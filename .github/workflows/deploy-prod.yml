@@ -36,9 +36,28 @@ jobs:
           docker build -t ${ECR_URI}:${IMAGE_TAG} .
           docker push ${ECR_URI}:${IMAGE_TAG}
 
-      - name: Force new ECS deployment
+      - name: Update task definition with new image
         run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_URI=$ACCOUNT_ID.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}
+          
+          # Update the task definition with the new image URI
+          aws ecs describe-task-definition --task-definition the1-prod-task --query taskDefinition > task-definition.json
+          jq --arg IMAGE_URI "${ECR_URI}:${IMAGE_TAG}" '.containerDefinitions[0].image = $IMAGE_URI' task-definition.json > updated-task-definition.json
+          
+          # Remove fields that shouldn't be in the new task definition
+          jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' updated-task-definition.json > final-task-definition.json
+          
+          # Register the new task definition
+          aws ecs register-task-definition --cli-input-json file://final-task-definition.json
+
+      - name: Update ECS service with new task definition
+        run: |
+          # Get the latest task definition revision
+          TASK_DEF_ARN=$(aws ecs describe-task-definition --task-definition the1-prod-task --query 'taskDefinition.taskDefinitionArn' --output text)
+          
+          # Update the service to use the new task definition
           aws ecs update-service \
             --cluster "${ECS_CLUSTER}" \
             --service "${ECS_SERVICE}" \
-            --force-new-deployment
+            --task-definition "${TASK_DEF_ARN}"
