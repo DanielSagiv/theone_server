@@ -7,7 +7,7 @@ app.use(express.json());
 
 // Routes
 app.get('/', (req, res) => {
-  res.send('THEONE SERVER');
+  res.send('THEONE SERVER TEST');
 });
 
 app.get('/health', (req, res) => {
