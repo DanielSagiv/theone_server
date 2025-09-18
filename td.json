@@ -1,0 +1,92 @@
+{
+    "taskDefinitionArn": "arn:aws:ecs:us-west-2:894726850744:task-definition/the1-stage-task:3",
+    "containerDefinitions": [
+        {
+            "name": "app",
+            "image": "894726850744.dkr.ecr.us-west-2.amazonaws.com/the1-repo:stage",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 80,
+                    "hostPort": 80,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "S3_BUCKET",
+                    "value": "the1-media-uploads-stage"
+                },
+                {
+                    "name": "PUBLIC_URL",
+                    "value": "https://stage.the1.vip"
+                },
+                {
+                    "name": "PORT",
+                    "value": "80"
+                },
+                {
+                    "name": "MONGO_URI",
+                    "value": "mongodb+srv://sagiv:madonna@cluster0.et5fx.mongodb.net/the1-stage?retryWrites=true&w=majority"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/the1",
+                    "awslogs-region": "us-west-2",
+                    "awslogs-stream-prefix": "stage"
+                }
+            },
+            "systemControls": []
+        }
+    ],
+    "family": "the1-stage-task",
+    "taskRoleArn": "arn:aws:iam::894726850744:role/the1-ecs-task-role",
+    "executionRoleArn": "arn:aws:iam::894726850744:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "revision": 3,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.ecr-auth"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.execution-role-ecr-pull"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EC2",
+        "FARGATE"
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "256",
+    "memory": "512",
+    "registeredAt": "2025-09-17T14:52:59.599000+03:00",
+    "registeredBy": "arn:aws:iam::894726850744:root"
+}

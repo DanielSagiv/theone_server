@@ -1,6 +1,6 @@
 const express = require('express');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 80;
 
 // Middleware
 app.use(express.json());
@@ -15,13 +15,11 @@ app.get('/health', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+/*app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});*/
+app.listen(80, '0.0.0.0', () => {
+  console.log('Server is running on port 80');
 });
 
 module.exports = app;
-<<<<<<< HEAD
-//stage comment 2
-=======
-//prod comment
->>>>>>> main
