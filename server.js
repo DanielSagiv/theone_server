@@ -22,29 +22,18 @@ mongoose.connect(process.env.DB_URI, {
   });
 
 // Health check endpoint
-app.get('/health', async (req, res) => {
-  const uri = process.env.DB_URI;
+app.get('/health', (req, res) => {
+  const dbUri = process.env.DB_URI;
+  console.log("DB_URI:", dbUri);
 
-  if (!uri) {
-    return res.status(500).send('❌ DB_URI not set');
-  }
-
-  try {
-    // Try connecting (with 3s timeout)
-    await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 3000,
-    });
-
-    res.send('✅ Healthy: Connected to DB');
-  } catch (err) {
-    res.status(500).send(`❌ Healthy: Failed to connect to DB - ${err.message}`);
-  } finally {
-    // Clean up connection
-    await mongoose.disconnect();
+  if (!dbUri) {
+    res.status(500).send('❌ DB_URI is missing');
+  } else {
+    res.send('✅ DB_URI is present');
   }
 });
 
->>>>>>> stage
+
 
 app.listen(80, '0.0.0.0', () => {
   console.log('Server is running on port 80 prod service test');
