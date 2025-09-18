@@ -7,10 +7,16 @@
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["nodejs", "express", "api", "rest"],
+  "keywords": [
+    "nodejs",
+    "express",
+    "api",
+    "rest"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dotenv": "^17.2.2",
     "express": "^4.18.2"
   },
   "devDependencies": {
