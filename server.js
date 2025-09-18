@@ -24,19 +24,23 @@ mongoose.connect(process.env.DB_URI, {
 // Health check endpoint
 app.get('/health', (req, res) => {
   const dbUri = process.env.DB_URI;
-  console.log("DB_URI:", dbUri);
+   console.log("DB_URI:", dbUri?.slice(0, 15) + '...');  
 
   if (!dbUri) {
     res.status(500).send('❌ DB_URI is missing');
   } else {
-    res.send('✅ DB_URI is present');
+    if (dbUri.includes('prod') || dbUri.includes('PROD')) {
+      res.send('✅ PROD DB_URI is present');
+    } else {
+      res.send('✅ stage DB_URI is present');
+    }
   }
 });
 
+let port = process.env.PORT || 80;
 
-
-app.listen(80, '0.0.0.0', () => {
-  console.log('Server is running on port 80 prod service test');
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server is running on port ${port} `);
 });
 
 module.exports = app;

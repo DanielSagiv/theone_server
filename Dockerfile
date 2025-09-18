@@ -1,15 +1,19 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine
+
 WORKDIR /app
 
-# Install deps using lockfile if present
+# Copy only package metadata first
 COPY package*.json ./
+
+# Install dependencies (production only)
 RUN npm ci --omit=dev || npm install --omit=dev
 
-# Copy source
+# Now copy the rest of the app
 COPY . .
 
-# App must listen on port 80 for ECS and return 200 on /health
+# Set port (required by ECS)
 ENV PORT=80
 EXPOSE 80
-CMD ["npm","start"]
+
+CMD ["npm", "start"]
