@@ -10,6 +10,7 @@ process.on('uncaughtException', err => {
 const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
+const AWS = require('aws-sdk');
 
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
@@ -40,26 +41,56 @@ app.get('/health', (req, res) => {
 });
 
 //  check list
-app.get('/checklist', (req, res) => {
-  const dbUri = process.env.DB_URI;
-  console.log("DB_URI:", dbUri?.slice(0, 15) + '...');  
+app.get('/checklist', async (req, res) => {
+  let output = `\n🔍 THEONE SERVER CHECKLIST\n`;
+  output += `================================\n`;
+  output += `Environment: ${process.env.NODE_ENV || 'unknown'}\n`;
+  output += `Timestamp: ${new Date().toLocaleString()}\n\n`;
 
+  // 1. Database Check (assume dbStatus already set elsewhere)
+  const dbUri = process.env.DB_URI;
   if (!dbUri) {
-    res.status(500).send('❌ DB_URI is missing');
+    output += `❌ DATABASE: DB_URI is missing\n`;
   } else {
-    if (dbUri.includes('prod') || dbUri.includes('PROD')) {
-      res.send('✅ PROD DB_URI is present');
-    } else {
-      res.send('✅ stage DB_URI is present');
+    const isProd = dbUri.toLowerCase().includes('prod');
+    const dbStatusIcon = dbStatus === 'connected' ? '✅' : '❌';
+    output += `${dbStatusIcon} DATABASE: ${isProd ? 'PROD' : 'STAGE'} - ${dbStatus === 'connected' ? 'Connected' : 'Failed'}\n`;
+  }
+
+  // 2. S3 Bucket Check
+  const s3Bucket = process.env.S3_BUCKET;
+  if (!s3Bucket) {
+    output += `❌ S3 BUCKET: S3_BUCKET is missing\n`;
+  } else {
+    try {
+      const s3 = new AWS.S3({
+        region: process.env.AWS_REGION || 'us-west-2'
+      });
+
+      await s3.headBucket({ Bucket: s3Bucket }).promise();
+      output += `✅ S3 BUCKET: ${s3Bucket} - Accessible\n`;
+    } catch (s3Error) {
+      output += `❌ S3 BUCKET: ${s3Bucket} - ${s3Error.message}\n`;
     }
   }
-});
 
-let port = process.env.PORT || 3009;
+  // 3. Environment Info
+  output += `\n📋 ENVIRONMENT INFO:\n`;
+  output += `   Node Env: ${process.env.NODE_ENV}\n`;
+  output += `   Port: ${process.env.PORT || 80}\n`;
+  output += `   AWS Region: ${process.env.AWS_REGION || 'us-west-2'}\n`;
+  output += `   Has DB URI: ${!!process.env.DB_URI ? 'Yes' : 'No'}\n`;
+  output += `   Has S3 Bucket: ${!!process.env.S3_BUCKET ? 'Yes' : 'No'}\n`;
+
+  output += `\n================================\n`;
+
+  res.set('Content-Type', 'text/plain');
+  res.send(output);
+});
+let port = process.env.PORT || 3006;
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
 });
 
 module.exports = app;
-//
