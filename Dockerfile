@@ -1,19 +1,24 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine
 
+# Install system dependencies needed for native modules and curl
+RUN apk update && \
+    apk add --no-cache python3 make g++ curl
+
 WORKDIR /app
 
-# Copy only package metadata first
+# Copy dependency metadata first
 COPY package*.json ./
 
-# Install dependencies (production only)
-RUN npm ci --omit=dev || npm install --omit=dev
+# Install only production dependencies
+RUN npm ci --omit=dev
 
-# Now copy the rest of the app
+# Copy the rest of the application code
 COPY . .
 
-# Set port (required by ECS)
+# Set the default port and expose it
 ENV PORT=80
 EXPOSE 80
 
+# Start the app
 CMD ["npm", "start"]
