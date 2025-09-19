@@ -1,8 +1,19 @@
+// Catch unhandled errors
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', err => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
 const express = require('express');
 const mongoose = require('mongoose');
 const app = express();
-require('dotenv').config();
 
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 const PORT = 80;
 let dbStatus = 'not connected';
@@ -24,7 +35,7 @@ mongoose.connect(process.env.DB_URI, {
 // Health check endpoint
 app.get('/health', (req, res) => {
   const dbUri = process.env.DB_URI;
-   console.log("DB_URI:", dbUri?.slice(0, 15) + '...');  
+  console.log("DB_URI:", dbUri?.slice(0, 15) + '...');  
 
   if (!dbUri) {
     res.status(500).send('❌ DB_URI is missing');
@@ -40,8 +51,7 @@ app.get('/health', (req, res) => {
 let port = process.env.PORT || 80;
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Server is running on port ${port} `);
+  console.log(`Server is running on port ${port}`);
 });
 
 module.exports = app;
-
