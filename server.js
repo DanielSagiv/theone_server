@@ -34,6 +34,13 @@ mongoose.connect(process.env.DB_URI, {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  console.log(`Server is up ${process.env.NODE_ENV}`);
+  res.send(`✅ ${process.env.NODE_ENV} DB_URI is present`);
+   
+});
+
+//  check list
+app.get('/checklist', (req, res) => {
   const dbUri = process.env.DB_URI;
   console.log("DB_URI:", dbUri?.slice(0, 15) + '...');  
 
@@ -48,7 +55,7 @@ app.get('/health', (req, res) => {
   }
 });
 
-let port = process.env.PORT || 80;
+let port = process.env.PORT || 3009;
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
