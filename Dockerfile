@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine
 
-# Install system dependencies for native modules and curl
-RUN apk add --no-cache --virtual .build-deps python3 make g++ && \
-    apk add --no-cache curl
+# Install system dependencies needed for native modules and curl
+RUN apk update && \
+    apk add --no-cache python3 make g++ curl
 
 WORKDIR /app
 
@@ -13,13 +13,10 @@ COPY package*.json ./
 # Install only production dependencies
 RUN npm ci --omit=dev
 
-# Copy application code
+# Copy the rest of the application code
 COPY . .
 
-# Clean up build dependencies
-RUN apk del .build-deps
-
-# Set the default port
+# Set the default port and expose it
 ENV PORT=80
 EXPOSE 80
 
