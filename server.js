@@ -41,19 +41,18 @@ app.get('/health', (req, res) => {
 });
 
 //  check list
-//  check list
 app.get('/checklist', async (req, res) => {
   let output = `\n🔍 THEONE SERVER CHECKLIST\n`;
   output += `================================\n`;
   output += `Environment: ${process.env.NODE_ENV || 'unknown'}\n`;
   output += `Timestamp: ${new Date().toLocaleString()}\n\n`;
 
-  // 1. Database Check
+  // 1. Database Check (assume dbStatus already set elsewhere)
   const dbUri = process.env.DB_URI;
   if (!dbUri) {
     output += `❌ DATABASE: DB_URI is missing\n`;
   } else {
-    const isProd = dbUri.includes('prod') || dbUri.includes('PROD');
+    const isProd = dbUri.toLowerCase().includes('prod');
     const dbStatusIcon = dbStatus === 'connected' ? '✅' : '❌';
     output += `${dbStatusIcon} DATABASE: ${isProd ? 'PROD' : 'STAGE'} - ${dbStatus === 'connected' ? 'Connected' : 'Failed'}\n`;
   }
@@ -66,11 +65,8 @@ app.get('/checklist', async (req, res) => {
     try {
       const s3 = new AWS.S3({
         region: process.env.AWS_REGION || 'us-west-2'
-        // No credentials - AWS SDK will automatically use:
-        // - IAM role (when running on ECS)
-        // - Local credentials (when running locally)
       });
-      
+
       await s3.headBucket({ Bucket: s3Bucket }).promise();
       output += `✅ S3 BUCKET: ${s3Bucket} - Accessible\n`;
     } catch (s3Error) {
@@ -78,22 +74,7 @@ app.get('/checklist', async (req, res) => {
     }
   }
 
-  // 3. AWS Credentials Check
-  try {
-    const sts = new AWS.STS({
-      region: process.env.AWS_REGION || 'us-west-2'
-      // No credentials - AWS SDK will automatically use:
-      // - IAM role (when running on ECS)
-      // - Local credentials (when running locally)
-    });
-    
-    const identity = await sts.getCallerIdentity().promise();
-    output += `✅ AWS CREDENTIALS: Account ${identity.Account}\n`;
-  } catch (awsError) {
-    output += `❌ AWS CREDENTIALS: ${awsError.message}\n`;
-  }
-
-  // 4. Environment Info
+  // 3. Environment Info
   output += `\n📋 ENVIRONMENT INFO:\n`;
   output += `   Node Env: ${process.env.NODE_ENV}\n`;
   output += `   Port: ${process.env.PORT || 80}\n`;
@@ -106,7 +87,6 @@ app.get('/checklist', async (req, res) => {
   res.set('Content-Type', 'text/plain');
   res.send(output);
 });
-
 let port = process.env.PORT || 3006;
 
 app.listen(port, '0.0.0.0', () => {
