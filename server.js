@@ -9,12 +9,44 @@ process.on('uncaughtException', err => {
 
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const app = express();
 const AWS = require('aws-sdk');
 
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
+
+// Set EJS as view engine
+app.set('view engine', 'ejs');
+app.set('views', './views');
+
+// Middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", "https:", "data:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+}));
+app.use(morgan('combined'));
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 const PORT = 80;
 let dbStatus = 'not connected';
@@ -32,6 +64,18 @@ mongoose.connect(process.env.DB_URI, {
     dbStatus = 'connection failed';
     console.error('❌ Failed to connect to MongoDB:', err.message);
   });
+
+// Import routes
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
+const testRoutes = require('./routes/test');
+
+// API Routes
+app.use('/v1/auth', authRoutes);
+app.use('/v1/users', userRoutes);
+
+// Test Interface Routes
+app.use('/test', testRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

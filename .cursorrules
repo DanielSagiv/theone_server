@@ -1,0 +1,123 @@
+# The1 Platform - Project Rules
+
+## Endpoint Organization and Duplication Prevention
+
+- All endpoints must be organized in the correct place in the project tree structure
+- Before creating any new endpoints or functions, scan the existing codebase to identify what already exists
+- Check existing routes, controllers, services, and utilities before implementing new functionality
+- Prefer reusing existing code with small refactors over duplicating functionality
+- Follow RESTful API conventions for route organization
+- Group related endpoints in appropriate route files
+- Maintain consistent naming conventions across all endpoints
+
+## API Standards
+
+- All API endpoints must return JSON responses only
+- Use consistent response structure across all endpoints
+- Include proper HTTP status codes
+- Validate all input data
+- Use consistent validation patterns
+- Return validation errors in standard format
+
+## Code Documentation
+
+- Always add short description to functions so it be able to easily scan them and know what we have
+- Use JSDoc format for function documentation
+- Include parameter descriptions and return types
+- Keep descriptions concise but informative
+
+## Error Handling and Logging
+
+- Always make sure we are creating endpoints and functions in a way that will not crash the app (try catch for example) with relevant logging
+- Use try-catch blocks for all async operations and database calls
+- Implement proper error logging with timestamps and context
+- Log errors with appropriate levels (error, warn, info, debug)
+- Include request ID and user context in error logs
+- Never let unhandled errors crash the application
+- Return meaningful error responses to clients
+- Log all API requests and responses for debugging
+
+## Security
+
+- Implement proper authentication middleware for protected routes
+- Validate and sanitize all input data to prevent injection attacks
+- Use HTTPS in production environments
+- Implement rate limiting to prevent abuse
+- Configure CORS properly for client applications
+- Never expose sensitive information in error messages
+- Use secure session management with proper expiration
+- Implement proper password hashing and validation
+
+## Database
+
+- Use MongoDB best practices for schema design
+- Implement proper connection handling and error recovery
+- Use transactions for critical operations
+- Validate data before database operations
+- Implement proper indexing for performance
+- Use connection pooling for better performance
+- Handle database connection errors gracefully
+- Implement data validation at the model level
+
+## Testing
+
+- Write unit tests for all utility functions
+- Create integration tests for API endpoints
+- Test error scenarios and edge cases
+- Use the EJS test interface for manual API testing
+- Test authentication and authorization flows
+- Validate all error responses and status codes
+- Test database operations and error handling
+- Maintain test coverage for critical functionality
+
+## Environment Configuration
+
+- When relevant and applicable, put all general configuration data in `.env` file
+- Use `process.env.<name>` throughout the project to access environment variables
+- This enables local development and automatic deployment to AWS
+- Never hardcode configuration values in the code
+- Use environment-specific values for different deployment stages (dev, staging, prod)
+- Always validate first that a parameter does not exist before creating a new one
+- Check existing parameters, variables, functions, and objects before adding new ones
+- Use descriptive and unique names to avoid conflicts
+- Implement proper validation logic for all input parameters
+- Return appropriate error messages for invalid or missing parameters
+
+## Project Structure
+
+```
+server/
+├── .env                 # Environment variables (not version controlled)
+├── .env.example         # Example environment file (version controlled)
+├── routes/
+│   ├── auth.js          # Authentication endpoints
+│   ├── users.js         # User management endpoints
+│   ├── locations.js     # Location CRUD endpoints
+│   ├── events.js        # Event CRUD endpoints
+│   └── test.js          # Test interface routes
+├── controllers/
+├── services/
+├── middleware/
+├── models/
+├── utils/
+└── views/
+```
+
+## UI/UX Standards
+
+- Never use emoji icons or symbols in the user interface
+- Use clean, professional text-based navigation and headers
+- Maintain consistent typography and spacing
+- Focus on readability and accessibility
+- Use color coding and visual hierarchy instead of emojis for categorization
+- Keep the interface minimal and professional
+
+## Implementation Process
+
+1. Search existing codebase for similar functionality
+2. Check if existing code can be reused or refactored
+3. Identify the correct location in project structure
+4. Plan implementation following established patterns
+5. Implement with proper error handling and validation
+6. Update documentation and API specifications
+7. Test functionality through EJS test interface

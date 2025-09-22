@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f6fa;
+            color: #333;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .dashboard-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: #2c3e50;
+            color: white;
+            padding: 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #34495e;
+        }
+
+        .sidebar-header h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .sidebar-nav {
+            padding: 20px 0;
+        }
+
+        .nav-item {
+            display: block;
+            padding: 15px 20px;
+            color: #bdc3c7;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover {
+            background: #34495e;
+            color: white;
+            border-left-color: #3498db;
+        }
+
+        .nav-item.active {
+            background: #34495e;
+            color: white;
+            border-left-color: #3498db;
+        }
+
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top Banner */
+        .top-banner {
+            background: white;
+            padding: 15px 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .logo {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-main {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            line-height: 1;
+        }
+
+        .logo-subtitle {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            font-weight: normal;
+            margin-top: 2px;
+        }
+
+        .user-avatar {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .avatar-img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #3498db;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        .user-dropdown {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 15px;
+            min-width: 200px;
+            display: none;
+            z-index: 1001;
+        }
+
+        .user-dropdown.show {
+            display: block;
+        }
+
+        .user-dropdown h4 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .user-dropdown p {
+            color: #7f8c8d;
+            margin: 5px 0;
+            font-size: 0.9rem;
+        }
+
+        .user-dropdown .divider {
+            height: 1px;
+            background: #ecf0f1;
+            margin: 10px 0;
+        }
+
+        .profile-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+
+        .profile-btn:hover {
+            background: #2980b9;
+        }
+
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            width: 100%;
+        }
+
+        .logout-btn:hover {
+            background: #c0392b;
+        }
+
+        /* Content Area */
+        .content-area {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            background: #f5f6fa;
+        }
+
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .section-header {
+            margin-bottom: 30px;
+        }
+
+        .section-header h1 {
+            color: #2c3e50;
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .section-header p {
+            color: #7f8c8d;
+            font-size: 1.1rem;
+        }
+
+        /* Users Table */
+        .users-table {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+        }
+
+        .table td {
+            padding: 15px;
+            border-bottom: 1px solid #ecf0f1;
+        }
+
+        .table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .role-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .role-admin {
+            background: #e8f5e8;
+            color: #27ae60;
+        }
+
+        .role-client {
+            background: #e3f2fd;
+            color: #3498db;
+        }
+
+        .role-runner {
+            background: #fff3e0;
+            color: #f39c12;
+        }
+
+        .role-badge.clickable {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .role-badge.clickable:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .status-live {
+            background: #e8f5e8;
+            color: #27ae60;
+        }
+
+        .status-suspended {
+            background: #fdf2e9;
+            color: #e67e22;
+        }
+
+        .status-deleted {
+            background: #f8d7da;
+            color: #e74c3c;
+        }
+
+        .status-pendingApproval {
+            background: #e3f2fd;
+            color: #3498db;
+        }
+
+        .status-badge.clickable {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.clickable:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .status-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .status-option {
+            background: none;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .status-option:hover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+
+        .status-option.selected {
+            border-color: #3498db;
+            background: #e3f2fd;
+        }
+
+        .role-options {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .role-option {
+            background: none;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .role-option:hover {
+            border-color: #3498db;
+            background: #f8f9fa;
+        }
+
+        .role-option.selected {
+            border-color: #3498db;
+            background: #e3f2fd;
+        }
+
+        /* Placeholder Content */
+        .placeholder-content {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+
+
+        .placeholder-content h3 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        /* Loading */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #ecf0f1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close:hover {
+            color: #000;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .profile-info {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .profile-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .profile-field label {
+            font-weight: 600;
+            color: #2c3e50;
+            min-width: 120px;
+        }
+
+        .profile-field span {
+            color: #7f8c8d;
+            flex: 1;
+            text-align: right;
+        }
+
+        .profile-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ecf0f1;
+        }
+
+        .profile-section h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .profile-field a {
+            color: #3498db;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .profile-field a:hover {
+            text-decoration: underline;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .user-name.clickable {
+            cursor: pointer;
+            color: #3498db;
+            transition: all 0.3s ease;
+        }
+
+        .user-name.clickable:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid #ecf0f1;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .modal-footer .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            min-width: 80px;
+        }
+
+        .modal-footer .btn:hover {
+            background: #2980b9;
+        }
+
+        .modal-footer .btn-secondary {
+            background: #95a5a6;
+        }
+
+        .modal-footer .btn-secondary:hover {
+            background: #7f8c8d;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+            
+            .content-area {
+                padding: 20px;
+            }
+            
+            .top-banner {
+                padding: 15px 20px;
+            }
+
+            .modal-content {
+                width: 95%;
+                margin: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>THE1</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active" data-section="users" id="usersNav" style="display: none;">
+                    Users
+                </a>
+                <a href="#" class="nav-item" data-section="locations">
+                    Locations
+                </a>
+                <a href="#" class="nav-item" data-section="events">
+                    Events
+                </a>
+                <a href="#" class="nav-item" data-section="coes">
+                    COE's
+                </a>
+                <a href="#" class="nav-item" data-section="settings">
+                    Settings
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Banner -->
+            <div class="top-banner">
+                <div class="logo">
+                    <div class="logo-main">THE1</div>
+                    <div class="logo-subtitle">Development, Testing and Validation Area</div>
+                </div>
+                <div class="user-avatar" onclick="toggleUserDropdown()">
+                    <div class="avatar-img" id="avatarInitials">U</div>
+                    <div class="user-dropdown" id="userDropdown">
+                        <h4 id="dropdownName">User Name</h4>
+                        <p id="dropdownEmail">user@example.com</p>
+                        <p id="dropdownRole">Role</p>
+                        <div class="divider"></div>
+                        <button class="profile-btn" onclick="viewProfile()">View Profile</button>
+                        <button class="profile-btn" onclick="triggerAvatarUpload()">Upload Image</button>
+                        <button class="logout-btn" onclick="logout()">Logout</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content-area">
+                <div id="alerts"></div>
+
+                <!-- Users Section -->
+                <div class="content-section active" id="usersSection">
+                    <div class="section-header">
+                        <h1>User Management</h1>
+                        <p>Manage system users and their roles</p>
+                    </div>
+                    <div class="users-table">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Phone</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr>
+                                    <td colspan="6" style="text-align: center; padding: 40px;">
+                                        <div class="loading" id="usersLoading">
+                                            <div class="spinner"></div>
+                                            <p>Loading users...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Locations Section -->
+                <div class="content-section" id="locationsSection">
+                    <div class="section-header">
+                        <h1>Location Management</h1>
+                        <p>Manage locations and venues</p>
+                    </div>
+                    <div class="placeholder-content">
+                        <h3>Location Management</h3>
+                        <p>This section will be implemented soon</p>
+                    </div>
+                </div>
+
+                <!-- Events Section -->
+                <div class="content-section" id="eventsSection">
+                    <div class="section-header">
+                        <h1>Event Management</h1>
+                        <p>Manage events and activities</p>
+                    </div>
+                    <div class="placeholder-content">
+                        <h3>Event Management</h3>
+                        <p>This section will be implemented soon</p>
+                    </div>
+                </div>
+
+                <!-- COE's Section -->
+                <div class="content-section" id="coesSection">
+                    <div class="section-header">
+                        <h1>COE's Management</h1>
+                        <p>Manage Centers of Excellence</p>
+                    </div>
+                    <div class="placeholder-content">
+                        <h3>COE's Management</h3>
+                        <p>This section will be implemented soon</p>
+                    </div>
+                </div>
+
+                <!-- Settings Section -->
+                <div class="content-section" id="settingsSection">
+                    <div class="section-header">
+                        <h1>Settings</h1>
+                        <p>Manage your account settings</p>
+                    </div>
+                    <div class="placeholder-content">
+                        <h3>Settings</h3>
+                        <p>This section will be implemented soon</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>User Profile</h2>
+                <span class="close" onclick="closeProfileModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="profileModalBody">
+                <div class="profile-info">
+                    <div class="profile-field">
+                        <label>Name:</label>
+                        <span id="profileName">-</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Email:</label>
+                        <span id="profileEmail">-</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Phone:</label>
+                        <span id="profilePhone">-</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Role:</label>
+                        <span id="profileRole">-</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Created:</label>
+                        <span id="profileCreated">-</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Last Updated:</label>
+                        <span id="profileUpdated">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeProfileModal()">Close</button>
+                <button class="btn" onclick="editProfile()">Edit Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Update Modal -->
+    <div id="statusModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Update User Status</h2>
+                <span class="close" onclick="closeStatusModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Select new status for <strong id="statusUserName">User Name</strong>:</p>
+                <div class="status-options">
+                    <button class="status-option" data-status="live" onclick="selectStatus('live')">
+                        <span class="status-badge status-live">Live</span>
+                    </button>
+                    <button class="status-option" data-status="suspended" onclick="selectStatus('suspended')">
+                        <span class="status-badge status-suspended">Suspended</span>
+                    </button>
+                    <button class="status-option" data-status="deleted" onclick="selectStatus('deleted')">
+                        <span class="status-badge status-deleted">Deleted</span>
+                    </button>
+                    <button class="status-option" data-status="pendingApproval" onclick="selectStatus('pendingApproval')">
+                        <span class="status-badge status-pendingApproval">Pending Approval</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeStatusModal()">Cancel</button>
+                <button class="btn" id="updateStatusBtn" onclick="updateUserStatus()" disabled>Update Status</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Role Update Modal -->
+    <div id="roleModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Update User Role</h2>
+                <span class="close" onclick="closeRoleModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p>Select new role for <strong id="roleUserName">User Name</strong>:</p>
+                <div class="role-options">
+                    <button class="role-option" data-role="admin" onclick="selectRole('admin')">
+                        <span class="role-badge role-admin">Admin</span>
+                    </button>
+                    <button class="role-option" data-role="client" onclick="selectRole('client')">
+                        <span class="role-badge role-client">Client</span>
+                    </button>
+                    <button class="role-option" data-role="runner" onclick="selectRole('runner')">
+                        <span class="role-badge role-runner">Runner</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRoleModal()">Cancel</button>
+                <button class="btn" id="updateRoleBtn" onclick="updateUserRole()" disabled>Update Role</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let currentUser = null;
+
+        // Check for existing session on page load
+        window.onload = function() {
+            checkExistingSession();
+            setupNavigation();
+        };
+
+        /**
+         * Check if user has existing session from login
+         */
+        function checkExistingSession() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const user = urlParams.get('user');
+            
+            if (token && user) {
+                currentToken = token;
+                currentUser = JSON.parse(decodeURIComponent(user));
+                displayUserInfo();
+                setupRoleBasedNavigation();
+                loadUsers();
+            } else {
+                showAlert('No session found. Please login first.', 'error');
+                setTimeout(() => {
+                    window.location.href = '/test/login';
+                }, 2000);
+            }
+        }
+
+        /**
+         * Display user information in the UI
+         */
+        function displayUserInfo() {
+            if (currentUser) {
+                // Update avatar initials
+                const initials = (currentUser.firstName?.[0] || '') + (currentUser.lastName?.[0] || '');
+                const avatarInitialsEl = document.getElementById('avatarInitials');
+                avatarInitialsEl.textContent = initials.toUpperCase();
+                
+                // Update dropdown info
+                document.getElementById('dropdownName').textContent = `${currentUser.firstName} ${currentUser.lastName}`;
+                document.getElementById('dropdownEmail').textContent = currentUser.email;
+                document.getElementById('dropdownRole').textContent = currentUser.role;
+                
+                // Update avatar image if available (use inner .avatar-img)
+                if (currentUser.avatarUrl) {
+                    const avatarImgEl = document.querySelector('.user-avatar .avatar-img');
+                    if (avatarImgEl) {
+                        avatarImgEl.style.backgroundImage = `url('${currentUser.avatarUrl}')`;
+                        avatarImgEl.style.backgroundSize = 'cover';
+                        avatarImgEl.style.backgroundPosition = 'center';
+                        avatarImgEl.style.color = 'transparent';
+                    }
+                }
+            }
+        }
+
+        /**
+         * Setup role-based navigation
+         */
+        function setupRoleBasedNavigation() {
+            const usersNav = document.getElementById('usersNav');
+            
+            // Show users section only for admin users
+            if (currentUser && currentUser.role === 'admin') {
+                usersNav.style.display = 'block';
+            } else {
+                usersNav.style.display = 'none';
+                // If user is not admin and users section is active, switch to locations
+                if (document.querySelector('.nav-item.active').dataset.section === 'users') {
+                    switchSection('locations');
+                }
+            }
+        }
+
+        /**
+         * Setup navigation event listeners
+         */
+        function setupNavigation() {
+            const navItems = document.querySelectorAll('.nav-item');
+            navItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const section = this.dataset.section;
+                    switchSection(section);
+                });
+            });
+        }
+
+        /**
+         * Switch between content sections
+         */
+        function switchSection(sectionName) {
+            // Update active nav item
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+
+            // Update active content section
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(`${sectionName}Section`).classList.add('active');
+
+            // Load section-specific data
+            if (sectionName === 'users' && currentUser?.role === 'admin') {
+                loadUsers();
+            }
+        }
+
+        /**
+         * Toggle user dropdown
+         */
+        function toggleUserDropdown() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.classList.toggle('show');
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('userDropdown');
+            const avatar = document.querySelector('.user-avatar');
+            if (!avatar.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        /**
+         * Load users for admin
+         */
+        async function loadUsers() {
+            if (currentUser?.role !== 'admin') {
+                console.log('User is not admin, cannot load users');
+                return;
+            }
+
+            console.log('Loading users...', { currentToken: currentToken ? 'present' : 'missing', userRole: currentUser?.role });
+
+            const tableBody = document.getElementById('usersTableBody');
+            
+            // Show loading state
+            tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px;"><div class="loading"><div class="spinner"></div><p>Loading users...</p></div></td></tr>';
+
+            try {
+                const result = await makeApiRequest('/users');
+                console.log('Users API response:', result);
+                console.log('Response details:', {
+                    success: result.success,
+                    dataType: typeof result.data,
+                    isArray: Array.isArray(result.data),
+                    dataLength: result.data?.length,
+                    dataKeys: result.data ? Object.keys(result.data) : 'no data'
+                });
+                
+                if (result.success && result.data) {
+                    // Check if data is an array directly
+                    if (Array.isArray(result.data)) {
+                        displayUsersTable(result.data);
+                        showAlert('Users loaded successfully!', 'success');
+                    } 
+                    // Check if data has a users property
+                    else if (result.data.users && Array.isArray(result.data.users)) {
+                        displayUsersTable(result.data.users);
+                        showAlert('Users loaded successfully!', 'success');
+                    }
+                    // Check if data has a data property (nested)
+                    else if (result.data.data && Array.isArray(result.data.data)) {
+                        displayUsersTable(result.data.data);
+                        showAlert('Users loaded successfully!', 'success');
+                    }
+                    else {
+                        const errorMsg = 'Invalid data format: ' + JSON.stringify(result.data);
+                        tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #e74c3c;">Failed to load users: ' + errorMsg + '</td></tr>';
+                        showAlert('Failed to load users: ' + errorMsg, 'error');
+                    }
+                } else {
+                    const errorMsg = result.data?.message || result.data?.error?.message || 'Unknown error';
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #e74c3c;">Failed to load users: ' + errorMsg + '</td></tr>';
+                    showAlert('Failed to load users: ' + errorMsg, 'error');
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 40px; color: #e74c3c;">Error loading users: ' + error.message + '</td></tr>';
+                showAlert('Error loading users: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Display users in table
+         */
+        function displayUsersTable(users) {
+            const tableBody = document.getElementById('usersTableBody');
+            
+            if (users.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #7f8c8d;">No users found</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = users.map(user => `
+                <tr>
+                    <td>
+                        <span class="user-name ${currentUser?.role === 'admin' ? 'clickable' : ''}" 
+                              ${currentUser?.role === 'admin' ? `onclick="viewUserProfile('${user._id}', '${user.firstName} ${user.lastName}')"` : ''}>
+                            ${user.firstName} ${user.lastName}
+                        </span>
+                        <small style="display: block; color: #7f8c8d; font-size: 0.7rem;">ID: ${user._id}</small>
+                    </td>
+                    <td>${user.email}</td>
+                    <td>${user.phone || '-'}</td>
+                    <td>
+                        <span class="role-badge role-${user.role} ${currentUser?.role === 'admin' ? 'clickable' : ''}" 
+                              ${currentUser?.role === 'admin' ? `onclick="openRoleModal('${user._id}', '${user.firstName} ${user.lastName}', '${user.role}')"` : ''}>
+                            ${user.role}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="status-badge status-${user.entity_status} ${currentUser?.role === 'admin' ? 'clickable' : ''}" 
+                              ${currentUser?.role === 'admin' ? `onclick="openStatusModal('${user._id}', '${user.firstName} ${user.lastName}', '${user.entity_status}')"` : ''}>
+                            ${user.entity_status}
+                        </span>
+                    </td>
+                    <td>${new Date(user.createdAt).toLocaleDateString()}</td>
+                </tr>
+            `).join('');
+        }
+
+        /**
+         * Show alert message
+         */
+        function showAlert(message, type = 'success') {
+            const alertsDiv = document.getElementById('alerts');
+            const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
+            alertsDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
+            alertsDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                alertsDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        /**
+         * Make API request with authentication
+         */
+        async function makeApiRequest(endpoint, method = 'GET', body = null) {
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            if (currentToken) {
+                headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+
+            const config = {
+                method: method,
+                headers: headers,
+                cache: 'no-store'
+            };
+
+            if (body) {
+                config.body = JSON.stringify(body);
+            }
+
+            // Cache-busting for GET requests
+            let finalEndpoint = endpoint;
+            if (method === 'GET') {
+                const ts = Date.now();
+                finalEndpoint += (endpoint.includes('?') ? '&' : '?') + `_=${ts}`;
+                headers['Cache-Control'] = 'no-cache';
+            }
+
+            console.log('Making API request:', { endpoint: `/v1${finalEndpoint}`, method, headers });
+
+            try {
+                const response = await fetch(`/v1${finalEndpoint}`, config);
+                const data = await response.json();
+                console.log('API response:', { status: response.status, data });
+                return { success: response.ok, data, status: response.status };
+            } catch (error) {
+                console.error('API request error:', error);
+                return { success: false, data: { error: error.message }, status: 0 };
+            }
+        }
+
+        /**
+         * View user profile
+         */
+        async function viewProfile() {
+            try {
+                // Close the dropdown first
+                document.getElementById('userDropdown').classList.remove('show');
+                
+                // Show loading in modal
+                document.getElementById('profileModalBody').innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading profile...</p></div>';
+                document.getElementById('profileModal').style.display = 'flex';
+                
+                // Fetch detailed profile from API
+                const result = await makeApiRequest('/users/profile');
+                console.log('Profile API response:', result);
+                
+                if (result.success && result.data) {
+                    // Handle different response structures
+                    let user = result.data;
+                    
+                    // Check if user data is nested
+                    if (result.data.user) {
+                        user = result.data.user;
+                    }
+                    
+                    console.log('User data from API:', user);
+                    console.log('Current user from session:', currentUser);
+                    
+                    // Use API data if available, otherwise fall back to session data
+                    const profileData = (user && user.firstName) ? user : currentUser;
+                    
+                    // Show the profile content directly
+                    document.getElementById('profileModalBody').innerHTML = `
+                        <div class="profile-info">
+                            <div class="profile-field">
+                                <label>Name:</label>
+                                <span>${profileData.firstName || 'N/A'} ${profileData.lastName || 'N/A'}</span>
+                            </div>
+                            <div class="profile-field">
+                                <label>Email:</label>
+                                <span>${profileData.email || 'N/A'}</span>
+                            </div>
+                            <div class="profile-field">
+                                <label>Phone:</label>
+                                <span>${profileData.phone || 'Not provided'}</span>
+                            </div>
+                            <div class="profile-field">
+                                <label>Role:</label>
+                                <span>${profileData.role || 'N/A'}</span>
+                            </div>
+                            <div class="profile-field">
+                                <label>Created:</label>
+                                <span>${profileData.createdAt ? new Date(profileData.createdAt).toLocaleString() : 'N/A'}</span>
+                            </div>
+                <div class="profile-field">
+                    <label>Last Updated:</label>
+                    <span>${profileData.updatedAt ? new Date(profileData.updatedAt).toLocaleString() : 'N/A'}</span>
+                </div>
+                <div class="profile-section">
+                    <h3>Social Media</h3>
+                    <div class="profile-field">
+                        <label>Facebook:</label>
+                        <span>${profileData.socialMedia?.facebook ? `<a href="${profileData.socialMedia.facebook}" target="_blank" style="color: #3498db;">${profileData.socialMedia.facebook}</a>` : 'Not provided'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>LinkedIn:</label>
+                        <span>${profileData.socialMedia?.linkedin ? `<a href="${profileData.socialMedia.linkedin}" target="_blank" style="color: #3498db;">${profileData.socialMedia.linkedin}</a>` : 'Not provided'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>X (Twitter):</label>
+                        <span>${profileData.socialMedia?.x ? `<a href="${profileData.socialMedia.x}" target="_blank" style="color: #3498db;">${profileData.socialMedia.x}</a>` : 'Not provided'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Instagram:</label>
+                        <span>${profileData.socialMedia?.instagram ? `<a href="${profileData.socialMedia.instagram}" target="_blank" style="color: #3498db;">${profileData.socialMedia.instagram}</a>` : 'Not provided'}</span>
+                    </div>
+                </div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('profileModalBody').innerHTML = '<p style="color: #e74c3c; text-align: center;">Failed to load profile: ' + (result.data?.message || 'Unknown error') + '</p>';
+                }
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                document.getElementById('profileModalBody').innerHTML = '<p style="color: #e74c3c; text-align: center;">Error loading profile: ' + error.message + '</p>';
+            }
+        }
+
+        /**
+         * Close profile modal
+         */
+        function closeProfileModal() {
+            document.getElementById('profileModal').style.display = 'none';
+        }
+
+        /**
+         * Edit profile (placeholder)
+         */
+        function editProfile() {
+            alert('Edit profile functionality will be implemented soon!');
+        }
+
+        /**
+         * View any user profile by ID (admin only)
+         */
+        async function viewUserProfile(userId, userName) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can view other user profiles', 'error');
+                return;
+            }
+
+            console.log('Viewing user profile:', { userId, userName });
+
+            // Show modal and loading state
+            document.getElementById('profileModal').style.display = 'flex';
+            document.getElementById('profileModalBody').innerHTML = '<div style="text-align: center; padding: 40px;"><div class="loading-spinner"></div><p>Loading profile...</p></div>';
+
+            try {
+                const result = await makeApiRequest(`/users/${userId}/profile`, 'GET');
+                console.log('Profile API response:', result);
+                
+                if (result.success && result.data) {
+                    const profileData = result.data.data || result.data.user || result.data;
+                    console.log('Profile data received:', profileData);
+                    console.log('Profile data type:', typeof profileData);
+                    console.log('Profile data keys:', Object.keys(profileData || {}));
+                    displayProfileData(profileData, `${userName}'s Profile`);
+                } else {
+                    console.error('Profile API failed:', result);
+                    document.getElementById('profileModalBody').innerHTML = '<p style="color: #e74c3c; text-align: center;">Failed to load profile: ' + (result.data?.message || 'Unknown error') + '</p>';
+                }
+            } catch (error) {
+                console.error('Error loading user profile:', error);
+                document.getElementById('profileModalBody').innerHTML = '<p style="color: #e74c3c; text-align: center;">Error loading profile: ' + error.message + '</p>';
+            }
+        }
+
+        /**
+         * Display profile data in modal
+         */
+        function displayProfileData(profileData, title) {
+            console.log('Displaying profile data:', profileData);
+            console.log('Profile data keys:', Object.keys(profileData || {}));
+            console.log('firstName:', profileData?.firstName);
+            console.log('lastName:', profileData?.lastName);
+            console.log('email:', profileData?.email);
+            console.log('phone:', profileData?.phone);
+            console.log('role:', profileData?.role);
+            console.log('entity_status:', profileData?.entity_status);
+            
+            document.getElementById('profileModalBody').innerHTML = `
+                <div class="profile-info">
+                    <div class="profile-field">
+                        <label>Name:</label>
+                        <span>${profileData.firstName || 'N/A'} ${profileData.lastName || 'N/A'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Email:</label>
+                        <span>${profileData.email || 'N/A'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Avatar:</label>
+                        <span>
+                            ${profileData.avatarUrl ? `<a href="${profileData.avatarUrl}" target="_blank" style="color: #3498db;">${profileData.avatarUrl}</a>` : 'Not provided'}
+                        </span>
+                    </div>
+                    ${profileData.avatarUrl ? `
+                    <div class="profile-field" style="justify-content:flex-start; gap:16px; border-bottom:none;">
+                        <label style="min-width:120px;">Preview:</label>
+                        <span style="text-align:left;">
+                            <img src="${profileData.avatarUrl}" alt="Avatar" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:1px solid #ecf0f1;" onerror="this.style.display='none'" />
+                        </span>
+                    </div>
+                    ` : ''}
+                    <div class="profile-field">
+                        <label>Phone:</label>
+                        <span>${profileData.phone || 'Not provided'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Role:</label>
+                        <span>${profileData.role || 'N/A'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Status:</label>
+                        <span class="status-badge status-${profileData.entity_status || 'pendingApproval'}">${profileData.entity_status || 'pendingApproval'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Created:</label>
+                        <span>${profileData.createdAt ? new Date(profileData.createdAt).toLocaleString() : 'N/A'}</span>
+                    </div>
+                    <div class="profile-field">
+                        <label>Last Updated:</label>
+                        <span>${profileData.updatedAt ? new Date(profileData.updatedAt).toLocaleString() : 'N/A'}</span>
+                    </div>
+                    <div class="profile-section">
+                        <h3>Social Media</h3>
+                        <div class="profile-field">
+                            <label>Facebook:</label>
+                            <span>${profileData.socialMedia?.facebook ? `<a href="${profileData.socialMedia.facebook}" target="_blank" style="color: #3498db;">${profileData.socialMedia.facebook}</a>` : 'Not provided'}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>LinkedIn:</label>
+                            <span>${profileData.socialMedia?.linkedin ? `<a href="${profileData.socialMedia.linkedin}" target="_blank" style="color: #3498db;">${profileData.socialMedia.linkedin}</a>` : 'Not provided'}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>X (Twitter):</label>
+                            <span>${profileData.socialMedia?.x ? `<a href="${profileData.socialMedia.x}" target="_blank" style="color: #3498db;">${profileData.socialMedia.x}</a>` : 'Not provided'}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>Instagram:</label>
+                            <span>${profileData.socialMedia?.instagram ? `<a href="${profileData.socialMedia.instagram}" target="_blank" style="color: #3498db;">${profileData.socialMedia.instagram}</a>` : 'Not provided'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Avatar upload client helpers
+        let hiddenFileInput = null;
+        function ensureHiddenFileInput() {
+            if (!hiddenFileInput) {
+                hiddenFileInput = document.createElement('input');
+                hiddenFileInput.type = 'file';
+                hiddenFileInput.accept = 'image/*';
+                hiddenFileInput.style.display = 'none';
+                hiddenFileInput.addEventListener('change', handleAvatarSelected);
+                document.body.appendChild(hiddenFileInput);
+            }
+        }
+
+        function triggerAvatarUpload() {
+            if (!currentUser) { showAlert('Please log in', 'error'); return; }
+            ensureHiddenFileInput();
+            hiddenFileInput.value = '';
+            hiddenFileInput.click();
+        }
+
+        async function handleAvatarSelected(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) { showAlert('Please select an image file', 'error'); return; }
+
+            try {
+                const formData = new FormData();
+                formData.append('avatar', file);
+
+                const response = await fetch('/v1/users/profile/avatar', {
+                    method: 'POST',
+                    headers: currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {},
+                    body: formData,
+                    cache: 'no-store'
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    const url = result.data?.avatarUrl;
+                    if (url) {
+                        currentUser.avatarUrl = url;
+                        const avatarEl = document.querySelector('.user-avatar');
+                        avatarEl.style.backgroundImage = `url('${url}')`;
+                        avatarEl.style.backgroundSize = 'cover';
+                        avatarEl.style.backgroundPosition = 'center';
+                        const modal = document.getElementById('profileModal');
+                        if (modal && modal.style.display === 'flex') {
+                            displayProfileData(currentUser, 'Your Profile');
+                        }
+                        showAlert('Avatar updated', 'success');
+                    } else {
+                        showAlert('Upload succeeded but no URL returned', 'warn');
+                    }
+                } else {
+                    showAlert(result?.error?.message || 'Failed to upload avatar', 'error');
+                }
+            } catch (err) {
+                console.error('Avatar upload error:', err);
+                showAlert('Error uploading avatar: ' + err.message, 'error');
+            }
+        }
+
+        // Status update variables
+        let selectedUserId = null;
+        let selectedUserName = null;
+        let selectedStatus = null;
+
+        // Role update variables
+        let selectedRoleUserId = null;
+        let selectedRoleUserName = null;
+        let selectedRole = null;
+
+        /**
+         * Open status update modal
+         */
+        function openStatusModal(userId, userName, currentStatus) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can update user status', 'error');
+                return;
+            }
+
+            selectedUserId = userId;
+            selectedUserName = userName;
+            selectedStatus = null;
+
+            document.getElementById('statusUserName').textContent = userName;
+            document.getElementById('updateStatusBtn').disabled = true;
+
+            // Clear previous selections
+            document.querySelectorAll('.status-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+
+            document.getElementById('statusModal').style.display = 'flex';
+        }
+
+        /**
+         * Select status in modal
+         */
+        function selectStatus(status) {
+            selectedStatus = status;
+
+            // Update UI
+            document.querySelectorAll('.status-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            document.querySelector(`[data-status="${status}"]`).classList.add('selected');
+            document.getElementById('updateStatusBtn').disabled = false;
+        }
+
+        /**
+         * Close status modal
+         */
+        function closeStatusModal() {
+            document.getElementById('statusModal').style.display = 'none';
+            selectedUserId = null;
+            selectedUserName = null;
+            selectedStatus = null;
+        }
+
+        /**
+         * Update user status
+         */
+        async function updateUserStatus() {
+            if (!selectedUserId || !selectedStatus) {
+                showAlert('Please select a status', 'error');
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/users/${selectedUserId}/status`, 'PUT', {
+                    entity_status: selectedStatus
+                });
+
+                if (result.success) {
+                    showAlert('User status updated successfully!', 'success');
+                    closeStatusModal();
+                    loadUsers(); // Refresh the users table
+                } else {
+                    showAlert('Failed to update status: ' + (result.data?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+                showAlert('Error updating status: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Open role update modal
+         */
+        function openRoleModal(userId, userName, currentRole) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can update user roles', 'error');
+                return;
+            }
+
+            selectedRoleUserId = userId;
+            selectedRoleUserName = userName;
+            selectedRole = null;
+
+            document.getElementById('roleUserName').textContent = userName;
+            document.getElementById('updateRoleBtn').disabled = true;
+
+            // Clear previous selections
+            document.querySelectorAll('.role-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+
+            document.getElementById('roleModal').style.display = 'flex';
+        }
+
+        /**
+         * Select role in modal
+         */
+        function selectRole(role) {
+            selectedRole = role;
+
+            // Update UI
+            document.querySelectorAll('.role-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            document.querySelector(`[data-role="${role}"]`).classList.add('selected');
+            document.getElementById('updateRoleBtn').disabled = false;
+        }
+
+        /**
+         * Close role modal
+         */
+        function closeRoleModal() {
+            document.getElementById('roleModal').style.display = 'none';
+            selectedRoleUserId = null;
+            selectedRoleUserName = null;
+            selectedRole = null;
+        }
+
+        /**
+         * Update user role
+         */
+        async function updateUserRole() {
+            if (!selectedRoleUserId || !selectedRole) {
+                showAlert('Please select a role', 'error');
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/users/${selectedRoleUserId}/role`, 'PUT', {
+                    role: selectedRole
+                });
+
+                if (result.success) {
+                    showAlert('User role updated successfully!', 'success');
+                    closeRoleModal();
+                    loadUsers(); // Refresh the users table
+                } else {
+                    showAlert('Failed to update role: ' + (result.data?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating role:', error);
+                showAlert('Error updating role: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Logout user
+         */
+        async function logout() {
+            if (currentToken) {
+                try {
+                    await makeApiRequest('/auth/logout', 'POST');
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            }
+            
+            // Clear session data
+            currentToken = null;
+            currentUser = null;
+            
+            // Redirect to login
+            window.location.href = '/test/login';
+        }
+    </script>
+</body>
+</html>
