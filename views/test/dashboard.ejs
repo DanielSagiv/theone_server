@@ -543,6 +543,334 @@
             color: #2980b9;
             text-decoration: underline;
         }
+        
+        /* Location table row styling */
+        #locationsTableBody tr {
+            transition: background-color 0.2s ease;
+        }
+        #locationsTableBody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        /* Delete button styling */
+        .btn-danger {
+            background-color: #e74c3c;
+            border-color: #e74c3c;
+            color: white;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+            border-color: #c0392b;
+        }
+
+        /* Icon button styling */
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: none;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin: 0 2px;
+        }
+
+        .btn-icon:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .btn-icon-edit {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .btn-icon-edit:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-icon-delete {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .btn-icon-delete:hover {
+            background-color: #c0392b;
+        }
+
+        /* Icon styles */
+        .icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        /* Location Details Modal Styles */
+        .location-modal-content {
+            max-width: 1000px !important;
+        }
+
+        .location-details {
+            padding: 20px;
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 20px;
+        }
+
+        .detail-section:last-child {
+            border-bottom: none;
+        }
+
+        .detail-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .detail-item label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .detail-item span {
+            color: #333;
+            font-size: 14px;
+        }
+
+        /* Main Media Gallery */
+        .main-media-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .media-item {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+        }
+
+        .media-item:hover {
+            transform: scale(1.05);
+            border-color: #007bff;
+        }
+
+        .media-item img,
+        .media-item video {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .media-type-badge {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .media-caption {
+            padding: 8px;
+            font-size: 12px;
+            color: #666;
+            text-align: center;
+            background: white;
+        }
+
+        .no-media-message {
+            text-align: center;
+            color: #999;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        /* Seating Areas & Room Types */
+        .seating-area,
+        .room-type {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .seating-area-header,
+        .room-type-header {
+            background: #f8f9fa;
+            padding: 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .seating-area-header:hover,
+        .room-type-header:hover {
+            background: #e9ecef;
+        }
+
+        .seating-area-title,
+        .room-type-title {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .seating-area-count,
+        .room-type-count {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .expand-icon {
+            transition: transform 0.2s ease;
+        }
+
+        .seating-area.expanded .expand-icon,
+        .room-type.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .seating-area-content,
+        .room-type-content {
+            padding: 15px;
+            display: none;
+        }
+
+        .seating-area.expanded .seating-area-content,
+        .room-type.expanded .room-type-content {
+            display: block;
+        }
+
+        .seating-items,
+        .room-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .seat-item,
+        .room-item {
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            background: white;
+        }
+
+        .seat-code,
+        .room-code {
+            font-weight: 600;
+            color: #007bff;
+            margin-bottom: 8px;
+        }
+
+        .seat-details,
+        .room-details {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .seat-media,
+        .room-media {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .seat-media .media-item,
+        .room-media .media-item {
+            width: 60px;
+            height: 60px;
+        }
+
+        .seat-media .media-item img,
+        .room-media .media-item img,
+        .seat-media .media-item video,
+        .room-media .media-item video {
+            height: 60px;
+        }
+
+        /* Lightbox Styles */
+        .lightbox-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            margin: auto;
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .lightbox-media {
+            text-align: center;
+        }
+
+        .lightbox-media img,
+        .lightbox-media video {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+
+        .lightbox-caption {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            text-align: center;
+        }
+
+        .lightbox .close {
+            color: white;
+            font-size: 30px;
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            z-index: 1000;
+        }
 
         .modal-footer {
             padding: 20px;
@@ -686,9 +1014,38 @@
                         <h1>Location Management</h1>
                         <p>Manage locations and venues</p>
                     </div>
-                    <div class="placeholder-content">
-                        <h3>Location Management</h3>
-                        <p>This section will be implemented soon</p>
+                    <div class="card">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <h3 style="margin:0;">Locations</h3>
+                                <small>All locations (admin)</small>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="testLocationModal()">Test Modal</button>
+                                <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateLocation()">Create Location</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div style="overflow:auto;">
+                                <table class="table" id="locationsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>City</th>
+                                            <th>Country</th>
+                                            <th>Score</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="locationsTableBody">
+                                        <tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No data loaded</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -732,6 +1089,116 @@
     </div>
 
     <!-- Profile Modal -->
+        <!-- Create Location Modal -->
+        <div id="createLocationModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Create Location</h2>
+                    <span class="close" onclick="closeCreateLocation()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- Steps Header -->
+                    <div style="display:flex;gap:12px;margin-bottom:16px;">
+                        <div id="cl_step1_badge" class="status-badge status-live">1. Basics</div>
+                        <div id="cl_step2_badge" class="status-badge status-live" style="opacity:.6;">2. Attributes</div>
+                        <div id="cl_step3_badge" class="status-badge status-live" style="opacity:.6;">3. Inventory</div>
+                        <div id="cl_step4_badge" class="status-badge status-live" style="opacity:.6;">4. Review</div>
+                    </div>
+
+                    <!-- Step 1: Basics -->
+                    <div id="cl_step1">
+                        <div class="profile-field">
+                            <label>Name</label>
+                            <input id="cl_name" type="text" placeholder="Location name" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Type</label>
+                            <select id="cl_type" onchange="onClTypeChange()" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="night_club">Night Club</option>
+                                <option value="day_club">Day Club</option>
+                                <option value="restaurant">Restaurant</option>
+                                <option value="hotel">Hotel</option>
+                            </select>
+                        </div>
+                        <div class="profile-field">
+                            <label>City</label>
+                            <input id="cl_city" type="text" placeholder="City" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Country</label>
+                            <input id="cl_country" type="text" placeholder="Country" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Attributes (dynamic) -->
+                    <div id="cl_step2" style="display:none;">
+                        <div id="cl_attrs_common">
+                            <div class="profile-field">
+                                <label>Description</label>
+                                <textarea id="cl_desc" rows="3" placeholder="Description" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                            </div>
+                            <div class="profile-field">
+                                <label>General Media</label>
+                                <div id="cl_media_list"></div>
+                                <div style="display:flex;gap:8px;margin-top:8px;">
+                                    <button class="btn" onclick="triggerGeneralMediaUpload()">Upload Media</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="cl_attrs_club" style="display:none;">
+                            <div class="profile-field"><label>Bottle Service</label><select id="cl_bottle" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"><option value="true">Yes</option><option value="false" selected>No</option></select></div>
+                            <div class="profile-field"><label>Dress Code</label><input id="cl_dress" type="text" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Capacity</label><input id="cl_capacity" type="number" min="0" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                        </div>
+                        <div id="cl_attrs_hotel" style="display:none;">
+                            <div class="profile-field"><label>Stars</label><input id="cl_stars" type="number" min="1" max="5" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Brand</label><input id="cl_brand" type="text" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Check-in</label><input id="cl_checkin" type="text" placeholder="15:00" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Check-out</label><input id="cl_checkout" type="text" placeholder="11:00" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Inventory -->
+                    <div id="cl_step3" style="display:none;">
+                        <div id="cl_inventory_club" style="display:none;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <h3 style="margin:0;">Seats</h3>
+                                <button class="btn" onclick="addSeatRow()">Add Seat</button>
+                            </div>
+                            <table class="table">
+                                <thead><tr><th>Code</th><th>Category</th><th>Capacity</th><th>Min Spend</th><th>Media</th><th></th></tr></thead>
+                                <tbody id="cl_seats_tbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="cl_inventory_hotel" style="display:none;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <h3 style="margin:0;">Units</h3>
+                                <button class="btn" onclick="addUnitRow()">Add Unit</button>
+                            </div>
+                            <table class="table">
+                                <thead><tr><th>Code</th><th>Kind</th><th>Beds</th><th>Occupancy</th><th>Min Price</th><th></th></tr></thead>
+                                <tbody id="cl_units_tbody"></tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Location Sentiment removed from create flow - managed post-creation -->
+                    </div>
+
+                    <!-- Step 4: Review -->
+                    <div id="cl_step4" style="display:none;">
+                        <pre id="cl_review" style="background:#f8f9fa;border:1px solid #ecf0f1;border-radius:8px;padding:12px;white-space:pre-wrap;"></pre>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="prevClStep()">Back</button>
+                        <button class="btn" id="cl_next_btn" onclick="nextClStep()">Next</button>
+                        <button class="btn" id="cl_create_btn" style="display:none;" onclick="console.log('Create button clicked!'); submitCreateLocationFromMultiStep(event)">Create</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Modal -->
     <div id="profileModal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header">
@@ -770,6 +1237,138 @@
                 <button class="btn btn-secondary" onclick="closeProfileModal()">Close</button>
                 <button class="btn" onclick="editProfile()">Edit Profile</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Location Details Modal -->
+    <div id="locationModal" class="modal" style="display: none;">
+        <div class="modal-content location-modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h2>Location Details</h2>
+                <span class="close" onclick="closeLocationModal()">&times;</span>
+            </div>
+            <div class="modal-body" id="locationModalBody">
+                <div class="location-details">
+                    <!-- Basic Information Section -->
+                    <div class="detail-section">
+                        <h3>Basic Information</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Name:</label>
+                                <span id="locationName">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Type:</label>
+                                <span id="locationType">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Description:</label>
+                                <span id="locationDescription">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Score:</label>
+                                <span id="locationScore">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Status:</label>
+                                <span id="locationStatus">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Location Media Section -->
+                    <div class="detail-section">
+                        <h3>Location Overview</h3>
+                        <div class="main-media-gallery" id="mainLocationMedia">
+                            <div class="no-media-message" style="display: none;">
+                                <p>No media available for this location</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Address & Contact Section -->
+                    <div class="detail-section">
+                        <h3>Location Details</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>City:</label>
+                                <span id="locationCity">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Country:</label>
+                                <span id="locationCountry">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Phone:</label>
+                                <span id="locationContactPhone">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Email:</label>
+                                <span id="locationContactEmail">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Website:</label>
+                                <span id="locationContactWebsite">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Attributes Section -->
+                    <div class="detail-section">
+                        <h3>Attributes</h3>
+                        <div class="detail-grid" id="locationAttributes">
+                            <!-- Dynamic attributes will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Sentiment Section -->
+                    <div class="detail-section">
+                        <h3>Admin Sentiment</h3>
+                        <div id="locationSentimentContainer">
+                            <div id="locationSentimentList">
+                                <!-- Dynamic sentiment items will be populated here -->
+                            </div>
+                            <button class="btn btn-primary" onclick="openAddSentimentModal('location')" style="margin-top: 10px;">
+                                Add Sentiment
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Seating Areas Section (for clubs) -->
+                    <div class="detail-section" id="seatingAreasSection" style="display: none;">
+                        <h3>Seating Areas</h3>
+                        <div class="seating-areas-container" id="seatingAreasContainer">
+                            <!-- Seating areas will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Room Types Section (for hotels) -->
+                    <div class="detail-section" id="roomTypesSection" style="display: none;">
+                        <h3>Room Types</h3>
+                        <div class="room-types-container" id="roomTypesContainer">
+                            <!-- Room types will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLocationModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Lightbox Modal -->
+    <div id="mediaLightbox" class="modal" style="display: none;">
+        <div class="lightbox-content">
+            <span class="close" onclick="closeLightbox()">&times;</span>
+            <div class="lightbox-media">
+                <img id="lightboxImage" src="" alt="" style="display: none;">
+                <video id="lightboxVideo" controls muted playsinline style="display: none;" onclick="this.play(); event.stopPropagation();">
+                    <source src="" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            <div class="lightbox-caption" id="lightboxCaption"></div>
         </div>
     </div>
 
@@ -828,6 +1427,120 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeRoleModal()">Cancel</button>
                 <button class="btn" id="updateRoleBtn" onclick="updateUserRole()" disabled>Update Role</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Sentiment Modal -->
+    <div id="addSentimentModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add Sentiment</h2>
+                <span class="close" onclick="closeAddSentimentModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="profile-field">
+                    <label>Type</label>
+                    <select id="sentimentType" style="width: 100%; padding: 10px; border: 1px solid #ecf0f1; border-radius: 8px;">
+                        <option value="A">Type A</option>
+                        <option value="B">Type B</option>
+                    </select>
+                </div>
+                <div class="profile-field">
+                    <label>Text</label>
+                    <textarea id="sentimentText" rows="4" placeholder="Enter sentiment text..." style="width: 100%; padding: 10px; border: 1px solid #ecf0f1; border-radius: 8px;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddSentimentModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="addSentiment()">Add Sentiment</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Location Modal -->
+    <div id="editLocationModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Edit Location</h2>
+                <span class="close" onclick="closeEditLocationModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="editLocationForm">
+                    <!-- Step 1: Basics -->
+                    <div id="el_step1">
+                        <h3>1. Basics</h3>
+                        <div class="form-group">
+                            <label for="el_name">Name *</label>
+                            <input type="text" id="el_name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="el_type">Type *</label>
+                            <select id="el_type" required>
+                                <option value="night_club">Night Club</option>
+                                <option value="day_club">Day Club</option>
+                                <option value="restaurant">Restaurant</option>
+                                <option value="hotel">Hotel</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="el_description">Description</label>
+                            <textarea id="el_description" rows="3"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="el_city">City</label>
+                                <input type="text" id="el_city">
+                            </div>
+                            <div class="form-group">
+                                <label for="el_country">Country</label>
+                                <input type="text" id="el_country">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="el_score">Score (0-5)</label>
+                                <input type="number" id="el_score" min="0" max="5" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label for="el_status">Status</label>
+                                <select id="el_status">
+                                    <option value="active">Active</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="archived">Archived</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Attributes -->
+                    <div id="el_step2" style="display: none;">
+                        <h3>2. Attributes</h3>
+                        <div id="el_attributes_container">
+                            <!-- Dynamic attributes based on type -->
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Inventory -->
+                    <div id="el_step3" style="display: none;">
+                        <h3>3. Inventory</h3>
+                        <div id="el_inventory_container">
+                            <!-- Dynamic inventory based on type -->
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Review -->
+                    <div id="el_step4" style="display: none;">
+                        <h3>4. Review</h3>
+                        <pre id="el_review" style="background:#f8f9fa;border:1px solid #ecf0f1;border-radius:8px;padding:12px;white-space:pre-wrap;"></pre>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeEditLocationModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" id="el_backBtn" onclick="el_previousStep()" style="display: none;">Back</button>
+                <button type="button" class="btn btn-primary" id="el_nextBtn" onclick="el_nextStep()">Next</button>
+                <button type="button" class="btn btn-primary" id="el_saveBtn" onclick="updateLocation()" style="display: none;">Save Changes</button>
             </div>
         </div>
     </div>
@@ -943,6 +1656,9 @@
             // Load section-specific data
             if (sectionName === 'users' && currentUser?.role === 'admin') {
                 loadUsers();
+            }
+            if (sectionName === 'locations' && currentUser?.role === 'admin') {
+                loadLocations();
             }
         }
 
@@ -1222,6 +1938,854 @@
         }
 
         /**
+         * View location details
+         */
+        async function viewLocationDetails(locationId) {
+            console.log('Viewing location details for ID:', locationId);
+            currentLocationId = locationId; // Set current location ID for sentiment management
+            // Show modal container (do not replace inner HTML skeleton)
+            const modal = document.getElementById('locationModal');
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+            try {
+                const result = await makeApiRequest(`/locations/${locationId}`);
+                console.log('Location details API response:', result);
+                if (result.success && result.data) {
+                    console.log('Location data received:', result.data);
+                    // Extract the actual location data from the nested response
+                    const locationData = result.data.data || result.data;
+                    displayLocationDetails(locationData);
+                    // Ensure modal is visible
+                    if (modal) modal.style.display = 'flex';
+                } else {
+                    console.error('API response failed:', result);
+                    showAlert('Failed to load location details: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                console.error('View location details error:', err);
+                showAlert('Error loading location details: ' + err.message, 'error');
+            }
+        }
+
+        /**
+         * Display location details in modal
+         */
+        function displayLocationDetails(location) {
+            console.log('Displaying location details:', location);
+            console.log('Location keys:', Object.keys(location || {}));
+            
+            // Basic info
+            document.getElementById('locationName').textContent = location.name || '-';
+            document.getElementById('locationType').textContent = location.type || '-';
+            document.getElementById('locationDescription').textContent = location.description || '-';
+            document.getElementById('locationScore').textContent = typeof location.score === 'number' ? location.score.toFixed(1) : '0.0';
+            document.getElementById('locationStatus').textContent = location.status || '-';
+            
+            // Address & Contact
+            const address = location.address || {};
+            document.getElementById('locationCity').textContent = address.city || '-';
+            document.getElementById('locationCountry').textContent = address.country || '-';
+            
+            const contact = location.contact || {};
+            document.getElementById('locationContactPhone').textContent = contact.phone || '-';
+            document.getElementById('locationContactEmail').textContent = contact.email || '-';
+            document.getElementById('locationContactWebsite').textContent = contact.website || '-';
+            
+            // Attributes
+            displayLocationAttributes(location.attributes || {});
+            
+            // Sentiment
+            displayLocationSentiment(location.sentiment || []);
+            
+            // Main Location Media
+            displayMainLocationMedia(location.media || []);
+            
+            // Sub-entity media based on location type
+            if (location.type === 'night_club' || location.type === 'day_club') {
+                displaySeatingAreas(location.seats || []);
+            } else if (location.type === 'hotel') {
+                displayRoomTypes(location.units || []);
+            }
+        }
+
+        /**
+         * Display location attributes
+         */
+        function displayLocationAttributes(attributes) {
+            const attributesContainer = document.getElementById('locationAttributes');
+            attributesContainer.innerHTML = '';
+            
+            Object.entries(attributes).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    const attributeDiv = document.createElement('div');
+                    attributeDiv.className = 'detail-item';
+                    attributeDiv.innerHTML = `
+                        <label>${key}:</label>
+                        <span>${value}</span>
+                    `;
+                    attributesContainer.appendChild(attributeDiv);
+                }
+            });
+        }
+
+        /**
+         * Display location sentiment
+         */
+        function displayLocationSentiment(sentiments) {
+            const sentimentContainer = document.getElementById('locationSentimentList');
+            sentimentContainer.innerHTML = '';
+            
+            if (sentiments.length === 0) {
+                sentimentContainer.innerHTML = '<p style="color: #999; font-style: italic;">No sentiments added yet</p>';
+                return;
+            }
+            
+            sentiments.forEach((sentiment, index) => {
+                const sentimentDiv = document.createElement('div');
+                sentimentDiv.className = 'sentiment-item';
+                sentimentDiv.style.cssText = 'border: 1px solid #ecf0f1; border-radius: 8px; padding: 15px; margin-bottom: 10px; background: #f8f9fa;';
+                sentimentDiv.innerHTML = `
+                    <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
+                        <span class="sentiment-type" style="background: ${sentiment.type === 'A' ? '#3498db' : '#e74c3c'}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                            Type ${sentiment.type}
+                        </span>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSentiment('location', ${index})" style="margin-left: auto;">
+                            Delete
+                        </button>
+                    </div>
+                    <div class="sentiment-text" style="color: #333; line-height: 1.4;">
+                        ${sentiment.text || '<em>No text provided</em>'}
+                    </div>
+                    <div class="sentiment-meta" style="font-size: 12px; color: #666; margin-top: 8px;">
+                        Added: ${new Date(sentiment.updatedAt).toLocaleDateString()}
+                    </div>
+                `;
+                sentimentContainer.appendChild(sentimentDiv);
+            });
+        }
+
+        /**
+         * Display main location media gallery
+         */
+        function displayMainLocationMedia(media) {
+            const mediaContainer = document.getElementById('mainLocationMedia');
+            const noMediaMessage = mediaContainer.querySelector('.no-media-message');
+            
+            if (media.length === 0) {
+                noMediaMessage.style.display = 'block';
+                return;
+            }
+            
+            noMediaMessage.style.display = 'none';
+            mediaContainer.innerHTML = '';
+            
+            media.forEach((item, index) => {
+                const mediaItem = document.createElement('div');
+                mediaItem.className = 'media-item';
+                mediaItem.onclick = () => openLightbox(item);
+                
+                if (item.type === 'image') {
+                    mediaItem.innerHTML = `
+                        <img src="${item.url}" alt="${item.caption || 'Location image'}" loading="lazy">
+                        <div class="media-type-badge">IMG</div>
+                        ${item.caption ? `<div class="media-caption">${item.caption}</div>` : ''}
+                    `;
+                } else if (item.type === 'video') {
+                    // Detect video format from URL
+                    const videoType = item.url.toLowerCase().includes('.webm') ? 'video/webm' : 
+                                    item.url.toLowerCase().includes('.mov') ? 'video/quicktime' :
+                                    item.url.toLowerCase().includes('.avi') ? 'video/x-msvideo' :
+                                    item.url.toLowerCase().includes('.bin') ? 'video/mp4' : // Handle .bin files as MP4
+                                    'video/mp4';
+                    
+                    console.log('Creating video element:', {
+                        url: item.url,
+                        type: item.type,
+                        videoType: videoType,
+                        caption: item.caption
+                    });
+                    
+                    // Test if URL is accessible
+                    fetch(item.url, { method: 'HEAD' })
+                        .then(response => {
+                            console.log('Video URL accessibility test:', {
+                                url: item.url,
+                                status: response.status,
+                                contentType: response.headers.get('content-type')
+                            });
+                        })
+                        .catch(err => {
+                            console.error('Video URL accessibility error:', err);
+                        });
+                    
+                    // Test video element after it's created
+                    setTimeout(() => {
+                        const video = mediaItem.querySelector('video');
+                        if (video) {
+                            console.log('Video element test:', {
+                                src: video.src,
+                                currentSrc: video.currentSrc,
+                                networkState: video.networkState,
+                                readyState: video.readyState,
+                                error: video.error,
+                                canPlayType: {
+                                    'video/mp4': video.canPlayType('video/mp4'),
+                                    'video/webm': video.canPlayType('video/webm'),
+                                    'video/quicktime': video.canPlayType('video/quicktime')
+                                }
+                            });
+                            
+                            // Try to load the video
+                            video.load();
+                            
+                            // Test if we can play it
+                            video.play().then(() => {
+                                console.log('Video can play successfully');
+                                video.pause();
+                            }).catch(err => {
+                                console.error('Video play failed:', err);
+                            });
+                        }
+                    }, 100);
+                    
+                    mediaItem.innerHTML = `
+                        <video preload="metadata" controls muted playsinline 
+                               onerror="console.error('Video load error:', this.error, 'Network state:', this.networkState, 'Ready state:', this.readyState)" 
+                               onloadstart="console.log('Video loading started:', this.src)"
+                               oncanplay="console.log('Video can play:', this.src)"
+                               onloadeddata="console.log('Video data loaded:', this.src)"
+                               onloadedmetadata="console.log('Video metadata loaded:', this.src, 'Duration:', this.duration, 'Video dimensions:', this.videoWidth + 'x' + this.videoHeight)"
+                               onclick="this.play(); event.stopPropagation();">
+                            <source src="${item.url}" type="${videoType}">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div class="media-type-badge">VID</div>
+                        <div style="position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px;">
+                            <a href="${item.url}" target="_blank" style="color: white; text-decoration: none;">Test Direct</a>
+                        </div>
+                        ${item.caption ? `<div class="media-caption">${item.caption}</div>` : ''}
+                    `;
+                }
+                
+                mediaContainer.appendChild(mediaItem);
+            });
+        }
+
+        /**
+         * Display seating areas for clubs
+         */
+        function displaySeatingAreas(seats) {
+            const seatingSection = document.getElementById('seatingAreasSection');
+            const seatingContainer = document.getElementById('seatingAreasContainer');
+            
+            console.log('Displaying seating areas with seats:', seats);
+            
+            if (seats.length === 0) {
+                seatingSection.style.display = 'none';
+                return;
+            }
+            
+            seatingSection.style.display = 'block';
+            seatingContainer.innerHTML = '';
+            
+            // Group seats by category
+            const seatsByCategory = {};
+            seats.forEach(seat => {
+                console.log('Processing seat:', seat);
+                if (seat.media && seat.media.length > 0) {
+                    console.log('Seat has media:', seat.media);
+                }
+                const category = seat.category || 'Other';
+                if (!seatsByCategory[category]) {
+                    seatsByCategory[category] = [];
+                }
+                seatsByCategory[category].push(seat);
+            });
+            
+            // Create expandable sections for each category
+            Object.entries(seatsByCategory).forEach(([category, categorySeats]) => {
+                const areaDiv = document.createElement('div');
+                areaDiv.className = 'seating-area';
+                areaDiv.innerHTML = `
+                    <div class="seating-area-header" onclick="toggleSeatingArea(this)">
+                        <div>
+                            <div class="seating-area-title">${category.replace(/_/g, ' ').toUpperCase()}</div>
+                            <div class="seating-area-count">${categorySeats.length} seat${categorySeats.length !== 1 ? 's' : ''}</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="seating-area-content">
+                        <div class="seating-items">
+                            ${categorySeats.map(seat => createSeatItem(seat)).join('')}
+                        </div>
+                    </div>
+                `;
+                seatingContainer.appendChild(areaDiv);
+            });
+        }
+
+        /**
+         * Display room types for hotels
+         */
+        function displayRoomTypes(units) {
+            const roomSection = document.getElementById('roomTypesSection');
+            const roomContainer = document.getElementById('roomTypesContainer');
+            
+            if (units.length === 0) {
+                roomSection.style.display = 'none';
+                return;
+            }
+            
+            roomSection.style.display = 'block';
+            roomContainer.innerHTML = '';
+            
+            // Group units by kind
+            const unitsByKind = {};
+            units.forEach(unit => {
+                const kind = unit.kind || 'Other';
+                if (!unitsByKind[kind]) {
+                    unitsByKind[kind] = [];
+                }
+                unitsByKind[kind].push(unit);
+            });
+            
+            // Create expandable sections for each room type
+            Object.entries(unitsByKind).forEach(([kind, kindUnits]) => {
+                const roomDiv = document.createElement('div');
+                roomDiv.className = 'room-type';
+                roomDiv.innerHTML = `
+                    <div class="room-type-header" onclick="toggleRoomType(this)">
+                        <div>
+                            <div class="room-type-title">${kind.toUpperCase()}</div>
+                            <div class="room-type-count">${kindUnits.length} room${kindUnits.length !== 1 ? 's' : ''}</div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="room-type-content">
+                        <div class="room-items">
+                            ${kindUnits.map(unit => createRoomItem(unit)).join('')}
+                        </div>
+                    </div>
+                `;
+                roomContainer.appendChild(roomDiv);
+            });
+        }
+
+        /**
+         * Create seat item HTML
+         */
+        function createSeatItem(seat) {
+            const mediaHtml = (seat.media || []).map(media => {
+                if (media.type === 'image') {
+                    return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
+                        <img src="${media.url}" alt="${media.caption || 'Seat image'}" loading="lazy">
+                    </div>`;
+                } else if (media.type === 'video') {
+                    // Detect video format from URL
+                    const videoType = media.url.toLowerCase().includes('.webm') ? 'video/webm' : 
+                                    media.url.toLowerCase().includes('.mov') ? 'video/quicktime' :
+                                    media.url.toLowerCase().includes('.avi') ? 'video/x-msvideo' :
+                                    media.url.toLowerCase().includes('.bin') ? 'video/mp4' : // Handle .bin files as MP4
+                                    'video/mp4';
+                    
+                    console.log('Creating seat video element:', {
+                        url: media.url,
+                        type: media.type,
+                        videoType: videoType,
+                        caption: media.caption
+                    });
+                    
+                    return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
+                        <video preload="metadata" controls muted playsinline 
+                               onerror="console.error('Seat video load error:', this.error)" 
+                               onloadstart="console.log('Seat video loading started:', this.src)"
+                               onclick="this.play(); event.stopPropagation();">
+                            <source src="${media.url}" type="${videoType}">
+                            Your browser does not support the video tag.
+                        </video>
+                        <div style="position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.7); color: white; padding: 2px 5px; font-size: 10px; border-radius: 3px;">
+                            <a href="${media.url}" target="_blank" style="color: white; text-decoration: none;">Test URL</a>
+                        </div>
+                    </div>`;
+                }
+                return '';
+            }).join('');
+            
+            // Generate seat sentiments HTML
+            const sentimentsHtml = (seat.sentiment || []).map((sentiment, index) => `
+                <div class="sentiment-item" style="border: 1px solid #ecf0f1; border-radius: 8px; padding: 10px; margin-bottom: 8px; background: #f8f9fa;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <span class="sentiment-type" style="background: ${sentiment.type === 'A' ? '#3498db' : '#e74c3c'}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">
+                            Type ${sentiment.type}
+                        </span>
+                        <button class="btn btn-sm" onclick="deleteSeatSentiment('${seat.code}', ${index})" style="padding: 2px 6px; font-size: 11px; background: #e74c3c; color: white; border: none; border-radius: 3px;">Delete</button>
+                    </div>
+                    <div class="sentiment-text" style="color: #333; line-height: 1.3; font-size: 12px;">
+                        ${sentiment.text || '<em>No text provided</em>'}
+                    </div>
+                    <div class="sentiment-meta" style="font-size: 10px; color: #666; margin-top: 5px;">
+                        Added: ${new Date(sentiment.updatedAt).toLocaleDateString()}
+                    </div>
+                </div>
+            `).join('');
+            
+            return `
+                <div class="seat-item">
+                    <div class="seat-code">Seat ${seat.code}</div>
+                    <div class="seat-details">
+                        <div>Capacity: ${seat.capacity || '-'}</div>
+                        <div>Min Spend: $${seat.minSpendUSD || 0}</div>
+                        <div>Status: ${seat.status || '-'}</div>
+                        ${seat.section ? `<div>Section: ${seat.section}</div>` : ''}
+                    </div>
+                    <div style="margin-top:8px; display:flex; gap:8px;">
+                        <button class="btn btn-secondary" onclick="openAddSentimentModal('seat', '${seat.code}')">Add Sentiment</button>
+                    </div>
+                    ${sentimentsHtml ? `<div class="seat-sentiments" style="margin-top: 10px;"><h4 style="margin: 0 0 8px 0; font-size: 14px; color: #333;">Sentiments:</h4>${sentimentsHtml}</div>` : ''}
+                    ${mediaHtml ? `<div class="seat-media">${mediaHtml}</div>` : ''}
+                </div>
+            `;
+        }
+
+        /**
+         * Create room item HTML
+         */
+        function createRoomItem(unit) {
+            const mediaHtml = (unit.media || []).map(media => {
+                if (media.type === 'image') {
+                    return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
+                        <img src="${media.url}" alt="${media.caption || 'Room image'}" loading="lazy">
+                    </div>`;
+                } else if (media.type === 'video') {
+                    // Detect video format from URL
+                    const videoType = media.url.toLowerCase().includes('.webm') ? 'video/webm' : 
+                                    media.url.toLowerCase().includes('.mov') ? 'video/quicktime' :
+                                    media.url.toLowerCase().includes('.avi') ? 'video/x-msvideo' :
+                                    media.url.toLowerCase().includes('.bin') ? 'video/mp4' : // Handle .bin files as MP4
+                                    'video/mp4';
+                    
+                    return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
+                        <video preload="metadata" controls muted playsinline 
+                               onclick="this.play(); event.stopPropagation();">
+                            <source src="${media.url}" type="${videoType}">
+                            Your browser does not support the video tag.
+                        </video>
+                    </div>`;
+                }
+                return '';
+            }).join('');
+            
+            return `
+                <div class="room-item">
+                    <div class="room-code">Room ${unit.code}</div>
+                    <div class="room-details">
+                        <div>Beds: ${unit.beds || '-'}</div>
+                        <div>Occupancy: ${unit.occupancy || '-'}</div>
+                        <div>Min Price: $${unit.minPriceUSD || 0}</div>
+                        <div>Status: ${unit.status || '-'}</div>
+                        ${unit.view ? `<div>View: ${unit.view}</div>` : ''}
+                        ${unit.floor ? `<div>Floor: ${unit.floor}</div>` : ''}
+                    </div>
+                    ${mediaHtml ? `<div class="room-media">${mediaHtml}</div>` : ''}
+                </div>
+            `;
+        }
+
+        /**
+         * Toggle seating area expansion
+         */
+        function toggleSeatingArea(header) {
+            const area = header.parentElement;
+            area.classList.toggle('expanded');
+        }
+
+        /**
+         * Toggle room type expansion
+         */
+        function toggleRoomType(header) {
+            const roomType = header.parentElement;
+            roomType.classList.toggle('expanded');
+        }
+
+        /**
+         * Open media lightbox
+         */
+        function openLightbox(mediaItem) {
+            const lightbox = document.getElementById('mediaLightbox');
+            const lightboxImage = document.getElementById('lightboxImage');
+            const lightboxVideo = document.getElementById('lightboxVideo');
+            const lightboxCaption = document.getElementById('lightboxCaption');
+            
+            // Hide both media elements
+            lightboxImage.style.display = 'none';
+            lightboxVideo.style.display = 'none';
+            
+            if (mediaItem.type === 'image') {
+                lightboxImage.src = mediaItem.url;
+                lightboxImage.alt = mediaItem.caption || 'Media';
+                lightboxImage.style.display = 'block';
+            } else if (mediaItem.type === 'video') {
+                // Detect video format from URL
+                const videoType = mediaItem.url.toLowerCase().includes('.webm') ? 'video/webm' : 
+                                mediaItem.url.toLowerCase().includes('.mov') ? 'video/quicktime' :
+                                mediaItem.url.toLowerCase().includes('.avi') ? 'video/x-msvideo' :
+                                mediaItem.url.toLowerCase().includes('.bin') ? 'video/mp4' : // Handle .bin files as MP4
+                                'video/mp4';
+                
+                const source = lightboxVideo.querySelector('source');
+                source.src = mediaItem.url;
+                source.type = videoType;
+                lightboxVideo.load();
+                lightboxVideo.style.display = 'block';
+            }
+            
+            lightboxCaption.textContent = mediaItem.caption || '';
+            lightbox.style.display = 'flex';
+        }
+
+        /**
+         * Close media lightbox
+         */
+        function closeLightbox() {
+            document.getElementById('mediaLightbox').style.display = 'none';
+        }
+
+        /**
+         * Delete location with confirmation
+         */
+        async function deleteLocation(locationId, locationName) {
+            // Check if user is admin
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can delete locations', 'error');
+                return;
+            }
+
+            // Show confirmation dialog
+            const confirmed = confirm(`Are you sure you want to delete the location "${locationName}"?\n\nThis action cannot be undone.`);
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/locations/${locationId}`, 'DELETE');
+                if (result.success) {
+                    showAlert('Location deleted successfully', 'success');
+                    loadLocations(); // Refresh the locations table
+                } else {
+                    showAlert('Failed to delete location: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Delete location error:', error);
+                showAlert('Error deleting location: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Close location modal
+         */
+        function closeLocationModal() {
+            const modal = document.getElementById('locationModal');
+            if (modal) modal.style.display = 'none';
+            // Reset state so reopening works reliably
+            currentLocationId = null;
+            // Clear section content but keep modal skeleton in DOM
+            const sentimentContainer = document.getElementById('locationSentimentList');
+            if (sentimentContainer) sentimentContainer.innerHTML = '';
+            const attributesContainer = document.getElementById('locationAttributes');
+            if (attributesContainer) attributesContainer.innerHTML = '';
+            const seatingAreas = document.getElementById('seatingAreas');
+            if (seatingAreas) seatingAreas.innerHTML = '';
+            const roomTypes = document.getElementById('roomTypes');
+            if (roomTypes) roomTypes.innerHTML = '';
+        }
+
+        // ===== Edit Location Functions =====
+        let currentEditLocation = null;
+        let el_currentStep = 1;
+
+        /**
+         * Open edit location modal
+         */
+        async function openEditLocationModal() {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can edit locations', 'error');
+                return;
+            }
+
+            if (!currentLocationId) {
+                showAlert('No location selected', 'error');
+                return;
+            }
+
+            try {
+                // Fetch current location data
+                const result = await makeApiRequest(`/locations/${currentLocationId}`);
+                if (!result.success) {
+                    showAlert('Failed to load location data', 'error');
+                    return;
+                }
+
+                currentEditLocation = result.data;
+                el_currentStep = 1;
+                
+                // Populate form with current data
+                populateEditForm(currentEditLocation);
+                
+                // Show modal
+                document.getElementById('editLocationModal').style.display = 'flex';
+                el_showStep(1);
+                
+            } catch (error) {
+                console.error('Error opening edit modal:', error);
+                showAlert('Error loading location data: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Close edit location modal
+         */
+        function closeEditLocationModal() {
+            document.getElementById('editLocationModal').style.display = 'none';
+            currentEditLocation = null;
+            el_currentStep = 1;
+            // Reset form
+            document.getElementById('editLocationForm').reset();
+        }
+
+        /**
+         * Populate edit form with location data
+         */
+        function populateEditForm(location) {
+            document.getElementById('el_name').value = location.name || '';
+            document.getElementById('el_type').value = location.type || '';
+            document.getElementById('el_description').value = location.description || '';
+            document.getElementById('el_city').value = location.address?.city || '';
+            document.getElementById('el_country').value = location.address?.country || '';
+            document.getElementById('el_score').value = location.score || 0;
+            document.getElementById('el_status').value = location.status || 'active';
+            
+            // Populate attributes based on type
+            el_populateAttributes(location.attributes || {});
+            
+            // Populate inventory
+            el_populateInventory(location);
+        }
+
+        /**
+         * Populate attributes section
+         */
+        function el_populateAttributes(attributes) {
+            const container = document.getElementById('el_attributes_container');
+            container.innerHTML = '';
+            
+            // Add common attributes
+            const commonAttrs = [
+                { key: 'capacity', label: 'Capacity', type: 'number' },
+                { key: 'priceLevel', label: 'Price Level (1-5)', type: 'number', min: 1, max: 5 }
+            ];
+            
+            commonAttrs.forEach(attr => {
+                const div = document.createElement('div');
+                div.className = 'form-group';
+                div.innerHTML = `
+                    <label for="el_attr_${attr.key}">${attr.label}</label>
+                    <input type="${attr.type}" id="el_attr_${attr.key}" 
+                           ${attr.min ? `min="${attr.min}"` : ''} 
+                           ${attr.max ? `max="${attr.max}"` : ''} 
+                           value="${attributes[attr.key] || ''}">
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        /**
+         * Populate inventory section
+         */
+        function el_populateInventory(location) {
+            const container = document.getElementById('el_inventory_container');
+            container.innerHTML = '';
+            
+            if (location.type === 'night_club' || location.type === 'day_club') {
+                // Show seats
+                container.innerHTML = `
+                    <h4>Seats</h4>
+                    <div id="el_seats_container">
+                        ${(location.seats || []).map(seat => `
+                            <div class="seat-item" style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                                <strong>Seat ${seat.code}</strong> - ${seat.category || 'Unknown'} 
+                                (Capacity: ${seat.capacity || 0}, Min Spend: $${seat.minSpendUSD || 0})
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else if (location.type === 'hotel') {
+                // Show units
+                container.innerHTML = `
+                    <h4>Units</h4>
+                    <div id="el_units_container">
+                        ${(location.units || []).map(unit => `
+                            <div class="unit-item" style="border: 1px solid #ddd; padding: 10px; margin: 5px 0; border-radius: 5px;">
+                                <strong>Unit ${unit.code}</strong> - ${unit.kind || 'Unknown'} 
+                                (Beds: ${unit.beds || 0}, Occupancy: ${unit.occupancy || 0})
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+        }
+
+        /**
+         * Show specific step in edit modal
+         */
+        function el_showStep(step) {
+            // Hide all steps
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`el_step${i}`).style.display = 'none';
+            }
+            
+            // Show current step
+            document.getElementById(`el_step${step}`).style.display = 'block';
+            
+            // Update buttons
+            document.getElementById('el_backBtn').style.display = step > 1 ? 'inline-block' : 'none';
+            document.getElementById('el_nextBtn').style.display = step < 4 ? 'inline-block' : 'none';
+            document.getElementById('el_saveBtn').style.display = step === 4 ? 'inline-block' : 'none';
+        }
+
+        /**
+         * Next step in edit modal
+         */
+        function el_nextStep() {
+            if (el_currentStep < 4) {
+                el_currentStep++;
+                el_showStep(el_currentStep);
+                
+                // Update review on step 4
+                if (el_currentStep === 4) {
+                    el_updateReview();
+                }
+            }
+        }
+
+        /**
+         * Previous step in edit modal
+         */
+        function el_previousStep() {
+            if (el_currentStep > 1) {
+                el_currentStep--;
+                el_showStep(el_currentStep);
+            }
+        }
+
+        /**
+         * Update review section
+         */
+        function el_updateReview() {
+            const payload = el_buildUpdatePayload();
+            document.getElementById('el_review').textContent = JSON.stringify(payload, null, 2);
+        }
+
+        /**
+         * Build update payload from form
+         */
+        function el_buildUpdatePayload() {
+            const payload = {
+                name: document.getElementById('el_name').value.trim(),
+                type: document.getElementById('el_type').value,
+                description: document.getElementById('el_description').value.trim(),
+                score: parseFloat(document.getElementById('el_score').value) || 0,
+                status: document.getElementById('el_status').value
+            };
+            
+            // Address
+            const city = document.getElementById('el_city').value.trim();
+            const country = document.getElementById('el_country').value.trim();
+            if (city || country) {
+                payload.address = {};
+                if (city) payload.address.city = city;
+                if (country) payload.address.country = country;
+            }
+            
+            // Attributes
+            const attributes = {};
+            const capacity = document.getElementById('el_attr_capacity').value;
+            const priceLevel = document.getElementById('el_attr_priceLevel').value;
+            if (capacity) attributes.capacity = parseInt(capacity);
+            if (priceLevel) attributes.priceLevel = parseInt(priceLevel);
+            if (Object.keys(attributes).length > 0) {
+                payload.attributes = attributes;
+            }
+            
+            return payload;
+        }
+
+        /**
+         * Update location
+         */
+        async function updateLocation() {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can update locations', 'error');
+                return;
+            }
+
+            try {
+                const payload = el_buildUpdatePayload();
+                
+                // Validate required fields
+                if (!payload.name) {
+                    showAlert('Name is required', 'error');
+                    return;
+                }
+                if (!payload.type) {
+                    showAlert('Type is required', 'error');
+                    return;
+                }
+
+                const result = await makeApiRequest(`/locations/${currentLocationId}`, 'PUT', payload);
+                
+                if (result.success) {
+                    showAlert('Location updated successfully!', 'success');
+                    closeEditLocationModal();
+                    // Refresh location details
+                    viewLocationDetails(currentLocationId);
+                } else {
+                    showAlert('Failed to update location: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating location:', error);
+                showAlert('Error updating location: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Test location modal (for debugging)
+         */
+        function testLocationModal() {
+            console.log('Testing location modal...');
+            const testLocation = {
+                name: "Test Location",
+                type: "night_club",
+                description: "Test description",
+                score: 4.5,
+                status: "active",
+                address: {
+                    city: "Test City",
+                    country: "Test Country"
+                }
+            };
+            console.log('Test location data:', testLocation);
+            displayLocationDetails(testLocation);
+            
+            const modal = document.getElementById('locationModal');
+            console.log('Modal element found:', modal);
+            console.log('Modal current display style:', modal.style.display);
+            modal.style.display = 'flex';
+            console.log('Modal display set to flex');
+            console.log('Modal computed style after change:', window.getComputedStyle(modal).display);
+        }
+
+        /**
          * View any user profile by ID (admin only)
          */
         async function viewUserProfile(userId, userName) {
@@ -1336,13 +2900,263 @@
             `;
         }
 
+        // Locations API
+        async function loadLocations() {
+            const tbody = document.getElementById('locationsTableBody');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;"><div class="loading"><div class="spinner"></div><p>Loading locations...</p></div></td></tr>';
+            try {
+                const result = await makeApiRequest('/locations');
+                if (result.success && result.data) {
+                    const list = Array.isArray(result.data) ? result.data : (result.data.data || []);
+                    if (!list.length) {
+                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No locations found</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = list.map(loc => `
+                        <tr>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.name}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.type}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.address?.city || '-'}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.address?.country || '-'}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${typeof loc.score === 'number' ? loc.score.toFixed(1) : '0.0'}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.status}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.createdAt ? new Date(loc.createdAt).toLocaleDateString() : '-'}</td>
+                            <td>
+                                <button class="btn-icon btn-icon-edit" onclick="event.stopPropagation(); openEditLocationFromList('${loc._id}')" title="Edit Location">
+                                    <svg class="icon" viewBox="0 0 24 24">
+                                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                    </svg>
+                                </button>
+                                <button class="btn-icon btn-icon-delete" onclick="event.stopPropagation(); deleteLocation('${loc._id}', '${loc.name}')" title="Delete Location">
+                                    <svg class="icon" viewBox="0 0 24 24">
+                                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#e74c3c;">Failed to load locations</td></tr>';
+                }
+            } catch (err) {
+                console.error('Load locations error:', err);
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#e74c3c;">Error loading locations</td></tr>';
+            }
+        }
+
+        function openCreateLocation() {
+            document.getElementById('createLocationModal').style.display = 'flex';
+            // reset form
+            cl_isEditMode = false; cl_editLocationId = null;
+            document.querySelector('#createLocationModal .modal-header h2').textContent = 'Create Location';
+            document.getElementById('cl_name').value = '';
+            document.getElementById('cl_type').value = 'night_club';
+            document.getElementById('cl_city').value = '';
+            document.getElementById('cl_country').value = '';
+            document.getElementById('cl_desc').value = '';
+            document.getElementById('cl_bottle').value = 'false';
+            document.getElementById('cl_dress').value = '';
+            document.getElementById('cl_capacity').value = '';
+            document.getElementById('cl_stars').value = '';
+            document.getElementById('cl_brand').value = '';
+            document.getElementById('cl_checkin').value = '';
+            document.getElementById('cl_checkout').value = '';
+            document.getElementById('cl_seats_tbody').innerHTML = '';
+            document.getElementById('cl_units_tbody').innerHTML = '';
+            setClStep(1);
+        }
+
+        function closeCreateLocation() {
+            console.log('=== CLOSE MODAL CALLED ===');
+            console.log('Before reset - Edit mode flags:', { cl_isEditMode, cl_editLocationId });
+            document.getElementById('createLocationModal').style.display = 'none';
+            // Reset edit mode when closing
+            cl_isEditMode = false;
+            cl_editLocationId = null;
+            console.log('After reset - Edit mode flags:', { cl_isEditMode, cl_editLocationId });
+            // Reset modal title
+            document.querySelector('#createLocationModal .modal-header h2').textContent = 'Create Location';
+            console.log('Modal title reset to: Create Location');
+        }
+
+        // ----- Edit using Create Modal (Edit Mode) -----
+        let cl_isEditMode = false;
+        let cl_editLocationId = null;
+
+        async function openEditLocationFromList(locationId) {
+            console.log('openEditLocationFromList called with locationId:', locationId);
+            // Visual debugging
+            showAlert('Opening edit for location: ' + locationId, 'info');
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can edit locations', 'error');
+                return;
+            }
+            try {
+                const result = await makeApiRequest(`/locations/${locationId}`);
+                if (!result.success) {
+                    showAlert('Failed to load location', 'error');
+                    return;
+                }
+                const loc = result.data.data || result.data;
+                console.log('Setting edit mode flags:', { locationId, loc });
+                cl_isEditMode = true;
+                cl_editLocationId = locationId;
+                console.log('Edit mode flags set:', { cl_isEditMode, cl_editLocationId });
+                // Visual confirmation
+                showAlert('Edit mode activated for: ' + loc.name, 'success');
+                // Open modal
+                document.getElementById('createLocationModal').style.display = 'flex';
+                // Set header and primary button text
+                document.querySelector('#createLocationModal .modal-header h2').textContent = 'Edit Location';
+                // Populate fields
+                document.getElementById('cl_name').value = loc.name || '';
+                document.getElementById('cl_type').value = loc.type || 'night_club';
+                document.getElementById('cl_city').value = loc.address?.city || '';
+                document.getElementById('cl_country').value = loc.address?.country || '';
+                // Ensure type-specific sections visible
+                onClTypeChange();
+                // Attributes
+                document.getElementById('cl_desc').value = loc.description || '';
+                if (loc.type === 'night_club' || loc.type === 'day_club') {
+                    if (typeof loc.attributes?.bottleService === 'boolean') {
+                        document.getElementById('cl_bottle').value = String(loc.attributes.bottleService);
+                    }
+                    document.getElementById('cl_dress').value = loc.attributes?.dressCode || '';
+                    document.getElementById('cl_capacity').value = loc.attributes?.capacity || '';
+                } else if (loc.type === 'hotel') {
+                    document.getElementById('cl_stars').value = loc.attributes?.stars || '';
+                    document.getElementById('cl_brand').value = loc.attributes?.brand || '';
+                    document.getElementById('cl_checkin').value = loc.attributes?.checkInTime || '';
+                    document.getElementById('cl_checkout').value = loc.attributes?.checkOutTime || '';
+                }
+                // Inventory: clear and populate
+                document.getElementById('cl_seats_tbody').innerHTML = '';
+                (loc.seats || []).forEach(seat => {
+                    addSeatRow();
+                    const row = document.querySelector('#cl_seats_tbody tr:last-child');
+                    row.querySelector('.cl_seat_code').value = seat.code || '';
+                    row.querySelector('.cl_seat_category').value = seat.category || '';
+                    row.querySelector('.cl_seat_capacity').value = seat.capacity || '';
+                    row.querySelector('.cl_seat_min').value = seat.minSpendUSD || '';
+                });
+                document.getElementById('cl_units_tbody').innerHTML = '';
+                (loc.units || []).forEach(unit => {
+                    addUnitRow();
+                    const row = document.querySelector('#cl_units_tbody tr:last-child');
+                    row.querySelector('.cl_unit_code').value = unit.code || '';
+                    row.querySelector('.cl_unit_kind').value = unit.kind || '';
+                    row.querySelector('.cl_unit_beds').value = unit.beds || '';
+                    row.querySelector('.cl_unit_occ').value = unit.occupancy || '';
+                    row.querySelector('.cl_unit_min').value = unit.minPriceUSD || '';
+                });
+                // Start at step 1
+                setClStep(1);
+            } catch (e) {
+                console.error('openEditLocationFromList error:', e);
+                showAlert('Error opening edit: ' + e.message, 'error');
+            }
+        }
+
+        async function submitCreateLocationFromMultiStep(event) {
+            console.log('=== SUBMIT FUNCTION CALLED ===');
+            console.log('Event:', event);
+            console.log('Current edit mode flags:', { cl_isEditMode, cl_editLocationId });
+            console.log('Modal title:', document.querySelector('#createLocationModal .modal-header h2').textContent);
+            
+            // Visual debugging
+            showAlert('Submit called - Edit mode: ' + cl_isEditMode + ', ID: ' + cl_editLocationId, 'info');
+            
+            event?.preventDefault?.();
+            try {
+                console.log('Building payload...');
+                const payload = buildCreateLocationPayload();
+                console.log('Payload built:', payload);
+                
+                // Detailed edit mode check
+                console.log('=== EDIT MODE DETECTION ===');
+                console.log('cl_isEditMode:', cl_isEditMode, '(type:', typeof cl_isEditMode, ')');
+                console.log('cl_editLocationId:', cl_editLocationId, '(type:', typeof cl_editLocationId, ')');
+                console.log('cl_isEditMode && cl_editLocationId:', cl_isEditMode && cl_editLocationId);
+                
+                if (cl_isEditMode && cl_editLocationId) {
+                    console.log('✅ EDIT MODE DETECTED - Updating existing location:', cl_editLocationId);
+                    console.log('Making PUT request to:', `/locations/${cl_editLocationId}`);
+                    showAlert('✅ EDIT MODE - Updating location: ' + cl_editLocationId, 'success');
+                    const result = await makeApiRequest(`/locations/${cl_editLocationId}`,'PUT', payload);
+                    console.log('PUT request result:', result);
+                    if (result.success) {
+                        closeCreateLocation();
+                        showAlert('Location updated successfully', 'success');
+                        loadLocations();
+                    } else {
+                        showAlert(result.error?.message || 'Failed to update location', 'error');
+                    }
+                } else {
+                    console.log('❌ CREATE MODE DETECTED - Creating new location');
+                    console.log('Making POST request to:', '/locations');
+                    showAlert('❌ CREATE MODE - Creating new location', 'warning');
+                    const result = await makeApiRequest('/locations','POST', payload);
+                    console.log('POST request result:', result);
+                    if (result.success) {
+                        closeCreateLocation();
+                        showAlert('Location created successfully', 'success');
+                        loadLocations();
+                    } else {
+                        showAlert(result.error?.message || 'Failed to create location', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Submit location error:', err);
+                showAlert('Error submitting location: ' + err.message, 'error');
+            }
+        }
+
+        async function submitCreateLocation(event) {
+            event?.preventDefault?.();
+            const name = document.getElementById('cl_name').value.trim();
+            const type = document.getElementById('cl_type').value;
+            const city = document.getElementById('cl_city').value.trim();
+            const country = document.getElementById('cl_country').value.trim();
+            if (!name) { showAlert('Name is required', 'error'); return; }
+            try {
+                const payload = { name, type, address: { city, country } };
+                const result = await makeApiRequest('/locations', 'POST', payload);
+                if (result.success) {
+                    closeCreateLocation();
+                    showAlert('Location created', 'success');
+                    loadLocations();
+                } else {
+                    showAlert(result.data?.error?.message || 'Failed to create location', 'error');
+                }
+            } catch (err) {
+                console.error('Create location error:', err);
+                showAlert('Error creating location: ' + err.message, 'error');
+            }
+        }
+
+        async function createLocation(payload) {
+            try {
+                const result = await makeApiRequest('/locations', 'POST', payload);
+                if (result.success) {
+                    showAlert('Location created', 'success');
+                    loadLocations();
+                } else {
+                    showAlert(result.data?.error?.message || 'Failed to create location', 'error');
+                }
+            } catch (err) {
+                console.error('Create location error:', err);
+                showAlert('Error creating location: ' + err.message, 'error');
+            }
+        }
+
+
         // Avatar upload client helpers
         let hiddenFileInput = null;
         function ensureHiddenFileInput() {
             if (!hiddenFileInput) {
                 hiddenFileInput = document.createElement('input');
                 hiddenFileInput.type = 'file';
-                hiddenFileInput.accept = 'image/*';
+                hiddenFileInput.accept = 'image/*,video/*';
                 hiddenFileInput.style.display = 'none';
                 hiddenFileInput.addEventListener('change', handleAvatarSelected);
                 document.body.appendChild(hiddenFileInput);
@@ -1395,6 +3209,339 @@
                 console.error('Avatar upload error:', err);
                 showAlert('Error uploading avatar: ' + err.message, 'error');
             }
+        }
+
+        // General media add/upload
+        function addGeneralMediaRow() {
+            const list = document.getElementById('cl_media_list');
+            const row = document.createElement('div');
+            row.className = 'cl_media_row';
+            row.style.marginTop = '6px';
+            row.innerHTML = `
+                <select class="cl_media_type"><option value="image">Image</option><option value="video">Video</option></select>
+                <input class="cl_media_url" placeholder="https://..." style="width:260px"/>
+                <input class="cl_media_caption" placeholder="Caption" style="width:160px"/>
+                <button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button>
+            `;
+            list.appendChild(row);
+        }
+        let hiddenAssetInput = null;
+        function ensureHiddenAssetInput() {
+            if (!hiddenAssetInput) {
+                hiddenAssetInput = document.createElement('input');
+                hiddenAssetInput.type = 'file';
+                hiddenAssetInput.accept = 'image/*,video/*';
+                hiddenAssetInput.style.display = 'none';
+                hiddenAssetInput.addEventListener('change', handleGeneralAssetSelected);
+                document.body.appendChild(hiddenAssetInput);
+            }
+        }
+        function triggerGeneralMediaUpload() {
+            ensureHiddenAssetInput();
+            hiddenAssetInput.value = '';
+            hiddenAssetInput.click();
+        }
+        async function handleGeneralAssetSelected(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            try {
+                const form = new FormData();
+                form.append('asset', file);
+                const resp = await fetch('/v1/locations/media/upload', { method: 'POST', headers: currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}, body: form, cache: 'no-store' });
+                const result = await resp.json();
+                console.log('General media upload response:', result);
+                if (resp.ok && result.success && result.data?.url) {
+                    addGeneralMediaRow();
+                    const lastRow = document.querySelector('#cl_media_list .cl_media_row:last-child');
+                    lastRow.querySelector('.cl_media_url').value = result.data.url;
+                    // Set the correct media type from the upload response
+                    console.log('Setting media type to:', result.data.type);
+                    lastRow.querySelector('.cl_media_type').value = result.data.type;
+                    console.log('Media type set to:', lastRow.querySelector('.cl_media_type').value);
+                    showAlert('Media uploaded', 'success');
+                } else {
+                    showAlert(result?.error?.message || 'Upload failed', 'error');
+                }
+            } catch (err) {
+                console.error('General media upload error:', err);
+                showAlert('Upload error: ' + err.message, 'error');
+            }
+        }
+        // Seat media upload
+        let hiddenSeatAssetInput = null, seatUploadTargetTd = null;
+        function ensureHiddenSeatAssetInput() {
+            if (!hiddenSeatAssetInput) {
+                hiddenSeatAssetInput = document.createElement('input');
+                hiddenSeatAssetInput.type = 'file';
+                hiddenSeatAssetInput.accept = 'image/*,video/*';
+                hiddenSeatAssetInput.style.display = 'none';
+                hiddenSeatAssetInput.addEventListener('change', handleSeatAssetSelected);
+                document.body.appendChild(hiddenSeatAssetInput);
+            }
+        }
+        function triggerSeatMediaUpload(btn) {
+            seatUploadTargetTd = btn.closest('td');
+            ensureHiddenSeatAssetInput();
+            hiddenSeatAssetInput.value = '';
+            hiddenSeatAssetInput.click();
+        }
+        async function handleSeatAssetSelected(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file || !seatUploadTargetTd) return;
+            try {
+                const form = new FormData();
+                form.append('asset', file);
+                const resp = await fetch('/v1/locations/media/upload', { method: 'POST', headers: currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}, body: form, cache: 'no-store' });
+                const result = await resp.json();
+                console.log('Seat media upload response:', result);
+                if (resp.ok && result.success && result.data?.url) {
+                    // add a seat media row
+                    const container = seatUploadTargetTd.querySelector('.cl_seat_media_container');
+                    const row = document.createElement('div');
+                    row.className = 'cl_seat_media_row';
+                    row.style.marginTop = '6px';
+                    console.log('Creating seat media row with type:', result.data.type);
+                    row.innerHTML = `
+                        <select class="cl_seat_media_type">
+                            <option value="image" ${result.data.type === 'image' ? 'selected' : ''}>Image</option>
+                            <option value="video" ${result.data.type === 'video' ? 'selected' : ''}>Video</option>
+                        </select>
+                        <input class="cl_seat_media_url" value="${result.data.url}" style="width:240px"/>
+                        <input class="cl_seat_media_caption" placeholder="Caption" style="width:140px"/>
+                        <button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button>
+                    `;
+                    container.appendChild(row);
+                    console.log('Seat media row created, selected value:', row.querySelector('.cl_seat_media_type').value);
+                    showAlert('Media uploaded', 'success');
+                } else {
+                    showAlert(result?.error?.message || 'Upload failed', 'error');
+                }
+            } catch (err) {
+                console.error('Seat media upload error:', err);
+                showAlert('Upload error: ' + err.message, 'error');
+            } finally {
+                seatUploadTargetTd = null;
+            }
+        }
+
+        // ===== Create Location Multi-step Logic =====
+        let clStep = 1;
+        function setClStep(step) {
+            console.log('Setting step to:', step);
+            clStep = step;
+            document.getElementById('cl_step1').style.display = step === 1 ? 'block' : 'none';
+            document.getElementById('cl_step2').style.display = step === 2 ? 'block' : 'none';
+            document.getElementById('cl_step3').style.display = step === 3 ? 'block' : 'none';
+            document.getElementById('cl_step4').style.display = step === 4 ? 'block' : 'none';
+            document.getElementById('cl_next_btn').style.display = step < 4 ? 'inline-block' : 'none';
+            document.getElementById('cl_create_btn').style.display = step === 4 ? 'inline-block' : 'none';
+            console.log('Create button display:', document.getElementById('cl_create_btn').style.display);
+            // badges
+            document.getElementById('cl_step1_badge').style.opacity = step >= 1 ? '1' : '.6';
+            document.getElementById('cl_step2_badge').style.opacity = step >= 2 ? '1' : '.6';
+            document.getElementById('cl_step3_badge').style.opacity = step >= 3 ? '1' : '.6';
+            document.getElementById('cl_step4_badge').style.opacity = step >= 4 ? '1' : '.6';
+        }
+
+        function nextClStep() {
+            console.log('nextClStep called, current step:', clStep);
+            if (clStep === 1) {
+                // basic validation
+                if (!document.getElementById('cl_name').value.trim()) { showAlert('Name is required', 'error'); return; }
+                console.log('Moving from step 1 to step 2');
+                setClStep(2);
+                onClTypeChange();
+            } else if (clStep === 2) {
+                console.log('Moving from step 2 to step 3');
+                setClStep(3);
+            } else if (clStep === 3) {
+                console.log('Moving from step 3 to step 4');
+                // build review
+                const payload = buildCreateLocationPayload();
+                document.getElementById('cl_review').textContent = JSON.stringify(payload, null, 2);
+                setClStep(4);
+            }
+        }
+        function prevClStep() {
+            if (clStep > 1) setClStep(clStep - 1);
+        }
+        function onClTypeChange() {
+            const type = document.getElementById('cl_type').value;
+            const club = (type === 'night_club' || type === 'day_club');
+            const hotel = (type === 'hotel');
+            document.getElementById('cl_attrs_club').style.display = club ? 'block' : 'none';
+            document.getElementById('cl_inventory_club').style.display = club ? 'block' : 'none';
+            document.getElementById('cl_attrs_hotel').style.display = hotel ? 'block' : 'none';
+            document.getElementById('cl_inventory_hotel').style.display = hotel ? 'block' : 'none';
+        }
+        // seats
+        function addSeatRow() {
+            const tbody = document.getElementById('cl_seats_tbody');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input class="cl_seat_code" style="width:90px"/></td>
+                <td>
+                    <select class="cl_seat_cat">
+                        <option value="backwall">Backwall</option>
+                        <option value="large_3rd_tier_couch">Large 3rd Tier Couch</option>
+                        <option value="third_tier_couch">3rd Tier Couch</option>
+                        <option value="upper_dance">Upper Dance</option>
+                        <option value="lower_dance">Lower Dance</option>
+                        <option value="four_tops">4 Tops</option>
+                        <option value="stage_tables">Stage Tables</option>
+                        <option value="owner_tables">Owner Tables</option>
+                    </select>
+                </td>
+                <td><input class="cl_seat_cap" type="number" min="0" style="width:80px"/></td>
+                <td><input class="cl_seat_min" type="number" min="0" style="width:100px"/></td>
+                <td>
+                    <div class="cl_seat_media_container"></div>
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button class="btn btn-secondary" onclick="triggerSeatMediaUpload(this)">Upload Media</button>
+                    </div>
+                </td>
+                <td><button class="btn btn-secondary" onclick="this.closest('tr').remove()">Remove</button></td>`;
+            tbody.appendChild(tr);
+        }
+        function addSeatMediaRow(button) {
+            const container = button.closest('td').querySelector('.cl_seat_media_container');
+            const row = document.createElement('div');
+            row.className = 'cl_seat_media_row';
+            row.style.marginTop = '6px';
+            row.innerHTML = `
+                <select class="cl_seat_media_type"><option value="image">Image</option><option value="video">Video</option></select>
+                <input class="cl_seat_media_url" placeholder="https://..." style="width:240px"/>
+                <input class="cl_seat_media_caption" placeholder="Caption" style="width:140px"/>
+                <button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button>
+            `;
+            container.appendChild(row);
+        }
+        // units
+        function addUnitRow() {
+            const tbody = document.getElementById('cl_units_tbody');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input class="cl_unit_code" style="width:90px"/></td>
+                <td>
+                    <select class="cl_unit_kind">
+                        <option value="standard">Standard</option>
+                        <option value="deluxe">Deluxe</option>
+                        <option value="suite">Suite</option>
+                        <option value="penthouse">Penthouse</option>
+                    </select>
+                </td>
+                <td><input class="cl_unit_beds" type="number" min="0" style="width:70px"/></td>
+                <td><input class="cl_unit_occ" type="number" min="1" style="width:70px"/></td>
+                <td><input class="cl_unit_min" type="number" min="0" style="width:100px"/></td>
+                <td><button class="btn btn-secondary" onclick="this.closest('tr').remove()">Remove</button></td>`;
+            tbody.appendChild(tr);
+        }
+        
+        function addLocationSentimentRow() { /* disabled in create flow */ }
+        
+        function buildCreateLocationPayload() {
+            const type = document.getElementById('cl_type').value;
+            const payload = {
+                name: document.getElementById('cl_name').value.trim(),
+                type
+            };
+            
+            // Only add description if not empty
+            const description = document.getElementById('cl_desc')?.value?.trim();
+            if (description) payload.description = description;
+            
+            // Build address object with only non-empty fields
+            const address = {};
+            const city = document.getElementById('cl_city').value.trim();
+            const country = document.getElementById('cl_country').value.trim();
+            if (city) address.city = city;
+            if (country) address.country = country;
+            if (Object.keys(address).length > 0) payload.address = address;
+            
+            // General media
+            const gmRows = Array.from(document.querySelectorAll('.cl_media_row'));
+            const generalMedia = gmRows.map(r => {
+                const url = r.querySelector('.cl_media_url').value.trim();
+                if (!url) return null;
+                return {
+                    type: r.querySelector('.cl_media_type').value,
+                    url: url,
+                    caption: r.querySelector('.cl_media_caption').value.trim() || undefined
+                };
+            }).filter(m => m !== null);
+            if (generalMedia.length > 0) payload.media = generalMedia;
+            
+            if (type === 'night_club' || type === 'day_club') {
+                const attributes = {};
+                const bottleService = document.getElementById('cl_bottle').value;
+                if (bottleService === 'true' || bottleService === 'false') {
+                    attributes.bottleService = bottleService === 'true';
+                }
+                const dressCode = document.getElementById('cl_dress').value.trim();
+                if (dressCode) attributes.dressCode = dressCode;
+                const capacity = parseInt(document.getElementById('cl_capacity').value || '0', 10);
+                if (capacity > 0) attributes.capacity = capacity;
+                if (Object.keys(attributes).length > 0) payload.attributes = attributes;
+                
+                // Seats
+                const rows = Array.from(document.querySelectorAll('#cl_seats_tbody tr'));
+                const seats = rows.map(r => {
+                    const code = r.querySelector('.cl_seat_code').value.trim();
+                    if (!code) return null;
+                    const seat = {
+                        code: code,
+                        category: r.querySelector('.cl_seat_cat').value,
+                        capacity: parseInt(r.querySelector('.cl_seat_cap').value || '0', 10),
+                        minSpendUSD: parseFloat(r.querySelector('.cl_seat_min').value || '0')
+                    };
+                    // Add media if any
+                    const mediaRows = Array.from(r.querySelectorAll('.cl_seat_media_row'));
+                    const media = mediaRows.map(mr => {
+                        const url = mr.querySelector('.cl_seat_media_url').value.trim();
+                        if (!url) return null;
+                        return {
+                            type: mr.querySelector('.cl_seat_media_type').value,
+                            url: url,
+                            caption: mr.querySelector('.cl_seat_media_caption').value.trim() || undefined
+                        };
+                    }).filter(m => m !== null);
+                    if (media.length > 0) seat.media = media;
+                    return seat;
+                }).filter(s => s !== null);
+                if (seats.length > 0) payload.seats = seats;
+            }
+            
+            if (type === 'hotel') {
+                const attributes = {};
+                const stars = parseInt(document.getElementById('cl_stars').value || '0', 10);
+                if (stars > 0) attributes.stars = stars;
+                const brand = document.getElementById('cl_brand').value.trim();
+                if (brand) attributes.brand = brand;
+                const checkInTime = document.getElementById('cl_checkin').value.trim();
+                if (checkInTime) attributes.checkInTime = checkInTime;
+                const checkOutTime = document.getElementById('cl_checkout').value.trim();
+                if (checkOutTime) attributes.checkOutTime = checkOutTime;
+                if (Object.keys(attributes).length > 0) payload.attributes = attributes;
+                
+                // Units
+                const rows = Array.from(document.querySelectorAll('#cl_units_tbody tr'));
+                const units = rows.map(r => {
+                    const code = r.querySelector('.cl_unit_code').value.trim();
+                    if (!code) return null;
+                    return {
+                        code: code,
+                        kind: r.querySelector('.cl_unit_kind').value,
+                        beds: parseInt(r.querySelector('.cl_unit_beds').value || '0', 10),
+                        occupancy: parseInt(r.querySelector('.cl_unit_occ').value || '1', 10),
+                        minPriceUSD: parseFloat(r.querySelector('.cl_unit_min').value || '0')
+                    };
+                }).filter(u => u !== null);
+                if (units.length > 0) payload.units = units;
+            }
+            
+            // Sentiment removed from create payload; managed post-creation
+            
+            return payload;
         }
 
         // Status update variables
@@ -1557,6 +3704,143 @@
             }
         }
 
+        // ===== Sentiment Management Functions =====
+        let currentLocationId = null;
+        let currentSentimentContext = null; // 'location', 'seat', 'unit'
+        let currentSeatCode = null;
+        let currentUnitCode = null;
+
+        /**
+         * Open add sentiment modal
+         */
+        function openAddSentimentModal(context, refCode) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can add sentiments', 'error');
+                return;
+            }
+
+            currentSentimentContext = context;
+            currentSeatCode = context === 'seat' ? refCode || null : null;
+            currentUnitCode = context === 'unit' ? refCode || null : null;
+            document.getElementById('addSentimentModal').style.display = 'block';
+            document.getElementById('sentimentType').value = 'A';
+            document.getElementById('sentimentText').value = '';
+        }
+
+        /**
+         * Close add sentiment modal
+         */
+        function closeAddSentimentModal() {
+            document.getElementById('addSentimentModal').style.display = 'none';
+            currentSentimentContext = null;
+            currentSeatCode = null;
+            currentUnitCode = null;
+        }
+
+        /**
+         * Add sentiment
+         */
+        async function addSentiment() {
+            console.log('addSentiment called');
+            console.log('currentLocationId:', currentLocationId);
+            console.log('currentSentimentContext:', currentSentimentContext);
+            
+            if (!currentLocationId) {
+                showAlert('No location selected', 'error');
+                return;
+            }
+
+            const type = document.getElementById('sentimentType').value;
+            const text = document.getElementById('sentimentText').value.trim();
+
+            console.log('Sentiment data:', { type, text });
+
+            if (!type) {
+                showAlert('Please select a sentiment type', 'error');
+                return;
+            }
+
+            try {
+                let endpoint = '';
+                if (currentSentimentContext === 'location') {
+                    endpoint = `/locations/${currentLocationId}/sentiment`;
+                } else if (currentSentimentContext === 'seat') {
+                    if (!currentSeatCode) {
+                        showAlert('Seat code not set', 'error');
+                        return;
+                    }
+                    endpoint = `/locations/${currentLocationId}/seats/${currentSeatCode}/sentiment`;
+                } else if (currentSentimentContext === 'unit') {
+                    if (!currentUnitCode) {
+                        showAlert('Unit code not set', 'error');
+                        return;
+                    }
+                    endpoint = `/locations/${currentLocationId}/units/${currentUnitCode}/sentiment`;
+                }
+
+                console.log('API endpoint:', endpoint);
+
+                const result = await makeApiRequest(endpoint, 'POST', {
+                    type: type,
+                    text: text
+                });
+
+                console.log('API response:', result);
+
+                if (result.success) {
+                    showAlert('Sentiment added successfully!', 'success');
+                    closeAddSentimentModal();
+                    // Refresh location details
+                    viewLocationDetails(currentLocationId);
+                } else {
+                    showAlert('Failed to add sentiment: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error adding sentiment:', error);
+                showAlert('Error adding sentiment: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Delete sentiment
+         */
+        async function deleteSentiment(context, index) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can delete sentiments', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to delete this sentiment?')) {
+                return;
+            }
+
+            try {
+                let endpoint = '';
+                if (context === 'location') {
+                    endpoint = `/locations/${currentLocationId}/sentiment/${index}`;
+                } else if (context === 'seat') {
+                    // This would need seat code, for now just show message
+                    showAlert('Seat sentiment deletion not implemented yet', 'info');
+                    return;
+                } else if (context === 'unit') {
+                    // This would need unit code, for now just show message
+                    showAlert('Unit sentiment deletion not implemented yet', 'info');
+                    return;
+                }
+
+                const result = await makeApiRequest(endpoint, 'DELETE');
+                if (result.success) {
+                    showAlert('Sentiment deleted successfully!', 'success');
+                    viewLocationDetails(currentLocationId);
+                } else {
+                    showAlert('Failed to delete sentiment: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting sentiment:', error);
+                showAlert('Error deleting sentiment: ' + error.message, 'error');
+            }
+        }
+
         /**
          * Logout user
          */
@@ -1575,6 +3859,36 @@
             
             // Redirect to login
             window.location.href = '/test/login';
+        }
+
+        /**
+         * Delete seat sentiment
+         */
+        async function deleteSeatSentiment(seatCode, index) {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Only administrators can delete sentiments', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to delete this sentiment?')) {
+                return;
+            }
+
+            try {
+                const endpoint = `/locations/${currentLocationId}/seats/${seatCode}/sentiment/${index}`;
+                const result = await makeApiRequest(endpoint, 'DELETE');
+                
+                if (result.success) {
+                    showAlert('Sentiment deleted successfully!', 'success');
+                    // Refresh location details
+                    viewLocationDetails(currentLocationId);
+                } else {
+                    showAlert('Failed to delete sentiment: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting seat sentiment:', error);
+                showAlert('Error deleting sentiment: ' + error.message, 'error');
+            }
         }
     </script>
 </body>

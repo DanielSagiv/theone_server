@@ -1,0 +1,126 @@
+const mongoose = require('mongoose');
+
+/**
+ * Asset for media (image/video) stored in S3 or external URL
+ */
+const AssetSchema = new mongoose.Schema({
+  type: { type: String, enum: ['image', 'video'], required: true },
+  url: { type: String, required: true, trim: true },
+  caption: { type: String, trim: true },
+  order: { type: Number, default: 0 }
+}, { _id: false });
+
+/**
+ * Admin sentiment for venue/unit/seat
+ */
+const SentimentSchema = new mongoose.Schema({
+  text: { type: String, trim: true },
+  type: { type: String, enum: ['A', 'B'], required: true },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updatedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
+/**
+ * Seat/table for night/day clubs (map-linked)
+ */
+const SeatSchema = new mongoose.Schema({
+  code: { type: String, required: true, trim: true, index: true },
+  label: { type: String, trim: true },
+  category: {
+    type: String,
+    enum: [
+      'backwall', 'large_3rd_tier_couch', 'third_tier_couch',
+      'upper_dance', 'lower_dance', 'four_tops', 'stage_tables', 'owner_tables'
+    ],
+    index: true
+  },
+  section: { type: String, trim: true },
+  capacity: { type: Number, min: 0 },
+  minSpendUSD: { type: Number, min: 0 },
+  priceTier: { type: Number, min: 1, max: 5 },
+  status: { type: String, enum: ['available','held','booked','blocked'], default: 'available' },
+  mapAnchor: { x: Number, y: Number },
+  polygon: [{ x: Number, y: Number }],
+  media: [AssetSchema],
+  sentiment: [SentimentSchema]
+}, { _id: false });
+
+/**
+ * Hotel unit (room/suite)
+ */
+const UnitSchema = new mongoose.Schema({
+  code: { type: String, required: true, trim: true, index: true },
+  kind: { type: String, enum: ['standard','deluxe','suite','penthouse'], required: true, index: true },
+  beds: { type: Number, min: 0 },
+  occupancy: { type: Number, min: 1 },
+  view: { type: String, trim: true },
+  smoking: { type: Boolean, default: false },
+  floor: { type: Number, min: 0 },
+  minPriceUSD: { type: Number, min: 0 },
+  status: { type: String, enum: ['available','held','booked','blocked'], default: 'available' },
+  media: [AssetSchema],
+  sentiment: [SentimentSchema]
+}, { _id: false });
+
+/**
+ * Location model covering night_club, day_club, restaurant, hotel
+ */
+const LocationSchema = new mongoose.Schema({
+  type: { type: String, enum: ['night_club','day_club','restaurant','hotel'], required: true, index: true },
+  name: { type: String, required: true, trim: true },
+  description: { type: String, trim: true },
+  address: {
+    line1: { type: String, trim: true },
+    line2: { type: String, trim: true },
+    city: { type: String, trim: true, index: true },
+    state: { type: String, trim: true },
+    country: { type: String, trim: true, index: true },
+    postalCode: { type: String, trim: true }
+  },
+  geo: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], index: '2dsphere', default: undefined }
+  },
+  media: [AssetSchema],
+  score: { type: Number, min: 0, max: 5, default: 0 },
+  tags: [{ type: String, trim: true }],
+  status: { type: String, enum: ['draft','active','archived'], default: 'active' },
+  contact: {
+    name: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    email: { type: String, trim: true },
+    website: { type: String, trim: true }
+  },
+  attributes: {
+    bottleService: { type: Boolean, default: undefined },
+    dressCode: { type: String, trim: true },
+    agePolicy: { type: String, trim: true },
+    musicGenres: [{ type: String, trim: true }],
+    tableMapUrl: { type: String, trim: true },
+    capacity: { type: Number, min: 0 },
+    cuisine: [{ type: String, trim: true }],
+    priceLevel: { type: Number, min: 1, max: 5 },
+    michelinStars: { type: Number, min: 0, max: 3 },
+    privateDiningRooms: { type: Number, min: 0 },
+    stars: { type: Number, min: 1, max: 5 },
+    brand: { type: String, trim: true },
+    checkInTime: { type: String, trim: true },
+    checkOutTime: { type: String, trim: true },
+    amenities: {
+      spa: Boolean, gym: Boolean, pool: Boolean, parking: Boolean, wifi: Boolean,
+      concierge: Boolean, businessCenter: Boolean, roomService: Boolean
+    },
+    conferenceRooms: { type: Number, min: 0 }
+  },
+  seats: [SeatSchema],
+  units: [UnitSchema],
+  sentiment: [SentimentSchema],
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+LocationSchema.index({ name: 'text', description: 'text', 'address.city': 1, 'address.country': 1 });
+
+module.exports = mongoose.model('Location', LocationSchema);
+
+

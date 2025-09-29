@@ -105,12 +105,14 @@ server/
 
 ## UI/UX Standards
 
-- Never use emoji icons or symbols in the user interface
+- Never use emoji icons, symbols, or Unicode emojis in the user interface (including 🪑, 📸, 🏨, 👥, 📍, 🎉, ⚙️, etc.)
 - Use clean, professional text-based navigation and headers
 - Maintain consistent typography and spacing
 - Focus on readability and accessibility
 - Use color coding and visual hierarchy instead of emojis for categorization
 - Keep the interface minimal and professional
+- Use descriptive text labels instead of emoji symbols for section headers and navigation
+- Apply this rule to all UI elements including modals, forms, buttons, and content sections
 
 ## Implementation Process
 

@@ -1,4 +1,127 @@
 const Joi = require('joi');
+// Location validation
+const assetSchema = Joi.object({
+  type: Joi.string().valid('image','video').required(),
+  url: Joi.string().uri().required(),
+  caption: Joi.string().allow(''),
+  order: Joi.number().min(0)
+});
+
+const sentimentSchema = Joi.object({
+  text: Joi.string().allow(''),
+  type: Joi.string().valid('A', 'B').required(),
+  updatedBy: Joi.string().hex().length(24),
+  updatedAt: Joi.date()
+});
+
+const seatSchema = Joi.object({
+  code: Joi.string().required(),
+  label: Joi.string().allow(''),
+  category: Joi.string().valid(
+    'backwall','large_3rd_tier_couch','third_tier_couch',
+    'upper_dance','lower_dance','four_tops','stage_tables','owner_tables'
+  ),
+  section: Joi.string().allow(''),
+  capacity: Joi.number().min(0),
+  minSpendUSD: Joi.number().min(0),
+  priceTier: Joi.number().min(1).max(5),
+  status: Joi.string().valid('available','held','booked','blocked'),
+  mapAnchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
+  polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
+  media: Joi.array().items(assetSchema),
+  sentiment: Joi.array().items(sentimentSchema)
+});
+
+const unitSchema = Joi.object({
+  code: Joi.string().required(),
+  kind: Joi.string().valid('standard','deluxe','suite','penthouse').required(),
+  beds: Joi.number().min(0),
+  occupancy: Joi.number().min(1),
+  view: Joi.string().allow(''),
+  smoking: Joi.boolean(),
+  floor: Joi.number().min(0),
+  minPriceUSD: Joi.number().min(0),
+  status: Joi.string().valid('available','held','booked','blocked'),
+  media: Joi.array().items(assetSchema),
+  sentiment: Joi.array().items(sentimentSchema)
+});
+
+const createLocationSchema = Joi.object({
+  type: Joi.string().valid('night_club','day_club','restaurant','hotel').required(),
+  name: Joi.string().min(2).required(),
+  description: Joi.string().allow('').optional(),
+  address: Joi.object({
+    line1: Joi.string().allow('').optional(),
+    line2: Joi.string().allow('').optional(),
+    city: Joi.string().allow('').optional(),
+    state: Joi.string().allow('').optional(),
+    country: Joi.string().allow('').optional(),
+    postalCode: Joi.string().allow('').optional()
+  }).optional(),
+  geo: Joi.object({
+    type: Joi.string().valid('Point').optional(),
+    coordinates: Joi.array().items(Joi.number()).length(2).optional()
+  }).optional(),
+  media: Joi.array().items(assetSchema).optional(),
+  score: Joi.number().min(0).max(5).optional(),
+  tags: Joi.array().items(Joi.string()).optional(),
+  status: Joi.string().valid('draft','active','archived').optional(),
+  contact: Joi.object({
+    name: Joi.string().allow('').optional(),
+    phone: Joi.string().allow('').optional(),
+    email: Joi.string().email().allow('').optional(),
+    website: Joi.string().uri().allow('').optional()
+  }).optional(),
+  attributes: Joi.object({
+    bottleService: Joi.boolean().optional(),
+    dressCode: Joi.string().allow('').optional(),
+    agePolicy: Joi.string().allow('').optional(),
+    musicGenres: Joi.array().items(Joi.string()).optional(),
+    tableMapUrl: Joi.string().uri().allow('').optional(),
+    capacity: Joi.number().min(0).optional(),
+    cuisine: Joi.array().items(Joi.string()).optional(),
+    priceLevel: Joi.number().min(1).max(5).optional(),
+    michelinStars: Joi.number().min(0).max(3).optional(),
+    privateDiningRooms: Joi.number().min(0).optional(),
+    stars: Joi.number().min(1).max(5).optional(),
+    brand: Joi.string().allow('').optional(),
+    checkInTime: Joi.string().allow('').optional(),
+    checkOutTime: Joi.string().allow('').optional(),
+    amenities: Joi.object({
+      spa: Joi.boolean().optional(), 
+      gym: Joi.boolean().optional(), 
+      pool: Joi.boolean().optional(), 
+      parking: Joi.boolean().optional(), 
+      wifi: Joi.boolean().optional(),
+      concierge: Joi.boolean().optional(), 
+      businessCenter: Joi.boolean().optional(), 
+      roomService: Joi.boolean().optional()
+    }).optional(),
+    conferenceRooms: Joi.number().min(0).optional()
+  }).optional(),
+  seats: Joi.array().items(seatSchema).optional(),
+  units: Joi.array().items(unitSchema).optional(),
+  sentiment: Joi.array().items(sentimentSchema).optional()
+});
+
+const updateLocationSchema = createLocationSchema.fork(
+  ['type','name'],
+  (schema) => schema.optional()
+);
+
+/**
+ * Sentiment validation schemas
+ */
+const addSentimentSchema = Joi.object({
+  text: Joi.string().allow(''),
+  type: Joi.string().valid('A', 'B').required()
+});
+
+const updateSentimentSchema = Joi.object({
+  text: Joi.string().allow(''),
+  type: Joi.string().valid('A', 'B')
+});
+
 
 /**
  * Authentication validation schemas
@@ -75,5 +198,9 @@ module.exports = {
   resetPasswordSchema,
   updateProfileSchema,
   updateEntityStatusSchema,
-  updateRoleSchema
+  updateRoleSchema,
+  createLocationSchema,
+  updateLocationSchema,
+  addSentimentSchema,
+  updateSentimentSchema
 };

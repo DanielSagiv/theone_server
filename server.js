@@ -31,11 +31,11 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-hashes'"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com"],
+      connectSrc: ["'self'", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com"],
       fontSrc: ["'self'", "https:", "data:"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
+      mediaSrc: ["'self'", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com"],
       frameSrc: ["'none'"],
     },
   },
@@ -68,11 +68,13 @@ mongoose.connect(process.env.DB_URI, {
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const locationRoutes = require('./routes/locations');
 const testRoutes = require('./routes/test');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
 app.use('/v1/users', userRoutes);
+app.use('/v1/locations', locationRoutes);
 
 // Test Interface Routes
 app.use('/test', testRoutes);

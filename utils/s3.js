@@ -43,11 +43,24 @@ async function uploadBufferToS3(buffer, key, contentType) {
  */
 function extFromMime(mimeType) {
   if (!mimeType) return 'bin';
+  
+  // Image types
   if (mimeType === 'image/jpeg' || mimeType === 'image/jpg') return 'jpg';
   if (mimeType === 'image/png') return 'png';
   if (mimeType === 'image/gif') return 'gif';
   if (mimeType === 'image/webp') return 'webp';
   if (mimeType === 'image/svg+xml') return 'svg';
+  
+  // Video types
+  if (mimeType === 'video/mp4') return 'mp4';
+  if (mimeType === 'video/webm') return 'webm';
+  if (mimeType === 'video/quicktime') return 'mov';
+  if (mimeType === 'video/x-msvideo') return 'avi';
+  if (mimeType === 'video/avi') return 'avi';
+  if (mimeType === 'video/3gpp') return '3gp';
+  if (mimeType === 'video/x-ms-wmv') return 'wmv';
+  if (mimeType === 'video/x-flv') return 'flv';
+  
   return 'bin';
 }
 

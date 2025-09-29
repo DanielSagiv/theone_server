@@ -7,7 +7,7 @@ const { uploadBufferToS3, extFromMime } = require('../utils/s3');
 const crypto = require('crypto');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
 /**
  * GET /v1/users/profile
@@ -102,7 +102,23 @@ router.put('/profile', authenticateToken, async (req, res) => {
  * POST /v1/users/profile/avatar
  * Upload avatar image to S3 and save URL (self only)
  */
-router.post('/profile/avatar', authenticateToken, upload.single('avatar'), async (req, res) => {
+router.post('/profile/avatar', authenticateToken, (req, res, next) => {
+  upload.single('avatar')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'FILE_TOO_LARGE', message: 'File size too large. Maximum size is 50MB.' }
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: { code: 'UPLOAD_ERROR', message: 'File upload error: ' + err.message }
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
