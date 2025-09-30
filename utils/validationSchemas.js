@@ -25,7 +25,6 @@ const seatSchema = Joi.object({
   capacity: Joi.number().min(0),
   minSpendUSD: Joi.number().min(0),
   priceTier: Joi.number().min(1).max(5),
-  status: Joi.string().valid('available','held','booked','blocked'),
   mapAnchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
   polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
   media: Joi.array().items(assetSchema),
@@ -41,7 +40,6 @@ const unitSchema = Joi.object({
   smoking: Joi.boolean(),
   floor: Joi.number().min(0),
   minPriceUSD: Joi.number().min(0),
-  status: Joi.string().valid('available','held','booked','blocked'),
   media: Joi.array().items(assetSchema),
   sentiment: Joi.array().items(sentimentSchema)
 });

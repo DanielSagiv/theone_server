@@ -38,12 +38,11 @@ const SeatSchema = new mongoose.Schema({
   capacity: { type: Number, min: 0 },
   minSpendUSD: { type: Number, min: 0 },
   priceTier: { type: Number, min: 1, max: 5 },
-  status: { type: String, enum: ['available','held','booked','blocked'], default: 'available' },
   mapAnchor: { x: Number, y: Number },
   polygon: [{ x: Number, y: Number }],
   media: [AssetSchema],
   sentiment: [SentimentSchema]
-}, { _id: false });
+}, { _id: true }); // Enable unique IDs for each seat
 
 /**
  * Hotel unit (room/suite)
@@ -57,10 +56,9 @@ const UnitSchema = new mongoose.Schema({
   smoking: { type: Boolean, default: false },
   floor: { type: Number, min: 0 },
   minPriceUSD: { type: Number, min: 0 },
-  status: { type: String, enum: ['available','held','booked','blocked'], default: 'available' },
   media: [AssetSchema],
   sentiment: [SentimentSchema]
-}, { _id: false });
+}, { _id: true }); // Enable unique IDs for each unit
 
 /**
  * Location model covering night_club, day_club, restaurant, hotel
@@ -122,5 +120,4 @@ const LocationSchema = new mongoose.Schema({
 LocationSchema.index({ name: 'text', description: 'text', 'address.city': 1, 'address.country': 1 });
 
 module.exports = mongoose.model('Location', LocationSchema);
-
 
