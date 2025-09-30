@@ -922,6 +922,311 @@
                 margin: 10px;
             }
         }
+
+        /* Event Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-draft {
+            background-color: #f39c12;
+            color: white;
+        }
+
+        .status-active {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        .status-sold_out {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .status-cancelled {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .status-completed {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .status-archived {
+            background-color: #7f8c8d;
+            color: white;
+        }
+
+        /* Icon Buttons */
+        .btn-icon {
+            background: none;
+            border: none;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            margin: 0 2px;
+        }
+
+        .btn-icon:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-icon-edit:hover {
+            background-color: rgba(52, 152, 219, 0.2);
+        }
+
+        .btn-icon-delete:hover {
+            background-color: rgba(231, 76, 60, 0.2);
+        }
+
+        .btn-icon .icon {
+            width: 16px;
+            height: 16px;
+            fill: #7f8c8d;
+        }
+
+        .btn-icon-edit .icon {
+            fill: #3498db;
+        }
+
+        .btn-icon-delete .icon {
+            fill: #e74c3c;
+        }
+
+        /* Event Details Tabs */
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 10px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #7f8c8d;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+
+        .tab-btn:hover {
+            color: #3498db;
+        }
+
+        .event-tab-content {
+            min-height: 400px;
+        }
+
+        /* Seat Card */
+        .seat-card {
+            border: 1px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 12px;
+            background: white;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .seat-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .seat-card.available {
+            border-left: 4px solid #27ae60;
+        }
+
+        .seat-card.booked {
+            border-left: 4px solid #e74c3c;
+            background-color: #fdf2f2;
+        }
+
+        .seat-card.held {
+            border-left: 4px solid #f39c12;
+            background-color: #fef9e7;
+        }
+
+        .seat-card.blocked {
+            border-left: 4px solid #95a5a6;
+            background-color: #f8f9fa;
+        }
+
+        .seat-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .seat-code {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .seat-status {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .seat-status.available {
+            background-color: #d5f4e6;
+            color: #27ae60;
+        }
+
+        .seat-status.booked {
+            background-color: #fadbd8;
+            color: #e74c3c;
+        }
+
+        .seat-status.held {
+            background-color: #fdeaa7;
+            color: #f39c12;
+        }
+
+        .seat-status.blocked {
+            background-color: #e8e8e8;
+            color: #95a5a6;
+        }
+
+        .seat-details {
+            font-size: 12px;
+            color: #7f8c8d;
+            line-height: 1.4;
+        }
+
+        /* Media Thumbnails */
+        .media-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .media-thumbnail {
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            object-fit: cover;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .media-thumbnail:hover {
+            transform: scale(1.05);
+            border-color: #3498db;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+        }
+
+        .media-thumbnail.video {
+            position: relative;
+        }
+
+        .media-thumbnail.video::after {
+            content: '▶';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .no-media {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        /* Seat Media Thumbnails */
+        .seat-media {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+
+        .seat-media-thumbnail {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            object-fit: cover;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid #ecf0f1;
+        }
+
+        .seat-media-thumbnail:hover {
+            transform: scale(1.2);
+            border-color: #3498db;
+            z-index: 10;
+            position: relative;
+        }
+
+        .seat-media-thumbnail.video {
+            position: relative;
+        }
+
+        .seat-media-thumbnail.video::after {
+            content: '▶';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 8px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* Media Modal */
+        .media-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .media-modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .media-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: white;
+            font-size: 30px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .media-modal-close:hover {
+            color: #3498db;
+        }
     </style>
 </head>
 <body>
@@ -1055,9 +1360,65 @@
                         <h1>Event Management</h1>
                         <p>Manage events and activities</p>
                     </div>
-                    <div class="placeholder-content">
-                        <h3>Event Management</h3>
-                        <p>This section will be implemented soon</p>
+                    <div class="card">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <h3 style="margin:0;">Events</h3>
+                                <small>All events (admin)</small>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshEvents()">Refresh</button>
+                                <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateEvent()">Create Event</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Events Filters -->
+                            <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+                                <select id="eventLocationFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterEvents()">
+                                    <option value="">All Locations</option>
+                                </select>
+                                <select id="eventStatusFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterEvents()">
+                                    <option value="">All Status</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="active">Active</option>
+                                    <option value="sold_out">Sold Out</option>
+                                    <option value="cancelled">Cancelled</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="archived">Archived</option>
+                                </select>
+                                <select id="eventTypeFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterEvents()">
+                                    <option value="">All Types</option>
+                                    <option value="night_club">Night Club</option>
+                                    <option value="day_club">Day Club</option>
+                                    <option value="restaurant">Restaurant</option>
+                                    <option value="hotel">Hotel</option>
+                                    <option value="private">Private</option>
+                                    <option value="corporate">Corporate</option>
+                                </select>
+                                <input type="text" id="eventSearchInput" placeholder="Search events..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:200px;" onkeyup="searchEvents()">
+                            </div>
+                            
+                            <!-- Events Table -->
+                            <div style="overflow:auto;">
+                                <table class="table" id="eventsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Location</th>
+                                            <th>Type</th>
+                                            <th>Date & Time</th>
+                                            <th>Capacity</th>
+                                            <th>Status</th>
+                                            <th>Revenue</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="eventsTableBody">
+                                        <tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No data loaded</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1196,6 +1557,263 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Create Event Modal -->
+        <div id="createEventModal" class="modal" style="display:none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Create Event</h2>
+                    <span class="close" onclick="closeCreateEvent()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- Steps Header -->
+                    <div style="display:flex;gap:12px;margin-bottom:16px;">
+                        <div id="ce_step1_badge" class="status-badge status-live">1. Basic Info</div>
+                        <div id="ce_step2_badge" class="status-badge status-live" style="opacity:.6;">2. Location</div>
+                        <div id="ce_step3_badge" class="status-badge status-live" style="opacity:.6;">3. Pricing</div>
+                        <div id="ce_step4_badge" class="status-badge status-live" style="opacity:.6;">4. Review</div>
+                    </div>
+
+                    <!-- Step 1: Basic Information -->
+                    <div id="ce_step1">
+                        <div class="profile-field">
+                            <label>Event Name</label>
+                            <input id="ce_name" type="text" placeholder="Event name" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Description</label>
+                            <textarea id="ce_description" rows="3" placeholder="Event description" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                        <div class="profile-field">
+                            <label>Event Type</label>
+                            <select id="ce_type" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="night_club">Night Club</option>
+                                <option value="day_club">Day Club</option>
+                                <option value="restaurant">Restaurant</option>
+                                <option value="hotel">Hotel</option>
+                                <option value="private">Private</option>
+                                <option value="corporate">Corporate</option>
+                            </select>
+                        </div>
+                        <div class="profile-field">
+                            <label>Start Date & Time</label>
+                            <input id="ce_start_datetime" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>End Date & Time</label>
+                            <input id="ce_end_datetime" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Location Selection -->
+                    <div id="ce_step2" style="display:none;">
+                        <div class="profile-field">
+                            <label>Select Location</label>
+                            <select id="ce_location_id" onchange="onCeLocationChange()" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="">Choose a location...</option>
+                            </select>
+                        </div>
+                        <div id="ce_location_preview" style="display:none;margin-top:20px;padding:15px;border:1px solid #ecf0f1;border-radius:8px;background:#f8f9fa;">
+                            <h4>Location Preview</h4>
+                            <div id="ce_location_details"></div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Pricing & Settings -->
+                    <div id="ce_step3" style="display:none;">
+                        <div class="profile-field">
+                            <label>Base Price (USD)</label>
+                            <input id="ce_base_price" type="number" min="0" step="0.01" placeholder="150.00" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Currency</label>
+                            <select id="ce_currency" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                                <option value="GBP">GBP</option>
+                            </select>
+                        </div>
+                        <div class="profile-field">
+                            <label>Price Tier (1-5)</label>
+                            <select id="ce_price_tier" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="1">1 - Budget</option>
+                                <option value="2">2 - Standard</option>
+                                <option value="3">3 - Premium</option>
+                                <option value="4">4 - Luxury</option>
+                                <option value="5">5 - Ultra Luxury</option>
+                            </select>
+                        </div>
+                        <div class="profile-field">
+                            <label>Event Policies</label>
+                            <textarea id="ce_policies" rows="3" placeholder="Event-specific policies and terms..." style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                        <div class="profile-field">
+                            <label>Notes</label>
+                            <textarea id="ce_notes" rows="2" placeholder="Internal notes..." style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Review -->
+                    <div id="ce_step4" style="display:none;">
+                        <h3>Review Event Details</h3>
+                        <pre id="ce_review" style="background:#f8f9fa;border:1px solid #ecf0f1;border-radius:8px;padding:12px;white-space:pre-wrap;"></pre>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="prevCeStep()">Back</button>
+                        <button class="btn" id="ce_next_btn" onclick="nextCeStep()">Next</button>
+                        <button class="btn" id="ce_create_btn" style="display:none;" onclick="submitCreateEvent()">Create Event</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Event Details Modal -->
+        <div id="eventDetailsModal" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width:1200px;">
+                <div class="modal-header">
+                    <h2 id="eventDetailsTitle">Event Details</h2>
+                    <span class="close" onclick="closeEventDetails()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- Event Info Tabs -->
+                    <div style="display:flex;gap:12px;margin-bottom:20px;border-bottom:1px solid #ecf0f1;">
+                        <button class="tab-btn active" onclick="switchEventTab('info')" id="eventTabInfo">Event Info</button>
+                        <button class="tab-btn" onclick="switchEventTab('seats')" id="eventTabSeats">Seat Management</button>
+                        <button class="tab-btn" onclick="switchEventTab('analytics')" id="eventTabAnalytics">Analytics</button>
+                    </div>
+
+                    <!-- Event Info Tab -->
+                    <div id="eventInfoTab" class="event-tab-content">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Event Name:</label>
+                                <span id="eventDetailName">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Type:</label>
+                                <span id="eventDetailType">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Location:</label>
+                                <span id="eventDetailLocation">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Start Date:</label>
+                                <span id="eventDetailStartDate">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>End Date:</label>
+                                <span id="eventDetailEndDate">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Status:</label>
+                                <span id="eventDetailStatus">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Base Price:</label>
+                                <span id="eventDetailBasePrice">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Total Capacity:</label>
+                                <span id="eventDetailCapacity">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Total Booked:</label>
+                                <span id="eventDetailBooked">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Total Revenue:</label>
+                                <span id="eventDetailRevenue">-</span>
+                            </div>
+                        </div>
+                        <div class="profile-field" style="margin-top:20px;">
+                            <label>Description:</label>
+                            <div id="eventDetailDescription" style="padding:10px;background:#f8f9fa;border-radius:8px;min-height:60px;">-</div>
+                        </div>
+                        <div class="profile-field" style="margin-top:20px;">
+                            <label>Policies:</label>
+                            <div id="eventDetailPolicies" style="padding:10px;background:#f8f9fa;border-radius:8px;min-height:60px;">-</div>
+                        </div>
+                        <div class="profile-field" style="margin-top:20px;">
+                            <label>Location Media:</label>
+                            <div id="eventDetailLocationMedia" style="padding:10px;background:#f8f9fa;border-radius:8px;min-height:80px;">
+                                <div style="text-align:center;color:#7f8c8d;padding:20px;">Loading location media...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seat Management Tab -->
+                    <div id="eventSeatsTab" class="event-tab-content" style="display:none;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                            <h3>Seat Management</h3>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-secondary" onclick="refreshEventSeats()">Refresh</button>
+                                <button class="btn" onclick="bulkUpdateSeats()">Bulk Update</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Seat Status Legend -->
+                        <div style="display:flex;gap:16px;margin-bottom:20px;padding:12px;background:#f8f9fa;border-radius:8px;">
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <div style="width:12px;height:12px;background:#27ae60;border-radius:2px;"></div>
+                                <span>Available</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <div style="width:12px;height:12px;background:#e74c3c;border-radius:2px;"></div>
+                                <span>Booked</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <div style="width:12px;height:12px;background:#f39c12;border-radius:2px;"></div>
+                                <span>Held</span>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <div style="width:12px;height:12px;background:#95a5a6;border-radius:2px;"></div>
+                                <span>Blocked</span>
+                            </div>
+                        </div>
+
+                        <!-- Seats Grid -->
+                        <div id="eventSeatsGrid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;">
+                            <!-- Seats will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Analytics Tab -->
+                    <div id="eventAnalyticsTab" class="event-tab-content" style="display:none;">
+                        <h3>Event Analytics</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <label>Availability %:</label>
+                                <span id="eventAnalyticsAvailability">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Revenue per Seat:</label>
+                                <span id="eventAnalyticsRevenuePerSeat">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Days Until Event:</label>
+                                <span id="eventAnalyticsDaysUntil">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Booking Rate:</label>
+                                <span id="eventAnalyticsBookingRate">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeEventDetails()">Close</button>
+                    <button class="btn" onclick="editEventFromDetails()">Edit Event</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Media Modal -->
+        <div id="mediaModal" class="media-modal">
+            <span class="media-modal-close" onclick="closeMediaModal()">&times;</span>
+            <img id="mediaModalContent" class="media-modal-content" src="" alt="">
         </div>
 
         <!-- Profile Modal -->
@@ -1659,6 +2277,9 @@
             }
             if (sectionName === 'locations' && currentUser?.role === 'admin') {
                 loadLocations();
+            }
+            if (sectionName === 'events' && currentUser?.role === 'admin') {
+                loadEvents();
             }
         }
 
@@ -3888,6 +4509,659 @@
             } catch (error) {
                 console.error('Error deleting seat sentiment:', error);
                 showAlert('Error deleting sentiment: ' + error.message, 'error');
+            }
+        }
+
+        // ========================================
+        // EVENT MANAGEMENT FUNCTIONS
+        // ========================================
+
+        let currentEventStep = 1;
+        let allEvents = [];
+        let allLocations = [];
+
+        /**
+         * Load events for the events section
+         */
+        async function loadEvents() {
+            try {
+                console.log('Loading events...');
+                const result = await makeApiRequest('/events');
+                
+                if (result.success && result.data) {
+                    allEvents = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    displayEventsTable(allEvents);
+                    populateEventLocationFilter();
+                    showAlert('Events loaded successfully!', 'success');
+                } else {
+                    console.error('Failed to load events:', result);
+                    showAlert('Failed to load events: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error loading events:', error);
+                showAlert('Error loading events: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Display events in table
+         */
+        function displayEventsTable(events) {
+            const tableBody = document.getElementById('eventsTableBody');
+            
+            if (events.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#7f8c8d;">No events found</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = events.map(event => {
+                const startDate = new Date(event.start_datetime).toLocaleDateString();
+                const startTime = new Date(event.start_datetime).toLocaleTimeString();
+                const locationName = event.location_id?.name || 'Unknown Location';
+                const statusClass = `status-${event.status}`;
+                const statusText = event.status.replace('_', ' ').toUpperCase();
+                
+                return `
+                    <tr onclick="viewEventDetails('${event._id}')" style="cursor:pointer;">
+                        <td>
+                            <strong>${event.name}</strong>
+                            <br><small style="color:#666;">${event.description || 'No description'}</small>
+                        </td>
+                        <td>${locationName}</td>
+                        <td>${event.type.replace('_', ' ').toUpperCase()}</td>
+                        <td>
+                            ${startDate}<br>
+                            <small style="color:#666;">${startTime}</small>
+                        </td>
+                        <td>
+                            ${event.total_booked || 0} / ${event.total_capacity || 0}
+                            <br><small style="color:#666;">${event.availability_percentage || 0}% available</small>
+                        </td>
+                        <td>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            $${(event.total_revenue || 0).toLocaleString()}
+                            <br><small style="color:#666;">${event.currency || 'USD'}</small>
+                        </td>
+                        <td>
+                            <button class="btn-icon btn-icon-edit" onclick="event.stopPropagation(); editEvent('${event._id}')" title="Edit Event">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon btn-icon-delete" onclick="event.stopPropagation(); deleteEvent('${event._id}', '${event.name}')" title="Delete Event">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Populate event location filter
+         */
+        async function populateEventLocationFilter() {
+            try {
+                const result = await makeApiRequest('/locations');
+                if (result.success && result.data) {
+                    allLocations = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    const locationFilter = document.getElementById('eventLocationFilter');
+                    locationFilter.innerHTML = '<option value="">All Locations</option>' +
+                        allLocations.map(loc => `<option value="${loc._id}">${loc.name}</option>`).join('');
+                }
+            } catch (error) {
+                console.error('Error loading locations for filter:', error);
+            }
+        }
+
+        /**
+         * Filter events based on selected filters
+         */
+        function filterEvents() {
+            const locationFilter = document.getElementById('eventLocationFilter').value;
+            const statusFilter = document.getElementById('eventStatusFilter').value;
+            const typeFilter = document.getElementById('eventTypeFilter').value;
+            const searchInput = document.getElementById('eventSearchInput').value.toLowerCase();
+
+            let filteredEvents = allEvents.filter(event => {
+                const matchesLocation = !locationFilter || event.location_id?._id === locationFilter;
+                const matchesStatus = !statusFilter || event.status === statusFilter;
+                const matchesType = !typeFilter || event.type === typeFilter;
+                const matchesSearch = !searchInput || 
+                    event.name.toLowerCase().includes(searchInput) ||
+                    event.description?.toLowerCase().includes(searchInput);
+
+                return matchesLocation && matchesStatus && matchesType && matchesSearch;
+            });
+
+            displayEventsTable(filteredEvents);
+        }
+
+        /**
+         * Search events
+         */
+        function searchEvents() {
+            filterEvents();
+        }
+
+        /**
+         * Refresh events
+         */
+        function refreshEvents() {
+            loadEvents();
+        }
+
+        /**
+         * Open create event modal
+         */
+        async function openCreateEvent() {
+            try {
+                // Load locations for selection
+                const result = await makeApiRequest('/locations');
+                if (result.success && result.data) {
+                    const locations = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    const locationSelect = document.getElementById('ce_location_id');
+                    locationSelect.innerHTML = '<option value="">Choose a location...</option>' +
+                        locations.map(loc => `<option value="${loc._id}">${loc.name} (${loc.type.replace('_', ' ')})</option>`).join('');
+                }
+
+                // Reset form and show modal
+                resetCreateEventForm();
+                document.getElementById('createEventModal').style.display = 'flex';
+                setCeStep(1);
+            } catch (error) {
+                console.error('Error opening create event modal:', error);
+                showAlert('Error opening create event modal: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Close create event modal
+         */
+        function closeCreateEvent() {
+            document.getElementById('createEventModal').style.display = 'none';
+            resetCreateEventForm();
+        }
+
+        /**
+         * Reset create event form
+         */
+        function resetCreateEventForm() {
+            document.getElementById('ce_name').value = '';
+            document.getElementById('ce_description').value = '';
+            document.getElementById('ce_type').value = 'night_club';
+            document.getElementById('ce_start_datetime').value = '';
+            document.getElementById('ce_end_datetime').value = '';
+            document.getElementById('ce_location_id').value = '';
+            document.getElementById('ce_base_price').value = '';
+            document.getElementById('ce_currency').value = 'USD';
+            document.getElementById('ce_price_tier').value = '1';
+            document.getElementById('ce_policies').value = '';
+            document.getElementById('ce_notes').value = '';
+            document.getElementById('ce_location_preview').style.display = 'none';
+            currentEventStep = 1;
+        }
+
+        /**
+         * Set current step in create event modal
+         */
+        function setCeStep(step) {
+            currentEventStep = step;
+            
+            // Hide all steps
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`ce_step${i}`).style.display = 'none';
+                document.getElementById(`ce_step${i}_badge`).style.opacity = '0.6';
+            }
+            
+            // Show current step
+            document.getElementById(`ce_step${step}`).style.display = 'block';
+            document.getElementById(`ce_step${step}_badge`).style.opacity = '1';
+            
+            // Update buttons
+            const backBtn = document.querySelector('#createEventModal .modal-footer .btn-secondary');
+            const nextBtn = document.getElementById('ce_next_btn');
+            const createBtn = document.getElementById('ce_create_btn');
+            
+            backBtn.style.display = step > 1 ? 'inline-block' : 'none';
+            nextBtn.style.display = step < 4 ? 'inline-block' : 'none';
+            createBtn.style.display = step === 4 ? 'inline-block' : 'none';
+        }
+
+        /**
+         * Next step in create event modal
+         */
+        function nextCeStep() {
+            if (validateCeStep(currentEventStep)) {
+                if (currentEventStep < 4) {
+                    setCeStep(currentEventStep + 1);
+                    if (currentEventStep === 4) {
+                        updateCeReview();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Previous step in create event modal
+         */
+        function prevCeStep() {
+            if (currentEventStep > 1) {
+                setCeStep(currentEventStep - 1);
+            }
+        }
+
+        /**
+         * Validate current step in create event modal
+         */
+        function validateCeStep(step) {
+            switch (step) {
+                case 1:
+                    const name = document.getElementById('ce_name').value.trim();
+                    const startDate = document.getElementById('ce_start_datetime').value;
+                    const endDate = document.getElementById('ce_end_datetime').value;
+                    
+                    if (!name) {
+                        showAlert('Event name is required', 'error');
+                        return false;
+                    }
+                    if (!startDate) {
+                        showAlert('Start date and time is required', 'error');
+                        return false;
+                    }
+                    if (!endDate) {
+                        showAlert('End date and time is required', 'error');
+                        return false;
+                    }
+                    if (new Date(startDate) >= new Date(endDate)) {
+                        showAlert('End date must be after start date', 'error');
+                        return false;
+                    }
+                    return true;
+                    
+                case 2:
+                    const locationId = document.getElementById('ce_location_id').value;
+                    if (!locationId) {
+                        showAlert('Please select a location', 'error');
+                        return false;
+                    }
+                    return true;
+                    
+                case 3:
+                    const basePrice = document.getElementById('ce_base_price').value;
+                    if (!basePrice || parseFloat(basePrice) < 0) {
+                        showAlert('Base price must be a positive number', 'error');
+                        return false;
+                    }
+                    return true;
+                    
+                default:
+                    return true;
+            }
+        }
+
+        /**
+         * Handle location selection change
+         */
+        async function onCeLocationChange() {
+            const locationId = document.getElementById('ce_location_id').value;
+            const preview = document.getElementById('ce_location_preview');
+            const details = document.getElementById('ce_location_details');
+            
+            if (!locationId) {
+                preview.style.display = 'none';
+                return;
+            }
+            
+            try {
+                const result = await makeApiRequest(`/locations/${locationId}`);
+                if (result.success && result.data) {
+                    const location = result.data.data || result.data;
+                    details.innerHTML = `
+                        <p><strong>${location.name}</strong> - ${location.type.replace('_', ' ').toUpperCase()}</p>
+                        <p>Seats: ${location.seats?.length || 0} | Units: ${location.units?.length || 0}</p>
+                        <p>Total Capacity: ${(location.seats?.reduce((sum, seat) => sum + (seat.capacity || 0), 0) || 0) + (location.units?.reduce((sum, unit) => sum + (unit.occupancy || 0), 0) || 0)}</p>
+                        <p>City: ${location.address?.city || 'N/A'} | Country: ${location.address?.country || 'N/A'}</p>
+                    `;
+                    preview.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading location details:', error);
+            }
+        }
+
+        /**
+         * Update review section
+         */
+        function updateCeReview() {
+            const reviewData = {
+                name: document.getElementById('ce_name').value,
+                description: document.getElementById('ce_description').value,
+                type: document.getElementById('ce_type').value,
+                start_datetime: document.getElementById('ce_start_datetime').value,
+                end_datetime: document.getElementById('ce_end_datetime').value,
+                location_id: document.getElementById('ce_location_id').value,
+                base_price: document.getElementById('ce_base_price').value,
+                currency: document.getElementById('ce_currency').value,
+                price_tier: document.getElementById('ce_price_tier').value,
+                policies: document.getElementById('ce_policies').value,
+                notes: document.getElementById('ce_notes').value
+            };
+            
+            document.getElementById('ce_review').textContent = JSON.stringify(reviewData, null, 2);
+        }
+
+        /**
+         * Submit create event
+         */
+        async function submitCreateEvent() {
+            try {
+                const eventData = {
+                    name: document.getElementById('ce_name').value.trim(),
+                    description: document.getElementById('ce_description').value.trim(),
+                    type: document.getElementById('ce_type').value,
+                    location_id: document.getElementById('ce_location_id').value,
+                    start_datetime: new Date(document.getElementById('ce_start_datetime').value).toISOString(),
+                    end_datetime: new Date(document.getElementById('ce_end_datetime').value).toISOString(),
+                    base_price: parseFloat(document.getElementById('ce_base_price').value),
+                    currency: document.getElementById('ce_currency').value,
+                    price_tier: parseInt(document.getElementById('ce_price_tier').value),
+                    policies: document.getElementById('ce_policies').value.trim(),
+                    notes: document.getElementById('ce_notes').value.trim()
+                };
+
+                console.log('Creating event:', eventData);
+
+                const result = await makeApiRequest('/events', 'POST', eventData);
+                
+                if (result.success) {
+                    showAlert('Event created successfully!', 'success');
+                    closeCreateEvent();
+                    loadEvents(); // Refresh events list
+                } else {
+                    showAlert('Failed to create event: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error creating event:', error);
+                showAlert('Error creating event: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * View event details
+         */
+        async function viewEventDetails(eventId) {
+            try {
+                console.log('Viewing event details for:', eventId);
+                const result = await makeApiRequest(`/events/${eventId}`);
+                
+                if (result.success && result.data) {
+                    const event = result.data.data || result.data;
+                    displayEventDetails(event);
+                    document.getElementById('eventDetailsModal').style.display = 'flex';
+                } else {
+                    showAlert('Failed to load event details: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error loading event details:', error);
+                showAlert('Error loading event details: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Display event details in modal
+         */
+        function displayEventDetails(event) {
+            // Update event info
+            document.getElementById('eventDetailsTitle').textContent = event.name;
+            document.getElementById('eventDetailName').textContent = event.name;
+            document.getElementById('eventDetailType').textContent = event.type.replace('_', ' ').toUpperCase();
+            document.getElementById('eventDetailLocation').textContent = event.location_id?.name || 'Unknown Location';
+            document.getElementById('eventDetailStartDate').textContent = new Date(event.start_datetime).toLocaleString();
+            document.getElementById('eventDetailEndDate').textContent = new Date(event.end_datetime).toLocaleString();
+            document.getElementById('eventDetailStatus').innerHTML = `<span class="status-badge status-${event.status}">${event.status.replace('_', ' ').toUpperCase()}</span>`;
+            document.getElementById('eventDetailBasePrice').textContent = `${event.currency || 'USD'} ${event.base_price || 0}`;
+            document.getElementById('eventDetailCapacity').textContent = event.total_capacity || 0;
+            document.getElementById('eventDetailBooked').textContent = event.total_booked || 0;
+            document.getElementById('eventDetailRevenue').textContent = `${event.currency || 'USD'} ${(event.total_revenue || 0).toLocaleString()}`;
+            document.getElementById('eventDetailDescription').textContent = event.description || 'No description';
+            document.getElementById('eventDetailPolicies').textContent = event.policies || 'No policies specified';
+
+            // Update analytics
+            const availability = event.total_capacity > 0 ? Math.round(((event.total_capacity - (event.total_booked || 0)) / event.total_capacity) * 100) : 0;
+            const revenuePerSeat = event.total_booked > 0 ? (event.total_revenue || 0) / event.total_booked : 0;
+            const daysUntil = Math.ceil((new Date(event.start_datetime) - new Date()) / (1000 * 60 * 60 * 24));
+            
+            document.getElementById('eventAnalyticsAvailability').textContent = `${availability}%`;
+            document.getElementById('eventAnalyticsRevenuePerSeat').textContent = `${event.currency || 'USD'} ${revenuePerSeat.toFixed(2)}`;
+            document.getElementById('eventAnalyticsDaysUntil').textContent = daysUntil > 0 ? `${daysUntil} days` : 'Event has passed';
+            document.getElementById('eventAnalyticsBookingRate').textContent = `${event.total_booked || 0}/${event.total_capacity || 0}`;
+
+            // Store current event for seat management
+            window.currentEvent = event;
+            
+            // Display location media
+            displayLocationMedia(event.location_id?.media || []);
+            
+            // Load seats if available
+            if (event.seats && event.seats.length > 0) {
+                displayEventSeats(event.seats);
+            }
+        }
+
+        /**
+         * Display event seats in grid
+         */
+        function displayEventSeats(seats) {
+            const seatsGrid = document.getElementById('eventSeatsGrid');
+            
+            if (!seats || seats.length === 0) {
+                seatsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#7f8c8d;">No seats available for this event</div>';
+                return;
+            }
+
+            seatsGrid.innerHTML = seats.map(seat => {
+                const status = seat.status || 'available';
+                const price = seat.price || window.currentEvent?.base_price || 0;
+                const currency = window.currentEvent?.currency || 'USD';
+                
+                return `
+                    <div class="seat-card ${status}" onclick="toggleSeatStatus('${seat._id}', '${status}')">
+                        <div class="seat-card-header">
+                            <span class="seat-code">${seat.code}</span>
+                            <span class="seat-status ${status}">${status}</span>
+                        </div>
+                        <div class="seat-details">
+                            <div><strong>${currency} ${price}</strong></div>
+                            <div>Capacity: ${seat.capacity || 1}</div>
+                            <div>Category: ${seat.category || 'N/A'}</div>
+                            ${seat.section ? `<div>Section: ${seat.section}</div>` : ''}
+                            ${seat.minSpendUSD ? `<div>Min Spend: $${seat.minSpendUSD}</div>` : ''}
+                            ${seat.media && seat.media.length > 0 ? `
+                                <div class="seat-media">
+                                    ${seat.media.map(media => `
+                                        <img src="${media.url}" alt="${media.alt || 'Seat media'}" 
+                                             class="seat-media-thumbnail ${media.type === 'video' ? 'video' : ''}"
+                                             onclick="event.stopPropagation(); openMediaModal('${media.url}', '${media.type}')">
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Toggle seat status
+         */
+        async function toggleSeatStatus(seatId, currentStatus) {
+            const statuses = ['available', 'held', 'booked', 'blocked'];
+            const currentIndex = statuses.indexOf(currentStatus);
+            const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+            
+            if (!confirm(`Change seat status from ${currentStatus} to ${nextStatus}?`)) {
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/events/${window.currentEvent._id}/seats/${seatId}/status`, 'PUT', {
+                    status: nextStatus
+                });
+                
+                if (result.success) {
+                    showAlert(`Seat status updated to ${nextStatus}`, 'success');
+                    // Refresh the event details to get updated data
+                    viewEventDetails(window.currentEvent._id);
+                } else {
+                    showAlert('Failed to update seat status: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error updating seat status:', error);
+                showAlert('Error updating seat status: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Switch event details tab
+         */
+        function switchEventTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`eventTab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`).classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.event-tab-content').forEach(content => content.style.display = 'none');
+            document.getElementById(`event${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`).style.display = 'block';
+        }
+
+        /**
+         * Close event details modal
+         */
+        function closeEventDetails() {
+            document.getElementById('eventDetailsModal').style.display = 'none';
+            window.currentEvent = null;
+        }
+
+        /**
+         * Refresh event seats
+         */
+        function refreshEventSeats() {
+            if (window.currentEvent) {
+                viewEventDetails(window.currentEvent._id);
+            }
+        }
+
+        /**
+         * Bulk update seats
+         */
+        function bulkUpdateSeats() {
+            showAlert('Bulk update functionality will be implemented in the next phase', 'info');
+        }
+
+        /**
+         * Edit event from details modal
+         */
+        function editEventFromDetails() {
+            if (window.currentEvent) {
+                closeEventDetails();
+                editEvent(window.currentEvent._id);
+            }
+        }
+
+        /**
+         * Display location media in event info tab
+         */
+        function displayLocationMedia(mediaArray) {
+            const mediaContainer = document.getElementById('eventDetailLocationMedia');
+            
+            if (!mediaArray || mediaArray.length === 0) {
+                mediaContainer.innerHTML = '<div class="no-media">No media available for this location</div>';
+                return;
+            }
+
+            const mediaGallery = mediaArray.map(media => {
+                const isVideo = media.type === 'video' || media.url.toLowerCase().includes('.mp4') || media.url.toLowerCase().includes('.mov');
+                return `
+                    <img src="${media.url}" alt="${media.alt || 'Location media'}" 
+                         class="media-thumbnail ${isVideo ? 'video' : ''}"
+                         onclick="openMediaModal('${media.url}', '${isVideo ? 'video' : 'image'}')">
+                `;
+            }).join('');
+
+            mediaContainer.innerHTML = `<div class="media-gallery">${mediaGallery}</div>`;
+        }
+
+        /**
+         * Open media modal
+         */
+        function openMediaModal(url, type) {
+            const modal = document.getElementById('mediaModal');
+            const content = document.getElementById('mediaModalContent');
+            
+            if (type === 'video') {
+                content.innerHTML = `<video class="media-modal-content" controls autoplay><source src="${url}" type="video/mp4">Your browser does not support the video tag.</video>`;
+            } else {
+                content.src = url;
+                content.alt = 'Media content';
+            }
+            
+            modal.style.display = 'flex';
+        }
+
+        /**
+         * Close media modal
+         */
+        function closeMediaModal() {
+            const modal = document.getElementById('mediaModal');
+            const content = document.getElementById('mediaModalContent');
+            
+            modal.style.display = 'none';
+            content.src = '';
+            content.innerHTML = '';
+        }
+
+        // Close media modal when clicking outside
+        document.addEventListener('click', function(event) {
+            const modal = document.getElementById('mediaModal');
+            if (event.target === modal) {
+                closeMediaModal();
+            }
+        });
+
+        /**
+         * Edit event
+         */
+        function editEvent(eventId) {
+            console.log('Editing event:', eventId);
+            // TODO: Implement event editing
+            showAlert('Event editing will be implemented in the next step', 'info');
+        }
+
+        /**
+         * Delete event
+         */
+        async function deleteEvent(eventId, eventName) {
+            if (!confirm(`Are you sure you want to delete the event "${eventName}"?`)) {
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/events/${eventId}`, 'DELETE');
+                
+                if (result.success) {
+                    showAlert('Event deleted successfully!', 'success');
+                    loadEvents(); // Refresh events list
+                } else {
+                    showAlert('Failed to delete event: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting event:', error);
+                showAlert('Error deleting event: ' + error.message, 'error');
             }
         }
     </script>

@@ -1,7 +1,14 @@
 const express = require('express');
 const Location = require('../models/Location');
+const Event = require('../models/Event');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { createLocationSchema, updateLocationSchema, addSentimentSchema, updateSentimentSchema } = require('../utils/validationSchemas');
+const { 
+  getLocationEventCount, 
+  getLocationEventRevenue, 
+  getLocationAnalytics,
+  validateLocationCapacity 
+} = require('../services/locationEventService');
 const multer = require('multer');
 const { uploadBufferToS3, extFromMime } = require('../utils/s3');
 const crypto = require('crypto');
@@ -490,6 +497,334 @@ router.delete('/:id/units/:unitCode/sentiment/:index', authenticateToken, requir
     res.status(500).json({ 
       success: false, 
       error: { code: 'UNIT_SENTIMENT_DELETE_FAILED', message: 'Failed to delete unit sentiment' } 
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events
+ * @description Get all events for a specific location
+ */
+router.get('/:id/events', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, upcoming_only, page = 1, limit = 20 } = req.query;
+
+    // Check if location exists
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Build filter
+    const filter = { location_id: id };
+    if (status) filter.status = status;
+    
+    if (upcoming_only === 'true') {
+      filter.start_datetime = { $gte: new Date() };
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Execute query
+    const events = await Event.find(filter)
+      .populate('created_by', 'firstName lastName email')
+      .sort({ start_datetime: 1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count
+    const total = await Event.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: events,
+      location: {
+        id: location._id,
+        name: location.name,
+        type: location.type
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching location events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch location events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events/active
+ * @description Get active events for a specific location
+ */
+router.get('/:id/events/active', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const events = await Event.find({
+      location_id: id,
+      status: 'active'
+    })
+    .populate('created_by', 'firstName lastName email')
+    .sort({ start_datetime: 1 });
+
+    res.json({
+      success: true,
+      data: events
+    });
+
+  } catch (error) {
+    console.error('Error fetching active location events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch active location events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events/upcoming
+ * @description Get upcoming events for a specific location
+ */
+router.get('/:id/events/upcoming', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const events = await Event.find({
+      location_id: id,
+      status: 'active',
+      start_datetime: { $gte: new Date() }
+    })
+    .populate('created_by', 'firstName lastName email')
+    .sort({ start_datetime: 1 });
+
+    res.json({
+      success: true,
+      data: events
+    });
+
+  } catch (error) {
+    console.error('Error fetching upcoming location events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch upcoming location events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events/analytics
+ * @description Get location event analytics
+ */
+router.get('/:id/events/analytics', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { start_date, end_date } = req.query;
+
+    // Check if location exists
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Get analytics
+    const analytics = await getLocationAnalytics(id);
+
+    // Get revenue analytics with date filter if provided
+    const startDate = start_date ? new Date(start_date) : null;
+    const endDate = end_date ? new Date(end_date) : null;
+    const revenueAnalytics = await getLocationEventRevenue(id, startDate, endDate);
+
+    res.json({
+      success: true,
+      data: {
+        ...analytics,
+        revenue_analytics: revenueAnalytics
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching location event analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch location event analytics',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/locations/:id/events/validate
+ * @description Validate if location can support new event
+ */
+router.post('/:id/events/validate', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requested_capacity, start_date, end_date } = req.body;
+
+    // Validate required fields
+    if (!requested_capacity || !start_date || !end_date) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Missing required fields: requested_capacity, start_date, end_date',
+          code: 'MISSING_REQUIRED_FIELDS'
+        }
+      });
+    }
+
+    // Check if location exists
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Validate capacity
+    const validation = await validateLocationCapacity(
+      id, 
+      parseInt(requested_capacity), 
+      new Date(start_date), 
+      new Date(end_date)
+    );
+
+    res.json({
+      success: true,
+      data: validation,
+      message: validation.validation_passed ? 
+        'Location can accommodate the event' : 
+        'Location cannot accommodate the event'
+    });
+
+  } catch (error) {
+    console.error('Error validating location capacity:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to validate location capacity',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events/count
+ * @description Get event count for location
+ */
+router.get('/:id/events/count', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.query;
+
+    // Check if location exists
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Get event count
+    const eventCount = await getLocationEventCount(id, status);
+
+    res.json({
+      success: true,
+      data: eventCount
+    });
+
+  } catch (error) {
+    console.error('Error fetching location event count:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch location event count',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/:id/events/revenue
+ * @description Get event revenue for location
+ */
+router.get('/:id/events/revenue', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { start_date, end_date } = req.query;
+
+    // Check if location exists
+    const location = await Location.findById(id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Get revenue analytics
+    const startDate = start_date ? new Date(start_date) : null;
+    const endDate = end_date ? new Date(end_date) : null;
+    const revenueAnalytics = await getLocationEventRevenue(id, startDate, endDate);
+
+    res.json({
+      success: true,
+      data: revenueAnalytics
+    });
+
+  } catch (error) {
+    console.error('Error fetching location event revenue:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch location event revenue',
+        details: error.message
+      }
     });
   }
 });

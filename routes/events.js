@@ -1,0 +1,690 @@
+const express = require('express');
+const router = express.Router();
+const Event = require('../models/Event');
+const Location = require('../models/Location');
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { 
+  createEventSchema, 
+  updateEventSchema, 
+  bookSeatSchema, 
+  updateAvailabilitySchema 
+} = require('../utils/validationSchemas');
+
+/**
+ * Event Routes
+ * @description REST API endpoints for event management
+ */
+
+/**
+ * GET /v1/events
+ * @description Get all events with optional filtering
+ */
+router.get('/', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      location_id, 
+      status, 
+      type, 
+      start_date, 
+      end_date,
+      search 
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    
+    if (location_id) filter.location_id = location_id;
+    if (status) filter.status = status;
+    if (type) filter.type = type;
+    
+    if (start_date || end_date) {
+      filter.start_datetime = {};
+      if (start_date) filter.start_datetime.$gte = new Date(start_date);
+      if (end_date) filter.start_datetime.$lte = new Date(end_date);
+    }
+    
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Execute query with population
+    const events = await Event.find(filter)
+      .populate('location_id', 'name type address.city address.country')
+      .populate('created_by', 'firstName lastName email')
+      .sort({ start_datetime: 1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get total count for pagination
+    const total = await Event.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: events,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/events/:id
+ * @description Get single event by ID
+ */
+router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const event = await Event.findById(id)
+      .populate('location_id', 'name type address media seats units')
+      .populate('created_by', 'firstName lastName email')
+      .populate('updated_by', 'firstName lastName email')
+      .populate('approved_by', 'firstName lastName email');
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: event
+    });
+
+  } catch (error) {
+    console.error('Error fetching event:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch event',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/events
+ * @description Create new event
+ */
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Validate request body
+    const { error, value } = createEventSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Validation error',
+          details: error.details[0].message
+        }
+      });
+    }
+
+    // Check if location exists
+    const location = await Location.findById(value.location_id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Location not found',
+          code: 'LOCATION_NOT_FOUND'
+        }
+      });
+    }
+
+    // Inherit seats/units from location
+    const inheritedSeats = location.seats.map(seat => ({
+      seat_id: seat._id,
+      code: seat.code,
+      label: seat.label,
+      category: seat.category,
+      section: seat.section,
+      capacity: seat.capacity,
+      min_spend: seat.minSpendUSD,
+      price_tier: seat.priceTier,
+      event_price: value.base_price * 1.5, // Default 1.5x base price
+      event_min_spend: seat.minSpendUSD * 1.2, // Default 1.2x min spend
+      status: 'available',
+      map_anchor: seat.mapAnchor,
+      polygon: seat.polygon,
+      media: []
+    }));
+
+    const inheritedUnits = location.units.map(unit => ({
+      unit_id: unit._id,
+      code: unit.code,
+      kind: unit.kind,
+      beds: unit.beds,
+      occupancy: unit.occupancy,
+      view: unit.view,
+      smoking: unit.smoking,
+      floor: unit.floor,
+      min_price: unit.minPriceUSD,
+      event_price: value.base_price * 1.5,
+      status: 'available',
+      media: []
+    }));
+
+    // Calculate total capacity
+    const totalCapacity = inheritedSeats.reduce((sum, seat) => sum + (seat.capacity || 0), 0) +
+                         inheritedUnits.reduce((sum, unit) => sum + (unit.occupancy || 0), 0);
+
+    // Create event
+    const eventData = {
+      ...value,
+      seats: inheritedSeats,
+      units: inheritedUnits,
+      total_capacity: totalCapacity,
+      total_available: totalCapacity,
+      total_booked: 0,
+      total_revenue: 0,
+      created_by: req.user?.id || '507f1f77bcf86cd799439011', // TODO: Get from auth middleware
+      views: 0,
+      inquiries: 0,
+      conversion_rate: 0,
+      coe_count: 0,
+      is_featured: false,
+      priority: 0
+    };
+
+    const event = new Event(eventData);
+    await event.save();
+
+    // Populate the created event
+    const populatedEvent = await Event.findById(event._id)
+      .populate('location_id', 'name type address.city address.country')
+      .populate('created_by', 'firstName lastName email');
+
+    res.status(201).json({
+      success: true,
+      data: populatedEvent,
+      message: 'Event created successfully'
+    });
+
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to create event',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/events/:id
+ * @description Update event
+ */
+router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate request body
+    const { error, value } = updateEventSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Validation error',
+          details: error.details[0].message
+        }
+      });
+    }
+
+    // Check if event exists
+    const existingEvent = await Event.findById(id);
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Update event
+    const updateData = {
+      ...value,
+      updated_by: req.user?.id || '507f1f77bcf86cd799439011' // TODO: Get from auth middleware
+    };
+
+    const event = await Event.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true, runValidators: true }
+    ).populate('location_id', 'name type address.city address.country')
+     .populate('updated_by', 'firstName lastName email');
+
+    res.json({
+      success: true,
+      data: event,
+      message: 'Event updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to update event',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /v1/events/:id
+ * @description Delete event
+ */
+router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Check if event has bookings
+    const hasBookings = event.seats.some(seat => seat.status === 'booked') ||
+                       event.units.some(unit => unit.status === 'booked');
+
+    if (hasBookings) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Cannot delete event with existing bookings',
+          code: 'EVENT_HAS_BOOKINGS'
+        }
+      });
+    }
+
+    await Event.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Event deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to delete event',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/events/location/:locationId
+ * @description Get events for specific location
+ */
+router.get('/location/:locationId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { locationId } = req.params;
+    const { status, upcoming_only } = req.query;
+
+    // Build filter
+    const filter = { location_id: locationId };
+    if (status) filter.status = status;
+    
+    if (upcoming_only === 'true') {
+      filter.start_datetime = { $gte: new Date() };
+    }
+
+    const events = await Event.find(filter)
+      .populate('location_id', 'name type address.city address.country')
+      .sort({ start_datetime: 1 });
+
+    res.json({
+      success: true,
+      data: events
+    });
+
+  } catch (error) {
+    console.error('Error fetching location events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to fetch location events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/events/:id/availability
+ * @description Update event availability
+ */
+router.put('/:id/availability', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate request body
+    const { error, value } = updateAvailabilitySchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Validation error',
+          details: error.details[0].message
+        }
+      });
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Update availability
+    event.total_available = value.total_available;
+    event.total_booked = value.total_booked;
+    event.total_revenue = value.total_revenue;
+    event.last_availability_check = new Date();
+    event.availability_updated_by = req.user?.id || '507f1f77bcf86cd799439011';
+
+    await event.save();
+
+    res.json({
+      success: true,
+      data: event,
+      message: 'Event availability updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Error updating event availability:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to update event availability',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/events/:id/seats/:seatId/book
+ * @description Book specific seat
+ */
+router.post('/:id/seats/:seatId/book', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id, seatId } = req.params;
+
+    // Validate request body
+    const { error, value } = bookSeatSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Validation error',
+          details: error.details[0].message
+        }
+      });
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Find the seat
+    const seat = event.seats.id(seatId);
+    if (!seat) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Seat not found',
+          code: 'SEAT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Check if seat is available
+    if (seat.status !== 'available') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Seat is not available',
+          code: 'SEAT_NOT_AVAILABLE',
+          current_status: seat.status
+        }
+      });
+    }
+
+    // Book the seat
+    seat.status = 'booked';
+    seat.booked_by = value.user_id;
+    seat.booked_at = new Date();
+    seat.booking_reference = value.booking_reference || null;
+
+    // Update event totals
+    event.total_booked += seat.capacity || 0;
+    event.total_available -= seat.capacity || 0;
+    event.total_revenue += seat.event_price || 0;
+
+    await event.save();
+
+    res.json({
+      success: true,
+      data: {
+        event_id: event._id,
+        seat_id: seat._id,
+        seat_code: seat.code,
+        status: seat.status,
+        booked_by: seat.booked_by,
+        booked_at: seat.booked_at,
+        booking_reference: seat.booking_reference
+      },
+      message: 'Seat booked successfully'
+    });
+
+  } catch (error) {
+    console.error('Error booking seat:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to book seat',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/events/:id/seats/:seatId/release
+ * @description Release seat booking
+ */
+router.post('/:id/seats/:seatId/release', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id, seatId } = req.params;
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Event not found',
+          code: 'EVENT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Find the seat
+    const seat = event.seats.id(seatId);
+    if (!seat) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Seat not found',
+          code: 'SEAT_NOT_FOUND'
+        }
+      });
+    }
+
+    // Check if seat is booked
+    if (seat.status !== 'booked') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Seat is not booked',
+          code: 'SEAT_NOT_BOOKED',
+          current_status: seat.status
+        }
+      });
+    }
+
+    // Release the seat
+    seat.status = 'available';
+    seat.booked_by = null;
+    seat.booked_at = null;
+    seat.booking_reference = null;
+
+    // Update event totals
+    event.total_booked -= seat.capacity || 0;
+    event.total_available += seat.capacity || 0;
+    event.total_revenue -= seat.event_price || 0;
+
+    await event.save();
+
+    res.json({
+      success: true,
+      data: {
+        event_id: event._id,
+        seat_id: seat._id,
+        seat_code: seat.code,
+        status: seat.status
+      },
+      message: 'Seat released successfully'
+    });
+
+  } catch (error) {
+    console.error('Error releasing seat:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to release seat',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/events/:id/seats/:seatId/status
+ * @description Update seat status
+ */
+router.put('/:id/seats/:seatId/status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id, seatId } = req.params;
+    const { status } = req.body;
+
+    if (!status || !['available', 'held', 'booked', 'blocked'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid status. Must be: available, held, booked, or blocked' }
+      });
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Event not found' }
+      });
+    }
+
+    // Find the seat in the event
+    const seat = event.seats.find(s => s._id.toString() === seatId);
+    if (!seat) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Seat not found in this event' }
+      });
+    }
+
+    // Update seat status
+    seat.status = status;
+    
+    // Clear booking details if status is not booked
+    if (status !== 'booked') {
+      seat.booked_by = undefined;
+      seat.booked_at = undefined;
+      seat.booking_reference = undefined;
+    }
+
+    await event.save();
+
+    res.json({
+      success: true,
+      data: {
+        message: `Seat ${seat.code} status updated to ${status}`,
+        seat: {
+          _id: seat._id,
+          code: seat.code,
+          status: seat.status
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error updating seat status:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error' }
+    });
+  }
+});
+
+module.exports = router;

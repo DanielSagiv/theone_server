@@ -69,12 +69,14 @@ mongoose.connect(process.env.DB_URI, {
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const locationRoutes = require('./routes/locations');
+const eventRoutes = require('./routes/events');
 const testRoutes = require('./routes/test');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
 app.use('/v1/users', userRoutes);
 app.use('/v1/locations', locationRoutes);
+app.use('/v1/events', eventRoutes);
 
 // Test Interface Routes
 app.use('/test', testRoutes);

@@ -120,6 +120,99 @@ const updateSentimentSchema = Joi.object({
   type: Joi.string().valid('A', 'B')
 });
 
+/**
+ * Event validation schemas
+ * @description Joi validation schemas for event endpoints
+ */
+
+// Event seat validation schema
+const eventSeatSchema = Joi.object({
+  seat_id: Joi.string().hex().length(24).required(),
+  code: Joi.string().required(),
+  label: Joi.string().allow(''),
+  category: Joi.string().allow(''),
+  section: Joi.string().allow(''),
+  capacity: Joi.number().min(0),
+  min_spend: Joi.number().min(0),
+  price_tier: Joi.number().min(1).max(5),
+  event_price: Joi.number().min(0),
+  event_min_spend: Joi.number().min(0),
+  status: Joi.string().valid('available', 'held', 'booked', 'blocked'),
+  booked_by: Joi.string().hex().length(24),
+  booked_at: Joi.date(),
+  booking_reference: Joi.string().allow(''),
+  map_anchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
+  polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
+  media: Joi.array().items(assetSchema)
+});
+
+// Event unit validation schema
+const eventUnitSchema = Joi.object({
+  unit_id: Joi.string().hex().length(24).required(),
+  code: Joi.string().required(),
+  kind: Joi.string().valid('standard', 'deluxe', 'suite', 'penthouse').required(),
+  beds: Joi.number().min(0),
+  occupancy: Joi.number().min(1),
+  view: Joi.string().allow(''),
+  smoking: Joi.boolean(),
+  floor: Joi.number().min(0),
+  min_price: Joi.number().min(0),
+  event_price: Joi.number().min(0),
+  status: Joi.string().valid('available', 'held', 'booked', 'blocked'),
+  booked_by: Joi.string().hex().length(24),
+  booked_at: Joi.date(),
+  booking_reference: Joi.string().allow(''),
+  media: Joi.array().items(assetSchema)
+});
+
+// Create event validation schema
+const createEventSchema = Joi.object({
+  name: Joi.string().min(2).required(),
+  description: Joi.string().allow('').optional(),
+  type: Joi.string().valid('night_club', 'day_club', 'restaurant', 'hotel', 'private', 'corporate').required(),
+  location_id: Joi.string().hex().length(24).required(),
+  start_datetime: Joi.date().required(),
+  end_datetime: Joi.date().required(),
+  timezone: Joi.string().default('UTC'),
+  base_price: Joi.number().min(0).required(),
+  currency: Joi.string().default('USD'),
+  price_tier: Joi.number().min(1).max(5).default(1),
+  status: Joi.string().valid('draft', 'active', 'sold_out', 'cancelled', 'completed', 'archived').default('draft'),
+  tags: Joi.array().items(Joi.string()).optional(),
+  notes: Joi.string().allow('').optional(),
+  policies: Joi.string().allow('').optional(),
+  media: Joi.array().items(assetSchema).optional(),
+  seats: Joi.array().items(eventSeatSchema).optional(),
+  units: Joi.array().items(eventUnitSchema).optional(),
+  requires_approval: Joi.boolean().default(false),
+  auto_approve: Joi.boolean().default(true),
+  max_group_size: Joi.number().min(1).optional(),
+  cancellation_policy: Joi.object({
+    hours_before_event: Joi.number().min(0),
+    refund_percentage: Joi.number().min(0).max(100).default(100),
+    admin_fee: Joi.number().min(0).default(0)
+  }).optional()
+});
+
+// Update event validation schema
+const updateEventSchema = createEventSchema.fork(
+  ['name', 'type', 'location_id', 'start_datetime', 'end_datetime', 'base_price'],
+  (schema) => schema.optional()
+);
+
+// Book seat validation schema
+const bookSeatSchema = Joi.object({
+  user_id: Joi.string().hex().length(24).required(),
+  booking_reference: Joi.string().allow('').optional()
+});
+
+// Update availability validation schema
+const updateAvailabilitySchema = Joi.object({
+  total_available: Joi.number().min(0).required(),
+  total_booked: Joi.number().min(0).required(),
+  total_revenue: Joi.number().min(0).required()
+});
+
 
 /**
  * Authentication validation schemas
@@ -200,5 +293,11 @@ module.exports = {
   createLocationSchema,
   updateLocationSchema,
   addSentimentSchema,
-  updateSentimentSchema
+  updateSentimentSchema,
+  createEventSchema,
+  updateEventSchema,
+  eventSeatSchema,
+  eventUnitSchema,
+  bookSeatSchema,
+  updateAvailabilitySchema
 };

@@ -1,0 +1,250 @@
+const mongoose = require('mongoose');
+
+/**
+ * Event-specific seat booking (inherited from location seats)
+ */
+const EventSeatSchema = new mongoose.Schema({
+  seat_id: { type: mongoose.Schema.Types.ObjectId, required: true }, // Reference to Location.seats[]._id
+  code: { type: String, required: true, trim: true }, // Inherited from location
+  label: { type: String, trim: true }, // Inherited from location
+  category: { type: String, trim: true }, // Inherited from location
+  section: { type: String, trim: true }, // Inherited from location
+  capacity: { type: Number, min: 0 }, // Inherited from location
+  min_spend: { type: Number, min: 0 }, // Inherited from location
+  price_tier: { type: Number, min: 1, max: 5 }, // Inherited from location
+  
+  // Event-specific pricing and status
+  event_price: { type: Number, min: 0 }, // Event-specific pricing
+  event_min_spend: { type: Number, min: 0 }, // Event-specific minimum spend
+  status: { 
+    type: String, 
+    enum: ['available', 'held', 'booked', 'blocked'], 
+    default: 'available' 
+  },
+  
+  // Booking details
+  booked_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who booked it
+  booked_at: { type: Date }, // When it was booked
+  booking_reference: { type: String, trim: true }, // COE or booking reference
+  
+  // Map coordinates (inherited from location)
+  map_anchor: { x: Number, y: Number },
+  polygon: [{ x: Number, y: Number }],
+  
+  // Event-specific media
+  media: [{
+    type: { type: String, enum: ['image', 'video'], required: true },
+    url: { type: String, required: true, trim: true },
+    caption: { type: String, trim: true },
+    order: { type: Number, default: 0 }
+  }]
+}, { _id: true });
+
+/**
+ * Event-specific unit booking (inherited from location units)
+ */
+const EventUnitSchema = new mongoose.Schema({
+  unit_id: { type: mongoose.Schema.Types.ObjectId, required: true }, // Reference to Location.units[]._id
+  code: { type: String, required: true, trim: true }, // Inherited from location
+  kind: { 
+    type: String, 
+    enum: ['standard', 'deluxe', 'suite', 'penthouse'], 
+    required: true 
+  }, // Inherited from location
+  beds: { type: Number, min: 0 }, // Inherited from location
+  occupancy: { type: Number, min: 1 }, // Inherited from location
+  view: { type: String, trim: true }, // Inherited from location
+  smoking: { type: Boolean, default: false }, // Inherited from location
+  floor: { type: Number, min: 0 }, // Inherited from location
+  min_price: { type: Number, min: 0 }, // Inherited from location
+  
+  // Event-specific pricing and status
+  event_price: { type: Number, min: 0 }, // Event-specific pricing
+  status: { 
+    type: String, 
+    enum: ['available', 'held', 'booked', 'blocked'], 
+    default: 'available' 
+  },
+  
+  // Booking details
+  booked_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who booked it
+  booked_at: { type: Date }, // When it was booked
+  booking_reference: { type: String, trim: true }, // COE or booking reference
+  
+  // Event-specific media
+  media: [{
+    type: { type: String, enum: ['image', 'video'], required: true },
+    url: { type: String, required: true, trim: true },
+    caption: { type: String, trim: true },
+    order: { type: Number, default: 0 }
+  }]
+}, { _id: true });
+
+/**
+ * Event model - represents a specific event at a location
+ */
+const EventSchema = new mongoose.Schema({
+  // Basic Information
+  name: { type: String, required: true, trim: true, index: true },
+  description: { type: String, trim: true },
+  type: { 
+    type: String, 
+    enum: ['night_club', 'day_club', 'restaurant', 'hotel', 'private', 'corporate'], 
+    required: true, 
+    index: true 
+  },
+  
+  // Location Reference
+  location_id: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Location', 
+    required: true, 
+    index: true 
+  },
+  
+  // Event Timing
+  start_datetime: { type: Date, required: true, index: true },
+  end_datetime: { type: Date, required: true, index: true },
+  timezone: { type: String, default: 'UTC' },
+  
+  // Capacity & Availability
+  total_capacity: { type: Number, min: 0, required: true },
+  total_available: { type: Number, min: 0, required: true },
+  total_booked: { type: Number, min: 0, default: 0 },
+  total_revenue: { type: Number, min: 0, default: 0 },
+  
+  // Pricing
+  base_price: { type: Number, min: 0, required: true },
+  currency: { type: String, default: 'USD', index: true },
+  price_tier: { type: Number, min: 1, max: 5, default: 1 },
+  
+  // Event Status
+  status: { 
+    type: String, 
+    enum: ['draft', 'active', 'sold_out', 'cancelled', 'completed', 'archived'], 
+    default: 'draft', 
+    index: true 
+  },
+  
+  // Event Details
+  tags: [{ type: String, trim: true }],
+  notes: { type: String, trim: true },
+  policies: { type: String, trim: true },
+  
+  // Media & Assets
+  media: [{
+    type: { type: String, enum: ['image', 'video'], required: true },
+    url: { type: String, required: true, trim: true },
+    caption: { type: String, trim: true },
+    order: { type: Number, default: 0 }
+  }],
+  
+  // Seats & Units (inherited from location with event-specific pricing/status)
+  seats: [EventSeatSchema],
+  units: [EventUnitSchema],
+  
+  // Event Management
+  created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  approved_at: { type: Date },
+  
+  // Availability Tracking
+  last_availability_check: { type: Date, default: Date.now },
+  availability_updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  // Event Analytics
+  views: { type: Number, default: 0 },
+  inquiries: { type: Number, default: 0 },
+  conversion_rate: { type: Number, min: 0, max: 100, default: 0 },
+  
+  // COE Integration
+  coe_count: { type: Number, default: 0 }, // Number of COEs that include this event
+  is_featured: { type: Boolean, default: false }, // Featured event
+  priority: { type: Number, default: 0 }, // Event priority for recommendations
+  
+  // Event Settings
+  requires_approval: { type: Boolean, default: false }, // Requires admin approval
+  auto_approve: { type: Boolean, default: true }, // Auto-approve bookings
+  max_group_size: { type: Number, min: 1 }, // Maximum group size for booking
+  
+  // Cancellation Policy
+  cancellation_policy: {
+    hours_before_event: { type: Number, min: 0 }, // Hours before event for cancellation
+    refund_percentage: { type: Number, min: 0, max: 100, default: 100 },
+    admin_fee: { type: Number, min: 0, default: 0 }
+  }
+}, { 
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual fields
+EventSchema.virtual('duration_hours').get(function() {
+  if (this.start_datetime && this.end_datetime) {
+    return Math.ceil((this.end_datetime - this.start_datetime) / (1000 * 60 * 60));
+  }
+  return 0;
+});
+
+EventSchema.virtual('is_active').get(function() {
+  const now = new Date();
+  return this.status === 'active' && 
+         this.start_datetime <= now && 
+         this.end_datetime >= now;
+});
+
+EventSchema.virtual('is_upcoming').get(function() {
+  const now = new Date();
+  return this.status === 'active' && this.start_datetime > now;
+});
+
+EventSchema.virtual('is_past').get(function() {
+  const now = new Date();
+  return this.end_datetime < now;
+});
+
+EventSchema.virtual('availability_percentage').get(function() {
+  if (this.total_capacity === 0) return 100;
+  return Math.round((this.total_available / this.total_capacity) * 100);
+});
+
+// Indexes for performance
+EventSchema.index({ location_id: 1, start_datetime: 1 });
+EventSchema.index({ status: 1, start_datetime: 1 });
+EventSchema.index({ start_datetime: 1, end_datetime: 1 });
+EventSchema.index({ name: 'text', description: 'text' });
+EventSchema.index({ tags: 1 });
+EventSchema.index({ created_by: 1, status: 1 });
+
+// Pre-save middleware to update availability
+EventSchema.pre('save', function(next) {
+  try {
+    // Update total_available based on seat/unit status
+    let availableSeats = 0;
+    let availableUnits = 0;
+    
+    this.seats.forEach(seat => {
+      if (seat.status === 'available') availableSeats += seat.capacity || 0;
+    });
+    
+    this.units.forEach(unit => {
+      if (unit.status === 'available') availableUnits += unit.occupancy || 0;
+    });
+    
+    this.total_available = availableSeats + availableUnits;
+    
+    // Update status based on availability
+    if (this.total_available === 0 && this.status === 'active') {
+      this.status = 'sold_out';
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error in Event pre-save middleware:', error);
+    next(error);
+  }
+});
+
+module.exports = mongoose.model('Event', EventSchema);
