@@ -185,6 +185,27 @@
                 <input type="tel" id="phone" name="phone" placeholder="Enter your phone number" required>
             </div>
             <div class="form-group">
+                <label for="dateOfBirth">Date of Birth</label>
+                <input type="date" id="dateOfBirth" name="dateOfBirth" required>
+            </div>
+            <div class="form-group">
+                <label for="industry">Industry</label>
+                <select id="industry" name="industry" required>
+                    <option value="">Select your industry</option>
+                    <option value="fintech">Fintech</option>
+                    <option value="cyber">Cyber Security</option>
+                    <option value="social">Social Media</option>
+                    <option value="sales">Sales</option>
+                    <option value="e-commerce">E-commerce</option>
+                    <option value="AI">Artificial Intelligence</option>
+                    <option value="energy">Energy</option>
+                    <option value="crypto">Cryptocurrency</option>
+                    <option value="banking">Banking</option>
+                    <option value="real-estate">Real Estate</option>
+                    <option value="tech">Technology</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="role">Role</label>
                 <select id="role" name="role">
                     <option value="client">Client</option>
@@ -228,7 +249,7 @@
             const data = Object.fromEntries(formData);
             
             // Client-side validation
-            if (!data.email || !data.password || !data.firstName || !data.lastName || !data.phone) {
+            if (!data.email || !data.password || !data.firstName || !data.lastName || !data.phone || !data.dateOfBirth || !data.industry) {
                 showAlert('Please fill in all required fields.', 'error');
                 return;
             }
@@ -245,6 +266,14 @@
             
             if (data.phone.length < 10) {
                 showAlert('Please enter a valid phone number.', 'error');
+                return;
+            }
+            
+            // Validate date of birth
+            const dob = new Date(data.dateOfBirth);
+            const today = new Date();
+            if (dob >= today) {
+                showAlert('Date of birth must be in the past.', 'error');
                 return;
             }
             

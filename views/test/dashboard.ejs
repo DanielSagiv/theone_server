@@ -321,6 +321,108 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
 
+        .visibility-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .visibility-public {
+            background: #d4edda;
+            color: #27ae60;
+        }
+
+        .visibility-private {
+            background: #e2e3e5;
+            color: #6c757d;
+        }
+
+        .tier-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .tier-member {
+            background: #e3f2fd;
+            color: #2196f3;
+        }
+
+        .tier-vip {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        .tier-elite {
+            background: #f3e5f5;
+            color: #9c27b0;
+        }
+
+        .industry-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .industry-fintech {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .industry-cyber {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .industry-social {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .industry-sales {
+            background: #fce4ec;
+            color: #c2185b;
+        }
+
+        .industry-e-commerce {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .industry-ai {
+            background: #e0f2f1;
+            color: #00695c;
+        }
+
+        .industry-energy {
+            background: #fff8e1;
+            color: #f9a825;
+        }
+
+        .industry-crypto {
+            background: #f1f8e9;
+            color: #558b2f;
+        }
+
+        .industry-banking {
+            background: #e8eaf6;
+            color: #3f51b5;
+        }
+
+        .industry-real-estate {
+            background: #fafafa;
+            color: #424242;
+        }
+
+        .industry-tech {
+            background: #e0f7fa;
+            color: #00acc1;
+        }
+
         .status-options {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -939,6 +1041,11 @@
             color: white;
         }
 
+        .status-pending {
+            background-color: #9b59b6;
+            color: white;
+        }
+
         .status-active {
             background-color: #27ae60;
             color: white;
@@ -1102,6 +1209,11 @@
             color: #95a5a6;
         }
 
+        .seat-status.pending {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+
         .seat-details {
             font-size: 12px;
             color: #7f8c8d;
@@ -1198,7 +1310,7 @@
         .media-modal {
             display: none;
             position: fixed;
-            z-index: 1000;
+            z-index: 3000;
             left: 0;
             top: 0;
             width: 100%;
@@ -1212,6 +1324,12 @@
             max-width: 90%;
             max-height: 90%;
             object-fit: contain;
+        }
+
+        .media-modal-content video {
+            width: 100%;
+            height: auto;
+            max-height: 90vh;
         }
 
         .media-modal-close {
@@ -1294,14 +1412,18 @@
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Phone</th>
+                                    <th>DOB</th>
+                                    <th>Industry</th>
                                     <th>Role</th>
                                     <th>Status</th>
+                                    <th>Visibility</th>
+                                    <th>Tier</th>
                                     <th>Created</th>
                                 </tr>
                             </thead>
                             <tbody id="usersTableBody">
                                 <tr>
-                                    <td colspan="6" style="text-align: center; padding: 40px;">
+                                    <td colspan="10" style="text-align: center; padding: 40px;">
                                         <div class="loading" id="usersLoading">
                                             <div class="spinner"></div>
                                             <p>Loading users...</p>
@@ -1482,8 +1604,24 @@
                             </select>
                         </div>
                         <div class="profile-field">
+                            <label>Address Line 1</label>
+                            <input id="cl_address_line1" type="text" placeholder="Street address" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Address Line 2</label>
+                            <input id="cl_address_line2" type="text" placeholder="Apartment, suite, etc. (optional)" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
                             <label>City</label>
                             <input id="cl_city" type="text" placeholder="City" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>State/Province</label>
+                            <input id="cl_state" type="text" placeholder="State or Province" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Postal Code</label>
+                            <input id="cl_postalCode" type="text" placeholder="ZIP/Postal Code" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
                         </div>
                         <div class="profile-field">
                             <label>Country</label>
@@ -1510,6 +1648,12 @@
                             <div class="profile-field"><label>Bottle Service</label><select id="cl_bottle" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"><option value="true">Yes</option><option value="false" selected>No</option></select></div>
                             <div class="profile-field"><label>Dress Code</label><input id="cl_dress" type="text" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
                             <div class="profile-field"><label>Capacity</label><input id="cl_capacity" type="number" min="0" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                        </div>
+                        <div id="cl_attrs_restaurant" style="display:none;">
+                            <div class="profile-field"><label>Cuisine</label><input id="cl_cuisine" type="text" placeholder="e.g., Italian, French, Asian" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Price Level</label><select id="cl_priceLevel" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"><option value="">Select Price Level</option><option value="1">$ - Budget</option><option value="2">$$ - Moderate</option><option value="3">$$$ - Expensive</option><option value="4">$$$$ - Very Expensive</option><option value="5">$$$$$ - Ultra Expensive</option></select></div>
+                            <div class="profile-field"><label>Michelin Stars</label><input id="cl_michelinStars" type="number" min="0" max="3" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
+                            <div class="profile-field"><label>Private Dining Rooms</label><input id="cl_privateDiningRooms" type="number" min="0" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
                         </div>
                         <div id="cl_attrs_hotel" style="display:none;">
                             <div class="profile-field"><label>Stars</label><input id="cl_stars" type="number" min="1" max="5" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" /></div>
@@ -1645,6 +1789,12 @@
                             </select>
                         </div>
                         <div class="profile-field">
+                            <label>Event Media (Optional)</label>
+                            <input id="ce_media_files" type="file" accept="image/*,video/*" multiple style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" onchange="previewEventMedia()" />
+                            <small style="color:#7f8c8d;font-size:12px;">Upload event-specific images or videos (max 50MB per file)</small>
+                        </div>
+                        <div id="ce_media_preview" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px;"></div>
+                        <div class="profile-field">
                             <label>Event Policies</label>
                             <textarea id="ce_policies" rows="3" placeholder="Event-specific policies and terms..." style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
                         </div>
@@ -1735,6 +1885,12 @@
                         <div class="profile-field" style="margin-top:20px;">
                             <label>Policies:</label>
                             <div id="eventDetailPolicies" style="padding:10px;background:#f8f9fa;border-radius:8px;min-height:60px;">-</div>
+                        </div>
+                        <div class="profile-field" style="margin-top:20px;">
+                            <label>Event Media:</label>
+                            <div id="eventDetailEventMedia" style="padding:10px;background:#f8f9fa;border-radius:8px;min-height:80px;">
+                                <div style="text-align:center;color:#7f8c8d;padding:20px;">No event-specific media</div>
+                            </div>
                         </div>
                         <div class="profile-field" style="margin-top:20px;">
                             <label>Location Media:</label>
@@ -1909,8 +2065,20 @@
                         <h3>Location Details</h3>
                         <div class="detail-grid">
                             <div class="detail-item">
+                                <label>Address:</label>
+                                <span id="locationAddress">-</span>
+                            </div>
+                            <div class="detail-item">
                                 <label>City:</label>
                                 <span id="locationCity">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>State:</label>
+                                <span id="locationState">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Postal Code:</label>
+                                <span id="locationPostalCode">-</span>
                             </div>
                             <div class="detail-item">
                                 <label>Country:</label>
@@ -2105,10 +2273,28 @@
                             <label for="el_description">Description</label>
                             <textarea id="el_description" rows="3"></textarea>
                         </div>
+                        <div class="form-group">
+                            <label for="el_address_line1">Address Line 1</label>
+                            <input type="text" id="el_address_line1">
+                        </div>
+                        <div class="form-group">
+                            <label for="el_address_line2">Address Line 2</label>
+                            <input type="text" id="el_address_line2">
+                        </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="el_city">City</label>
                                 <input type="text" id="el_city">
+                            </div>
+                            <div class="form-group">
+                                <label for="el_state">State/Province</label>
+                                <input type="text" id="el_state">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="el_postalCode">Postal Code</label>
+                                <input type="text" id="el_postalCode">
                             </div>
                             <div class="form-group">
                                 <label for="el_country">Country</label>
@@ -2367,7 +2553,7 @@
             const tableBody = document.getElementById('usersTableBody');
             
             if (users.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #7f8c8d;">No users found</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; padding: 40px; color: #7f8c8d;">No users found</td></tr>';
                 return;
             }
 
@@ -2382,6 +2568,12 @@
                     </td>
                     <td>${user.email}</td>
                     <td>${user.phone || '-'}</td>
+                    <td>${user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : '-'}</td>
+                    <td>
+                        <span class="industry-badge industry-${user.industry || 'tech'}">
+                            ${user.industry ? user.industry.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Tech'}
+                        </span>
+                    </td>
                     <td>
                         <span class="role-badge role-${user.role} ${currentUser?.role === 'admin' ? 'clickable' : ''}" 
                               ${currentUser?.role === 'admin' ? `onclick="openRoleModal('${user._id}', '${user.firstName} ${user.lastName}', '${user.role}')"` : ''}>
@@ -2392,6 +2584,16 @@
                         <span class="status-badge status-${user.entity_status} ${currentUser?.role === 'admin' ? 'clickable' : ''}" 
                               ${currentUser?.role === 'admin' ? `onclick="openStatusModal('${user._id}', '${user.firstName} ${user.lastName}', '${user.entity_status}')"` : ''}>
                             ${user.entity_status}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="visibility-badge visibility-${user.visibilityStatus || 'public'}">
+                            ${user.visibilityStatus === 'private' ? 'private' : 'public'}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="tier-badge tier-${user.userTier || 'member'}">
+                            ${user.userTier || 'member'}
                         </span>
                     </td>
                     <td>${new Date(user.createdAt).toLocaleDateString()}</td>
@@ -2605,7 +2807,21 @@
             
             // Address & Contact
             const address = location.address || {};
+            
+            // Build full address string
+            const addressParts = [];
+            if (address.line1) addressParts.push(address.line1);
+            if (address.line2) addressParts.push(address.line2);
+            if (address.city) addressParts.push(address.city);
+            if (address.state) addressParts.push(address.state);
+            if (address.postalCode) addressParts.push(address.postalCode);
+            if (address.country) addressParts.push(address.country);
+            
+            const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : '-';
+            document.getElementById('locationAddress').textContent = fullAddress;
             document.getElementById('locationCity').textContent = address.city || '-';
+            document.getElementById('locationState').textContent = address.state || '-';
+            document.getElementById('locationPostalCode').textContent = address.postalCode || '-';
             document.getElementById('locationCountry').textContent = address.country || '-';
             
             const contact = location.contact || {};
@@ -2614,7 +2830,7 @@
             document.getElementById('locationContactWebsite').textContent = contact.website || '-';
             
             // Attributes
-            displayLocationAttributes(location.attributes || {});
+            displayLocationAttributes(location.attributes || {}, location.type);
             
             // Sentiment
             displayLocationSentiment(location.sentiment || []);
@@ -2633,17 +2849,56 @@
         /**
          * Display location attributes
          */
-        function displayLocationAttributes(attributes) {
+        function displayLocationAttributes(attributes, locationType) {
             const attributesContainer = document.getElementById('locationAttributes');
             attributesContainer.innerHTML = '';
             
+            // Define which attributes are relevant for each location type
+            const typeSpecificAttributes = {
+                'restaurant': ['cuisine', 'priceLevel', 'michelinStars', 'privateDiningRooms'],
+                'night_club': ['bottleService', 'dressCode', 'capacity', 'musicGenres'],
+                'day_club': ['bottleService', 'dressCode', 'capacity', 'musicGenres'],
+                'hotel': ['stars', 'brand', 'checkInTime', 'checkOutTime', 'amenities']
+            };
+            
+            // Common attributes that apply to all types
+            const commonAttributes = ['capacity', 'priceLevel'];
+            
+            // Get relevant attributes for this location type
+            const relevantAttributes = [
+                ...commonAttributes,
+                ...(typeSpecificAttributes[locationType] || [])
+            ];
+            
             Object.entries(attributes).forEach(([key, value]) => {
-                if (value !== undefined && value !== null && value !== '') {
+                // Only show attributes that are relevant for this location type
+                if (relevantAttributes.includes(key) && value !== undefined && value !== null && value !== '') {
                     const attributeDiv = document.createElement('div');
                     attributeDiv.className = 'detail-item';
+                    
+                    // Handle special cases for better display
+                    let displayValue = value;
+                    if (key === 'cuisine' && Array.isArray(value)) {
+                        displayValue = value.join(', ');
+                    } else if (key === 'bottleService') {
+                        displayValue = value ? 'Yes' : 'No';
+                    } else if (key === 'priceLevel') {
+                        displayValue = '$'.repeat(value);
+                    } else if (key === 'michelinStars') {
+                        displayValue = value + ' star' + (value !== 1 ? 's' : '');
+                    } else if (key === 'musicGenres' && Array.isArray(value)) {
+                        displayValue = value.join(', ');
+                    } else if (key === 'amenities' && typeof value === 'object') {
+                        const amenityList = Object.entries(value)
+                            .filter(([_, enabled]) => enabled)
+                            .map(([amenity, _]) => amenity.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()))
+                            .join(', ');
+                        displayValue = amenityList || 'None';
+                    }
+                    
                     attributeDiv.innerHTML = `
-                        <label>${key}:</label>
-                        <span>${value}</span>
+                        <label>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</label>
+                        <span>${displayValue}</span>
                     `;
                     attributesContainer.appendChild(attributeDiv);
                 }
@@ -2797,9 +3052,12 @@
          * Display seating areas for clubs
          */
         function displaySeatingAreas(seats) {
+            console.log('=== DISPLAY SEATING AREAS FUNCTION CALLED ===');
             const seatingSection = document.getElementById('seatingAreasSection');
             const seatingContainer = document.getElementById('seatingAreasContainer');
             
+            console.log('Seating section element:', seatingSection);
+            console.log('Seating container element:', seatingContainer);
             console.log('Displaying seating areas with seats:', seats);
             
             if (seats.length === 0) {
@@ -2812,8 +3070,14 @@
             
             // Group seats by category
             const seatsByCategory = {};
-            seats.forEach(seat => {
-                console.log('Processing seat:', seat);
+            console.log('Total seats to process:', seats.length);
+            seats.forEach((seat, index) => {
+                console.log(`Processing seat ${index + 1}:`, {
+                    code: seat.code,
+                    category: seat.category,
+                    capacity: seat.capacity,
+                    minSpendUSD: seat.minSpendUSD
+                });
                 if (seat.media && seat.media.length > 0) {
                     console.log('Seat has media:', seat.media);
                 }
@@ -2824,10 +3088,27 @@
                 seatsByCategory[category].push(seat);
             });
             
+            console.log('Seats grouped by category:', seatsByCategory);
+            
             // Create expandable sections for each category
             Object.entries(seatsByCategory).forEach(([category, categorySeats]) => {
                 const areaDiv = document.createElement('div');
                 areaDiv.className = 'seating-area';
+                
+                // Create seat items with error handling (kept minimal)
+                let seatItemsHtml = '';
+                categorySeats.forEach((seat) => {
+                    try {
+                        const seatHtml = createSeatItem(seat);
+                        seatItemsHtml += seatHtml;
+                    } catch (error) {
+                        seatItemsHtml += `<div class="seat-item" style="border: 1px solid #e74c3c; padding: 10px; margin: 5px; background: #fdf2f2;">
+                            <div class="seat-code">Seat ${seat.code} (Error)</div>
+                            <div style="color: #e74c3c; font-size: 12px;">Error rendering seat: ${error.message}</div>
+                        </div>`;
+                    }
+                });
+                
                 areaDiv.innerHTML = `
                     <div class="seating-area-header" onclick="toggleSeatingArea(this)">
                         <div>
@@ -2838,7 +3119,7 @@
                     </div>
                     <div class="seating-area-content">
                         <div class="seating-items">
-                            ${categorySeats.map(seat => createSeatItem(seat)).join('')}
+                            ${seatItemsHtml}
                         </div>
                     </div>
                 `;
@@ -2897,6 +3178,7 @@
          * Create seat item HTML
          */
         function createSeatItem(seat) {
+            try {
             const mediaHtml = (seat.media || []).map(media => {
                 if (media.type === 'image') {
                     return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
@@ -2909,13 +3191,6 @@
                                     media.url.toLowerCase().includes('.avi') ? 'video/x-msvideo' :
                                     media.url.toLowerCase().includes('.bin') ? 'video/mp4' : // Handle .bin files as MP4
                                     'video/mp4';
-                    
-                    console.log('Creating seat video element:', {
-                        url: media.url,
-                        type: media.type,
-                        videoType: videoType,
-                        caption: media.caption
-                    });
                     
                     return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
                         <video preload="metadata" controls muted playsinline 
@@ -2960,13 +3235,21 @@
                         <div>Status: ${seat.status || '-'}</div>
                         ${seat.section ? `<div>Section: ${seat.section}</div>` : ''}
                     </div>
-                    <div style="margin-top:8px; display:flex; gap:8px;">
-                        <button class="btn btn-secondary" onclick="openAddSentimentModal('seat', '${seat.code}')">Add Sentiment</button>
-                    </div>
-                    ${sentimentsHtml ? `<div class="seat-sentiments" style="margin-top: 10px;"><h4 style="margin: 0 0 8px 0; font-size: 14px; color: #333;">Sentiments:</h4>${sentimentsHtml}</div>` : ''}
+                        <div style="margin-top:8px; display:flex; gap:8px;">
+                            <button class="btn btn-secondary" onclick="openAddSentimentModal('seat', '${seat.code}')">Add Sentiment</button>
+                        </div>
+                        ${sentimentsHtml ? `<div class="seat-sentiments" style="margin-top: 10px;"><h4 style="margin: 0 0 8px 0; font-size: 14px; color: #333;">Sentiments:</h4>${sentimentsHtml}</div>` : ''}
                     ${mediaHtml ? `<div class="seat-media">${mediaHtml}</div>` : ''}
                 </div>
             `;
+            } catch (error) {
+                return `
+                    <div class="seat-item" style="border: 1px solid #e74c3c; padding: 10px; margin: 5px; background: #fdf2f2;">
+                        <div class="seat-code">Seat ${seat.code} (Error)</div>
+                        <div style="color: #e74c3c; font-size: 12px;">Error: ${error.message}</div>
+                </div>
+            `;
+            }
         }
 
         /**
@@ -3181,7 +3464,11 @@
             document.getElementById('el_name').value = location.name || '';
             document.getElementById('el_type').value = location.type || '';
             document.getElementById('el_description').value = location.description || '';
+            document.getElementById('el_address_line1').value = location.address?.line1 || '';
+            document.getElementById('el_address_line2').value = location.address?.line2 || '';
             document.getElementById('el_city').value = location.address?.city || '';
+            document.getElementById('el_state').value = location.address?.state || '';
+            document.getElementById('el_postalCode').value = location.address?.postalCode || '';
             document.getElementById('el_country').value = location.address?.country || '';
             document.getElementById('el_score').value = location.score || 0;
             document.getElementById('el_status').value = location.status || 'active';
@@ -3200,21 +3487,78 @@
             const container = document.getElementById('el_attributes_container');
             container.innerHTML = '';
             
+            // Get current location type
+            const locationType = document.getElementById('el_type').value;
+            
             // Add common attributes
             const commonAttrs = [
                 { key: 'capacity', label: 'Capacity', type: 'number' },
                 { key: 'priceLevel', label: 'Price Level (1-5)', type: 'number', min: 1, max: 5 }
             ];
             
+            // Add restaurant-specific attributes
+            if (locationType === 'restaurant') {
+                const restaurantAttrs = [
+                    { key: 'cuisine', label: 'Cuisine (comma-separated)', type: 'text' },
+                    { key: 'michelinStars', label: 'Michelin Stars (0-3)', type: 'number', min: 0, max: 3 },
+                    { key: 'privateDiningRooms', label: 'Private Dining Rooms', type: 'number', min: 0 }
+                ];
+                commonAttrs.push(...restaurantAttrs);
+            }
+            
+            // Add club-specific attributes
+            if (locationType === 'night_club' || locationType === 'day_club') {
+                const clubAttrs = [
+                    { key: 'bottleService', label: 'Bottle Service', type: 'select', options: [
+                        { value: '', text: 'Select' },
+                        { value: 'true', text: 'Yes' },
+                        { value: 'false', text: 'No' }
+                    ]},
+                    { key: 'dressCode', label: 'Dress Code', type: 'text' }
+                ];
+                commonAttrs.push(...clubAttrs);
+            }
+            
+            // Add hotel-specific attributes
+            if (locationType === 'hotel') {
+                const hotelAttrs = [
+                    { key: 'stars', label: 'Stars (1-5)', type: 'number', min: 1, max: 5 },
+                    { key: 'brand', label: 'Brand', type: 'text' },
+                    { key: 'checkInTime', label: 'Check-in Time', type: 'text' },
+                    { key: 'checkOutTime', label: 'Check-out Time', type: 'text' }
+                ];
+                commonAttrs.push(...hotelAttrs);
+            }
+            
             commonAttrs.forEach(attr => {
                 const div = document.createElement('div');
                 div.className = 'form-group';
+                
+                let inputHtml = '';
+                if (attr.type === 'select' && attr.options) {
+                    inputHtml = `
+                        <select id="el_attr_${attr.key}">
+                            ${attr.options.map(opt => 
+                                `<option value="${opt.value}" ${attributes[attr.key] === opt.value ? 'selected' : ''}>${opt.text}</option>`
+                            ).join('')}
+                        </select>
+                    `;
+                } else {
+                    let value = attributes[attr.key] || '';
+                    if (attr.key === 'cuisine' && Array.isArray(value)) {
+                        value = value.join(', ');
+                    }
+                    inputHtml = `
+                        <input type="${attr.type}" id="el_attr_${attr.key}" 
+                               ${attr.min ? `min="${attr.min}"` : ''} 
+                               ${attr.max ? `max="${attr.max}"` : ''} 
+                               value="${value}">
+                    `;
+                }
+                
                 div.innerHTML = `
                     <label for="el_attr_${attr.key}">${attr.label}</label>
-                    <input type="${attr.type}" id="el_attr_${attr.key}" 
-                           ${attr.min ? `min="${attr.min}"` : ''} 
-                           ${attr.max ? `max="${attr.max}"` : ''} 
-                           value="${attributes[attr.key] || ''}">
+                    ${inputHtml}
                 `;
                 container.appendChild(div);
             });
@@ -3320,20 +3664,67 @@
             };
             
             // Address
+            const address_line1 = document.getElementById('el_address_line1').value.trim();
+            const address_line2 = document.getElementById('el_address_line2').value.trim();
             const city = document.getElementById('el_city').value.trim();
+            const state = document.getElementById('el_state').value.trim();
+            const postalCode = document.getElementById('el_postalCode').value.trim();
             const country = document.getElementById('el_country').value.trim();
-            if (city || country) {
+            
+            if (address_line1 || address_line2 || city || state || postalCode || country) {
                 payload.address = {};
+                if (address_line1) payload.address.line1 = address_line1;
+                if (address_line2) payload.address.line2 = address_line2;
                 if (city) payload.address.city = city;
+                if (state) payload.address.state = state;
+                if (postalCode) payload.address.postalCode = postalCode;
                 if (country) payload.address.country = country;
             }
             
-            // Attributes
+            // Attributes - handle all dynamic attributes
             const attributes = {};
-            const capacity = document.getElementById('el_attr_capacity').value;
-            const priceLevel = document.getElementById('el_attr_priceLevel').value;
+            const locationType = document.getElementById('el_type').value;
+            
+            // Common attributes
+            const capacity = document.getElementById('el_attr_capacity')?.value;
+            const priceLevel = document.getElementById('el_attr_priceLevel')?.value;
             if (capacity) attributes.capacity = parseInt(capacity);
             if (priceLevel) attributes.priceLevel = parseInt(priceLevel);
+            
+            // Restaurant-specific attributes
+            if (locationType === 'restaurant') {
+                const cuisine = document.getElementById('el_attr_cuisine')?.value?.trim();
+                if (cuisine) {
+                    attributes.cuisine = cuisine.split(',').map(c => c.trim()).filter(c => c.length > 0);
+                }
+                const michelinStars = document.getElementById('el_attr_michelinStars')?.value;
+                if (michelinStars) attributes.michelinStars = parseInt(michelinStars);
+                const privateDiningRooms = document.getElementById('el_attr_privateDiningRooms')?.value;
+                if (privateDiningRooms) attributes.privateDiningRooms = parseInt(privateDiningRooms);
+            }
+            
+            // Club-specific attributes
+            if (locationType === 'night_club' || locationType === 'day_club') {
+                const bottleService = document.getElementById('el_attr_bottleService')?.value;
+                if (bottleService === 'true' || bottleService === 'false') {
+                    attributes.bottleService = bottleService === 'true';
+                }
+                const dressCode = document.getElementById('el_attr_dressCode')?.value?.trim();
+                if (dressCode) attributes.dressCode = dressCode;
+            }
+            
+            // Hotel-specific attributes
+            if (locationType === 'hotel') {
+                const stars = document.getElementById('el_attr_stars')?.value;
+                if (stars) attributes.stars = parseInt(stars);
+                const brand = document.getElementById('el_attr_brand')?.value?.trim();
+                if (brand) attributes.brand = brand;
+                const checkInTime = document.getElementById('el_attr_checkInTime')?.value?.trim();
+                if (checkInTime) attributes.checkInTime = checkInTime;
+                const checkOutTime = document.getElementById('el_attr_checkOutTime')?.value?.trim();
+                if (checkOutTime) attributes.checkOutTime = checkOutTime;
+            }
+            
             if (Object.keys(attributes).length > 0) {
                 payload.attributes = attributes;
             }
@@ -3572,12 +3963,20 @@
             document.querySelector('#createLocationModal .modal-header h2').textContent = 'Create Location';
             document.getElementById('cl_name').value = '';
             document.getElementById('cl_type').value = 'night_club';
+            document.getElementById('cl_address_line1').value = '';
+            document.getElementById('cl_address_line2').value = '';
             document.getElementById('cl_city').value = '';
+            document.getElementById('cl_state').value = '';
+            document.getElementById('cl_postalCode').value = '';
             document.getElementById('cl_country').value = '';
             document.getElementById('cl_desc').value = '';
             document.getElementById('cl_bottle').value = 'false';
             document.getElementById('cl_dress').value = '';
             document.getElementById('cl_capacity').value = '';
+            document.getElementById('cl_cuisine').value = '';
+            document.getElementById('cl_priceLevel').value = '';
+            document.getElementById('cl_michelinStars').value = '';
+            document.getElementById('cl_privateDiningRooms').value = '';
             document.getElementById('cl_stars').value = '';
             document.getElementById('cl_brand').value = '';
             document.getElementById('cl_checkin').value = '';
@@ -3632,7 +4031,11 @@
                 // Populate fields
                 document.getElementById('cl_name').value = loc.name || '';
                 document.getElementById('cl_type').value = loc.type || 'night_club';
+                document.getElementById('cl_address_line1').value = loc.address?.line1 || '';
+                document.getElementById('cl_address_line2').value = loc.address?.line2 || '';
                 document.getElementById('cl_city').value = loc.address?.city || '';
+                document.getElementById('cl_state').value = loc.address?.state || '';
+                document.getElementById('cl_postalCode').value = loc.address?.postalCode || '';
                 document.getElementById('cl_country').value = loc.address?.country || '';
                 // Ensure type-specific sections visible
                 onClTypeChange();
@@ -3644,6 +4047,11 @@
                     }
                     document.getElementById('cl_dress').value = loc.attributes?.dressCode || '';
                     document.getElementById('cl_capacity').value = loc.attributes?.capacity || '';
+                } else if (loc.type === 'restaurant') {
+                    document.getElementById('cl_cuisine').value = loc.attributes?.cuisine?.join(', ') || '';
+                    document.getElementById('cl_priceLevel').value = loc.attributes?.priceLevel || '';
+                    document.getElementById('cl_michelinStars').value = loc.attributes?.michelinStars || '';
+                    document.getElementById('cl_privateDiningRooms').value = loc.attributes?.privateDiningRooms || '';
                 } else if (loc.type === 'hotel') {
                     document.getElementById('cl_stars').value = loc.attributes?.stars || '';
                     document.getElementById('cl_brand').value = loc.attributes?.brand || '';
@@ -3736,11 +4144,25 @@
             event?.preventDefault?.();
             const name = document.getElementById('cl_name').value.trim();
             const type = document.getElementById('cl_type').value;
+            const address_line1 = document.getElementById('cl_address_line1').value.trim();
+            const address_line2 = document.getElementById('cl_address_line2').value.trim();
             const city = document.getElementById('cl_city').value.trim();
+            const state = document.getElementById('cl_state').value.trim();
+            const postalCode = document.getElementById('cl_postalCode').value.trim();
             const country = document.getElementById('cl_country').value.trim();
             if (!name) { showAlert('Name is required', 'error'); return; }
             try {
-                const payload = { name, type, address: { city, country } };
+                // Build address object with only non-empty fields
+                const address = {};
+                if (address_line1) address.line1 = address_line1;
+                if (address_line2) address.line2 = address_line2;
+                if (city) address.city = city;
+                if (state) address.state = state;
+                if (postalCode) address.postalCode = postalCode;
+                if (country) address.country = country;
+                
+                const payload = { name, type };
+                if (Object.keys(address).length > 0) payload.address = address;
                 const result = await makeApiRequest('/locations', 'POST', payload);
                 if (result.success) {
                     closeCreateLocation();
@@ -3989,9 +4411,11 @@
         function onClTypeChange() {
             const type = document.getElementById('cl_type').value;
             const club = (type === 'night_club' || type === 'day_club');
+            const restaurant = (type === 'restaurant');
             const hotel = (type === 'hotel');
             document.getElementById('cl_attrs_club').style.display = club ? 'block' : 'none';
             document.getElementById('cl_inventory_club').style.display = club ? 'block' : 'none';
+            document.getElementById('cl_attrs_restaurant').style.display = restaurant ? 'block' : 'none';
             document.getElementById('cl_attrs_hotel').style.display = hotel ? 'block' : 'none';
             document.getElementById('cl_inventory_hotel').style.display = hotel ? 'block' : 'none';
         }
@@ -4073,9 +4497,17 @@
             
             // Build address object with only non-empty fields
             const address = {};
+            const address_line1 = document.getElementById('cl_address_line1').value.trim();
+            const address_line2 = document.getElementById('cl_address_line2').value.trim();
             const city = document.getElementById('cl_city').value.trim();
+            const state = document.getElementById('cl_state').value.trim();
+            const postalCode = document.getElementById('cl_postalCode').value.trim();
             const country = document.getElementById('cl_country').value.trim();
+            if (address_line1) address.line1 = address_line1;
+            if (address_line2) address.line2 = address_line2;
             if (city) address.city = city;
+            if (state) address.state = state;
+            if (postalCode) address.postalCode = postalCode;
             if (country) address.country = country;
             if (Object.keys(address).length > 0) payload.address = address;
             
@@ -4130,6 +4562,22 @@
                     return seat;
                 }).filter(s => s !== null);
                 if (seats.length > 0) payload.seats = seats;
+            }
+            
+            if (type === 'restaurant') {
+                const attributes = {};
+                const cuisine = document.getElementById('cl_cuisine').value.trim();
+                if (cuisine) {
+                    // Split by comma and trim each item
+                    attributes.cuisine = cuisine.split(',').map(c => c.trim()).filter(c => c.length > 0);
+                }
+                const priceLevel = parseInt(document.getElementById('cl_priceLevel').value || '0', 10);
+                if (priceLevel > 0) attributes.priceLevel = priceLevel;
+                const michelinStars = parseInt(document.getElementById('cl_michelinStars').value || '0', 10);
+                if (michelinStars > 0) attributes.michelinStars = michelinStars;
+                const privateDiningRooms = parseInt(document.getElementById('cl_privateDiningRooms').value || '0', 10);
+                if (privateDiningRooms > 0) attributes.privateDiningRooms = privateDiningRooms;
+                if (Object.keys(attributes).length > 0) payload.attributes = attributes;
             }
             
             if (type === 'hotel') {
@@ -4856,10 +5304,103 @@
         }
 
         /**
+         * Store uploaded event media URLs
+         */
+        let ce_uploadedMedia = [];
+
+        /**
+         * Preview event media files
+         */
+        function previewEventMedia() {
+            const fileInput = document.getElementById('ce_media_files');
+            const preview = document.getElementById('ce_media_preview');
+            const files = fileInput.files;
+            
+            preview.innerHTML = '';
+            
+            if (files.length === 0) {
+                return;
+            }
+            
+            Array.from(files).forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const isVideo = file.type.startsWith('video/');
+                    const previewItem = document.createElement('div');
+                    previewItem.style.cssText = 'position:relative;border:1px solid #ecf0f1;border-radius:8px;overflow:hidden;';
+                    
+                    if (isVideo) {
+                        previewItem.innerHTML = `
+                            <video src="${e.target.result}" style="width:100%;height:120px;object-fit:cover;"></video>
+                            <div style="position:absolute;bottom:5px;left:5px;background:rgba(0,0,0,0.7);color:white;padding:2px 6px;font-size:10px;border-radius:3px;">VIDEO</div>
+                        `;
+                    } else {
+                        previewItem.innerHTML = `<img src="${e.target.result}" style="width:100%;height:120px;object-fit:cover;" />`;
+                    }
+                    
+                    preview.appendChild(previewItem);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        /**
+         * Upload event media files to S3
+         */
+        async function uploadEventMediaFiles() {
+            const fileInput = document.getElementById('ce_media_files');
+            const files = fileInput.files;
+            
+            if (!files || files.length === 0) {
+                return [];
+            }
+            
+            const uploadedUrls = [];
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const formData = new FormData();
+                formData.append('asset', file);
+                
+                try {
+                    const response = await fetch(`${API_BASE_URL}/events/media/upload`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        },
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success && result.data) {
+                        uploadedUrls.push({
+                            type: result.data.type,
+                            url: result.data.url,
+                            order: i
+                        });
+                    } else {
+                        console.error('Failed to upload file:', file.name, result.error);
+                        showAlert(`Failed to upload ${file.name}: ${result.error?.message || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error uploading file:', file.name, error);
+                    showAlert(`Error uploading ${file.name}: ${error.message}`, 'error');
+                }
+            }
+            
+            return uploadedUrls;
+        }
+
+        /**
          * Submit create event
          */
         async function submitCreateEvent() {
             try {
+                // Upload media files first
+                showAlert('Uploading event media...', 'info');
+                ce_uploadedMedia = await uploadEventMediaFiles();
+                
                 const eventData = {
                     name: document.getElementById('ce_name').value.trim(),
                     description: document.getElementById('ce_description').value.trim(),
@@ -4871,7 +5412,8 @@
                     currency: document.getElementById('ce_currency').value,
                     price_tier: parseInt(document.getElementById('ce_price_tier').value),
                     policies: document.getElementById('ce_policies').value.trim(),
-                    notes: document.getElementById('ce_notes').value.trim()
+                    notes: document.getElementById('ce_notes').value.trim(),
+                    media: ce_uploadedMedia
                 };
 
                 console.log('Creating event:', eventData);
@@ -4882,6 +5424,7 @@
                     showAlert('Event created successfully!', 'success');
                     closeCreateEvent();
                     loadEvents(); // Refresh events list
+                    ce_uploadedMedia = []; // Reset
                 } else {
                     showAlert('Failed to create event: ' + (result.error?.message || 'Unknown error'), 'error');
                 }
@@ -4944,6 +5487,9 @@
             // Store current event for seat management
             window.currentEvent = event;
             
+            // Display event-specific media
+            displayEventMedia(event.media || []);
+            
             // Display location media
             displayLocationMedia(event.location_id?.media || []);
             
@@ -4983,11 +5529,19 @@
                             ${seat.minSpendUSD ? `<div>Min Spend: $${seat.minSpendUSD}</div>` : ''}
                             ${seat.media && seat.media.length > 0 ? `
                                 <div class="seat-media">
-                                    ${seat.media.map(media => `
-                                        <img src="${media.url}" alt="${media.alt || 'Seat media'}" 
-                                             class="seat-media-thumbnail ${media.type === 'video' ? 'video' : ''}"
-                                             onclick="event.stopPropagation(); openMediaModal('${media.url}', '${media.type}')">
-                                    `).join('')}
+                                    ${seat.media.map(media => {
+                                        const isVideo = media.type === 'video' || 
+                                                       media.url.toLowerCase().includes('.mp4') || 
+                                                       media.url.toLowerCase().includes('.mov') ||
+                                                       media.url.toLowerCase().includes('.avi') ||
+                                                       media.url.toLowerCase().includes('.webm') ||
+                                                       media.url.toLowerCase().includes('.mkv');
+                                        return `
+                                            <img src="${media.url}" alt="${media.alt || 'Seat media'}" 
+                                                 class="seat-media-thumbnail ${isVideo ? 'video' : ''}"
+                                                 onclick="event.stopPropagation(); openMediaModal('${media.url}', '${isVideo ? 'video' : 'image'}')">
+                                        `;
+                                    }).join('')}
                                 </div>
                             ` : ''}
                         </div>
@@ -5000,7 +5554,7 @@
          * Toggle seat status
          */
         async function toggleSeatStatus(seatId, currentStatus) {
-            const statuses = ['available', 'held', 'booked', 'blocked'];
+            const statuses = ['available', 'pending', 'held', 'booked', 'blocked'];
             const currentIndex = statuses.indexOf(currentStatus);
             const nextStatus = statuses[(currentIndex + 1) % statuses.length];
             
@@ -5074,6 +5628,48 @@
         }
 
         /**
+         * Display event-specific media in event info tab
+         */
+        function displayEventMedia(mediaArray) {
+            const mediaContainer = document.getElementById('eventDetailEventMedia');
+            
+            if (!mediaArray || mediaArray.length === 0) {
+                mediaContainer.innerHTML = '<div class="no-media" style="text-align:center;color:#7f8c8d;padding:20px;">No event-specific media uploaded</div>';
+                return;
+            }
+
+            const mediaGallery = mediaArray.map(media => {
+                const isVideo = media.type === 'video' || 
+                               media.url.toLowerCase().includes('.mp4') || 
+                               media.url.toLowerCase().includes('.mov') ||
+                               media.url.toLowerCase().includes('.avi') ||
+                               media.url.toLowerCase().includes('.webm') ||
+                               media.url.toLowerCase().includes('.mkv');
+                
+                if (isVideo) {
+                    return `
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'video')" style="cursor:pointer;position:relative;">
+                            <video src="${media.url}" preload="metadata" style="width:100%;height:150px;object-fit:cover;border-radius:8px;"></video>
+                            <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.7);color:white;padding:4px 8px;font-size:11px;border-radius:4px;">VIDEO</div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'image')" style="cursor:pointer;">
+                            <img src="${media.url}" alt="Event media" style="width:100%;height:150px;object-fit:cover;border-radius:8px;" />
+                        </div>
+                    `;
+                }
+            }).join('');
+
+            mediaContainer.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+                    ${mediaGallery}
+                </div>
+            `;
+        }
+
+        /**
          * Display location media in event info tab
          */
         function displayLocationMedia(mediaArray) {
@@ -5085,7 +5681,12 @@
             }
 
             const mediaGallery = mediaArray.map(media => {
-                const isVideo = media.type === 'video' || media.url.toLowerCase().includes('.mp4') || media.url.toLowerCase().includes('.mov');
+                const isVideo = media.type === 'video' || 
+                               media.url.toLowerCase().includes('.mp4') || 
+                               media.url.toLowerCase().includes('.mov') ||
+                               media.url.toLowerCase().includes('.avi') ||
+                               media.url.toLowerCase().includes('.webm') ||
+                               media.url.toLowerCase().includes('.mkv');
                 return `
                     <img src="${media.url}" alt="${media.alt || 'Location media'}" 
                          class="media-thumbnail ${isVideo ? 'video' : ''}"
@@ -5104,10 +5705,38 @@
             const content = document.getElementById('mediaModalContent');
             
             if (type === 'video') {
-                content.innerHTML = `<video class="media-modal-content" controls autoplay><source src="${url}" type="video/mp4">Your browser does not support the video tag.</video>`;
+                // Get video file extension to determine MIME type
+                const extension = url.toLowerCase().split('.').pop();
+                let mimeType = 'video/mp4'; // default
+                
+                switch(extension) {
+                    case 'mp4':
+                        mimeType = 'video/mp4';
+                        break;
+                    case 'mov':
+                        mimeType = 'video/quicktime';
+                        break;
+                    case 'avi':
+                        mimeType = 'video/x-msvideo';
+                        break;
+                    case 'webm':
+                        mimeType = 'video/webm';
+                        break;
+                    case 'mkv':
+                        mimeType = 'video/x-matroska';
+                        break;
+                }
+                
+                content.innerHTML = `
+                    <video class="media-modal-content" controls preload="metadata">
+                        <source src="${url}" type="${mimeType}">
+                        <p>Your browser does not support the video tag. <a href="${url}" target="_blank">Download video</a></p>
+                    </video>
+                `;
             } else {
                 content.src = url;
                 content.alt = 'Media content';
+                content.innerHTML = ''; // Clear any previous video content
             }
             
             modal.style.display = 'flex';

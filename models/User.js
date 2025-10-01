@@ -33,6 +33,23 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  dateOfBirth: {
+    type: Date,
+    required: false,
+    validate: {
+      validator: function(value) {
+        if (!value) return true; // Allow empty values for existing users
+        return value < new Date(); // DOB must be in the past
+      },
+      message: 'Date of birth must be in the past'
+    }
+  },
+  industry: {
+    type: String,
+    required: false,
+    enum: ['fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech'],
+    index: true
+  },
   role: {
     type: String,
     enum: ['admin', 'client', 'runner'],
@@ -42,6 +59,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['live', 'suspended', 'deleted', 'pendingApproval'],
     default: 'pendingApproval'
+  },
+  visibilityStatus: {
+    type: String,
+    enum: ['public', 'private'],
+    default: 'public',
+    index: true
+  },
+  userTier: {
+    type: String,
+    enum: ['member', 'vip', 'elite'],
+    default: 'member',
+    index: true
   },
   isActive: {
     type: Boolean,

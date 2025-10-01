@@ -228,8 +228,15 @@ const signupSchema = Joi.object({
   firstName: Joi.string().min(2).required(),
   lastName: Joi.string().min(2).required(),
   phone: Joi.string().min(10).required(),
+  dateOfBirth: Joi.date().max('now').required().messages({
+    'date.max': 'Date of birth must be in the past',
+    'any.required': 'Date of birth is required'
+  }),
+  industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech').required(),
   role: Joi.string().valid('admin', 'client', 'runner').default('client'),
-  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval').default('pendingApproval')
+  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval').default('pendingApproval'),
+  visibilityStatus: Joi.string().valid('public', 'private').default('public'),
+  userTier: Joi.string().valid('member', 'vip', 'elite').default('member')
 });
 
 /**
@@ -282,6 +289,20 @@ const updateRoleSchema = Joi.object({
   role: Joi.string().valid('admin', 'client', 'runner').required()
 });
 
+/**
+ * Visibility status update validation schema
+ */
+const updateVisibilityStatusSchema = Joi.object({
+  visibilityStatus: Joi.string().valid('public', 'private').required()
+});
+
+/**
+ * User tier update validation schema
+ */
+const updateUserTierSchema = Joi.object({
+  userTier: Joi.string().valid('member', 'vip', 'elite').required()
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -290,6 +311,8 @@ module.exports = {
   updateProfileSchema,
   updateEntityStatusSchema,
   updateRoleSchema,
+  updateVisibilityStatusSchema,
+  updateUserTierSchema,
   createLocationSchema,
   updateLocationSchema,
   addSentimentSchema,

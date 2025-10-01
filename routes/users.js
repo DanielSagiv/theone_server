@@ -1,7 +1,7 @@
 const express = require('express');
 const User = require('../models/User');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
-const { updateProfileSchema, updateEntityStatusSchema, updateRoleSchema } = require('../utils/validationSchemas');
+const { updateProfileSchema, updateEntityStatusSchema, updateRoleSchema, updateVisibilityStatusSchema, updateUserTierSchema } = require('../utils/validationSchemas');
 const multer = require('multer');
 const { uploadBufferToS3, extFromMime } = require('../utils/s3');
 const crypto = require('crypto');
@@ -443,6 +443,128 @@ router.put('/:id/role', authenticateToken, requireAdmin, async (req, res) => {
       error: {
         code: 'ROLE_UPDATE_FAILED',
         message: 'Failed to update user role'
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/users/:id/visibility
+ * @description Update user visibility status (admin only)
+ */
+router.put('/:id/visibility', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate input
+    const { error, value } = updateVisibilityStatusSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    // Find user by ID
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Update visibility status
+    user.visibilityStatus = value.visibilityStatus;
+    await user.save();
+
+    res.json({
+      success: true,
+      data: {
+        user: user.getProfile()
+      },
+      message: 'User visibility status updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update user visibility status error:', {
+      error: error.message,
+      userId: req.params.id,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'VISIBILITY_UPDATE_FAILED',
+        message: 'Failed to update user visibility status'
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/users/:id/tier
+ * @description Update user tier (admin only)
+ */
+router.put('/:id/tier', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Validate input
+    const { error, value } = updateUserTierSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    // Find user by ID
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Update user tier
+    user.userTier = value.userTier;
+    await user.save();
+
+    res.json({
+      success: true,
+      data: {
+        user: user.getProfile()
+      },
+      message: 'User tier updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Update user tier error:', {
+      error: error.message,
+      userId: req.params.id,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'TIER_UPDATE_FAILED',
+        message: 'Failed to update user tier'
       }
     });
   }

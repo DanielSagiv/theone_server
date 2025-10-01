@@ -9,6 +9,14 @@ const {
   bookSeatSchema, 
   updateAvailabilitySchema 
 } = require('../utils/validationSchemas');
+const multer = require('multer');
+const { uploadBufferToS3, extFromMime } = require('../utils/s3');
+const crypto = require('crypto');
+
+const upload = multer({ 
+  storage: multer.memoryStorage(), 
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
+});
 
 /**
  * Event Routes
@@ -107,6 +115,18 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
           message: 'Event not found',
           code: 'EVENT_NOT_FOUND'
         }
+      });
+    }
+
+    // Populate seat media from location seats if event seats don't have media
+    if (event.location_id && event.location_id.seats) {
+      event.seats = event.seats.map(eventSeat => {
+        // Find corresponding location seat
+        const locationSeat = event.location_id.seats.find(ls => ls._id.toString() === eventSeat.seat_id.toString());
+        if (locationSeat && (!eventSeat.media || eventSeat.media.length === 0)) {
+          eventSeat.media = locationSeat.media || [];
+        }
+        return eventSeat;
       });
     }
 
@@ -234,6 +254,79 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         message: 'Failed to create event',
         details: error.message
       }
+    });
+  }
+});
+
+/**
+ * POST /v1/events/media/upload
+ * @description Upload event-specific media asset (image/video) to S3
+ */
+router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) => {
+  upload.single('asset')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'FILE_TOO_LARGE', message: 'File size too large. Maximum size is 50MB.' }
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: { code: 'UPLOAD_ERROR', message: 'File upload error: ' + err.message }
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_FILE', message: 'No file uploaded. Use field name "asset".' }
+      });
+    }
+
+    const mime = req.file.mimetype || 'application/octet-stream';
+    const type = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : 'other';
+    
+    console.log('Event media upload:', {
+      originalName: req.file.originalname,
+      mimetype: mime,
+      detectedType: type,
+      size: req.file.size
+    });
+    
+    if (type === 'other') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_FILE_TYPE', message: 'Only image and video files are allowed.' }
+      });
+    }
+
+    const ext = extFromMime(mime);
+    const userId = req.user._id.toString();
+    const hash = crypto.createHash('sha256').update(userId + Date.now().toString()).digest('hex').slice(0, 16);
+    const key = `events/${userId}/${hash}.${ext}`;
+
+    const url = await uploadBufferToS3(req.file.buffer, key, mime);
+
+    console.log('Event media upload response:', {
+      url: url,
+      type: type,
+      detectedFromMime: mime
+    });
+
+    return res.json({
+      success: true,
+      data: { url, type },
+      message: 'Event media uploaded successfully'
+    });
+  } catch (error) {
+    console.error('Upload event media error:', { error: error.message, timestamp: new Date().toISOString() });
+    return res.status(500).json({
+      success: false,
+      error: { code: 'MEDIA_UPLOAD_FAILED', message: 'Failed to upload media' }
     });
   }
 });

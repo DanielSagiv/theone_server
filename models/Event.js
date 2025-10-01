@@ -62,7 +62,7 @@ const EventUnitSchema = new mongoose.Schema({
   event_price: { type: Number, min: 0 }, // Event-specific pricing
   status: { 
     type: String, 
-    enum: ['available', 'held', 'booked', 'blocked'], 
+    enum: ['available', 'held', 'booked', 'blocked','pending'], 
     default: 'available' 
   },
   
@@ -121,7 +121,7 @@ const EventSchema = new mongoose.Schema({
   // Event Status
   status: { 
     type: String, 
-    enum: ['draft', 'active', 'sold_out', 'cancelled', 'completed', 'archived'], 
+    enum: ['draft', 'pending', 'active', 'sold_out', 'cancelled', 'completed', 'archived'], 
     default: 'draft', 
     index: true 
   },

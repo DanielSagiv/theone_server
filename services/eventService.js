@@ -40,7 +40,7 @@ async function createEventWithSeats(eventData, userId) {
         status: 'available',
         map_anchor: seat.mapAnchor,
         polygon: seat.polygon,
-        media: []
+        media: seat.media || []
       };
       
       console.log('Inherited seat:', { code: eventSeat.code, capacity: eventSeat.capacity, eventPrice: eventSeat.event_price });
@@ -61,7 +61,7 @@ async function createEventWithSeats(eventData, userId) {
         min_price: unit.minPriceUSD,
         event_price: eventData.base_price * 1.5,
         status: 'available',
-        media: []
+        media: unit.media || []
       };
       
       console.log('Inherited unit:', { code: eventUnit.code, kind: eventUnit.kind, occupancy: eventUnit.occupancy });
