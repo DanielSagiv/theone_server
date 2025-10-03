@@ -1667,21 +1667,31 @@
                     <div id="cl_step3" style="display:none;">
                         <div id="cl_inventory_club" style="display:none;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                <h3 style="margin:0;">Seats</h3>
-                                <button class="btn" onclick="addSeatRow()">Add Seat</button>
+                                <h3 style="margin:0;">Tables</h3>
+                                <button class="btn" onclick="addSeatRow()">Add Table</button>
                             </div>
                             <table class="table">
                                 <thead><tr><th>Code</th><th>Category</th><th>Capacity</th><th>Min Spend</th><th>Media</th><th></th></tr></thead>
                                 <tbody id="cl_seats_tbody"></tbody>
                             </table>
                         </div>
-                        <div id="cl_inventory_hotel" style="display:none;">
+                        <div id="cl_inventory_restaurant" style="display:none;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                <h3 style="margin:0;">Units</h3>
-                                <button class="btn" onclick="addUnitRow()">Add Unit</button>
+                                <h3 style="margin:0;">Sections</h3>
+                                <button class="btn" onclick="addRestaurantSectionRow()">Add Section</button>
                             </div>
                             <table class="table">
-                                <thead><tr><th>Code</th><th>Kind</th><th>Beds</th><th>Occupancy</th><th>Min Price</th><th></th></tr></thead>
+                                <thead><tr><th>Code</th><th>Name</th><th>Description</th><th>Media</th><th></th></tr></thead>
+                                <tbody id="cl_restaurant_sections_tbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="cl_inventory_hotel" style="display:none;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <h3 style="margin:0;">Rooms</h3>
+                                <button class="btn" onclick="addUnitRow()">Add Room</button>
+                            </div>
+                            <table class="table">
+                                <thead><tr><th>Code</th><th>Kind</th><th>Beds</th><th>Occupancy</th><th>Min Price</th><th>Media</th><th></th></tr></thead>
                                 <tbody id="cl_units_tbody"></tbody>
                             </table>
                         </div>
@@ -1830,7 +1840,7 @@
                     <!-- Event Info Tabs -->
                     <div style="display:flex;gap:12px;margin-bottom:20px;border-bottom:1px solid #ecf0f1;">
                         <button class="tab-btn active" onclick="switchEventTab('info')" id="eventTabInfo">Event Info</button>
-                        <button class="tab-btn" onclick="switchEventTab('seats')" id="eventTabSeats">Seat Management</button>
+                        <button class="tab-btn" onclick="switchEventTab('seats')" id="eventTabSeats">Management</button>
                         <button class="tab-btn" onclick="switchEventTab('analytics')" id="eventTabAnalytics">Analytics</button>
                     </div>
 
@@ -1900,10 +1910,10 @@
                         </div>
                     </div>
 
-                    <!-- Seat Management Tab -->
+                    <!-- Management Tab -->
                     <div id="eventSeatsTab" class="event-tab-content" style="display:none;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-                            <h3>Seat Management</h3>
+                            <h3 id="eventManagementTitle">Management</h3>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" onclick="refreshEventSeats()">Refresh</button>
                                 <button class="btn" onclick="bulkUpdateSeats()">Bulk Update</button>
@@ -2122,9 +2132,17 @@
 
                     <!-- Seating Areas Section (for clubs) -->
                     <div class="detail-section" id="seatingAreasSection" style="display: none;">
-                        <h3>Seating Areas</h3>
+                        <h3>Tables</h3>
                         <div class="seating-areas-container" id="seatingAreasContainer">
-                            <!-- Seating areas will be populated here -->
+                            <!-- Tables will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Restaurant Sections Section -->
+                    <div class="detail-section" id="restaurantSectionsSection" style="display: none;">
+                        <h3>Sections</h3>
+                        <div class="restaurant-sections-container" id="restaurantSectionsContainer">
+                            <!-- Restaurant sections will be populated here -->
                         </div>
                     </div>
 
@@ -2841,6 +2859,8 @@
             // Sub-entity media based on location type
             if (location.type === 'night_club' || location.type === 'day_club') {
                 displaySeatingAreas(location.seats || []);
+            } else if (location.type === 'restaurant') {
+                displayRestaurantSections(location.seats || []);
             } else if (location.type === 'hotel') {
                 displayRoomTypes(location.units || []);
             }
@@ -3103,8 +3123,8 @@
                         seatItemsHtml += seatHtml;
                     } catch (error) {
                         seatItemsHtml += `<div class="seat-item" style="border: 1px solid #e74c3c; padding: 10px; margin: 5px; background: #fdf2f2;">
-                            <div class="seat-code">Seat ${seat.code} (Error)</div>
-                            <div style="color: #e74c3c; font-size: 12px;">Error rendering seat: ${error.message}</div>
+                            <div class="seat-code">Table ${seat.code} (Error)</div>
+                            <div style="color: #e74c3c; font-size: 12px;">Error rendering table: ${error.message}</div>
                         </div>`;
                     }
                 });
@@ -3113,7 +3133,7 @@
                     <div class="seating-area-header" onclick="toggleSeatingArea(this)">
                         <div>
                             <div class="seating-area-title">${category.replace(/_/g, ' ').toUpperCase()}</div>
-                            <div class="seating-area-count">${categorySeats.length} seat${categorySeats.length !== 1 ? 's' : ''}</div>
+                            <div class="seating-area-count">${categorySeats.length} table${categorySeats.length !== 1 ? 's' : ''}</div>
                         </div>
                         <div class="expand-icon">▼</div>
                     </div>
@@ -3125,6 +3145,44 @@
                 `;
                 seatingContainer.appendChild(areaDiv);
             });
+        }
+
+        /**
+         * Display restaurant sections
+         */
+        function displayRestaurantSections(sections) {
+            const sectionElement = document.getElementById('restaurantSectionsSection');
+            const sectionContainer = document.getElementById('restaurantSectionsContainer');
+            
+            if (!sections || sections.length === 0) {
+                sectionElement.style.display = 'none';
+                return;
+            }
+            
+            sectionElement.style.display = 'block';
+            sectionContainer.innerHTML = sections.map(section => `
+                <div class="seating-area">
+                    <div class="seating-area-header">
+                        <h4>Section ${section.code}</h4>
+                        ${section.label ? `<p><strong>${section.label}</strong></p>` : ''}
+                        ${section.description ? `<p>${section.description}</p>` : ''}
+                    </div>
+                    ${section.media && section.media.length > 0 ? `
+                        <div class="seating-area-media">
+                            ${section.media.map(media => `
+                                <img src="${media.url}" alt="${media.caption || 'Section media'}" 
+                                     class="seating-area-thumbnail"
+                                     onclick="openMediaModal('${media.url}', '${media.type}')">
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="seating-area-actions">
+                        <button class="btn btn-secondary" onclick="openAddSentimentModal('section', '${section.code}')">
+                            Add Sentiment
+                        </button>
+                    </div>
+                </div>
+            `).join('');
         }
 
         /**
@@ -3228,7 +3286,7 @@
             
             return `
                 <div class="seat-item">
-                    <div class="seat-code">Seat ${seat.code}</div>
+                    <div class="seat-code">Table ${seat.code}</div>
                     <div class="seat-details">
                         <div>Capacity: ${seat.capacity || '-'}</div>
                         <div>Min Spend: $${seat.minSpendUSD || 0}</div>
@@ -4416,6 +4474,7 @@
             document.getElementById('cl_attrs_club').style.display = club ? 'block' : 'none';
             document.getElementById('cl_inventory_club').style.display = club ? 'block' : 'none';
             document.getElementById('cl_attrs_restaurant').style.display = restaurant ? 'block' : 'none';
+            document.getElementById('cl_inventory_restaurant').style.display = restaurant ? 'block' : 'none';
             document.getElementById('cl_attrs_hotel').style.display = hotel ? 'block' : 'none';
             document.getElementById('cl_inventory_hotel').style.display = hotel ? 'block' : 'none';
         }
@@ -4457,6 +4516,38 @@
                 <select class="cl_seat_media_type"><option value="image">Image</option><option value="video">Video</option></select>
                 <input class="cl_seat_media_url" placeholder="https://..." style="width:240px"/>
                 <input class="cl_seat_media_caption" placeholder="Caption" style="width:140px"/>
+                <button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button>
+            `;
+            container.appendChild(row);
+        }
+        // restaurant sections
+        function addRestaurantSectionRow() {
+            const tbody = document.getElementById('cl_restaurant_sections_tbody');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input class="cl_section_code" style="width:90px" placeholder="e.g., A1"/></td>
+                <td><input class="cl_section_name" style="width:120px" placeholder="e.g., Main Dining"/></td>
+                <td><input class="cl_section_description" style="width:150px" placeholder="e.g., Window seating"/></td>
+                <td>
+                    <div class="cl_section_media_list"></div>
+                    <button class="btn btn-secondary" onclick="addRestaurantSectionMediaRow(this)">Add Media</button>
+                </td>
+                <td><button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+        function addRestaurantSectionMediaRow(button) {
+            const container = button.previousElementSibling;
+            const row = document.createElement('div');
+            row.className = 'cl_section_media_row';
+            row.style.marginBottom = '8px';
+            row.innerHTML = `
+                <input class="cl_section_media_url" placeholder="Media URL" style="width:200px;margin-right:8px;"/>
+                <select class="cl_section_media_type" style="width:80px;margin-right:8px;">
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                </select>
+                <input class="cl_section_media_caption" placeholder="Caption" style="width:120px;margin-right:8px;"/>
                 <button class="btn btn-secondary" onclick="this.parentElement.remove()">X</button>
             `;
             container.appendChild(row);
@@ -4578,6 +4669,32 @@
                 const privateDiningRooms = parseInt(document.getElementById('cl_privateDiningRooms').value || '0', 10);
                 if (privateDiningRooms > 0) attributes.privateDiningRooms = privateDiningRooms;
                 if (Object.keys(attributes).length > 0) payload.attributes = attributes;
+                
+                // Restaurant Sections (using seats array)
+                const sectionRows = Array.from(document.querySelectorAll('#cl_restaurant_sections_tbody tr'));
+                const sections = sectionRows.map(r => {
+                    const code = r.querySelector('.cl_section_code').value.trim();
+                    if (!code) return null;
+                    const section = {
+                        code: code,
+                        label: r.querySelector('.cl_section_name').value.trim() || undefined,
+                        description: r.querySelector('.cl_section_description').value.trim() || undefined
+                    };
+                    // Add media if any
+                    const mediaRows = Array.from(r.querySelectorAll('.cl_section_media_row'));
+                    const media = mediaRows.map(mr => {
+                        const url = mr.querySelector('.cl_section_media_url').value.trim();
+                        if (!url) return null;
+                        return {
+                            type: mr.querySelector('.cl_section_media_type').value,
+                            url: url,
+                            caption: mr.querySelector('.cl_section_media_caption').value.trim() || undefined
+                        };
+                    }).filter(m => m !== null);
+                    if (media.length > 0) section.media = media;
+                    return section;
+                }).filter(s => s !== null);
+                if (sections.length > 0) payload.seats = sections;
             }
             
             if (type === 'hotel') {
@@ -5484,8 +5601,20 @@
             document.getElementById('eventAnalyticsDaysUntil').textContent = daysUntil > 0 ? `${daysUntil} days` : 'Event has passed';
             document.getElementById('eventAnalyticsBookingRate').textContent = `${event.total_booked || 0}/${event.total_capacity || 0}`;
 
-            // Store current event for seat management
+            // Store current event for management
             window.currentEvent = event;
+            
+            // Update management title based on event type
+            const managementTitle = document.getElementById('eventManagementTitle');
+            if (event.type === 'night_club' || event.type === 'day_club') {
+                managementTitle.textContent = 'Table Management';
+            } else if (event.type === 'restaurant') {
+                managementTitle.textContent = 'Section Management';
+            } else if (event.type === 'hotel') {
+                managementTitle.textContent = 'Room Management';
+            } else {
+                managementTitle.textContent = 'Management';
+            }
             
             // Display event-specific media
             displayEventMedia(event.media || []);
