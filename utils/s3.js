@@ -28,6 +28,7 @@ async function uploadBufferToS3(buffer, key, contentType) {
     Key: key,
     Body: buffer,
     ContentType: contentType
+    // Note: ACL removed - bucket should have public read policy
   };
 
   const result = await s3.upload(params).promise();

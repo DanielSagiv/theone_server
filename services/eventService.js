@@ -75,6 +75,9 @@ async function createEventWithSeats(eventData, userId) {
     console.log('Total capacity calculated:', totalCapacity);
 
     // Create event
+    console.log('Event data before creation:', eventData);
+    console.log('Event media in data:', eventData.media);
+    
     const event = new Event({
       ...eventData,
       seats: inheritedSeats,
@@ -91,6 +94,9 @@ async function createEventWithSeats(eventData, userId) {
       is_featured: false,
       priority: 0
     });
+    
+    console.log('Event object before save:', event);
+    console.log('Event media before save:', event.media);
 
     await event.save();
     console.log('Event created successfully:', event._id);

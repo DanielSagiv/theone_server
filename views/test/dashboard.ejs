@@ -1071,6 +1071,36 @@
             color: white;
         }
 
+        .status-approved {
+            background-color: #2ecc71;
+            color: white;
+        }
+
+        .status-sent {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .status-accepted {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        .status-rejected {
+            background-color: #e74c3c;
+            color: white;
+        }
+
+        .status-expired {
+            background-color: #95a5a6;
+            color: white;
+        }
+
+        .status-cancelled {
+            background-color: #7f8c8d;
+            color: white;
+        }
+
         /* Icon Buttons */
         .btn-icon {
             background: none;
@@ -1236,6 +1266,15 @@
             cursor: pointer;
             transition: all 0.2s ease;
             border: 2px solid transparent;
+            overflow: hidden; /* Prevent content from overflowing */
+        }
+        
+        .media-thumbnail img,
+        .media-thumbnail video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
         }
 
         .media-thumbnail:hover {
@@ -1323,13 +1362,21 @@
         .media-modal-content {
             max-width: 90%;
             max-height: 90%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-modal-content img,
+        .media-modal-content video {
+            max-width: 100%;
+            max-height: 90vh;
             object-fit: contain;
         }
 
         .media-modal-content video {
-            width: 100%;
+            width: auto;
             height: auto;
-            max-height: 90vh;
         }
 
         .media-modal-close {
@@ -1365,7 +1412,7 @@
                     Events
                 </a>
                 <a href="#" class="nav-item" data-section="coes">
-                    COE's
+                    COEs
                 </a>
                 <a href="#" class="nav-item" data-section="settings">
                     Settings
@@ -1544,15 +1591,74 @@
                     </div>
                 </div>
 
-                <!-- COE's Section -->
+                <!-- COEs Section -->
                 <div class="content-section" id="coesSection">
                     <div class="section-header">
-                        <h1>COE's Management</h1>
-                        <p>Manage Centers of Excellence</p>
+                        <h1>COE Management</h1>
+                        <p>Manage Curated One Experiences</p>
                     </div>
-                    <div class="placeholder-content">
-                        <h3>COE's Management</h3>
-                        <p>This section will be implemented soon</p>
+                    <div class="card">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                            <div>
+                                <h3 style="margin:0;">COEs</h3>
+                                <small>All Curated One Experiences (admin)</small>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshCOEs()">Refresh</button>
+                                <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateCOE()">Create COE</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- COE Filters -->
+                            <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+                                <select id="coeStatusFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterCOEs()">
+                                    <option value="">All Status</option>
+                                    <option value="draft">Draft</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="sent">Sent</option>
+                                    <option value="accepted">Accepted</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="expired">Expired</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                                <select id="coeClientFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterCOEs()">
+                                    <option value="">All Clients</option>
+                                </select>
+                                <select id="coeRunnerFilter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterCOEs()">
+                                    <option value="">All Runners</option>
+                                </select>
+                                <input type="text" id="coeSearchInput" placeholder="Search COEs..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:200px;" onkeyup="searchCOEs()">
+                            </div>
+                            
+                            <!-- COE Table -->
+                            <div style="overflow:auto;">
+                                <table class="table" id="coesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Client</th>
+                                            <th>Status</th>
+                                            <th>Events</th>
+                                            <th>Runner</th>
+                                            <th>Total Value</th>
+                                            <th>Start Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="coesTableBody">
+                                        <tr>
+                                            <td colspan="8" style="text-align: center; padding: 40px;">
+                                                <div class="loading" id="coesLoading">
+                                                    <div class="spinner"></div>
+                                                    <p>Loading COEs...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1829,6 +1935,192 @@
             </div>
         </div>
 
+        <!-- Create COE Modal -->
+        <div id="createCOEModal" class="modal" style="display:none;">
+            <div class="modal-content" style="max-width:1000px;">
+                <div class="modal-header">
+                    <h2>Create COE</h2>
+                    <span class="close" onclick="closeCreateCOE()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- Steps Header -->
+                    <div style="display:flex;gap:12px;margin-bottom:20px;">
+                        <div id="coec_step1_badge" class="status-badge status-live">1. Basics</div>
+                        <div id="coec_step2_badge" class="status-badge status-live" style="opacity:.6;">2. Events</div>
+                        <div id="coec_step3_badge" class="status-badge status-live" style="opacity:.6;">3. Tables</div>
+                        <div id="coec_step4_badge" class="status-badge status-live" style="opacity:.6;">4. Runner</div>
+                        <div id="coec_step5_badge" class="status-badge status-live" style="opacity:.6;">5. Pricing</div>
+                        <div id="coec_step6_badge" class="status-badge status-live" style="opacity:.6;">6. Review</div>
+                    </div>
+
+                    <!-- Step 1: Basic Information -->
+                    <div id="coec_step1">
+                        <div class="profile-field">
+                            <label>COE Name *</label>
+                            <input id="coec_name" type="text" placeholder="Enter COE name" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Description *</label>
+                            <textarea id="coec_description" placeholder="Enter COE description" rows="3" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                        <div class="profile-field">
+                            <label>Client *</label>
+                            <select id="coec_client_id" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="">Select Client</option>
+                            </select>
+                        </div>
+                        <div class="profile-field">
+                            <label>Start Date *</label>
+                            <input id="coec_start_date" type="date" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>End Date *</label>
+                            <input id="coec_end_date" type="date" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Currency</label>
+                            <select id="coec_currency" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                                <option value="GBP">GBP</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Event Selection -->
+                    <div id="coec_step2" style="display:none;">
+                        <div style="margin-bottom:20px;">
+                            <h3>Available Events</h3>
+                            <div style="display:flex;gap:12px;margin-bottom:15px;flex-wrap:wrap;">
+                                <select id="coec_event_location_filter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterCOEEvents()">
+                                    <option value="">All Locations</option>
+                                </select>
+                                <select id="coec_event_status_filter" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;" onchange="filterCOEEvents()">
+                                    <option value="">All Status</option>
+                                    <option value="active">Active</option>
+                                    <option value="draft">Draft</option>
+                                </select>
+                                <input type="text" id="coec_event_search" placeholder="Search events..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:200px;" onkeyup="filterCOEEvents()">
+                            </div>
+                        </div>
+                        <div id="coec_events_grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px;max-height:400px;overflow-y:auto;border:1px solid #ecf0f1;border-radius:8px;padding:15px;">
+                            <!-- Events will be populated here -->
+                        </div>
+                        <div style="margin-top:20px;">
+                            <h3>Selected Events</h3>
+                            <div id="coec_selected_events" style="min-height:100px;border:1px solid #ecf0f1;border-radius:8px;padding:15px;">
+                                <p style="color:#7f8c8d;text-align:center;margin:20px 0;">No events selected</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Table Assignment -->
+                    <div id="coec_step3" style="display:none;">
+                        <div id="coec_seats_container">
+                            <p style="color:#7f8c8d;text-align:center;margin:40px 0;">Please select events first</p>
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Runner Assignment -->
+                    <div id="coec_step4" style="display:none;">
+                        <div class="profile-field">
+                            <label>Assignment Type</label>
+                            <select id="coec_runner_type" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" onchange="toggleRunnerAssignmentType()">
+                                <option value="coe">Assign to entire COE</option>
+                                <option value="event">Assign per event</option>
+                            </select>
+                        </div>
+                        <div id="coec_runner_coe_assignment">
+                            <div class="profile-field">
+                                <label>Runner *</label>
+                                <select id="coec_coe_runner_id" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                    <option value="">Select Runner</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="coec_runner_event_assignment" style="display:none;">
+                            <h3>Event-Level Runner Assignment</h3>
+                            <div id="coec_event_runners">
+                                <!-- Event-level runner assignments will be populated here -->
+                            </div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Runner Notes</label>
+                            <textarea id="coec_runner_notes" placeholder="Add notes for the runner" rows="3" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Step 5: Pricing & Policies -->
+                    <div id="coec_step5" style="display:none;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;">
+                            <div>
+                                <h3>Pricing Breakdown</h3>
+                                <div id="coec_pricing_breakdown" style="background:#f8f9fa;padding:15px;border-radius:8px;">
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                                        <span>Subtotal:</span>
+                                        <span id="coec_subtotal">$0.00</span>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                                        <span>Taxes:</span>
+                                        <span id="coec_taxes_display">$0.00</span>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+                                        <span>Fees:</span>
+                                        <span id="coec_fees_display">$0.00</span>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;font-weight:bold;border-top:1px solid #ddd;padding-top:10px;">
+                                        <span>Total:</span>
+                                        <span id="coec_total_display">$0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h3>Additional Costs</h3>
+                                <div class="profile-field">
+                                    <label>Taxes (%)</label>
+                                    <input id="coec_taxes_percent" type="number" min="0" max="100" step="0.1" value="0" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" onchange="calculateCOEPricing()" />
+                                </div>
+                                <div class="profile-field">
+                                    <label>Fees ($)</label>
+                                    <input id="coec_fees_amount" type="number" min="0" step="0.01" value="0" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" onchange="calculateCOEPricing()" />
+                                </div>
+                                <div class="profile-field">
+                                    <label>Deposit Required (%)</label>
+                                    <input id="coec_deposit_percent" type="number" min="0" max="100" step="1" value="20" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" onchange="calculateCOEPricing()" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="profile-field">
+                            <label>Policies</label>
+                            <textarea id="coec_policies" placeholder="Enter terms and conditions" rows="4" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                        <div class="profile-field">
+                            <label>Notes</label>
+                            <textarea id="coec_notes" placeholder="Add internal notes" rows="3" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Step 6: Review & Create -->
+                    <div id="coec_step6" style="display:none;">
+                        <div style="background:#f8f9fa;padding:20px;border-radius:8px;margin-bottom:20px;">
+                            <h3>COE Summary</h3>
+                            <div id="coec_summary">
+                                <!-- Summary will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Navigation Buttons -->
+                    <div style="display:flex;justify-content:space-between;margin-top:30px;">
+                        <button id="coec_prev_btn" class="btn btn-secondary" onclick="coecPreviousStep()" style="display:none;">Previous</button>
+                        <div style="flex:1;"></div>
+                        <button id="coec_next_btn" class="btn" onclick="coecNextStep()">Next</button>
+                        <button id="coec_create_btn" class="btn" onclick="submitCreateCOE()" style="display:none;">Create COE</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Event Details Modal -->
         <div id="eventDetailsModal" class="modal" style="display:none;">
             <div class="modal-content" style="max-width:1200px;">
@@ -1979,7 +2271,7 @@
         <!-- Media Modal -->
         <div id="mediaModal" class="media-modal">
             <span class="media-modal-close" onclick="closeMediaModal()">&times;</span>
-            <img id="mediaModalContent" class="media-modal-content" src="" alt="">
+            <div id="mediaModalContent" class="media-modal-content"></div>
         </div>
 
         <!-- Profile Modal -->
@@ -2484,6 +2776,9 @@
             }
             if (sectionName === 'events' && currentUser?.role === 'admin') {
                 loadEvents();
+            }
+            if (sectionName === 'coes' && currentUser?.role === 'admin') {
+                loadCOEs();
             }
         }
 
@@ -3240,7 +3535,7 @@
             const mediaHtml = (seat.media || []).map(media => {
                 if (media.type === 'image') {
                     return `<div class="media-item" onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})">
-                        <img src="${media.url}" alt="${media.caption || 'Seat image'}" loading="lazy">
+                        <img src="${media.url}" alt="${media.caption || 'Table image'}" loading="lazy">
                     </div>`;
                 } else if (media.type === 'video') {
                     // Detect video format from URL
@@ -5092,9 +5387,11 @@
             try {
                 console.log('Loading events...');
                 const result = await makeApiRequest('/events');
+                console.log('Events API result:', result);
                 
                 if (result.success && result.data) {
                     allEvents = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    console.log('Events loaded:', allEvents.length, allEvents);
                     displayEventsTable(allEvents);
                     populateEventLocationFilter();
                     showAlert('Events loaded successfully!', 'success');
@@ -5133,7 +5430,7 @@
                             <br><small style="color:#666;">${event.description || 'No description'}</small>
                         </td>
                         <td>${locationName}</td>
-                        <td>${event.type.replace('_', ' ').toUpperCase()}</td>
+                        <td>${event.type ? event.type.replace('_', ' ').toUpperCase() : 'N/A'}</td>
                         <td>
                             ${startDate}<br>
                             <small style="color:#666;">${startTime}</small>
@@ -5468,7 +5765,10 @@
             const fileInput = document.getElementById('ce_media_files');
             const files = fileInput.files;
             
+            console.log('Upload event media files - files selected:', files.length);
+            
             if (!files || files.length === 0) {
+                console.log('No files selected for upload');
                 return [];
             }
             
@@ -5476,21 +5776,29 @@
             
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
+                console.log(`Uploading file ${i + 1}/${files.length}:`, file.name, file.type, file.size);
+                
                 const formData = new FormData();
                 formData.append('asset', file);
                 
                 try {
-                    const response = await fetch(`${API_BASE_URL}/events/media/upload`, {
+                    console.log('Making upload request to /v1/events/media/upload');
+                    
+                    // Use direct fetch for FormData (makeApiRequest doesn't handle FormData properly)
+                    const response = await fetch(`/v1/events/media/upload`, {
                         method: 'POST',
                         headers: {
-                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                            'Authorization': `Bearer ${currentToken}`
                         },
                         body: formData
                     });
                     
+                    console.log('Upload response status:', response.status);
                     const result = await response.json();
+                    console.log('Upload response result:', result);
                     
                     if (result.success && result.data) {
+                        console.log('File uploaded successfully:', result.data);
                         uploadedUrls.push({
                             type: result.data.type,
                             url: result.data.url,
@@ -5506,6 +5814,7 @@
                 }
             }
             
+            console.log('All files uploaded. URLs:', uploadedUrls);
             return uploadedUrls;
         }
 
@@ -5517,6 +5826,8 @@
                 // Upload media files first
                 showAlert('Uploading event media...', 'info');
                 ce_uploadedMedia = await uploadEventMediaFiles();
+                console.log('Uploaded media:', ce_uploadedMedia);
+                console.log('Number of media files uploaded:', ce_uploadedMedia.length);
                 
                 const eventData = {
                     name: document.getElementById('ce_name').value.trim(),
@@ -5533,7 +5844,8 @@
                     media: ce_uploadedMedia
                 };
 
-                console.log('Creating event:', eventData);
+                console.log('Creating event with data:', eventData);
+                console.log('Event media array:', eventData.media);
 
                 const result = await makeApiRequest('/events', 'POST', eventData);
                 
@@ -5635,7 +5947,7 @@
             const seatsGrid = document.getElementById('eventSeatsGrid');
             
             if (!seats || seats.length === 0) {
-                seatsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#7f8c8d;">No seats available for this event</div>';
+                seatsGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#7f8c8d;">No tables available for this event</div>';
                 return;
             }
 
@@ -5666,7 +5978,7 @@
                                                        media.url.toLowerCase().includes('.webm') ||
                                                        media.url.toLowerCase().includes('.mkv');
                                         return `
-                                            <img src="${media.url}" alt="${media.alt || 'Seat media'}" 
+                                            <img src="${media.url}" alt="${media.alt || 'Table media'}" 
                                                  class="seat-media-thumbnail ${isVideo ? 'video' : ''}"
                                                  onclick="event.stopPropagation(); openMediaModal('${media.url}', '${isVideo ? 'video' : 'image'}')">
                                         `;
@@ -5777,22 +6089,22 @@
                 
                 if (isVideo) {
                     return `
-                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'video')" style="cursor:pointer;position:relative;">
-                            <video src="${media.url}" preload="metadata" style="width:100%;height:150px;object-fit:cover;border-radius:8px;"></video>
-                            <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.7);color:white;padding:4px 8px;font-size:11px;border-radius:4px;">VIDEO</div>
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'video')" style="position:relative;">
+                            <video src="${media.url}" preload="metadata"></video>
+                            <div style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.7);color:white;padding:2px 6px;font-size:10px;border-radius:3px;">VIDEO</div>
                         </div>
                     `;
                 } else {
                     return `
-                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'image')" style="cursor:pointer;">
-                            <img src="${media.url}" alt="Event media" style="width:100%;height:150px;object-fit:cover;border-radius:8px;" />
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'image')">
+                            <img src="${media.url}" alt="Event media" />
                         </div>
                     `;
                 }
             }).join('');
 
             mediaContainer.innerHTML = `
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:12px;">
                     ${mediaGallery}
                 </div>
             `;
@@ -5816,11 +6128,21 @@
                                media.url.toLowerCase().includes('.avi') ||
                                media.url.toLowerCase().includes('.webm') ||
                                media.url.toLowerCase().includes('.mkv');
-                return `
-                    <img src="${media.url}" alt="${media.alt || 'Location media'}" 
-                         class="media-thumbnail ${isVideo ? 'video' : ''}"
-                         onclick="openMediaModal('${media.url}', '${isVideo ? 'video' : 'image'}')">
-                `;
+                
+                if (isVideo) {
+                    return `
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'video')" style="position:relative;">
+                            <video src="${media.url}" preload="metadata"></video>
+                            <div style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.7);color:white;padding:2px 6px;font-size:10px;border-radius:3px;">VIDEO</div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="media-thumbnail" onclick="openMediaModal('${media.url}', 'image')">
+                            <img src="${media.url}" alt="${media.alt || 'Location media'}" />
+                        </div>
+                    `;
+                }
             }).join('');
 
             mediaContainer.innerHTML = `<div class="media-gallery">${mediaGallery}</div>`;
@@ -5832,6 +6154,9 @@
         function openMediaModal(url, type) {
             const modal = document.getElementById('mediaModal');
             const content = document.getElementById('mediaModalContent');
+            
+            // Clear any previous content
+            content.innerHTML = '';
             
             if (type === 'video') {
                 // Get video file extension to determine MIME type
@@ -5856,16 +6181,48 @@
                         break;
                 }
                 
-                content.innerHTML = `
-                    <video class="media-modal-content" controls preload="metadata">
-                        <source src="${url}" type="${mimeType}">
-                        <p>Your browser does not support the video tag. <a href="${url}" target="_blank">Download video</a></p>
-                    </video>
-                `;
+                const video = document.createElement('video');
+                video.className = 'media-modal-content';
+                video.controls = true;
+                video.preload = 'metadata';
+                video.style.width = '100%';
+                video.style.height = 'auto';
+                video.style.maxHeight = '90vh';
+                
+                // Use direct src instead of source element for simplicity
+                video.src = url;
+                
+                const fallback = document.createElement('p');
+                fallback.innerHTML = `Your browser does not support the video tag. <a href="${url}" target="_blank">Download video</a>`;
+                
+                video.appendChild(fallback);
+                content.appendChild(video);
+                
+                // Add event listeners for debugging
+                video.addEventListener('loadstart', () => console.log('Video loadstart'));
+                video.addEventListener('loadedmetadata', () => console.log('Video loadedmetadata'));
+                video.addEventListener('canplay', () => {
+                    console.log('Video canplay - attempting to play');
+                    video.play().then(() => {
+                        console.log('✅ Video started playing successfully');
+                    }).catch(error => {
+                        console.log('⚠️ Video autoplay blocked (normal browser behavior):', error.message);
+                    });
+                });
+                video.addEventListener('error', (e) => console.error('Video error:', e));
+                video.addEventListener('load', () => console.log('Video load'));
+                
+                console.log('Video modal opened:', { url, mimeType, extension });
+                console.log('Video element created:', video);
+                console.log('Video src set to:', video.src);
             } else {
-                content.src = url;
-                content.alt = 'Media content';
-                content.innerHTML = ''; // Clear any previous video content
+                const img = document.createElement('img');
+                img.className = 'media-modal-content';
+                img.src = url;
+                img.alt = 'Media content';
+                content.appendChild(img);
+                
+                console.log('Image modal opened:', url);
             }
             
             modal.style.display = 'flex';
@@ -5879,7 +6236,6 @@
             const content = document.getElementById('mediaModalContent');
             
             modal.style.display = 'none';
-            content.src = '';
             content.innerHTML = '';
         }
 
@@ -5920,6 +6276,1068 @@
             } catch (error) {
                 console.error('Error deleting event:', error);
                 showAlert('Error deleting event: ' + error.message, 'error');
+            }
+        }
+
+        // COE Management Functions
+        let allCOEs = [];
+        let allClients = [];
+        let allRunners = [];
+        let allEventsForCOE = [];
+        let coecCurrentStep = 1;
+        let coecSelectedEvents = [];
+        let coecSelectedSeats = [];
+
+        /**
+         * Load COEs for the COEs section
+         */
+        async function loadCOEs() {
+            try {
+                console.log('Loading COEs...');
+                const result = await makeApiRequest('/coes');
+                
+                if (result.success && result.data) {
+                    allCOEs = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    displayCOEsTable(allCOEs);
+                    populateCOEFilters();
+                    showAlert('COEs loaded successfully!', 'success');
+                } else {
+                    console.error('Failed to load COEs:', result);
+                    showAlert('Failed to load COEs: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error loading COEs:', error);
+                showAlert('Error loading COEs: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Display COEs in table
+         */
+        function displayCOEsTable(coes) {
+            const tableBody = document.getElementById('coesTableBody');
+            
+            if (coes.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#7f8c8d;">No COEs found</td></tr>';
+                return;
+            }
+
+            tableBody.innerHTML = coes.map(coe => {
+                const startDate = new Date(coe.start_date).toLocaleDateString();
+                const clientName = coe.client_id?.firstName && coe.client_id?.lastName 
+                    ? `${coe.client_id.firstName} ${coe.client_id.lastName}`
+                    : 'Unknown Client';
+                const runnerName = coe.runner_assignment?.runner_id?.firstName && coe.runner_assignment?.runner_id?.lastName
+                    ? `${coe.runner_assignment.runner_id.firstName} ${coe.runner_assignment.runner_id.lastName}`
+                    : 'Not Assigned';
+                const statusClass = `status-${coe.status}`;
+                const statusText = coe.status.replace('_', ' ').toUpperCase();
+                const eventsCount = coe.events ? coe.events.length : 0;
+                
+                return `
+                    <tr onclick="viewCOEDetails('${coe._id}')" style="cursor:pointer;">
+                        <td>
+                            <strong>${coe.name}</strong>
+                            <br><small style="color:#666;">${coe.description || 'No description'}</small>
+                        </td>
+                        <td>${clientName}</td>
+                        <td>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </td>
+                        <td>
+                            ${eventsCount} events
+                            <br><small style="color:#666;">${coe.created_method || 'manual'}</small>
+                        </td>
+                        <td>${runnerName}</td>
+                        <td>
+                            $${(coe.total || 0).toLocaleString()}
+                            <br><small style="color:#666;">${coe.currency || 'USD'}</small>
+                        </td>
+                        <td>${startDate}</td>
+                        <td>
+                            <button class="btn-icon btn-icon-edit" onclick="event.stopPropagation(); editCOE('${coe._id}')" title="Edit COE">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon btn-icon-delete" onclick="event.stopPropagation(); deleteCOE('${coe._id}', '${coe.name}')" title="Delete COE">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Populate COE filters
+         */
+        async function populateCOEFilters() {
+            try {
+                // Load users for client and runner filters
+                const result = await makeApiRequest('/users');
+                if (result.success && result.data) {
+                    const users = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    allClients = users.filter(user => user.role === 'client');
+                    allRunners = users.filter(user => user.role === 'runner');
+                    
+                    // Populate client filter for COE list
+                    const clientFilter = document.getElementById('coeClientFilter');
+                    if (clientFilter) {
+                        clientFilter.innerHTML = '<option value="">All Clients</option>' +
+                            allClients.map(client => `<option value="${client._id}">${client.firstName} ${client.lastName}</option>`).join('');
+                    }
+                    
+                    // Populate runner filter for COE list
+                    const runnerFilter = document.getElementById('coeRunnerFilter');
+                    if (runnerFilter) {
+                        runnerFilter.innerHTML = '<option value="">All Runners</option>' +
+                            allRunners.map(runner => `<option value="${runner._id}">${runner.firstName} ${runner.lastName}</option>`).join('');
+                    }
+
+                    // Populate client dropdown for COE creation modal
+                    const coeClientSelect = document.getElementById('coec_client_id');
+                    if (coeClientSelect) {
+                        coeClientSelect.innerHTML = '<option value="">Select Client</option>' +
+                            allClients.map(client => `<option value="${client._id}">${client.firstName} ${client.lastName}</option>`).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading users for COE filters:', error);
+            }
+        }
+
+        /**
+         * Filter COEs based on selected filters
+         */
+        function filterCOEs() {
+            const statusFilter = document.getElementById('coeStatusFilter').value;
+            const clientFilter = document.getElementById('coeClientFilter').value;
+            const runnerFilter = document.getElementById('coeRunnerFilter').value;
+            const searchInput = document.getElementById('coeSearchInput').value.toLowerCase();
+
+            let filteredCOEs = allCOEs.filter(coe => {
+                const matchesStatus = !statusFilter || coe.status === statusFilter;
+                const matchesClient = !clientFilter || coe.client_id?._id === clientFilter;
+                const matchesRunner = !runnerFilter || coe.runner_assignment?.runner_id?._id === runnerFilter;
+                const matchesSearch = !searchInput || 
+                    coe.name.toLowerCase().includes(searchInput) ||
+                    coe.description?.toLowerCase().includes(searchInput) ||
+                    coe.client_id?.firstName?.toLowerCase().includes(searchInput) ||
+                    coe.client_id?.lastName?.toLowerCase().includes(searchInput);
+
+                return matchesStatus && matchesClient && matchesRunner && matchesSearch;
+            });
+
+            displayCOEsTable(filteredCOEs);
+        }
+
+        /**
+         * Search COEs
+         */
+        function searchCOEs() {
+            filterCOEs();
+        }
+
+        /**
+         * Refresh COEs
+         */
+        function refreshCOEs() {
+            loadCOEs();
+        }
+
+        /**
+         * Open create COE modal
+         */
+        async function openCreateCOE() {
+            try {
+                // Load clients and runners for selection
+                await populateCOEFilters();
+                
+                // Load events for selection
+                await loadEventsForCOE();
+                
+                // Reset form
+                resetCreateCOEForm();
+                
+                // Show modal
+                document.getElementById('createCOEModal').style.display = 'flex';
+                
+                // Start with step 1
+                coecCurrentStep = 1;
+                updateCOECStepDisplay();
+            } catch (error) {
+                console.error('Error opening create COE modal:', error);
+                showAlert('Error opening create COE modal: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Close create COE modal
+         */
+        function closeCreateCOE() {
+            document.getElementById('createCOEModal').style.display = 'none';
+            resetCreateCOEForm();
+        }
+
+        /**
+         * Reset create COE form
+         */
+        function resetCreateCOEForm() {
+            // Reset form fields
+            document.getElementById('coec_name').value = '';
+            document.getElementById('coec_description').value = '';
+            document.getElementById('coec_client_id').value = '';
+            document.getElementById('coec_start_date').value = '';
+            document.getElementById('coec_end_date').value = '';
+            document.getElementById('coec_currency').value = 'USD';
+            document.getElementById('coec_taxes_percent').value = '0';
+            document.getElementById('coec_fees_amount').value = '0';
+            document.getElementById('coec_deposit_percent').value = '20';
+            document.getElementById('coec_policies').value = '';
+            document.getElementById('coec_notes').value = '';
+            document.getElementById('coec_runner_notes').value = '';
+            document.getElementById('coec_runner_type').value = 'coe';
+            
+            // Reset step
+            coecCurrentStep = 1;
+            updateCOECStepDisplay();
+            
+            // Reset selected events and seats
+            coecSelectedEvents = [];
+            coecSelectedSeats = [];
+            
+            // Reset UI
+            document.getElementById('coec_selected_events').innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:20px 0;">No events selected</p>';
+            document.getElementById('coec_seats_container').innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:40px 0;">Please select events first</p>';
+            document.getElementById('coec_events_grid').innerHTML = '';
+            document.getElementById('coec_event_runners').innerHTML = '';
+            document.getElementById('coec_summary').innerHTML = '';
+            
+            // Reset pricing
+            calculateCOEPricing();
+        }
+
+        /**
+         * Update COE creation step display
+         */
+        function updateCOECStepDisplay() {
+            // Hide all steps
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`coec_step${i}`).style.display = 'none';
+                document.getElementById(`coec_step${i}_badge`).style.opacity = '0.6';
+            }
+            
+            // Show current step
+            document.getElementById(`coec_step${coecCurrentStep}`).style.display = 'block';
+            document.getElementById(`coec_step${coecCurrentStep}_badge`).style.opacity = '1';
+            
+            // Update navigation buttons
+            const prevBtn = document.getElementById('coec_prev_btn');
+            const nextBtn = document.getElementById('coec_next_btn');
+            const createBtn = document.getElementById('coec_create_btn');
+            
+            prevBtn.style.display = coecCurrentStep > 1 ? 'block' : 'none';
+            nextBtn.style.display = coecCurrentStep < 6 ? 'block' : 'none';
+            createBtn.style.display = coecCurrentStep === 6 ? 'block' : 'none';
+        }
+
+        /**
+         * Go to next step in COE creation
+         */
+        function coecNextStep() {
+            if (validateCOECCurrentStep()) {
+                coecCurrentStep++;
+                updateCOECStepDisplay();
+                
+                // Load data for specific steps
+                if (coecCurrentStep === 2) {
+                    populateCOEEventsGrid();
+                } else if (coecCurrentStep === 3) {
+                    populateCOESeatsContainer();
+                } else if (coecCurrentStep === 4) {
+                    populateCOERunnerAssignment();
+                } else if (coecCurrentStep === 5) {
+                    calculateCOEPricing();
+                } else if (coecCurrentStep === 6) {
+                    populateCOESummary();
+                }
+            }
+        }
+
+        /**
+         * Go to previous step in COE creation
+         */
+        function coecPreviousStep() {
+            if (coecCurrentStep > 1) {
+                coecCurrentStep--;
+                updateCOECStepDisplay();
+            }
+        }
+
+        /**
+         * Validate current step in COE creation
+         */
+        function validateCOECCurrentStep() {
+            switch (coecCurrentStep) {
+                case 1:
+                    const name = document.getElementById('coec_name').value.trim();
+                    const description = document.getElementById('coec_description').value.trim();
+                    const clientId = document.getElementById('coec_client_id').value;
+                    const startDate = document.getElementById('coec_start_date').value;
+                    const endDate = document.getElementById('coec_end_date').value;
+                    
+                    if (!name) {
+                        showAlert('Please enter a COE name', 'error');
+                        return false;
+                    }
+                    if (!description) {
+                        showAlert('Please enter a description', 'error');
+                        return false;
+                    }
+                    if (!clientId) {
+                        showAlert('Please select a client', 'error');
+                        return false;
+                    }
+                    if (!startDate) {
+                        showAlert('Please select a start date', 'error');
+                        return false;
+                    }
+                    if (!endDate) {
+                        showAlert('Please select an end date', 'error');
+                        return false;
+                    }
+                    if (new Date(startDate) >= new Date(endDate)) {
+                        showAlert('End date must be after start date', 'error');
+                        return false;
+                    }
+                    break;
+                    
+                case 2:
+                    if (coecSelectedEvents.length === 0) {
+                        showAlert('Please select at least one event', 'error');
+                        return false;
+                    }
+                    break;
+                    
+                case 4:
+                    const runnerType = document.getElementById('coec_runner_type').value;
+                    if (runnerType === 'coe') {
+                        const coeRunnerId = document.getElementById('coec_coe_runner_id').value;
+                        if (!coeRunnerId) {
+                            showAlert('Please select a runner for the COE', 'error');
+                            return false;
+                        }
+                    }
+                    break;
+            }
+            return true;
+        }
+
+        /**
+         * Load events for COE selection
+         */
+        async function loadEventsForCOE() {
+            try {
+                const result = await makeApiRequest('/events');
+                if (result.success && result.data) {
+                    allEventsForCOE = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    console.log('Events loaded for COE:', allEventsForCOE);
+                    console.log('First event media:', allEventsForCOE[0]?.media);
+                    
+                    // Populate location filter
+                    const locationFilter = document.getElementById('coec_event_location_filter');
+                    const uniqueLocations = [...new Set(allEventsForCOE.map(event => event.location_id?._id).filter(Boolean))];
+                    const locationMap = {};
+                    allEventsForCOE.forEach(event => {
+                        if (event.location_id) {
+                            locationMap[event.location_id._id] = event.location_id.name;
+                        }
+                    });
+                    
+                    locationFilter.innerHTML = '<option value="">All Locations</option>' +
+                        uniqueLocations.map(locId => `<option value="${locId}">${locationMap[locId]}</option>`).join('');
+                }
+            } catch (error) {
+                console.error('Error loading events for COE:', error);
+                showAlert('Error loading events: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Filter events for COE selection
+         */
+        function filterCOEEvents() {
+            const locationFilter = document.getElementById('coec_event_location_filter').value;
+            const statusFilter = document.getElementById('coec_event_status_filter').value;
+            const searchInput = document.getElementById('coec_event_search').value.toLowerCase();
+
+            let filteredEvents = allEventsForCOE.filter(event => {
+                const matchesLocation = !locationFilter || event.location_id?._id === locationFilter;
+                const matchesStatus = !statusFilter || event.status === statusFilter;
+                const matchesSearch = !searchInput || 
+                    event.name.toLowerCase().includes(searchInput) ||
+                    event.description?.toLowerCase().includes(searchInput) ||
+                    event.location_id?.name?.toLowerCase().includes(searchInput);
+
+                return matchesLocation && matchesStatus && matchesSearch;
+            });
+
+            populateCOEEventsGrid(filteredEvents);
+        }
+
+        /**
+         * Populate events grid for COE selection
+         */
+        function populateCOEEventsGrid(events = allEventsForCOE) {
+            const eventsGrid = document.getElementById('coec_events_grid');
+            
+            if (events.length === 0) {
+                eventsGrid.innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:40px 0;">No events found</p>';
+                return;
+            }
+
+            eventsGrid.innerHTML = events.map(event => {
+                const startDate = new Date(event.start_datetime).toLocaleDateString();
+                const startTime = new Date(event.start_datetime).toLocaleTimeString();
+                const locationName = event.location_id?.name || 'Unknown Location';
+                const isSelected = coecSelectedEvents.some(selected => selected._id === event._id);
+                
+                // Get first media item for thumbnail
+                const firstMedia = event.media && event.media.length > 0 ? event.media[0] : null;
+                const mediaHtml = firstMedia ? `
+                    <div style="margin-bottom:10px;position:relative;">
+                        ${firstMedia.type === 'image' ? 
+                            `<img src="${firstMedia.url}" alt="${firstMedia.caption || event.name}" 
+                                 style="width:100%;height:120px;object-fit:cover;border-radius:6px;cursor:pointer;"
+                                 onclick="event.stopPropagation(); openMediaModal('${firstMedia.url}', 'image')">` :
+                            `<div style="width:100%;height:120px;background:#f8f9fa;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;"
+                                 onclick="event.stopPropagation(); openMediaModal('${firstMedia.url}', 'video')">
+                                <div style="width:40px;height:40px;background:rgba(0,0,0,0.7);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                                    <div style="width:0;height:0;border-left:12px solid white;border-top:8px solid transparent;border-bottom:8px solid transparent;margin-left:3px;"></div>
+                                </div>
+                            </div>`
+                        }
+                        ${event.media && event.media.length > 1 ? 
+                            `<div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7);color:white;padding:2px 6px;border-radius:10px;font-size:0.7em;">+${event.media.length - 1}</div>` : ''
+                        }
+                    </div>
+                ` : '';
+                
+                return `
+                    <div class="event-card ${isSelected ? 'selected' : ''}" onclick="toggleCOEEventSelection('${event._id}')" style="
+                        border: 2px solid ${isSelected ? '#3498db' : '#ecf0f1'};
+                        border-radius: 8px;
+                        padding: 15px;
+                        cursor: pointer;
+                        background: ${isSelected ? '#f8f9fa' : 'white'};
+                        transition: all 0.2s ease;
+                        position: relative;
+                    ">
+                        ${mediaHtml}
+                        <h4 style="margin:0 0 10px 0;color:#2c3e50;">${event.name}</h4>
+                        <p style="margin:0 0 10px 0;color:#7f8c8d;font-size:0.9em;">${event.description || 'No description'}</p>
+                        <div style="font-size:0.85em;color:#666;">
+                            <div><strong>Location:</strong> ${locationName}</div>
+                            <div><strong>Date:</strong> ${startDate}</div>
+                            <div><strong>Time:</strong> ${startTime}</div>
+                            <div><strong>Price:</strong> $${event.base_price || 0}</div>
+                            <div><strong>Status:</strong> ${event.status}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Toggle event selection for COE
+         */
+        function toggleCOEEventSelection(eventId) {
+            const event = allEventsForCOE.find(e => e._id === eventId);
+            if (!event) return;
+
+            const existingIndex = coecSelectedEvents.findIndex(e => e._id === eventId);
+            
+            if (existingIndex >= 0) {
+                // Remove from selection
+                coecSelectedEvents.splice(existingIndex, 1);
+            } else {
+                // Add to selection
+                coecSelectedEvents.push(event);
+            }
+
+            // Update displays
+            populateCOEEventsGrid();
+            updateCOESelectedEvents();
+        }
+
+        /**
+         * Update selected events display
+         */
+        function updateCOESelectedEvents() {
+            const selectedEventsContainer = document.getElementById('coec_selected_events');
+            
+            if (coecSelectedEvents.length === 0) {
+                selectedEventsContainer.innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:20px 0;">No events selected</p>';
+                return;
+            }
+
+            selectedEventsContainer.innerHTML = coecSelectedEvents.map((event, index) => {
+                const startDate = new Date(event.start_datetime).toLocaleDateString();
+                const locationName = event.location_id?.name || 'Unknown Location';
+                
+                return `
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 10px;
+                        border: 1px solid #ecf0f1;
+                        border-radius: 6px;
+                        margin-bottom: 10px;
+                        background: #f8f9fa;
+                    ">
+                        <div>
+                            <strong>${index + 1}. ${event.name}</strong><br>
+                            <small style="color:#666;">${locationName} - ${startDate}</small>
+                        </div>
+                        <button onclick="removeCOEEvent('${event._id}')" style="
+                            background: #e74c3c;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            padding: 5px 10px;
+                            cursor: pointer;
+                            font-size: 0.8em;
+                        ">Remove</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Remove event from COE selection
+         */
+        function removeCOEEvent(eventId) {
+            coecSelectedEvents = coecSelectedEvents.filter(e => e._id !== eventId);
+            populateCOEEventsGrid();
+            updateCOESelectedEvents();
+        }
+
+        /**
+         * Populate seats container for COE creation
+         */
+        function populateCOESeatsContainer() {
+            const seatsContainer = document.getElementById('coec_seats_container');
+            
+            if (coecSelectedEvents.length === 0) {
+                seatsContainer.innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:40px 0;">Please select events first</p>';
+                return;
+            }
+
+            seatsContainer.innerHTML = coecSelectedEvents.map((event, index) => {
+                const locationName = event.location_id?.name || 'Unknown Location';
+                
+                return `
+                    <div style="margin-bottom: 30px; border: 1px solid #ecf0f1; border-radius: 8px; padding: 20px;">
+                        <h3 style="margin: 0 0 15px 0; color: #2c3e50;">
+                            ${index + 1}. ${event.name} - ${locationName}
+                        </h3>
+                        <div id="seats_grid_${event._id}" class="seats-grid" style="
+                            display: grid;
+                            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                            gap: 10px;
+                            margin-top: 15px;
+                        ">
+                            <!-- Seats will be populated here -->
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Load seats for each event
+            coecSelectedEvents.forEach(event => {
+                loadEventSeatsForCOE(event._id);
+            });
+        }
+
+        /**
+         * Load seats for a specific event in COE creation
+         */
+        async function loadEventSeatsForCOE(eventId) {
+            try {
+                console.log('Loading seats for event:', eventId);
+                const result = await makeApiRequest(`/events/${eventId}`);
+                console.log('Event API response:', result);
+                
+                if (result.success && result.data) {
+                    const event = result.data;
+                    console.log('Event data:', event);
+                    console.log('Event seats:', event.seats);
+                    console.log('Event seats length:', event.seats ? event.seats.length : 'undefined');
+                    
+                    // Handle nested data structure
+                    const eventData = event.data || event;
+                    console.log('Event data (after extraction):', eventData);
+                    console.log('EventData seats:', eventData.seats);
+                    console.log('EventData seats length:', eventData.seats ? eventData.seats.length : 'undefined');
+                    
+                    const seatsGrid = document.getElementById(`seats_grid_${eventId}`);
+                    
+                    if (!eventData.seats || eventData.seats.length === 0) {
+                        seatsGrid.innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:20px 0;">No tables available for this event</p>';
+                        return;
+                    }
+
+                    seatsGrid.innerHTML = eventData.seats.map(seat => {
+                        const isSelected = coecSelectedSeats.some(s => s.seat_id === seat._id && s.event_id === eventId);
+                        const statusClass = `seat-status ${seat.status}`;
+                        
+                        return `
+                            <div class="seat-card ${isSelected ? 'selected' : ''}" 
+                                 onclick="toggleCOESeatSelection('${eventId}', '${seat._id}')" 
+                                 style="
+                                    border: 2px solid ${isSelected ? '#3498db' : '#ecf0f1'};
+                                    border-radius: 6px;
+                                    padding: 10px;
+                                    cursor: pointer;
+                                    background: ${isSelected ? '#f8f9fa' : 'white'};
+                                    text-align: center;
+                                    transition: all 0.2s ease;
+                                    position: relative;
+                                 ">
+                                <div class="seat-code" style="font-weight: bold; color: #2c3e50;">${seat.code}</div>
+                                <div class="seat-category" style="font-size: 0.8em; color: #7f8c8d; margin: 5px 0;">${seat.category || 'N/A'}</div>
+                                <div class="seat-capacity" style="font-size: 0.8em; color: #666;">${seat.capacity || 0} seats</div>
+                                <div class="seat-price" style="font-size: 0.9em; color: #27ae60; font-weight: bold;">$${seat.event_price || seat.min_spend || 0}</div>
+                                <div class="${statusClass}" style="
+                                    position: absolute;
+                                    top: 5px;
+                                    right: 5px;
+                                    width: 8px;
+                                    height: 8px;
+                                    border-radius: 50%;
+                                    background: ${seat.status === 'available' ? '#27ae60' : seat.status === 'booked' ? '#e74c3c' : seat.status === 'held' ? '#f39c12' : '#95a5a6'};
+                                "></div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading seats for event:', error);
+                showAlert('Error loading seats: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Toggle seat selection for COE
+         */
+        function toggleCOESeatSelection(eventId, seatId) {
+            const existingIndex = coecSelectedSeats.findIndex(s => s.seat_id === seatId && s.event_id === eventId);
+            
+            if (existingIndex >= 0) {
+                // Remove from selection
+                coecSelectedSeats.splice(existingIndex, 1);
+            } else {
+                // Find the seat data from the current event
+                const event = allEventsForCOE.find(e => e._id === eventId);
+                if (event && event.seats) {
+                    const seatData = event.seats.find(s => s._id === seatId);
+                    if (seatData) {
+                        // Add to selection with full seat data
+                        coecSelectedSeats.push({
+                            event_id: eventId,
+                            seat_id: seatId,
+                            seat_code: seatData.code,
+                            capacity: seatData.capacity,
+                            base_price: seatData.min_spend || 0,
+                            event_price: seatData.event_price || seatData.min_spend || 0
+                        });
+                    }
+                }
+            }
+
+            // Update seat display
+            loadEventSeatsForCOE(eventId);
+        }
+
+        /**
+         * Populate runner assignment section
+         */
+        function populateCOERunnerAssignment() {
+            // Populate COE-level runner dropdown
+            const coeRunnerSelect = document.getElementById('coec_coe_runner_id');
+            coeRunnerSelect.innerHTML = '<option value="">Select Runner</option>' +
+                allRunners.map(runner => `<option value="${runner._id}">${runner.firstName} ${runner.lastName}</option>`).join('');
+
+            // Populate event-level runner assignments if needed
+            if (document.getElementById('coec_runner_type').value === 'event') {
+                populateCOEEventRunners();
+            }
+        }
+
+        /**
+         * Toggle runner assignment type
+         */
+        function toggleRunnerAssignmentType() {
+            const runnerType = document.getElementById('coec_runner_type').value;
+            const coeAssignment = document.getElementById('coec_runner_coe_assignment');
+            const eventAssignment = document.getElementById('coec_runner_event_assignment');
+
+            if (runnerType === 'coe') {
+                coeAssignment.style.display = 'block';
+                eventAssignment.style.display = 'none';
+            } else {
+                coeAssignment.style.display = 'none';
+                eventAssignment.style.display = 'block';
+                populateCOEEventRunners();
+            }
+        }
+
+        /**
+         * Populate event-level runner assignments
+         */
+        function populateCOEEventRunners() {
+            const eventRunnersContainer = document.getElementById('coec_event_runners');
+            
+            eventRunnersContainer.innerHTML = coecSelectedEvents.map((event, index) => {
+                return `
+                    <div style="margin-bottom: 15px; padding: 15px; border: 1px solid #ecf0f1; border-radius: 6px;">
+                        <h4 style="margin: 0 0 10px 0;">${index + 1}. ${event.name}</h4>
+                        <select id="coec_event_runner_${event._id}" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;">
+                            <option value="">Select Runner</option>
+                            ${allRunners.map(runner => `<option value="${runner._id}">${runner.firstName} ${runner.lastName}</option>`).join('')}
+                        </select>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        /**
+         * Calculate COE pricing
+         */
+        function calculateCOEPricing() {
+            let subtotal = 0;
+
+            // Calculate subtotal from selected events
+            coecSelectedEvents.forEach(event => {
+                const eventSeats = coecSelectedSeats.filter(s => s.event_id === event._id);
+                if (eventSeats.length > 0) {
+                    eventSeats.forEach(seatSelection => {
+                        // Find the seat details
+                        const seat = event.seats?.find(s => s._id === seatSelection.seat_id);
+                        if (seat) {
+                            subtotal += (seat.event_price || seat.min_spend || event.base_price || 0);
+                        }
+                    });
+                } else {
+                    // If no seats selected, use base price
+                    subtotal += (event.base_price || 0);
+                }
+            });
+
+            // Get tax and fee percentages/amounts
+            const taxesPercent = parseFloat(document.getElementById('coec_taxes_percent').value) || 0;
+            const feesAmount = parseFloat(document.getElementById('coec_fees_amount').value) || 0;
+
+            // Calculate taxes and total
+            const taxes = subtotal * (taxesPercent / 100);
+            const total = subtotal + taxes + feesAmount;
+
+            // Update display
+            document.getElementById('coec_subtotal').textContent = `$${subtotal.toFixed(2)}`;
+            document.getElementById('coec_taxes_display').textContent = `$${taxes.toFixed(2)}`;
+            document.getElementById('coec_fees_display').textContent = `$${feesAmount.toFixed(2)}`;
+            document.getElementById('coec_total_display').textContent = `$${total.toFixed(2)}`;
+
+            return { subtotal, taxes, fees: feesAmount, total };
+        }
+
+        /**
+         * Populate COE summary
+         */
+        function populateCOESummary() {
+            const summaryContainer = document.getElementById('coec_summary');
+            const pricing = calculateCOEPricing();
+            
+            const client = allClients.find(c => c._id === document.getElementById('coec_client_id').value);
+            const clientName = client ? `${client.firstName} ${client.lastName}` : 'Unknown Client';
+            
+            const runnerType = document.getElementById('coec_runner_type').value;
+            let runnerName = 'Not assigned';
+            
+            if (runnerType === 'coe') {
+                const runnerId = document.getElementById('coec_coe_runner_id').value;
+                const runner = allRunners.find(r => r._id === runnerId);
+                runnerName = runner ? `${runner.firstName} ${runner.lastName}` : 'Not assigned';
+            } else {
+                runnerName = 'Event-specific assignments';
+            }
+
+            summaryContainer.innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                    <div>
+                        <h4 style="margin: 0 0 10px 0;">Basic Information</h4>
+                        <div style="font-size: 0.9em; line-height: 1.6;">
+                            <div><strong>Name:</strong> ${document.getElementById('coec_name').value}</div>
+                            <div><strong>Client:</strong> ${clientName}</div>
+                            <div><strong>Start Date:</strong> ${document.getElementById('coec_start_date').value}</div>
+                            <div><strong>End Date:</strong> ${document.getElementById('coec_end_date').value}</div>
+                            <div><strong>Currency:</strong> ${document.getElementById('coec_currency').value}</div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0 0 10px 0;">Runner Assignment</h4>
+                        <div style="font-size: 0.9em; line-height: 1.6;">
+                            <div><strong>Type:</strong> ${runnerType === 'coe' ? 'COE-level' : 'Event-level'}</div>
+                            <div><strong>Runner:</strong> ${runnerName}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0;">Selected Events (${coecSelectedEvents.length})</h4>
+                    <div style="font-size: 0.9em;">
+                        ${coecSelectedEvents.map((event, index) => {
+                            const locationName = event.location_id?.name || 'Unknown Location';
+                            const eventSeats = coecSelectedSeats.filter(s => s.event_id === event._id);
+                            return `
+                                <div style="padding: 8px 0; border-bottom: 1px solid #ecf0f1;">
+                                    <strong>${index + 1}. ${event.name}</strong> - ${locationName}
+                                    ${eventSeats.length > 0 ? ` (${eventSeats.length} seats selected)` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 10px 0;">Pricing Summary</h4>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; font-size: 0.9em;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Subtotal:</span>
+                            <span>$${pricing.subtotal.toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Taxes (${document.getElementById('coec_taxes_percent').value}%):</span>
+                            <span>$${pricing.taxes.toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>Fees:</span>
+                            <span>$${pricing.fees.toFixed(2)}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #ddd; padding-top: 10px;">
+                            <span>Total:</span>
+                            <span>$${pricing.total.toFixed(2)}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 style="margin: 0 0 10px 0;">Description</h4>
+                    <div style="font-size: 0.9em; color: #666; line-height: 1.6;">
+                        ${document.getElementById('coec_description').value || 'No description provided'}
+                    </div>
+                </div>
+            `;
+        }
+
+        /**
+         * Submit create COE
+         */
+        async function submitCreateCOE() {
+            try {
+                console.log('submitCreateCOE called');
+                showAlert('Creating COE...', 'info');
+
+                // Check if form elements exist
+                const nameEl = document.getElementById('coec_name');
+                const descEl = document.getElementById('coec_description');
+                const clientEl = document.getElementById('coec_client_id');
+                const startDateEl = document.getElementById('coec_start_date');
+                const endDateEl = document.getElementById('coec_end_date');
+                
+                console.log('Form elements found:', {
+                    nameEl: !!nameEl,
+                    descEl: !!descEl,
+                    clientEl: !!clientEl,
+                    startDateEl: !!startDateEl,
+                    endDateEl: !!endDateEl
+                });
+
+                // Validate required fields
+                const name = nameEl ? nameEl.value.trim() : '';
+                const description = descEl ? descEl.value.trim() : '';
+                const clientId = clientEl ? clientEl.value : '';
+                const startDate = startDateEl ? startDateEl.value : '';
+                const endDate = endDateEl ? endDateEl.value : '';
+                
+                console.log('Form validation:', { 
+                    name, 
+                    description, 
+                    clientId, 
+                    startDate, 
+                    endDate,
+                    currentUserId: currentUser?._id,
+                    currentUser: currentUser,
+                    eventsCount: coecSelectedEvents.length, 
+                    seatsCount: coecSelectedSeats.length 
+                });
+                
+                if (!name) {
+                    showAlert('Please enter a COE name', 'error');
+                    return;
+                }
+                
+                if (!description) {
+                    showAlert('Please enter a COE description', 'error');
+                    return;
+                }
+                
+                if (!clientId) {
+                    showAlert('Please select a client', 'error');
+                    return;
+                }
+                
+                if (!startDate) {
+                    showAlert('Please select a start date', 'error');
+                    return;
+                }
+                
+                if (!endDate) {
+                    showAlert('Please select an end date', 'error');
+                    return;
+                }
+                
+                if (coecSelectedEvents.length === 0) {
+                    showAlert('Please select at least one event', 'error');
+                    return;
+                }
+                
+                if (!currentUser || !currentUser._id) {
+                    showAlert('User session expired. Please log in again.', 'error');
+                    return;
+                }
+
+                // Prepare COE data
+                const coeData = {
+                    name: document.getElementById('coec_name').value.trim(),
+                    description: document.getElementById('coec_description').value.trim(),
+                    client_id: document.getElementById('coec_client_id').value,
+                    admin_id: currentUser._id,
+                    start_date: document.getElementById('coec_start_date').value,
+                    end_date: document.getElementById('coec_end_date').value,
+                    currency: document.getElementById('coec_currency').value,
+                    policies: document.getElementById('coec_policies').value.trim(),
+                    notes: document.getElementById('coec_notes').value.trim(),
+                    events: coecSelectedEvents.map((event, index) => ({
+                        event_id: event._id.toString(),
+                        event_date: new Date(event.start_datetime).toISOString().split('T')[0],
+                        event_time: new Date(event.start_datetime).toTimeString().split(' ')[0],
+                        base_price: event.base_price || 0,
+                        quantity: 1,
+                        total_price: event.base_price || 0,
+                        sequence: index + 1
+                    })),
+                    available_seats: coecSelectedSeats.map(seat => ({
+                        event_id: seat.event_id.toString(),
+                        seat_id: seat.seat_id.toString(),
+                        seat_code: seat.seat_code || 'TBD', // Will be populated from seat data
+                        capacity: seat.capacity || 1, // Will be populated from seat data
+                        base_price: seat.base_price || 0, // Will be populated from seat data
+                        event_price: seat.event_price || 0, // Will be populated from seat data
+                        available_from: new Date(),
+                        available_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+                    }))
+                };
+
+                // Add runner assignment
+                const runnerType = document.getElementById('coec_runner_type').value;
+                if (runnerType === 'coe') {
+                    const runnerId = document.getElementById('coec_coe_runner_id').value;
+                    if (runnerId) {
+                        coeData.runner_assignment = {
+                            type: 'coe',
+                            runner_id: runnerId,
+                            notes: document.getElementById('coec_runner_notes').value.trim()
+                        };
+                    }
+                }
+
+                // Create COE
+                console.log('Sending COE data:', coeData);
+                const result = await makeApiRequest('/coes', 'POST', coeData);
+                console.log('COE creation result:', result);
+                
+                // Log detailed error if available
+                if (result.error || (result.data && result.data.error)) {
+                    console.error('Detailed error:', result.error || result.data.error);
+                }
+
+                if (result.success) {
+                    showAlert('COE created successfully!', 'success');
+                    closeCreateCOE();
+                    loadCOEs(); // Refresh COE list
+                } else {
+                    console.error('COE creation failed:', result);
+                    showAlert('Failed to create COE: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error creating COE:', error);
+                showAlert('Error creating COE: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * View COE details
+         */
+        async function viewCOEDetails(coeId) {
+            try {
+                console.log('Viewing COE details for:', coeId);
+                const result = await makeApiRequest(`/coes/${coeId}`);
+                
+                if (result.success && result.data) {
+                    window.currentCOE = result.data;
+                    showAlert('COE details modal will be implemented in the next phase', 'info');
+                } else {
+                    showAlert('Failed to load COE details: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error loading COE details:', error);
+                showAlert('Error loading COE details: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Edit COE
+         */
+        function editCOE(coeId) {
+            console.log('Editing COE:', coeId);
+            showAlert('COE editing will be implemented in the next phase', 'info');
+        }
+
+        /**
+         * Delete COE
+         */
+        async function deleteCOE(coeId, coeName) {
+            if (!confirm(`Are you sure you want to delete the COE "${coeName}"?`)) {
+                return;
+            }
+
+            try {
+                const result = await makeApiRequest(`/coes/${coeId}`, 'DELETE');
+                
+                if (result.success) {
+                    showAlert('COE deleted successfully', 'success');
+                    loadCOEs();
+                } else {
+                    showAlert('Failed to delete COE: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting COE:', error);
+                showAlert('Error deleting COE: ' + error.message, 'error');
             }
         }
     </script>

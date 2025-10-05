@@ -1,10 +1,10 @@
 // Catch unhandled errors
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection:', reason);
+  console.error(' Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', err => {
-  console.error('❌ Uncaught Exception:', err);
+  console.error(' Uncaught Exception:', err);
 });
 
 const express = require('express');
@@ -35,7 +35,7 @@ app.use(helmet({
       connectSrc: ["'self'", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com"],
       fontSrc: ["'self'", "https:", "data:"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com"],
+      mediaSrc: ["'self'", "https://*.s3.*.amazonaws.com", "https://*.s3.amazonaws.com", "https://the1-media-uploads-stage.s3.us-west-2.amazonaws.com"],
       frameSrc: ["'none'"],
     },
   },
@@ -58,11 +58,11 @@ mongoose.connect(process.env.DB_URI, {
 })
   .then(() => {
     dbStatus = 'connected';
-    console.log('✅ Connected to MongoDB');
+    console.log(' Connected to MongoDB');
   })
   .catch((err) => {
     dbStatus = 'connection failed';
-    console.error('❌ Failed to connect to MongoDB:', err.message);
+    console.error(' Failed to connect to MongoDB:', err.message);
   });
 
 // Import routes
@@ -70,6 +70,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const locationRoutes = require('./routes/locations');
 const eventRoutes = require('./routes/events');
+const coeRoutes = require('./routes/coes');
 const testRoutes = require('./routes/test');
 
 // API Routes
@@ -77,6 +78,7 @@ app.use('/v1/auth', authRoutes);
 app.use('/v1/users', userRoutes);
 app.use('/v1/locations', locationRoutes);
 app.use('/v1/events', eventRoutes);
+app.use('/v1/coes', coeRoutes);
 
 // Test Interface Routes
 app.use('/test', testRoutes);
@@ -84,7 +86,7 @@ app.use('/test', testRoutes);
 // Health check endpoint
 app.get('/health', (req, res) => {
   console.log(`Server is up ${process.env.NODE_ENV}`);
-  res.send(`✅ ${process.env.NODE_ENV} DB_URI is present`);
+  res.send(` ${process.env.NODE_ENV} DB_URI is present`);
    
 });
 
@@ -98,17 +100,17 @@ app.get('/checklist', async (req, res) => {
   // 1. Database Check (assume dbStatus already set elsewhere)
   const dbUri = process.env.DB_URI;
   if (!dbUri) {
-    output += `❌ DATABASE: DB_URI is missing\n`;
+    output += ` DATABASE: DB_URI is missing\n`;
   } else {
     const isProd = dbUri.toLowerCase().includes('prod');
-    const dbStatusIcon = dbStatus === 'connected' ? '✅' : '❌';
+    const dbStatusIcon = dbStatus === 'connected' ? 'V' : 'X';
     output += `${dbStatusIcon} DATABASE: ${isProd ? 'PROD' : 'STAGE'} - ${dbStatus === 'connected' ? 'Connected' : 'Failed'}\n`;
   }
 
   // 2. S3 Bucket Check
   const s3Bucket = process.env.S3_BUCKET;
   if (!s3Bucket) {
-    output += `❌ S3 BUCKET: S3_BUCKET is missing\n`;
+    output += `S3 BUCKET: S3_BUCKET is missing\n`;
   } else {
     try {
       const s3 = new AWS.S3({
@@ -116,9 +118,9 @@ app.get('/checklist', async (req, res) => {
       });
 
       await s3.headBucket({ Bucket: s3Bucket }).promise();
-      output += `✅ S3 BUCKET: ${s3Bucket} - Accessible\n`;
+      output += ` S3 BUCKET: ${s3Bucket} - Accessible\n`;
     } catch (s3Error) {
-      output += `❌ S3 BUCKET: ${s3Bucket} - ${s3Error.message}\n`;
+      output += ` S3 BUCKET: ${s3Bucket} - ${s3Error.message}\n`;
     }
   }
 

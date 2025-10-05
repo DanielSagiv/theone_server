@@ -62,11 +62,20 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
     
     // Execute query with population
     const events = await Event.find(filter)
-      .populate('location_id', 'name type address.city address.country')
+      .populate('location_id', 'name type address.city address.country media')
       .populate('created_by', 'firstName lastName email')
+      .select('name description type start_datetime end_datetime base_price currency status media')
       .sort({ start_datetime: 1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    // Inherit media from location if event doesn't have media (only for display purposes)
+    events.forEach(event => {
+      if ((!event.media || event.media.length === 0) && event.location_id && event.location_id.media) {
+        // Create a copy of location media to avoid modifying the original
+        event.media = [...event.location_id.media];
+      }
+    });
 
     // Get total count for pagination
     const total = await Event.countDocuments(filter);
@@ -165,6 +174,11 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
+    console.log('=== EVENT CREATION DEBUG ===');
+    console.log('Request body media field:', req.body.media);
+    console.log('Validated media field:', value.media);
+    console.log('Media array length:', Array.isArray(value.media) ? value.media.length : 'Not an array');
+
     // Check if location exists
     const location = await Location.findById(value.location_id);
     if (!location) {
@@ -232,8 +246,17 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       priority: 0
     };
 
+    console.log('=== FINAL EVENT DATA ===');
+    console.log('Event data media field:', eventData.media);
+    console.log('Media type:', typeof eventData.media);
+    console.log('Media length:', Array.isArray(eventData.media) ? eventData.media.length : 'Not array');
+
     const event = new Event(eventData);
+    console.log('Event object media field:', event.media);
+    
     await event.save();
+    console.log('✅ Event saved. Final media field:', event.media);
+    console.log('=== END EVENT CREATION DEBUG ===');
 
     // Populate the created event
     const populatedEvent = await Event.findById(event._id)
@@ -290,7 +313,8 @@ router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) =
     const mime = req.file.mimetype || 'application/octet-stream';
     const type = mime.startsWith('image/') ? 'image' : mime.startsWith('video/') ? 'video' : 'other';
     
-    console.log('Event media upload:', {
+    console.log('=== EVENT MEDIA UPLOAD DEBUG ===');
+    console.log('File received:', {
       originalName: req.file.originalname,
       mimetype: mime,
       detectedType: type,
@@ -311,11 +335,12 @@ router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) =
 
     const url = await uploadBufferToS3(req.file.buffer, key, mime);
 
-    console.log('Event media upload response:', {
+    console.log('✅ Event media upload successful:', {
       url: url,
       type: type,
       detectedFromMime: mime
     });
+    console.log('=== END EVENT MEDIA UPLOAD DEBUG ===');
 
     return res.json({
       success: true,

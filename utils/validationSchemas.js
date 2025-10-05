@@ -213,6 +213,118 @@ const updateAvailabilitySchema = Joi.object({
   total_revenue: Joi.number().min(0).required()
 });
 
+/**
+ * COE validation schemas
+ * @description Joi validation schemas for COE endpoints
+ */
+
+// COE Item validation schema
+const coeItemSchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  event_date: Joi.date().required(),
+  event_time: Joi.string().required(),
+  base_price: Joi.number().min(0).required(),
+  quantity: Joi.number().min(1).default(1),
+  total_price: Joi.number().min(0).required(),
+  runner_assignment: Joi.object({
+    runner_id: Joi.string().hex().length(24),
+    assigned_by: Joi.string().hex().length(24),
+    assigned_at: Joi.date(),
+    status: Joi.string().valid('assigned', 'confirmed', 'active', 'completed', 'cancelled').default('assigned'),
+    notes: Joi.string().allow('')
+  }).optional(),
+  status: Joi.string().valid('pending', 'confirmed', 'completed', 'cancelled').default('pending'),
+  notes: Joi.string().allow(''),
+  client_notes: Joi.string().allow(''),
+  sequence: Joi.number().min(1).required()
+});
+
+// COE available seat validation schema
+const coeAvailableSeatSchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  seat_id: Joi.string().hex().length(24).required(),
+  seat_code: Joi.string().required(),
+  capacity: Joi.number().min(1).required(),
+  base_price: Joi.number().min(0).required(),
+  event_price: Joi.number().min(0).required(),
+  available_from: Joi.date().required(),
+  available_until: Joi.date().required()
+});
+
+// Create COE validation schema
+const createCOESchema = Joi.object({
+  name: Joi.string().min(2).max(200).required(),
+  description: Joi.string().max(1000).required(),
+  status: Joi.string().valid('draft', 'approved', 'sent', 'accepted', 'rejected', 'expired', 'completed', 'cancelled').default('draft'),
+  created_method: Joi.string().valid('manual', 'automated').default('manual'),
+  creation_notes: Joi.string().max(500).allow(''),
+  client_id: Joi.string().hex().length(24).required(),
+  admin_id: Joi.string().hex().length(24).required(),
+  participants: Joi.array().items(Joi.object({
+    user_id: Joi.string().hex().length(24).required(),
+    role: Joi.string().valid('owner', 'participant').default('participant'),
+    status: Joi.string().valid('pending', 'accepted', 'rejected').default('pending'),
+    added_by: Joi.string().hex().length(24)
+  })).optional(),
+  runner_assignment: Joi.object({
+    type: Joi.string().valid('coe', 'event').default('coe'),
+    runner_id: Joi.string().hex().length(24),
+    assigned_by: Joi.string().hex().length(24),
+    assigned_at: Joi.date(),
+    status: Joi.string().valid('assigned', 'confirmed', 'active', 'completed', 'cancelled').default('assigned'),
+    notes: Joi.string().allow('')
+  }).optional(),
+  currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD'),
+  subtotal: Joi.number().min(0).default(0),
+  taxes: Joi.number().min(0).default(0),
+  fees: Joi.number().min(0).default(0),
+  total: Joi.number().min(0).default(0),
+  deposit_required: Joi.number().min(0).default(0),
+  deposit_paid: Joi.number().min(0).default(0),
+  start_date: Joi.date().required(),
+  end_date: Joi.date().required(),
+  events: Joi.array().items(coeItemSchema).optional(),
+  available_seats: Joi.array().items(coeAvailableSeatSchema).optional(),
+  policies: Joi.string().max(2000).allow(''),
+  notes: Joi.string().max(1000).allow(''),
+  client_notes: Joi.string().max(1000).allow(''),
+  sharable: Joi.boolean().default(false),
+  tags: Joi.array().items(Joi.string()).optional()
+});
+
+// Update COE validation schema
+const updateCOESchema = createCOESchema.fork(
+  ['name', 'description', 'client_id', 'admin_id', 'start_date', 'end_date'],
+  (schema) => schema.optional()
+);
+
+// Add event to COE validation schema
+const addEventToCOESchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  event_date: Joi.date().required(),
+  event_time: Joi.string().required(),
+  base_price: Joi.number().min(0).required(),
+  quantity: Joi.number().min(1).default(1),
+  notes: Joi.string().allow(''),
+  client_notes: Joi.string().allow('')
+});
+
+// Update COE status validation schema
+const updateCOEStatusSchema = Joi.object({
+  status: Joi.string().valid('draft', 'approved', 'sent', 'accepted', 'rejected', 'expired', 'completed', 'cancelled').required()
+});
+
+// Assign runner to COE validation schema
+const assignRunnerToCOESchema = Joi.object({
+  runner_id: Joi.string().hex().length(24).required(),
+  type: Joi.string().valid('coe', 'event').default('coe'),
+  notes: Joi.string().allow('')
+});
+
+// Update seat assignments validation schema
+const updateSeatAssignmentsSchema = Joi.object({
+  available_seats: Joi.array().items(coeAvailableSeatSchema).required()
+});
 
 /**
  * Authentication validation schemas
@@ -322,5 +434,13 @@ module.exports = {
   eventSeatSchema,
   eventUnitSchema,
   bookSeatSchema,
-  updateAvailabilitySchema
+  updateAvailabilitySchema,
+  createCOESchema,
+  updateCOESchema,
+  coeItemSchema,
+  coeAvailableSeatSchema,
+  addEventToCOESchema,
+  updateCOEStatusSchema,
+  assignRunnerToCOESchema,
+  updateSeatAssignmentsSchema
 };
