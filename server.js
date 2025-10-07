@@ -12,6 +12,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const session = require('express-session');
 const app = express();
 const AWS = require('aws-sdk');
 
@@ -48,6 +49,17 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session middleware for password protection
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'the1-platform-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
 const PORT = 80;
 let dbStatus = 'not connected';
 
@@ -65,6 +77,9 @@ mongoose.connect(process.env.DB_URI, {
     console.error(' Failed to connect to MongoDB:', err.message);
   });
 
+// Import middleware
+const { requirePasswordAuth } = require('./middleware/passwordProtection');
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -80,8 +95,24 @@ app.use('/v1/locations', locationRoutes);
 app.use('/v1/events', eventRoutes);
 app.use('/v1/coes', coeRoutes);
 
-// Test Interface Routes
-app.use('/test', testRoutes);
+// Landing page route (password protection)
+app.get('/', requirePasswordAuth);
+app.post('/', requirePasswordAuth);
+
+// Logout route to clear password session
+app.get('/logout', (req, res) => {
+  if (req.session) {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Error destroying session:', err);
+      }
+    });
+  }
+  res.redirect('/');
+});
+
+// Test Interface Routes (protected by password)
+app.use('/test', requirePasswordAuth, testRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

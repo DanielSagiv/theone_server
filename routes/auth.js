@@ -224,7 +224,7 @@ router.get('/validate', authenticateToken, async (req, res) => {
       success: true,
       data: {
         user: req.user.getProfile(),
-        session: req.session
+        session: req.userSession
       },
       message: 'Session is valid'
     });

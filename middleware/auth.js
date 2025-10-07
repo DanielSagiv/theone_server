@@ -62,7 +62,7 @@ const authenticateToken = async (req, res, next) => {
 
     // Add user and session to request object
     req.user = user;
-    req.session = session;
+    req.userSession = session; // Changed from req.session to avoid conflict with Express session
 
     next();
   } catch (error) {
