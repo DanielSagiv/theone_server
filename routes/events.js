@@ -37,7 +37,9 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
       type, 
       start_date, 
       end_date,
-      search 
+      search,
+      coe_start_date,
+      coe_end_date
     } = req.query;
 
     // Build filter object
@@ -53,6 +55,25 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
       if (end_date) filter.start_datetime.$lte = new Date(end_date);
     }
     
+    // COE date range filtering - events that overlap with COE date range
+    if (coe_start_date && coe_end_date) {
+      const coeStartDate = new Date(coe_start_date);
+      const coeEndDate = new Date(coe_end_date);
+      
+      // Events that overlap with COE date range:
+      // Event starts before COE ends AND Event ends after COE starts
+      filter.$and = [
+        { start_datetime: { $lt: coeEndDate } },  // Event starts before COE ends
+        { 
+          $or: [
+            { end_datetime: { $gt: coeStartDate } },  // Event ends after COE starts
+            { end_datetime: { $exists: false } },     // Event has no end date
+            { end_datetime: null }                    // Event end date is null
+          ]
+        }
+      ];
+    }
+    
     if (search) {
       filter.$text = { $search: search };
     }
@@ -64,7 +85,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
     const events = await Event.find(filter)
       .populate('location_id', 'name type address.city address.country media')
       .populate('created_by', 'firstName lastName email')
-      .select('name description type start_datetime end_datetime base_price currency status media')
+      .select('name description type start_datetime end_datetime base_price currency status media seats')
       .sort({ start_datetime: 1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -798,6 +819,122 @@ router.put('/:id/seats/:seatId/status', authenticateToken, requireAdmin, async (
     });
   } catch (error) {
     console.error('Error updating seat status:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Internal server error' }
+    });
+  }
+});
+
+/**
+ * PUT /v1/events/seats/bulk-status
+ * @description Update multiple seat statuses in bulk
+ */
+router.put('/seats/bulk-status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { seatUpdates } = req.body;
+
+    if (!seatUpdates || !Array.isArray(seatUpdates)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'seatUpdates array is required' }
+      });
+    }
+
+    const validStatuses = ['available', 'held', 'booked', 'blocked', 'pending'];
+    const results = [];
+
+    for (const update of seatUpdates) {
+      const { eventId, seatId, status, bookingReference } = update;
+
+      if (!eventId || !seatId || !status) {
+        results.push({
+          eventId,
+          seatId,
+          success: false,
+          error: 'Missing required fields: eventId, seatId, status'
+        });
+        continue;
+      }
+
+      if (!validStatuses.includes(status)) {
+        results.push({
+          eventId,
+          seatId,
+          success: false,
+          error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
+        });
+        continue;
+      }
+
+      try {
+        const event = await Event.findById(eventId);
+        if (!event) {
+          results.push({
+            eventId,
+            seatId,
+            success: false,
+            error: 'Event not found'
+          });
+          continue;
+        }
+
+        const seat = event.seats.find(s => s._id.toString() === seatId);
+        if (!seat) {
+          results.push({
+            eventId,
+            seatId,
+            success: false,
+            error: 'Seat not found in this event'
+          });
+          continue;
+        }
+
+        // Update seat status
+        await Event.updateOne(
+          { '_id': eventId, 'seats._id': seatId },
+          { 
+            $set: { 
+              'seats.$.status': status,
+              'seats.$.booking_reference': bookingReference || undefined,
+              'seats.$.booked_at': status === 'booked' || status === 'held' ? new Date() : undefined
+            }
+          }
+        );
+
+        results.push({
+          eventId,
+          seatId,
+          success: true,
+          message: `Seat ${seat.code} status updated to ${status}`
+        });
+      } catch (error) {
+        results.push({
+          eventId,
+          seatId,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      data: {
+        message: `Updated ${successCount} seats successfully, ${failureCount} failed`,
+        results,
+        summary: {
+          total: seatUpdates.length,
+          successful: successCount,
+          failed: failureCount
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error updating bulk seat statuses:', error);
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error' }

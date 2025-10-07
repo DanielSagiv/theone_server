@@ -692,6 +692,15 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
+        .btn-icon-view {
+            background-color: #27ae60;
+            color: white;
+        }
+
+        .btn-icon-view:hover {
+            background-color: #229954;
+        }
+
         .btn-icon-edit {
             background-color: #3498db;
             color: white;
@@ -1133,6 +1142,10 @@
             fill: #7f8c8d;
         }
 
+        .btn-icon-view .icon {
+            fill: #27ae60;
+        }
+
         .btn-icon-edit .icon {
             fill: #3498db;
         }
@@ -1197,6 +1210,13 @@
         .seat-card.blocked {
             border-left: 4px solid #95a5a6;
             background-color: #f8f9fa;
+        }
+
+        .seat-card.selected {
+            border: 3px solid #3498db !important;
+            background-color: #e3f2fd !important;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3) !important;
+            transform: scale(1.02);
         }
 
         .seat-card-header {
@@ -1534,7 +1554,7 @@
                             <div>
                                 <h3 style="margin:0;">Events</h3>
                                 <small>All events (admin)</small>
-                            </div>
+                    </div>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshEvents()">Refresh</button>
                                 <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateEvent()">Create Event</button>
@@ -1565,8 +1585,8 @@
                                     <option value="corporate">Corporate</option>
                                 </select>
                                 <input type="text" id="eventSearchInput" placeholder="Search events..." style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:200px;" onkeyup="searchEvents()">
-                            </div>
-                            
+                </div>
+
                             <!-- Events Table -->
                             <div style="overflow:auto;">
                                 <table class="table" id="eventsTable">
@@ -2114,7 +2134,7 @@
                     <div style="display:flex;justify-content:space-between;margin-top:30px;">
                         <button id="coec_prev_btn" class="btn btn-secondary" onclick="coecPreviousStep()" style="display:none;">Previous</button>
                         <div style="flex:1;"></div>
-                        <button id="coec_next_btn" class="btn" onclick="coecNextStep()">Next</button>
+                        <button id="coec_next_btn" class="btn" onclick="handleNextStep()">Next</button>
                         <button id="coec_create_btn" class="btn" onclick="submitCreateCOE()" style="display:none;">Create COE</button>
                     </div>
                 </div>
@@ -4741,9 +4761,17 @@
 
         function nextClStep() {
             console.log('nextClStep called, current step:', clStep);
+            
+            // Clear previous validation indicators
+            clearClValidationIndicators();
+            
             if (clStep === 1) {
                 // basic validation
-                if (!document.getElementById('cl_name').value.trim()) { showAlert('Name is required', 'error'); return; }
+                const name = document.getElementById('cl_name').value.trim();
+                if (!name) { 
+                    addClFieldValidation('cl_name', 'Location name is required');
+                    return; 
+                }
                 console.log('Moving from step 1 to step 2');
                 setClStep(2);
                 onClTypeChange();
@@ -4756,6 +4784,45 @@
                 const payload = buildCreateLocationPayload();
                 document.getElementById('cl_review').textContent = JSON.stringify(payload, null, 2);
                 setClStep(4);
+            }
+        }
+
+        /**
+         * Clear all location validation indicators
+         */
+        function clearClValidationIndicators() {
+            const fields = ['cl_name'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.style.borderColor = '';
+                    field.style.backgroundColor = '';
+                }
+            });
+            
+            const validationMsgs = document.querySelectorAll('.cl-validation-msg');
+            validationMsgs.forEach(msg => msg.remove());
+        }
+
+        /**
+         * Add location field validation indicator
+         */
+        function addClFieldValidation(fieldId, message) {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.style.borderColor = '#e74c3c';
+                field.style.backgroundColor = '#fdf2f2';
+                
+                const existingMsg = field.parentNode.querySelector('.cl-validation-msg');
+                if (!existingMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'cl-validation-msg';
+                    msgDiv.style.color = '#e74c3c';
+                    msgDiv.style.fontSize = '12px';
+                    msgDiv.style.marginTop = '4px';
+                    msgDiv.textContent = message;
+                    field.parentNode.appendChild(msgDiv);
+                }
             }
         }
         function prevClStep() {
@@ -5621,6 +5688,9 @@
          * Validate current step in create event modal
          */
         function validateCeStep(step) {
+            // Clear previous validation indicators
+            clearCeValidationIndicators();
+            
             switch (step) {
                 case 1:
                     const name = document.getElementById('ce_name').value.trim();
@@ -5628,19 +5698,19 @@
                     const endDate = document.getElementById('ce_end_datetime').value;
                     
                     if (!name) {
-                        showAlert('Event name is required', 'error');
+                        addCeFieldValidation('ce_name', 'Event name is required');
                         return false;
                     }
                     if (!startDate) {
-                        showAlert('Start date and time is required', 'error');
+                        addCeFieldValidation('ce_start_datetime', 'Start date and time is required');
                         return false;
                     }
                     if (!endDate) {
-                        showAlert('End date and time is required', 'error');
+                        addCeFieldValidation('ce_end_datetime', 'End date and time is required');
                         return false;
                     }
                     if (new Date(startDate) >= new Date(endDate)) {
-                        showAlert('End date must be after start date', 'error');
+                        addCeFieldValidation('ce_end_datetime', 'End date must be after start date');
                         return false;
                     }
                     return true;
@@ -5648,7 +5718,7 @@
                 case 2:
                     const locationId = document.getElementById('ce_location_id').value;
                     if (!locationId) {
-                        showAlert('Please select a location', 'error');
+                        addCeFieldValidation('ce_location_id', 'Please select a location');
                         return false;
                     }
                     return true;
@@ -5656,13 +5726,52 @@
                 case 3:
                     const basePrice = document.getElementById('ce_base_price').value;
                     if (!basePrice || parseFloat(basePrice) < 0) {
-                        showAlert('Base price must be a positive number', 'error');
+                        addCeFieldValidation('ce_base_price', 'Base price must be a positive number');
                         return false;
                     }
                     return true;
                     
                 default:
                     return true;
+            }
+        }
+
+        /**
+         * Clear all event validation indicators
+         */
+        function clearCeValidationIndicators() {
+            const fields = ['ce_name', 'ce_start_datetime', 'ce_end_datetime', 'ce_location_id', 'ce_base_price'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.style.borderColor = '';
+                    field.style.backgroundColor = '';
+                }
+            });
+            
+            const validationMsgs = document.querySelectorAll('.ce-validation-msg');
+            validationMsgs.forEach(msg => msg.remove());
+        }
+
+        /**
+         * Add event field validation indicator
+         */
+        function addCeFieldValidation(fieldId, message) {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.style.borderColor = '#e74c3c';
+                field.style.backgroundColor = '#fdf2f2';
+                
+                const existingMsg = field.parentNode.querySelector('.ce-validation-msg');
+                if (!existingMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'ce-validation-msg';
+                    msgDiv.style.color = '#e74c3c';
+                    msgDiv.style.fontSize = '12px';
+                    msgDiv.style.marginTop = '4px';
+                    msgDiv.textContent = message;
+                    field.parentNode.appendChild(msgDiv);
+                }
             }
         }
 
@@ -6293,7 +6402,6 @@
          */
         async function loadCOEs() {
             try {
-                console.log('Loading COEs...');
                 const result = await makeApiRequest('/coes');
                 
                 if (result.success && result.data) {
@@ -6355,6 +6463,11 @@
                         </td>
                         <td>${startDate}</td>
                         <td>
+                            <button class="btn-icon btn-icon-view" onclick="event.stopPropagation(); viewCOE('${coe._id}')" title="View COE">
+                                <svg class="icon" viewBox="0 0 24 24">
+                                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                </svg>
+                            </button>
                             <button class="btn-icon btn-icon-edit" onclick="event.stopPropagation(); editCOE('${coe._id}')" title="Edit COE">
                                 <svg class="icon" viewBox="0 0 24 24">
                                     <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -6449,10 +6562,199 @@
         }
 
         /**
+         * View COE details
+         */
+        async function viewCOE(coeId) {
+            try {
+                showAlert('Loading COE details...', 'info');
+                
+                const result = await makeApiRequest(`/coes/${coeId}`);
+                
+                if (result.success && result.data) {
+                    // The COE data is nested in result.data.data
+                    const coe = result.data.data;
+                    displayCOEViewModal(coe);
+                } else {
+                    showAlert('Failed to load COE details: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error viewing COE:', error);
+                showAlert('Error viewing COE: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Display COE view modal
+         */
+        function displayCOEViewModal(coe) {
+            const startDate = coe.start_date ? new Date(coe.start_date).toLocaleDateString() : 'Unknown';
+            const endDate = coe.end_date ? new Date(coe.end_date).toLocaleDateString() : 'Unknown';
+            const clientName = coe.client_id?.firstName && coe.client_id?.lastName 
+                ? `${coe.client_id.firstName} ${coe.client_id.lastName}`
+                : 'Unknown Client';
+            const runnerName = coe.runner_assignment?.runner_id?.firstName && coe.runner_assignment?.runner_id?.lastName
+                ? `${coe.runner_assignment.runner_id.firstName} ${coe.runner_assignment.runner_id.lastName}`
+                : 'Not Assigned';
+            const statusText = coe.status ? coe.status.replace('_', ' ').toUpperCase() : 'UNKNOWN';
+            const eventsCount = coe.events ? coe.events.length : 0;
+            const seatsCount = coe.available_seats ? coe.available_seats.length : 0;
+
+            // Create events HTML
+            const eventsHtml = coe.events && coe.events.length > 0 ? coe.events.map(event => {
+                // The event data is nested under event_id
+                const eventData = event.event_id || event;
+                const eventStartDate = eventData.start_datetime ? new Date(eventData.start_datetime).toLocaleDateString() : 'Unknown';
+                const eventStartTime = eventData.start_datetime ? new Date(eventData.start_datetime).toLocaleTimeString() : 'Unknown';
+                const locationName = eventData.location_id?.name || 'Unknown Location';
+                
+                return `
+                    <div style="border: 1px solid #ecf0f1; border-radius: 8px; padding: 15px; margin-bottom: 10px;">
+                        <h4 style="margin: 0 0 10px 0; color: #2c3e50;">${eventData.name || 'Unknown Event'}</h4>
+                        <p style="margin: 0 0 10px 0; color: #7f8c8d;">${eventData.description || 'No description'}</p>
+                        <div style="font-size: 0.9em; color: #666;">
+                            <div><strong>Location:</strong> ${locationName}</div>
+                            <div><strong>Date:</strong> ${eventStartDate}</div>
+                            <div><strong>Time:</strong> ${eventStartTime}</div>
+                            <div><strong>Price:</strong> $${eventData.base_price || 0}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('') : '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No events selected</p>';
+
+            // Create seats HTML
+            const seatsHtml = coe.available_seats && coe.available_seats.length > 0 ? coe.available_seats.map(seat => {
+                return `
+                    <div style="border: 1px solid #ecf0f1; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
+                        <div style="font-weight: bold; color: #2c3e50;">Table ${seat.seat_code || 'Unknown'}</div>
+                        <div style="font-size: 0.8em; color: #666;">
+                            <div>Capacity: ${seat.capacity || 0} seats</div>
+                            <div>Price: $${seat.event_price || seat.base_price || 0}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('') : '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No tables selected</p>';
+
+            const modalHtml = `
+                <div id="viewCOEModal" class="modal" style="display: flex;">
+                    <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+                        <div class="modal-header">
+                            <h2>COE Details: ${coe.name || 'Unknown COE'}</h2>
+                            <button class="close-btn" onclick="closeViewCOE()">&times;</button>
+                        </div>
+                        <div class="modal-body">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                <div>
+                                    <h3 style="color: #2c3e50; margin-bottom: 10px;">Basic Information</h3>
+                                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                                        <div style="margin-bottom: 10px;"><strong>Name:</strong> ${coe.name || 'Unknown'}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Description:</strong> ${coe.description || 'No description'}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Client:</strong> ${clientName}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Start Date:</strong> ${startDate}</div>
+                                        <div style="margin-bottom: 10px;"><strong>End Date:</strong> ${endDate}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Status:</strong> <span class="status-badge status-${coe.status || 'unknown'}">${statusText}</span></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 style="color: #2c3e50; margin-bottom: 10px;">Summary</h3>
+                                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                                        <div style="margin-bottom: 10px;"><strong>Events:</strong> ${eventsCount}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Tables:</strong> ${seatsCount}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Runner:</strong> ${runnerName}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Total Price:</strong> $${(coe.total || 0).toLocaleString()} ${coe.currency || 'USD'}</div>
+                                        <div style="margin-bottom: 10px;"><strong>Created:</strong> ${coe.createdAt ? new Date(coe.createdAt).toLocaleDateString() : 'Unknown'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <h3 style="color: #2c3e50; margin-bottom: 10px;">Selected Events (${eventsCount})</h3>
+                                <div style="max-height: 200px; overflow-y: auto;">
+                                    ${eventsHtml}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <h3 style="color: #2c3e50; margin-bottom: 10px;">Selected Tables (${seatsCount})</h3>
+                                <div style="max-height: 200px; overflow-y: auto;">
+                                    ${seatsHtml}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" onclick="closeViewCOE()">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Remove existing modal if any
+            const existingModal = document.getElementById('viewCOEModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        /**
+         * Close COE view modal
+         */
+        function closeViewCOE() {
+            const modal = document.getElementById('viewCOEModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+
+        /**
+         * Pre-select events for edit mode
+         */
+        function preSelectEventsForEdit() {
+            if (!coecSelectedEvents || coecSelectedEvents.length === 0) return;
+            
+            console.log('Pre-selecting events for edit:', coecSelectedEvents);
+            
+            // Mark events as selected in the UI
+            coecSelectedEvents.forEach(selectedEvent => {
+                const eventCard = document.querySelector(`[data-event-id="${selectedEvent._id}"]`);
+                if (eventCard) {
+                    eventCard.classList.add('selected');
+                    const checkmark = eventCard.querySelector('.event-checkmark');
+                    if (checkmark) {
+                        checkmark.style.display = 'block';
+                    }
+                }
+            });
+        }
+
+        /**
+         * Pre-select seats for edit mode
+         */
+        function preSelectSeatsForEdit() {
+            if (!coecSelectedSeats || coecSelectedSeats.length === 0) return;
+            
+            
+            // Mark seats as selected in the UI
+            coecSelectedSeats.forEach(selectedSeat => {
+                const seatCard = document.querySelector(`[data-seat-id="${selectedSeat.seat_id}"][data-event-id="${selectedSeat.event_id}"]`);
+                if (seatCard) {
+                    seatCard.classList.add('selected');
+                    // Add visual feedback
+                    updateSeatDisplayForCOE(selectedSeat.event_id);
+                }
+            });
+        }
+
+        /**
          * Open create COE modal
          */
         async function openCreateCOE() {
             try {
+                // Set create mode
+                window.coeEditMode = false;
+                window.currentEditingCOEId = null;
+                
                 // Load clients and runners for selection
                 await populateCOEFilters();
                 
@@ -6462,15 +6764,174 @@
                 // Reset form
                 resetCreateCOEForm();
                 
+                // Update modal title
+                document.querySelector('#createCOEModal .modal-header h2').textContent = 'Create COE';
+                document.getElementById('coec_create_btn').textContent = 'Create COE';
+                
                 // Show modal
                 document.getElementById('createCOEModal').style.display = 'flex';
                 
                 // Start with step 1
                 coecCurrentStep = 1;
                 updateCOECStepDisplay();
+                
+                // Add real-time validation listeners
+                addCOECValidationListeners();
             } catch (error) {
                 console.error('Error opening create COE modal:', error);
                 showAlert('Error opening create COE modal: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Edit COE
+         */
+        async function editCOE(coeId) {
+            try {
+                
+                // Fetch COE data first to check if it can be edited
+                const result = await makeApiRequest(`/coes/${coeId}`);
+                
+                if (result.success && result.data) {
+                    const coe = result.data.data || result.data;
+                    
+                    // Check if COE has past events
+                    const now = new Date();
+                    const hasPastEvents = coe.events && coe.events.some(event => {
+                        const eventDate = new Date(event.start_datetime);
+                        return eventDate < now;
+                    });
+                    
+                    if (hasPastEvents) {
+                        showAlert('Cannot edit COE with past events. Only COEs with future events can be edited.', 'error');
+                        return;
+                    }
+                    
+                    // Set edit mode
+                    window.coeEditMode = true;
+                    window.currentEditingCOEId = coeId;
+                    
+                    // Load clients and runners for selection
+                    await populateCOEFilters();
+                    
+                    // Load events for selection
+                    await loadEventsForCOE();
+                    
+                    // Populate form with COE data
+                    populateCOEFormForEdit(coe);
+                    
+                    // Update modal title
+                    document.querySelector('#createCOEModal .modal-header h2').textContent = 'Edit COE';
+                    document.getElementById('coec_create_btn').textContent = 'Update COE';
+                    
+                    // Show modal
+                    document.getElementById('createCOEModal').style.display = 'flex';
+                    
+                    // Start with step 1
+                    coecCurrentStep = 1;
+                    updateCOECStepDisplay();
+                    
+                    // Add real-time validation listeners
+                    addCOECValidationListeners();
+                    
+                    showAlert('COE loaded for editing', 'success');
+                } else {
+                    showAlert('Failed to load COE for editing: ' + (result.error?.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error editing COE:', error);
+                showAlert('Error editing COE: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Populate COE form for editing
+         */
+        function populateCOEFormForEdit(coe) {
+            // Step 1: Basic information
+            document.getElementById('coec_name').value = coe.name || '';
+            document.getElementById('coec_description').value = coe.description || '';
+            document.getElementById('coec_client_id').value = coe.client_id?._id || '';
+            document.getElementById('coec_start_date').value = coe.start_date ? coe.start_date.split('T')[0] : '';
+            document.getElementById('coec_end_date').value = coe.end_date ? coe.end_date.split('T')[0] : '';
+            document.getElementById('coec_currency').value = coe.currency || 'USD';
+            document.getElementById('coec_taxes_percent').value = coe.taxes_percent || '0';
+            document.getElementById('coec_fees_amount').value = coe.fees_amount || '0';
+            document.getElementById('coec_deposit_percent').value = coe.deposit_percent || '20';
+            document.getElementById('coec_policies').value = coe.policies || '';
+            document.getElementById('coec_notes').value = coe.notes || '';
+            
+            // Step 2: Events - populate immediately for visual display
+            // Extract full event objects from populated structure
+            coecSelectedEvents = (coe.events || []).map(event => event.event_id || event);
+            populateCOEEventsGrid(); // Show events grid with all available events
+            preSelectEventsForEdit(); // Mark selected events as selected
+            updateCOESelectedEvents(); // Update selected events display
+            
+            // Step 3: Tables - populate immediately for visual display
+            coecSelectedSeats = coe.available_seats || [];
+            populateCOESeatsContainer(); // Show seats container for all selected events
+            preSelectSeatsForEdit(); // Mark selected seats as selected
+            
+            // Step 4: Runner
+            if (coe.runner_assignment) {
+                document.getElementById('coec_runner_type').value = coe.runner_assignment.type || 'coe';
+                if (coe.runner_assignment.type === 'coe') {
+                    document.getElementById('coec_coe_runner_id').value = coe.runner_assignment.runner_id?._id || '';
+                }
+                document.getElementById('coec_runner_notes').value = coe.runner_assignment.notes || '';
+            } else {
+                // Reset runner fields if no assignment
+                document.getElementById('coec_runner_type').value = 'coe';
+                document.getElementById('coec_coe_runner_id').value = '';
+                document.getElementById('coec_runner_notes').value = '';
+            }
+            
+            // Step 5: Pricing - calculate immediately
+            calculateCOEPricing();
+            
+            // Step 6: Summary - populate immediately
+            populateCOESummary();
+        }
+
+        /**
+         * Add real-time validation listeners
+         */
+        function addCOECValidationListeners() {
+            // Step 1 field listeners
+            const step1Fields = ['coec_name', 'coec_description', 'coec_client_id', 'coec_start_date', 'coec_end_date'];
+            step1Fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.addEventListener('input', () => {
+                        if (coecCurrentStep === 1) {
+                            setTimeout(() => updateCOECValidationStatus(), 100);
+                        }
+                    });
+                    field.addEventListener('change', () => {
+                        if (coecCurrentStep === 1) {
+                            setTimeout(() => updateCOECValidationStatus(), 100);
+                        }
+                    });
+                }
+            });
+            
+            // Step 4 field listeners
+            const runnerTypeField = document.getElementById('coec_runner_type');
+            const runnerIdField = document.getElementById('coec_coe_runner_id');
+            if (runnerTypeField) {
+                runnerTypeField.addEventListener('change', () => {
+                    if (coecCurrentStep === 4) {
+                        setTimeout(() => updateCOECValidationStatus(), 100);
+                    }
+                });
+            }
+            if (runnerIdField) {
+                runnerIdField.addEventListener('change', () => {
+                    if (coecCurrentStep === 4) {
+                        setTimeout(() => updateCOECValidationStatus(), 100);
+                    }
+                });
             }
         }
 
@@ -6542,28 +7003,233 @@
             prevBtn.style.display = coecCurrentStep > 1 ? 'block' : 'none';
             nextBtn.style.display = coecCurrentStep < 6 ? 'block' : 'none';
             createBtn.style.display = coecCurrentStep === 6 ? 'block' : 'none';
+            
+            // Update validation status
+            updateCOECValidationStatus();
+        }
+
+        /**
+         * Update validation status and visual indicators
+         */
+        function updateCOECValidationStatus() {
+            // Clear all validation indicators
+            clearCOECValidationIndicators();
+            
+            // Add validation indicators based on current step
+            switch (coecCurrentStep) {
+                case 1:
+                    validateCOECStep1Fields();
+                    break;
+                case 2:
+                    validateCOECStep2Fields();
+                    break;
+                case 3:
+                    validateCOECStep3Fields();
+                    break;
+                case 4:
+                    validateCOECStep4Fields();
+                    break;
+            }
+        }
+
+        /**
+         * Clear all validation indicators
+         */
+        function clearCOECValidationIndicators() {
+            // Clear field validation styles
+            const fields = ['coec_name', 'coec_description', 'coec_client_id', 'coec_start_date', 'coec_end_date'];
+            fields.forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.style.borderColor = '';
+                    field.style.backgroundColor = '';
+                }
+            });
+            
+            // Clear validation messages
+            const validationMsgs = document.querySelectorAll('.coec-validation-msg');
+            validationMsgs.forEach(msg => msg.remove());
+        }
+
+        /**
+         * Validate Step 1 fields and show indicators
+         */
+        function validateCOECStep1Fields() {
+            const name = document.getElementById('coec_name').value.trim();
+            const description = document.getElementById('coec_description').value.trim();
+            const clientId = document.getElementById('coec_client_id').value;
+            const startDate = document.getElementById('coec_start_date').value;
+            const endDate = document.getElementById('coec_end_date').value;
+            
+            if (!name) addFieldValidation('coec_name', 'Name is required');
+            if (!description) addFieldValidation('coec_description', 'Description is required');
+            if (!clientId) addFieldValidation('coec_client_id', 'Client selection is required');
+            if (!startDate) addFieldValidation('coec_start_date', 'Start date is required');
+            if (!endDate) addFieldValidation('coec_end_date', 'End date is required');
+            
+            if (startDate && endDate && new Date(startDate) >= new Date(endDate)) {
+                addFieldValidation('coec_end_date', 'End date must be after start date');
+            }
+        }
+
+        /**
+         * Validate Step 2 fields and show indicators
+         */
+        function validateCOECStep2Fields() {
+            if (coecSelectedEvents.length === 0) {
+                // Check if there are any events available in the date range
+                if (!allEventsForCOE || allEventsForCOE.length === 0) {
+                    // No events in date range - show date adjustment message
+                    const coeStartDate = document.getElementById('coec_start_date').value;
+                    const coeEndDate = document.getElementById('coec_end_date').value;
+                    
+                    if (coeStartDate && coeEndDate) {
+                        const startDate = new Date(coeStartDate).toLocaleDateString();
+                        const endDate = new Date(coeEndDate).toLocaleDateString();
+                        addSectionValidation('coec_step2', `No events available between ${startDate} and ${endDate}. Please go back to Step 1 and adjust your COE date range to include available events.`);
+                    } else {
+                        addSectionValidation('coec_step2', 'No events available. Please go back to Step 1 and adjust your COE date range.');
+                    }
+                } else {
+                    // Events are available but none selected - show selection message
+                    addSectionValidation('coec_step2', 'Please select at least one event to continue');
+                }
+            }
+        }
+
+        /**
+         * Validate Step 3 fields and show indicators
+         */
+        function validateCOECStep3Fields() {
+            if (coecSelectedSeats.length === 0) {
+                addSectionValidation('coec_step3', 'Please select at least one table for the events');
+                return;
+            }
+            
+            // Check if each selected event has at least one table selected
+            const eventsWithoutTables = coecSelectedEvents.filter(event => 
+                !coecSelectedSeats.some(seat => seat.event_id === event._id)
+            );
+            
+            if (eventsWithoutTables.length > 0) {
+                const eventNames = eventsWithoutTables.map(e => e.name).join(', ');
+                addSectionValidation('coec_step3', `Please select tables for: ${eventNames}`);
+            }
+        }
+
+        /**
+         * Validate Step 4 fields and show indicators
+         */
+        function validateCOECStep4Fields() {
+            const runnerType = document.getElementById('coec_runner_type').value;
+            if (runnerType === 'coe') {
+                const coeRunnerId = document.getElementById('coec_coe_runner_id').value;
+                if (!coeRunnerId) {
+                    addFieldValidation('coec_coe_runner_id', 'Please select a runner for the COE');
+                }
+            }
+        }
+
+        /**
+         * Add field validation indicator
+         */
+        function addFieldValidation(fieldId, message) {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                field.style.borderColor = '#e74c3c';
+                field.style.backgroundColor = '#fdf2f2';
+                
+                // Add validation message
+                const existingMsg = field.parentNode.querySelector('.coec-validation-msg');
+                if (!existingMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'coec-validation-msg';
+                    msgDiv.style.color = '#e74c3c';
+                    msgDiv.style.fontSize = '12px';
+                    msgDiv.style.marginTop = '4px';
+                    msgDiv.textContent = message;
+                    field.parentNode.appendChild(msgDiv);
+                }
+            }
+        }
+
+        /**
+         * Add section validation indicator
+         */
+        function addSectionValidation(sectionId, message) {
+            const section = document.getElementById(sectionId);
+            if (section) {
+                const existingMsg = section.querySelector('.coec-validation-msg');
+                if (!existingMsg) {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'coec-validation-msg';
+                    msgDiv.style.color = '#e74c3c';
+                    msgDiv.style.fontSize = '14px';
+                    msgDiv.style.fontWeight = 'bold';
+                    msgDiv.style.textAlign = 'center';
+                    msgDiv.style.padding = '10px';
+                    msgDiv.style.backgroundColor = '#fdf2f2';
+                    msgDiv.style.border = '1px solid #e74c3c';
+                    msgDiv.style.borderRadius = '4px';
+                    msgDiv.style.margin = '10px 0';
+                    msgDiv.textContent = message;
+                    section.insertBefore(msgDiv, section.firstChild);
+                }
+            }
+        }
+
+        /**
+         * Handle next step button click (wrapper for async function)
+         */
+        function handleNextStep() {
+            console.log('handleNextStep called');
+            coecNextStep().catch(error => {
+                console.error('Error in handleNextStep:', error);
+                showAlert('Error moving to next step: ' + error.message, 'error');
+            });
         }
 
         /**
          * Go to next step in COE creation
          */
-        function coecNextStep() {
-            if (validateCOECCurrentStep()) {
-                coecCurrentStep++;
-                updateCOECStepDisplay();
+        async function coecNextStep() {
+            try {
                 
-                // Load data for specific steps
-                if (coecCurrentStep === 2) {
-                    populateCOEEventsGrid();
-                } else if (coecCurrentStep === 3) {
-                    populateCOESeatsContainer();
-                } else if (coecCurrentStep === 4) {
-                    populateCOERunnerAssignment();
-                } else if (coecCurrentStep === 5) {
-                    calculateCOEPricing();
-                } else if (coecCurrentStep === 6) {
-                    populateCOESummary();
+                if (validateCOECCurrentStep()) {
+                    coecCurrentStep++;
+                    
+                    // Load data for specific steps BEFORE updating display
+                    if (coecCurrentStep === 2) {
+                        // Reload events with date filtering when moving to Step 2
+                        await loadEventsForCOE();
+                        populateCOEEventsGrid();
+                    } else if (coecCurrentStep === 3) {
+                        populateCOESeatsContainer();
+                    } else if (coecCurrentStep === 4) {
+                        populateCOERunnerAssignment();
+                    } else if (coecCurrentStep === 5) {
+                        calculateCOEPricing();
+                    } else if (coecCurrentStep === 6) {
+                        populateCOESummary();
+                    }
+                    
+                    // Handle pre-selection in edit mode
+                    if (window.coeEditMode && window.currentEditingCOEId) {
+                        if (coecCurrentStep === 2) {
+                            // Pre-select events in edit mode
+                            preSelectEventsForEdit();
+                        } else if (coecCurrentStep === 3) {
+                            // Pre-select seats in edit mode
+                            preSelectSeatsForEdit();
+                        }
+                    }
+                    
+                    // Update display after loading data
+                    updateCOECStepDisplay();
                 }
+            } catch (error) {
+                console.error('Error in coecNextStep:', error);
+                showAlert('Error moving to next step: ' + error.message, 'error');
             }
         }
 
@@ -6581,6 +7247,7 @@
          * Validate current step in COE creation
          */
         function validateCOECCurrentStep() {
+            
             switch (coecCurrentStep) {
                 case 1:
                     const name = document.getElementById('coec_name').value.trim();
@@ -6588,6 +7255,8 @@
                     const clientId = document.getElementById('coec_client_id').value;
                     const startDate = document.getElementById('coec_start_date').value;
                     const endDate = document.getElementById('coec_end_date').value;
+                    
+                    console.log('Step 1 validation values:', { name, description, clientId, startDate, endDate });
                     
                     if (!name) {
                         showAlert('Please enter a COE name', 'error');
@@ -6622,6 +7291,22 @@
                     }
                     break;
                     
+                case 3:
+                    if (coecSelectedSeats.length === 0) {
+                        showAlert('Please select at least one table for the events', 'error');
+                        return false;
+                    }
+                    // Check if each selected event has at least one table selected
+                    const eventsWithoutTables = coecSelectedEvents.filter(event => 
+                        !coecSelectedSeats.some(seat => seat.event_id === event._id)
+                    );
+                    if (eventsWithoutTables.length > 0) {
+                        const eventNames = eventsWithoutTables.map(e => e.name).join(', ');
+                        showAlert(`Please select tables for: ${eventNames}`, 'error');
+                        return false;
+                    }
+                    break;
+                    
                 case 4:
                     const runnerType = document.getElementById('coec_runner_type').value;
                     if (runnerType === 'coe') {
@@ -6641,11 +7326,20 @@
          */
         async function loadEventsForCOE() {
             try {
-                const result = await makeApiRequest('/events');
+                // Get COE date range for filtering
+                const coeStartDate = document.getElementById('coec_start_date').value;
+                const coeEndDate = document.getElementById('coec_end_date').value;
+                
+                // Build API URL with date filtering
+                let apiUrl = '/events';
+                if (coeStartDate && coeEndDate) {
+                    apiUrl += `?coe_start_date=${coeStartDate}&coe_end_date=${coeEndDate}`;
+                }
+                
+                const result = await makeApiRequest(apiUrl);
+                
                 if (result.success && result.data) {
                     allEventsForCOE = Array.isArray(result.data) ? result.data : result.data.data || [];
-                    console.log('Events loaded for COE:', allEventsForCOE);
-                    console.log('First event media:', allEventsForCOE[0]?.media);
                     
                     // Populate location filter
                     const locationFilter = document.getElementById('coec_event_location_filter');
@@ -6694,11 +7388,37 @@
         function populateCOEEventsGrid(events = allEventsForCOE) {
             const eventsGrid = document.getElementById('coec_events_grid');
             
+            // Get COE date range for display
+            const coeStartDate = document.getElementById('coec_start_date').value;
+            const coeEndDate = document.getElementById('coec_end_date').value;
+            
             if (events.length === 0) {
-                eventsGrid.innerHTML = '<p style="color:#7f8c8d;text-align:center;margin:40px 0;">No events found</p>';
+                let emptyMessage = 'No events found';
+                let startDate = '';
+                let endDate = '';
+                
+                if (coeStartDate && coeEndDate) {
+                    startDate = new Date(coeStartDate).toLocaleDateString();
+                    endDate = new Date(coeEndDate).toLocaleDateString();
+                    emptyMessage = `No events available between ${startDate} and ${endDate}. Please adjust your COE dates to see available events.`;
+                }
+                
+                eventsGrid.innerHTML = `
+                    <div style="text-align: center; padding: 40px 20px; color: #7f8c8d;">
+                        <div style="font-size: 16px; margin-bottom: 10px;">${emptyMessage}</div>
+                        ${coeStartDate && coeEndDate ? `
+                            <div style="font-size: 14px; margin-top: 15px;">
+                                <strong>Current COE Date Range:</strong> ${startDate} - ${endDate}
+                            </div>
+                            <div style="font-size: 12px; margin-top: 10px; color: #95a5a6;">
+                                Tip: Try adjusting your COE start or end date to include more events
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
                 return;
             }
-
+            
             eventsGrid.innerHTML = events.map(event => {
                 const startDate = new Date(event.start_datetime).toLocaleDateString();
                 const startTime = new Date(event.start_datetime).toLocaleTimeString();
@@ -6771,6 +7491,11 @@
             // Update displays
             populateCOEEventsGrid();
             updateCOESelectedEvents();
+            
+            // Update validation status
+            if (coecCurrentStep === 2) {
+                setTimeout(() => updateCOECValidationStatus(), 100);
+            }
         }
 
         /**
@@ -6839,11 +7564,20 @@
 
             seatsContainer.innerHTML = coecSelectedEvents.map((event, index) => {
                 const locationName = event.location_id?.name || 'Unknown Location';
+                const eventDateTime = event.start_datetime ? new Date(event.start_datetime).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                }) : 'Date TBD';
                 
                 return `
                     <div style="margin-bottom: 30px; border: 1px solid #ecf0f1; border-radius: 8px; padding: 20px;">
                         <h3 style="margin: 0 0 15px 0; color: #2c3e50;">
                             ${index + 1}. ${event.name} - ${locationName}
+                            <span style="font-size: 0.8em; color: #7f8c8d; font-weight: normal;">${eventDateTime}</span>
                         </h3>
                         <div id="seats_grid_${event._id}" class="seats-grid" style="
                             display: grid;
@@ -6868,21 +7602,13 @@
          */
         async function loadEventSeatsForCOE(eventId) {
             try {
-                console.log('Loading seats for event:', eventId);
                 const result = await makeApiRequest(`/events/${eventId}`);
-                console.log('Event API response:', result);
                 
                 if (result.success && result.data) {
                     const event = result.data;
-                    console.log('Event data:', event);
-                    console.log('Event seats:', event.seats);
-                    console.log('Event seats length:', event.seats ? event.seats.length : 'undefined');
                     
                     // Handle nested data structure
                     const eventData = event.data || event;
-                    console.log('Event data (after extraction):', eventData);
-                    console.log('EventData seats:', eventData.seats);
-                    console.log('EventData seats length:', eventData.seats ? eventData.seats.length : 'undefined');
                     
                     const seatsGrid = document.getElementById(`seats_grid_${eventId}`);
                     
@@ -6891,30 +7617,98 @@
                         return;
                     }
 
-                    seatsGrid.innerHTML = eventData.seats.map(seat => {
-                        const isSelected = coecSelectedSeats.some(s => s.seat_id === seat._id && s.event_id === eventId);
-                        const statusClass = `seat-status ${seat.status}`;
+                    // In edit mode, show selected seats + available seats; in create mode, show only available seats
+                    let seatsToShow;
+                    if (window.coeEditMode && window.currentEditingCOEId) {
+                        // Edit mode: show all seats that are either available OR were originally selected for this COE
+                        const selectedSeatsForThisEvent = coecSelectedSeats.filter(s => s.event_id === eventId);
+                        const selectedSeatIds = selectedSeatsForThisEvent.map(s => s.seat_id);
                         
+                        // Show seats that are: available OR held by this COE OR were originally selected (even if now deselected)
+                        seatsToShow = eventData.seats.filter(seat => 
+                            seat.status === 'available' || 
+                            selectedSeatIds.includes(seat._id.toString()) ||
+                            (seat.status === 'held' && seat.booking_reference === window.currentEditingCOEId)
+                        );
+                    } else {
+                        // Create mode: show only available seats
+                        seatsToShow = eventData.seats.filter(seat => seat.status === 'available');
+                    }
+                    
+                    if (seatsToShow.length === 0) {
+                        const message = window.coeEditMode ? 
+                            'No tables available for this event' : 
+                            'No available tables for this event';
+                        const subMessage = window.coeEditMode ? 
+                            '' : 
+                            '<br><small style="color:#7f8c8d;">All tables are currently booked or held</small>';
+                        seatsGrid.innerHTML = `<p style="color:#e74c3c;text-align:center;margin:20px 0;padding:15px;background:#fdf2f2;border-radius:8px;border:1px solid #fecaca;">${message}${subMessage}</p>`;
+                        return;
+                    }
+
+                    seatsGrid.innerHTML = seatsToShow.map(seat => {
+                        const isSelected = coecSelectedSeats.some(s => s.seat_id === seat._id && s.event_id === eventId);
+                        
+                        // In edit mode, if seat is deselected, show it as available
+                        let displayStatus = seat.status;
+                        if (window.coeEditMode && !isSelected && seat.status === 'held' && seat.booking_reference === window.currentEditingCOEId) {
+                            displayStatus = 'available';
+                        }
+                        
+                        const statusClass = `seat-status ${displayStatus}`;
+                        
+                        // Generate media HTML for the table
+                        const mediaHtml = (seat.media || []).length > 0 ? `
+                            <div style="margin: 8px 0; display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                                ${(seat.media || []).slice(0, 2).map(media => {
+                                    if (media.type === 'image') {
+                                        return `
+                                            <div style="width: 40px; height: 30px; border-radius: 4px; overflow: hidden; cursor: pointer; border: 1px solid #ddd;" 
+                                                 onclick="event.stopPropagation(); openMediaModal('${media.url}', 'image')">
+                                                <img src="${media.url}" alt="Table image" style="width: 100%; height: 100%; object-fit: cover;">
+                                            </div>
+                                        `;
+                                    } else if (media.type === 'video') {
+                                        return `
+                                            <div style="width: 40px; height: 30px; border-radius: 4px; overflow: hidden; cursor: pointer; border: 1px solid #ddd; background: #f8f9fa; display: flex; align-items: center; justify-content: center;" 
+                                                 onclick="event.stopPropagation(); openMediaModal('${media.url}', 'video')">
+                                                <div style="font-size: 12px; color: #666;">▶</div>
+                                            </div>
+                                        `;
+                                    }
+                                    return '';
+                                }).join('')}
+                                ${(seat.media || []).length > 2 ? `<div style="width: 40px; height: 30px; border-radius: 4px; background: #f8f9fa; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #666;">+${(seat.media || []).length - 2}</div>` : ''}
+                            </div>
+                        ` : '';
+
                         return `
                             <div class="seat-card ${isSelected ? 'selected' : ''}" 
+                                 data-seat-id="${seat._id}"
+                                 data-event-id="${eventId}"
                                  onclick="toggleCOESeatSelection('${eventId}', '${seat._id}')" 
                                  style="
-                                    border: 2px solid ${isSelected ? '#3498db' : '#ecf0f1'};
-                                    border-radius: 6px;
-                                    padding: 10px;
+                                    border: 3px solid ${isSelected ? '#3498db' : '#ecf0f1'};
+                                    border-radius: 8px;
+                                    padding: 12px;
                                     cursor: pointer;
-                                    background: ${isSelected ? '#f8f9fa' : 'white'};
+                                    background: ${isSelected ? '#e3f2fd' : 'white'};
                                     text-align: center;
                                     transition: all 0.2s ease;
                                     position: relative;
+                                    box-shadow: ${isSelected ? '0 4px 12px rgba(52, 152, 219, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)'};
+                                    transform: ${isSelected ? 'scale(1.02)' : 'scale(1)'};
+                                    min-height: 120px;
                                  ">
                                 <div class="seat-code" style="font-weight: bold; color: #2c3e50;">${seat.code}</div>
                                 <div class="seat-category" style="font-size: 0.8em; color: #7f8c8d; margin: 5px 0;">${seat.category || 'N/A'}</div>
+                                ${mediaHtml}
                                 <div class="seat-capacity" style="font-size: 0.8em; color: #666;">${seat.capacity || 0} seats</div>
                                 <div class="seat-price" style="font-size: 0.9em; color: #27ae60; font-weight: bold;">$${seat.event_price || seat.min_spend || 0}</div>
+                                ${isSelected ? '<div style="position:absolute;top:5px;right:5px;background:#3498db;color:white;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:bold;">✓ SELECTED</div>' : ''}
                                 <div class="${statusClass}" style="
                                     position: absolute;
-                                    top: 5px;
+                                    bottom: 5px;
                                     right: 5px;
                                     width: 8px;
                                     height: 8px;
@@ -6935,32 +7729,121 @@
          * Toggle seat selection for COE
          */
         function toggleCOESeatSelection(eventId, seatId) {
-            const existingIndex = coecSelectedSeats.findIndex(s => s.seat_id === seatId && s.event_id === eventId);
             
+            const existingIndex = coecSelectedSeats.findIndex(s => s.seat_id === seatId && s.event_id === eventId);
             if (existingIndex >= 0) {
                 // Remove from selection
                 coecSelectedSeats.splice(existingIndex, 1);
             } else {
                 // Find the seat data from the current event
                 const event = allEventsForCOE.find(e => e._id === eventId);
+                
                 if (event && event.seats) {
                     const seatData = event.seats.find(s => s._id === seatId);
-                    if (seatData) {
-                        // Add to selection with full seat data
-                        coecSelectedSeats.push({
-                            event_id: eventId,
-                            seat_id: seatId,
-                            seat_code: seatData.code,
-                            capacity: seatData.capacity,
-                            base_price: seatData.min_spend || 0,
-                            event_price: seatData.event_price || seatData.min_spend || 0
-                        });
+                    
+                    // In create mode, only allow selection of available seats
+                    // In edit mode, allow selection of available seats + seats held by this COE
+                    if (!seatData) {
+                        showAlert('Seat data not found', 'error');
+                        return;
                     }
+                    
+                    if (!window.coeEditMode && seatData.status !== 'available') {
+                        showAlert('This table is not available for selection', 'error');
+                        return;
+                    }
+                    
+                    if (window.coeEditMode && seatData.status !== 'available' && seatData.status !== 'held') {
+                        showAlert('This table is not available for selection', 'error');
+                        return;
+                    }
+                    
+                    // In edit mode, if trying to select a held seat that belongs to another COE, prevent it
+                    if (window.coeEditMode && seatData.status === 'held' && seatData.booking_reference !== window.currentEditingCOEId) {
+                        showAlert('This table is already held by another COE', 'error');
+                        return;
+                    }
+                    
+                    // FIRST: Remove any existing selection for this event (1 table per event rule)
+                    const existingEventSelection = coecSelectedSeats.findIndex(seat => seat.event_id === eventId);
+                    if (existingEventSelection >= 0) {
+                        coecSelectedSeats.splice(existingEventSelection, 1);
+                    }
+                    
+                    // THEN: Add the new selection with full seat data
+                    const newSelection = {
+                        event_id: eventId,
+                        seat_id: seatId,
+                        seat_code: seatData.code,
+                        capacity: seatData.capacity,
+                        base_price: seatData.min_spend || 0,
+                        event_price: seatData.event_price || seatData.min_spend || 0
+                    };
+                    coecSelectedSeats.push(newSelection);
                 }
             }
-
-            // Update seat display
+            
+            // Force immediate visual update without API call
+            updateSeatDisplayForCOE(eventId);
+            
+            // Update validation status
+            if (coecCurrentStep === 3) {
+                setTimeout(() => updateCOECValidationStatus(), 100);
+            }
+            
+            // Test: Add a simple alert to confirm selection is working
+            const selectedCount = coecSelectedSeats.filter(s => s.event_id === eventId).length;
+            
+            // Also update the full display
             loadEventSeatsForCOE(eventId);
+        }
+
+        /**
+         * Update seat display immediately for COE (without API call)
+         */
+        function updateSeatDisplayForCOE(eventId) {
+            const seatsGrid = document.getElementById(`seats_grid_${eventId}`);
+            
+            if (!seatsGrid) {
+                return;
+            }
+            
+            // Get all seat cards in the grid
+            const seatCards = seatsGrid.querySelectorAll('.seat-card');
+            
+            seatCards.forEach(card => {
+                const seatId = card.getAttribute('data-seat-id');
+                const isSelected = coecSelectedSeats.some(s => s.seat_id === seatId && s.event_id === eventId);
+                
+                if (isSelected) {
+                    card.classList.add('selected');
+                    card.style.border = '3px solid #3498db';
+                    card.style.background = '#e3f2fd';
+                    card.style.boxShadow = '0 4px 12px rgba(52, 152, 219, 0.3)';
+                    card.style.transform = 'scale(1.02)';
+                    
+                    // Add selection badge if not exists
+                    if (!card.querySelector('.selection-badge')) {
+                        const badge = document.createElement('div');
+                        badge.className = 'selection-badge';
+                        badge.style.cssText = 'position:absolute;top:5px;right:5px;background:#3498db;color:white;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:bold;';
+                        badge.textContent = '✓ SELECTED';
+                        card.appendChild(badge);
+                    }
+                } else {
+                    card.classList.remove('selected');
+                    card.style.border = '2px solid #ecf0f1';
+                    card.style.background = 'white';
+                    card.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    card.style.transform = 'scale(1)';
+                    
+                    // Remove selection badge if exists
+                    const existingBadge = card.querySelector('.selection-badge');
+                    if (existingBadge) {
+                        existingBadge.remove();
+                    }
+                }
+            });
         }
 
         /**
@@ -7106,7 +7989,7 @@
                             return `
                                 <div style="padding: 8px 0; border-bottom: 1px solid #ecf0f1;">
                                     <strong>${index + 1}. ${event.name}</strong> - ${locationName}
-                                    ${eventSeats.length > 0 ? ` (${eventSeats.length} seats selected)` : ''}
+                                    ${eventSeats.length > 0 ? ` (${eventSeats.length} table${eventSeats.length > 1 ? 's' : ''} selected)` : ''}
                                 </div>
                             `;
                         }).join('')}
@@ -7149,8 +8032,8 @@
          */
         async function submitCreateCOE() {
             try {
-                console.log('submitCreateCOE called');
-                showAlert('Creating COE...', 'info');
+                const isEditMode = window.coeEditMode && window.currentEditingCOEId;
+                showAlert(isEditMode ? 'Updating COE...' : 'Creating COE...', 'info');
 
                 // Check if form elements exist
                 const nameEl = document.getElementById('coec_name');
@@ -7266,10 +8149,13 @@
                     }
                 }
 
-                // Create COE
-                console.log('Sending COE data:', coeData);
-                const result = await makeApiRequest('/coes', 'POST', coeData);
-                console.log('COE creation result:', result);
+                // Create or Update COE
+                let result;
+                if (isEditMode) {
+                    result = await makeApiRequest(`/coes/${window.currentEditingCOEId}`, 'PUT', coeData);
+                } else {
+                    result = await makeApiRequest('/coes', 'POST', coeData);
+                }
                 
                 // Log detailed error if available
                 if (result.error || (result.data && result.data.error)) {
@@ -7277,12 +8163,12 @@
                 }
 
                 if (result.success) {
-                    showAlert('COE created successfully!', 'success');
+                    showAlert(isEditMode ? 'COE updated successfully!' : 'COE created successfully!', 'success');
                     closeCreateCOE();
                     loadCOEs(); // Refresh COE list
                 } else {
-                    console.error('COE creation failed:', result);
-                    showAlert('Failed to create COE: ' + (result.error?.message || 'Unknown error'), 'error');
+                    console.error(isEditMode ? 'COE update failed:' : 'COE creation failed:', result);
+                    showAlert(`Failed to ${isEditMode ? 'update' : 'create'} COE: ` + (result.error?.message || 'Unknown error'), 'error');
                 }
             } catch (error) {
                 console.error('Error creating COE:', error);
@@ -7291,48 +8177,26 @@
         }
 
         /**
-         * View COE details
-         */
-        async function viewCOEDetails(coeId) {
-            try {
-                console.log('Viewing COE details for:', coeId);
-                const result = await makeApiRequest(`/coes/${coeId}`);
-                
-                if (result.success && result.data) {
-                    window.currentCOE = result.data;
-                    showAlert('COE details modal will be implemented in the next phase', 'info');
-                } else {
-                    showAlert('Failed to load COE details: ' + (result.error?.message || 'Unknown error'), 'error');
-                }
-            } catch (error) {
-                console.error('Error loading COE details:', error);
-                showAlert('Error loading COE details: ' + error.message, 'error');
-            }
-        }
-
-        /**
-         * Edit COE
-         */
-        function editCOE(coeId) {
-            console.log('Editing COE:', coeId);
-            showAlert('COE editing will be implemented in the next phase', 'info');
-        }
-
-        /**
-         * Delete COE
+         * Delete COE with confirmation
          */
         async function deleteCOE(coeId, coeName) {
-            if (!confirm(`Are you sure you want to delete the COE "${coeName}"?`)) {
-                return;
-            }
-
             try {
+                // Show confirmation dialog
+                const confirmed = confirm(`Are you sure you want to delete the COE "${coeName}"?\n\nThis action cannot be undone.`);
+                
+                if (!confirmed) {
+                    return;
+                }
+                
+                showAlert('Deleting COE...', 'info');
+                
                 const result = await makeApiRequest(`/coes/${coeId}`, 'DELETE');
                 
                 if (result.success) {
-                    showAlert('COE deleted successfully', 'success');
-                    loadCOEs();
+                    showAlert('COE deleted successfully!', 'success');
+                    loadCOEs(); // Refresh COE list
                 } else {
+                    console.error('COE deletion failed:', result);
                     showAlert('Failed to delete COE: ' + (result.error?.message || 'Unknown error'), 'error');
                 }
             } catch (error) {
@@ -7340,6 +8204,17 @@
                 showAlert('Error deleting COE: ' + error.message, 'error');
             }
         }
+
+        /**
+         * View COE details
+         */
+        async function viewCOEDetails(coeId) {
+            // Call the new viewCOE function
+            await viewCOE(coeId);
+        }
+
+
+
     </script>
 </body>
 </html>
