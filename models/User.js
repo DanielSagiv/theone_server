@@ -112,6 +112,26 @@ const userSchema = new mongoose.Schema({
   avatarUrl: {
     type: String,
     trim: true
+  },
+  // Email Verification Fields
+  emailVerified: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  emailVerificationToken: {
+    type: String,
+    index: true
+  },
+  emailVerificationExpires: {
+    type: Date,
+    index: true
+  },
+  emailVerificationSentAt: {
+    type: Date
+  },
+  emailVerifiedAt: {
+    type: Date
   }
 }, {
   timestamps: true

@@ -26,6 +26,16 @@ router.get('/signup', (req, res) => {
 });
 
 /**
+ * GET /test/verify-email
+ * Display email verification page
+ */
+router.get('/verify-email', (req, res) => {
+  res.render('test/verify-email', {
+    title: 'Verify Email - The1 Platform'
+  });
+});
+
+/**
  * GET /test/dashboard
  * Display user dashboard with API testing tools
  */

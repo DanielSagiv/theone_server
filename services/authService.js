@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Session = require('../models/Session');
+const emailService = require('../utils/emailService');
 
 /**
  * Generate JWT token for user
@@ -62,15 +64,50 @@ const registerUser = async (userData) => {
     // Check if user already exists
     const existingUser = await User.findOne({ email: userData.email });
     if (existingUser) {
+      // If user exists but email not verified, allow resend
+      if (!existingUser.emailVerified) {
+        throw new Error('EMAIL_NOT_VERIFIED');
+      }
       throw new Error('User with this email already exists');
     }
 
-    // Create new user
-    const user = new User(userData);
+    // Generate verification token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    // Create new user with verification fields
+    const user = new User({
+      ...userData,
+      emailVerified: false,
+      emailVerificationToken: verificationToken,
+      emailVerificationExpires: verificationExpires,
+      emailVerificationSentAt: new Date(),
+      entity_status: 'pendingApproval'
+    });
     await user.save();
 
+    // Send verification email (async, non-blocking)
+    emailService.sendVerificationEmail(user, verificationToken)
+      .then(() => {
+        console.log('Verification email sent:', { 
+          email: user.email, 
+          timestamp: new Date().toISOString() 
+        });
+      })
+      .catch(err => {
+        console.error('Email send error:', { 
+          email: user.email, 
+          error: err.message,
+          timestamp: new Date().toISOString()
+        });
+        // Don't throw - user can resend later
+      });
+
     // Return user profile without password
-    return user.getProfile();
+    return {
+      user: user.getProfile(),
+      message: 'Account created successfully. Please check your email to verify your account.'
+    };
   } catch (error) {
     console.error('User registration error:', error);
     throw error;
@@ -92,6 +129,17 @@ const authenticateUser = async (email, password, req) => {
       throw new Error('Invalid credentials');
     }
 
+    // Verify password
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      throw new Error('Invalid credentials');
+    }
+
+    // Check if email is verified
+    if (!user.emailVerified) {
+      throw new Error('EMAIL_NOT_VERIFIED');
+    }
+
     // Check if user is active
     if (!user.isActive) {
       throw new Error('User account is disabled');
@@ -108,12 +156,6 @@ const authenticateUser = async (email, password, req) => {
 
     if (user.entity_status === 'suspended') {
       throw new Error('Your account has been suspended. Please contact an administrator.');
-    }
-
-    // Verify password
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
-      throw new Error('Invalid credentials');
     }
 
     // Update last login

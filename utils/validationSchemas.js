@@ -415,6 +415,34 @@ const updateUserTierSchema = Joi.object({
   userTier: Joi.string().valid('member', 'vip', 'elite').required()
 });
 
+/**
+ * Email Verification Schemas
+ */
+
+// Verify email schema
+const verifyEmailSchema = Joi.object({
+  token: Joi.string()
+    .length(64)
+    .hex()
+    .required()
+    .messages({
+      'string.length': 'Invalid verification token',
+      'string.hex': 'Invalid verification token format',
+      'any.required': 'Verification token is required'
+    })
+});
+
+// Resend verification email schema
+const resendVerificationSchema = Joi.object({
+  email: Joi.string()
+    .email()
+    .required()
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email address is required'
+    })
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -442,5 +470,7 @@ module.exports = {
   addEventToCOESchema,
   updateCOEStatusSchema,
   assignRunnerToCOESchema,
-  updateSeatAssignmentsSchema
+  updateSeatAssignmentsSchema,
+  verifyEmailSchema,
+  resendVerificationSchema
 };

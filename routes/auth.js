@@ -1,11 +1,16 @@
 const express = require('express');
+const crypto = require('crypto');
 const authService = require('../services/authService');
 const { authenticateToken } = require('../middleware/auth');
+const User = require('../models/User');
+const emailService = require('../utils/emailService');
 const { 
   signupSchema, 
   signinSchema, 
   renewPasswordSchema, 
-  resetPasswordSchema 
+  resetPasswordSchema,
+  verifyEmailSchema,
+  resendVerificationSchema
 } = require('../utils/validationSchemas');
 
 const router = express.Router();
@@ -85,6 +90,18 @@ router.post('/signin', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString()
     });
+
+    // Special handling for unverified email
+    if (error.message === 'EMAIL_NOT_VERIFIED') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+          action: 'resend_verification'
+        }
+      });
+    }
 
     // Determine appropriate status code based on error type
     let statusCode = 401;
@@ -209,6 +226,196 @@ router.put('/reset-password', async (req, res) => {
       error: {
         code: 'RESET_PASSWORD_FAILED',
         message: 'Password reset failed'
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/auth/verify-email
+ * Verify user email with token
+ */
+router.post('/verify-email', async (req, res) => {
+  try {
+    // Validate input
+    const { error, value } = verifyEmailSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const { token } = value;
+
+    // Find user with valid token
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Invalid or expired verification token'
+        }
+      });
+    }
+
+    // Check if already verified
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ALREADY_VERIFIED',
+          message: 'Email is already verified'
+        }
+      });
+    }
+
+    // Mark email as verified
+    user.emailVerified = true;
+    user.emailVerifiedAt = new Date();
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    
+    // Auto-approve user after email verification
+    if (user.entity_status === 'pendingApproval') {
+      user.entity_status = 'live';
+    }
+    
+    await user.save();
+
+    // Send welcome email (optional, non-blocking)
+    emailService.sendWelcomeEmail(user)
+      .catch(err => console.error('Welcome email error:', err));
+
+    // Log verification event
+    console.log('Email verified:', {
+      userId: user._id,
+      email: user.email,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Email verified successfully! You can now log in.',
+        redirectUrl: '/test/login'
+      }
+    });
+
+  } catch (error) {
+    console.error('Email verification error:', {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'VERIFICATION_FAILED',
+        message: 'Email verification failed'
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/auth/resend-verification
+ * Resend verification email to user
+ */
+router.post('/resend-verification', async (req, res) => {
+  try {
+    // Validate input
+    const { error, value } = resendVerificationSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const { email } = value;
+
+    // Find user
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      // Don't reveal if user exists (security)
+      return res.json({
+        success: true,
+        message: 'If an account exists with this email, a verification link has been sent.'
+      });
+    }
+
+    // Check if already verified
+    if (user.emailVerified) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'ALREADY_VERIFIED',
+          message: 'Email is already verified'
+        }
+      });
+    }
+
+    // Check rate limiting (prevent spam)
+    const lastSent = user.emailVerificationSentAt;
+    if (lastSent) {
+      const minutesSinceLastSend = (Date.now() - lastSent) / 1000 / 60;
+      if (minutesSinceLastSend < 5) {
+        return res.status(429).json({
+          success: false,
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Please wait ${Math.ceil(5 - minutesSinceLastSend)} minutes before requesting another verification email`
+          }
+        });
+      }
+    }
+
+    // Generate new token
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    user.emailVerificationSentAt = new Date();
+    await user.save();
+
+    // Send email
+    await emailService.sendVerificationEmail(user, verificationToken);
+
+    // Log resend event
+    console.log('Verification email resent:', {
+      userId: user._id,
+      email: user.email,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      message: 'Verification email sent. Please check your inbox.'
+    });
+
+  } catch (error) {
+    console.error('Resend verification error:', {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'RESEND_FAILED',
+        message: 'Failed to resend verification email'
       }
     });
   }
