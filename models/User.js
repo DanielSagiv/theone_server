@@ -132,6 +132,53 @@ const userSchema = new mongoose.Schema({
   },
   emailVerifiedAt: {
     type: Date
+  },
+  
+  // Saved Payment Methods (Phase 2: Card Tokenization)
+  saved_payment_methods: [{
+    token_id: {
+      type: String,
+      required: true
+    },
+    card_brand: String,
+    card_last_four: String,
+    expiry_month: String,
+    expiry_year: String,
+    is_default: {
+      type: Boolean,
+      default: false
+    },
+    nickname: String,
+    created_at: {
+      type: Date,
+      default: Date.now
+    },
+    last_used_at: Date
+  }],
+  
+  default_payment_method: String,
+  
+  // Membership Status (Phase 3: Recurring Billing)
+  membership_status: {
+    type: String,
+    enum: ['free', 'active', 'cancelled', 'expired', 'suspended'],
+    default: 'free',
+    index: true
+  },
+  membership_tier: {
+    type: String,
+    enum: ['basic', 'premium', 'vip', 'elite'],
+    index: true
+  },
+  membership_started_at: {
+    type: Date
+  },
+  membership_expires_at: {
+    type: Date
+  },
+  active_subscription_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Subscription'
   }
 }, {
   timestamps: true

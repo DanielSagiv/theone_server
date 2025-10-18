@@ -71,6 +71,10 @@ mongoose.connect(process.env.DB_URI, {
   .then(() => {
     dbStatus = 'connected';
     console.log(' Connected to MongoDB');
+    
+    // Start automated billing cron jobs (Phase 3: Recurring Billing)
+    const cronJobs = require('./utils/cronJobs');
+    cronJobs.startAllCronJobs();
   })
   .catch((err) => {
     dbStatus = 'connection failed';
@@ -87,6 +91,9 @@ const locationRoutes = require('./routes/locations');
 const eventRoutes = require('./routes/events');
 const coeRoutes = require('./routes/coes');
 const testRoutes = require('./routes/test');
+const paymentRoutes = require('./routes/payments');
+const webhookRoutes = require('./routes/webhooks');
+const subscriptionRoutes = require('./routes/subscriptions');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -94,6 +101,9 @@ app.use('/v1/users', userRoutes);
 app.use('/v1/locations', locationRoutes);
 app.use('/v1/events', eventRoutes);
 app.use('/v1/coes', coeRoutes);
+app.use('/v1/payments', paymentRoutes);
+app.use('/v1/subscriptions', subscriptionRoutes);
+app.use('/webhooks', webhookRoutes);
 
 // Landing page route (password protection)
 app.get('/', requirePasswordAuth);

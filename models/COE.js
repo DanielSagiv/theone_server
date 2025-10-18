@@ -152,6 +152,44 @@ const coeSchema = new mongoose.Schema({
   deposit_required: { type: Number, min: 0, default: 0 },
   deposit_paid: { type: Number, min: 0, default: 0 },
   
+  // Payment Information (Phase 1: Global Payments Integration)
+  payment_status: {
+    type: String,
+    enum: ['unpaid', 'deposit_paid', 'partially_paid', 'fully_paid', 'refunded'],
+    default: 'unpaid',
+    index: true
+  },
+  deposit_amount: Number,
+  deposit_percent: {
+    type: Number,
+    default: 20
+  },
+  deposit_paid_at: Date,
+  deposit_payment_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment'
+  },
+  final_amount: Number,
+  final_paid_at: Date,
+  final_payment_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment'
+  },
+  total_paid: {
+    type: Number,
+    default: 0
+  },
+  payment_due_date: Date,
+  payment_terms: {
+    type: String,
+    default: '20% deposit required, balance due 48 hours before event'
+  },
+  refund_amount: {
+    type: Number,
+    default: 0
+  },
+  refunded_at: Date,
+  
   // Timeline
   request_date: { type: Date, default: Date.now },
   approved_date: { type: Date },
