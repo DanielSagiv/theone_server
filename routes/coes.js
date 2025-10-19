@@ -19,6 +19,42 @@ const {
  */
 
 /**
+ * GET /v1/coes/my
+ * Get COEs associated with the current user
+ * @access Authenticated users
+ */
+router.get('/my', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get COEs where user is admin, client, runner, or participant
+    const coes = await COE.find({
+      $or: [
+        { admin_id: userId },
+        { client_id: userId },
+        { 'runner_assignment.runner_id': userId },
+        { 'participants.user_id': userId }
+      ]
+    })
+    .populate('admin_id', 'name email')
+    .populate('client_id', 'name')
+    .populate('events.event_id', 'name start_datetime end_datetime location')
+    .sort({ created_at: -1 });
+
+    res.json({
+      success: true,
+      data: coes
+    });
+  } catch (error) {
+    console.error('Error fetching user COEs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user COEs'
+    });
+  }
+});
+
+/**
  * GET /v1/coes
  * Get all COEs with filtering and pagination
  * @access Admin only
@@ -156,6 +192,58 @@ router.get('/runner/:runnerId', authenticateToken, requireAdmin, async (req, res
       success: false,
       message: 'Failed to get runner COEs',
       error: error.message
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/my/:id
+ * Get COE by ID for current user (if they have access)
+ * @access Authenticated users
+ */
+router.get('/my/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    // Find COE where user has access (admin, client, runner, or participant)
+    const coe = await COE.findOne({
+      _id: id,
+      $or: [
+        { admin_id: userId },
+        { client_id: userId },
+        { 'runner_assignment.runner_id': userId },
+        { 'participants.user_id': userId }
+      ]
+    })
+    .populate('admin_id', 'name email')
+    .populate('client_id', 'name email')
+    .populate('events.event_id', 'name start_datetime end_datetime location')
+    .populate('runner_assignment.runner_id', 'name email');
+
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found or access denied'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: coe
+    });
+  } catch (error) {
+    console.error('Error fetching user COE:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch COE'
     });
   }
 });
