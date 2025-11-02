@@ -41,7 +41,10 @@ const SeatSchema = new mongoose.Schema({
   mapAnchor: { x: Number, y: Number },
   polygon: [{ x: Number, y: Number }],
   media: [AssetSchema],
-  sentiment: [SentimentSchema]
+  sentiment: [SentimentSchema],
+  // GXN integration fields
+  gxnItemCode: { type: String, trim: true, index: true, sparse: true }, // GXN item mastercode (e.g., MZSUOPAIB0AOXINQB)
+  gxnMasterItemCode: { type: String, trim: true } // GXN catalog master code (e.g., MAS10510)
 }, { _id: true }); // Enable unique IDs for each seat
 
 /**
@@ -83,6 +86,28 @@ const LocationSchema = new mongoose.Schema({
   score: { type: Number, min: 0, max: 5, default: 0 },
   tags: [{ type: String, trim: true }],
   status: { type: String, enum: ['draft','active','archived'], default: 'active' },
+  // GXN integration field
+  gxnVenueCode: { type: String, trim: true, index: true, sparse: true }, // GXN venue code (e.g., VEN505115)
+  // GXN venue metadata
+  timezone: { type: String, trim: true }, // Venue timezone (e.g., "America/Los_Angeles")
+  tagline: { type: String, trim: true }, // Short marketing tagline
+  directions: { type: String, trim: true }, // Directions/instructions text
+  menu: { type: String, trim: true }, // Menu URL
+  socials: [{
+    linktype: { type: String, trim: true }, // e.g., "Facebook", "Twitter", "Instagram"
+    url: { type: String, trim: true }, // Social media URL
+    linktypecode: { type: String, trim: true } // GXN link type code (optional, for reference)
+  }],
+  operatingHours: {
+    weekstring: { type: String, trim: true }, // Human-readable summary
+    weekdays: [{
+      weekday: { type: Number, min: 1, max: 7 }, // 1-7 (Mon-Sun)
+      openTime: { type: String, trim: true }, // "08:00" format
+      closeTime: { type: String, trim: true }, // "20:00" format
+      timestring: { type: String, trim: true } // "From 8:00am to 8:00pm"
+    }]
+  },
+  seasons: { type: mongoose.Schema.Types.Mixed }, // Operating seasons configuration (stored as-is from GXN)
   contact: {
     name: { type: String, trim: true },
     phone: { type: String, trim: true },
@@ -118,6 +143,7 @@ const LocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 LocationSchema.index({ name: 'text', description: 'text', 'address.city': 1, 'address.country': 1 });
+LocationSchema.index({ gxnVenueCode: 1 }); // Index for GXN venue code lookups
 
 module.exports = mongoose.model('Location', LocationSchema);
 

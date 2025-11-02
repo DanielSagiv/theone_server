@@ -94,6 +94,7 @@ const testRoutes = require('./routes/test');
 const paymentRoutes = require('./routes/payments');
 const webhookRoutes = require('./routes/webhooks');
 const subscriptionRoutes = require('./routes/subscriptions');
+const gxnRoutes = require('./routes/gxn');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -103,6 +104,7 @@ app.use('/v1/events', eventRoutes);
 app.use('/v1/coes', coeRoutes);
 app.use('/v1/payments', paymentRoutes);
 app.use('/v1/subscriptions', subscriptionRoutes);
+app.use('/v1/gxn', gxnRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // Landing page route (password protection)

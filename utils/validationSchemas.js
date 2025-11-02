@@ -28,7 +28,9 @@ const seatSchema = Joi.object({
   mapAnchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
   polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
   media: Joi.array().items(assetSchema),
-  sentiment: Joi.array().items(sentimentSchema)
+  sentiment: Joi.array().items(sentimentSchema),
+  gxnItemCode: Joi.string().allow('').optional(),
+  gxnMasterItemCode: Joi.string().allow('').optional()
 });
 
 const unitSchema = Joi.object({
@@ -64,6 +66,26 @@ const createLocationSchema = Joi.object({
   score: Joi.number().min(0).max(5).optional(),
   tags: Joi.array().items(Joi.string()).optional(),
   status: Joi.string().valid('draft','active','archived').optional(),
+  gxnVenueCode: Joi.string().allow('').optional(),
+  timezone: Joi.string().allow('').optional(),
+  tagline: Joi.string().allow('').optional(),
+  directions: Joi.string().allow('').optional(),
+  menu: Joi.string().uri().allow('').optional(),
+  socials: Joi.array().items(Joi.object({
+    linktype: Joi.string().allow('').optional(),
+    url: Joi.string().uri().allow('').optional(),
+    linktypecode: Joi.string().allow('').optional()
+  })).optional(),
+  operatingHours: Joi.object({
+    weekstring: Joi.string().allow('').optional(),
+    weekdays: Joi.array().items(Joi.object({
+      weekday: Joi.number().min(1).max(7).optional(),
+      openTime: Joi.string().allow('').optional(),
+      closeTime: Joi.string().allow('').optional(),
+      timestring: Joi.string().allow('').optional()
+    })).optional()
+  }).optional(),
+  seasons: Joi.any().optional(), // Mixed type, stored as-is
   contact: Joi.object({
     name: Joi.string().allow('').optional(),
     phone: Joi.string().allow('').optional(),

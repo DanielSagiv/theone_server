@@ -1972,6 +1972,7 @@
                             </div>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="testLocationModal()">Test Modal</button>
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importGXNVenues()">Import from GXN</button>
                                 <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateLocation()">Create Location</button>
                             </div>
                         </div>
@@ -4904,6 +4905,70 @@
             } catch (err) {
                 console.error('Load locations error:', err);
                 tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#e74c3c;">Error loading locations</td></tr>';
+            }
+        }
+
+        /**
+         * Import venues from GXN JSON file
+         */
+        async function importGXNVenues() {
+            if (!confirm('Import all venues from gxn_res.json? This will create new Location records with seats/tables from GXN data.')) {
+                return;
+            }
+            
+            try {
+                showAlert('Starting venue import from GXN...', 'info');
+                
+                const response = await makeApiRequest('/gxn/import/venues', 'POST', {});
+                
+                if (response.success) {
+                    const summary = response.summary || {};
+                    showAlert(`Import complete! ${summary.imported || 0} venues imported, ${summary.failed || 0} failed, ${summary.skipped || 0} skipped.`, 'success');
+                    
+                    // Display detailed results
+                    let resultsHtml = `<h4 style="margin:12px 0 8px;">Import Results</h4>`;
+                    resultsHtml += `<p><strong>Total processed:</strong> ${summary.total || 0}</p>`;
+                    resultsHtml += `<p style="color:green;"><strong>Imported:</strong> ${summary.imported || 0}</p>`;
+                    resultsHtml += `<p style="color:red;"><strong>Failed:</strong> ${summary.failed || 0}</p>`;
+                    resultsHtml += `<p style="color:orange;"><strong>Skipped:</strong> ${summary.skipped || 0}</p>`;
+                    
+                    if (response.data?.success?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;">Successfully Imported:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.success.forEach(item => {
+                            resultsHtml += `<li>${item.name} (${item.venueCode}) - ${item.seatsCreated || 0} seats - <a href="#" onclick="viewLocationDetails('${item.locationId}'); return false;">View</a></li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    if (response.data?.failed?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;color:red;">Failed:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.failed.forEach(item => {
+                            resultsHtml += `<li>${item.venueCode}: ${item.error}</li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    if (response.data?.skipped?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;color:orange;">Skipped:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.skipped.forEach(item => {
+                            resultsHtml += `<li>${item.venueCode}: ${item.reason}${item.locationId ? ' (existing: ' + item.locationId + ')' : ''}</li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    // Show in modal or alert
+                    alert(resultsHtml.replace(/<[^>]*>/g, '')); // Simple alert for now
+                    
+                    // Reload locations table
+                    await loadLocations();
+                    
+                } else {
+                    showAlert('Import failed: ' + (response.error?.message || 'Unknown error'), 'error');
+                }
+                
+            } catch (error) {
+                console.error('Import error:', error);
+                showAlert('Import error: ' + error.message, 'error');
             }
         }
 
