@@ -678,4 +678,414 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /v1/coes/:id/payments/full
+ * Process full payment for COE
+ * @access Authenticated users (COE client only)
+ */
+router.post('/:id/payments/full', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { token_id } = req.body;
+    const userId = req.user.id;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    if (!token_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment token is required'
+      });
+    }
+
+    // Find COE and verify user access
+    const coe = await COE.findOne({
+      _id: id,
+      $or: [
+        { client_id: userId },
+        { admin_id: userId }
+      ]
+    });
+
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found or access denied'
+      });
+    }
+
+    // Check if already paid
+    if (coe.payment_status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'COE is already paid'
+      });
+    }
+
+    // Process payment using existing payment service
+    const paymentService = require('../services/paymentService');
+    const payment = await paymentService.chargeSavedCard(
+      userId,
+      token_id,
+      coe.total,
+      `COE Payment - ${coe.name}`,
+      id
+    );
+
+    // Update COE payment status
+    coe.payment_status = 'paid';
+    coe.payment_id = payment._id;
+    coe.payment_date = new Date();
+    coe.payment_amount = coe.total;
+    await coe.save();
+
+    res.json({
+      success: true,
+      message: 'COE payment processed successfully',
+      data: {
+        payment_id: payment._id,
+        amount: coe.total,
+        status: 'paid'
+      }
+    });
+  } catch (error) {
+    console.error('Error processing COE payment:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process COE payment'
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/:id/payments/status
+ * Get COE payment status
+ * @access Authenticated users (COE client only)
+ */
+router.get('/:id/payments/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    // Find COE and verify user access
+    const coe = await COE.findOne({
+      _id: id,
+      $or: [
+        { client_id: userId },
+        { admin_id: userId }
+      ]
+    });
+
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found or access denied'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        payment_status: coe.payment_status,
+        total_amount: coe.total,
+        payment_date: coe.payment_date,
+        payment_amount: coe.payment_amount
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching COE payment status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch payment status'
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:id/payments/refund
+ * Process COE refund (admin only)
+ * @access Admin only
+ */
+router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { refund_amount, reason } = req.body;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    if (!refund_amount || refund_amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Refund amount must be greater than zero'
+      });
+    }
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Refund reason is required'
+      });
+    }
+
+    // Find COE
+    const coe = await COE.findById(id);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Check if COE is paid
+    if (coe.payment_status !== 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'Only paid COEs can be refunded'
+      });
+    }
+
+    // Check refund amount limits
+    const maxRefundAmount = coe.payment_amount || coe.total;
+    const totalRefunded = coe.refund_amount || 0;
+    const remainingRefundable = maxRefundAmount - totalRefunded;
+
+    if (refund_amount > remainingRefundable) {
+      return res.status(400).json({
+        success: false,
+        error: `Refund amount cannot exceed $${remainingRefundable.toLocaleString()}`
+      });
+    }
+
+    // Process refund using existing payment service
+    const paymentService = require('../services/paymentService');
+    const refundPayment = await paymentService.processRefund(
+      coe.payment_id,
+      refund_amount,
+      `COE Refund - ${coe.name}`,
+      reason
+    );
+
+    // Update COE refund status
+    const newTotalRefunded = totalRefunded + refund_amount;
+    coe.refund_amount = newTotalRefunded;
+    coe.refund_date = new Date();
+    coe.refund_reason = reason;
+    coe.refund_payment_id = refundPayment._id;
+
+    if (newTotalRefunded >= maxRefundAmount) {
+      coe.refund_status = 'full';
+      coe.payment_status = 'unpaid'; // Revert to unpaid for full refund
+    } else {
+      coe.refund_status = 'partial';
+      // Keep payment_status as 'paid' for partial refund
+    }
+
+    await coe.save();
+
+    res.json({
+      success: true,
+      message: 'Refund processed successfully',
+      data: {
+        refund_id: refundPayment._id,
+        refund_amount: refund_amount,
+        total_refunded: newTotalRefunded,
+        refund_status: coe.refund_status,
+        payment_status: coe.payment_status
+      }
+    });
+  } catch (error) {
+    console.error('Error processing COE refund:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process refund'
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/:id/payments/refund-status
+ * Get COE refund status (admin only)
+ * @access Admin only
+ */
+router.get('/:id/payments/refund-status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    // Find COE
+    const coe = await COE.findById(id);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    const maxRefundAmount = coe.payment_amount || coe.total;
+    const remainingRefundable = maxRefundAmount - (coe.refund_amount || 0);
+
+    res.json({
+      success: true,
+      data: {
+        payment_status: coe.payment_status,
+        refund_status: coe.refund_status,
+        original_amount: maxRefundAmount,
+        total_refunded: coe.refund_amount || 0,
+        remaining_refundable: remainingRefundable,
+        refund_date: coe.refund_date,
+        refund_reason: coe.refund_reason
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching COE refund status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch refund status'
+    });
+  }
+});
+
+/**
+ * PUT /v1/coes/:id/covered-amount
+ * Update COE covered amount by THE1 (admin only)
+ * @access Admin only
+ */
+router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount } = req.body;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    if (typeof amount !== 'number' || amount < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid amount is required'
+      });
+    }
+
+    const coe = await COE.findById(id);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Validate amount doesn't exceed total
+    if (amount > coe.total) {
+      return res.status(400).json({
+        success: false,
+        error: `Covered amount cannot exceed COE total of $${coe.total.toLocaleString()}`
+      });
+    }
+
+    // Update covered amount
+    coe.covered_by_t1.amount = amount;
+    coe.covered_by_t1.date = new Date();
+    coe.covered_by_t1.updated_by = req.user.id;
+
+    await coe.save();
+
+    res.json({
+      success: true,
+      message: 'COE covered amount updated successfully',
+      data: {
+        coe_id: coe._id,
+        covered_amount: amount,
+        total: coe.total,
+        coverage_percentage: ((amount / coe.total) * 100).toFixed(2),
+        updated_at: coe.covered_by_t1.date,
+        updated_by: req.user.id
+      }
+    });
+  } catch (error) {
+    console.error('Error updating COE covered amount:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update COE covered amount'
+    });
+  }
+});
+
+/**
+ * PUT /v1/coes/:id/covered-all
+ * Set COE as fully covered by THE1 (admin only)
+ * @access Admin only
+ */
+router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid COE ID format'
+      });
+    }
+
+    const coe = await COE.findById(id);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Set covered amount to total
+    coe.covered_by_t1.amount = coe.total;
+    coe.covered_by_t1.date = new Date();
+    coe.covered_by_t1.updated_by = req.user.id;
+
+    await coe.save();
+
+    res.json({
+      success: true,
+      message: 'COE set as fully covered by THE1',
+      data: {
+        coe_id: coe._id,
+        covered_amount: coe.total,
+        total: coe.total,
+        coverage_percentage: 100,
+        updated_at: coe.covered_by_t1.date,
+        updated_by: req.user.id
+      }
+    });
+  } catch (error) {
+    console.error('Error setting COE as fully covered:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to set COE as fully covered'
+    });
+  }
+});
+
 module.exports = router;

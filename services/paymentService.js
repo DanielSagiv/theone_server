@@ -290,12 +290,12 @@ async function processRefund(paymentId, amount = null, reason = '') {
             coe.deposit_paid = 0;
             coe.deposit_paid_at = null;
           } else {
-            coe.payment_status = 'refunded';
+            coe.payment_status = 'unpaid'; // Revert to unpaid for full refund
           }
           coe.refunded_at = new Date();
         } else {
-          // Partial refund
-          coe.payment_status = 'partially_paid';
+          // Partial refund - keep payment_status as 'paid'
+          coe.payment_status = 'paid';
         }
         
         await coe.save();
@@ -440,29 +440,29 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       
       // Check if also fully paid (can happen with full_payment)
       if (totalPaid >= coe.total) {
-        coe.payment_status = 'fully_paid';
+        coe.payment_status = 'paid';
         coe.status = 'accepted'; // Auto-accept on full payment
       }
     } else if (completedPayment.payment_type === 'final_payment') {
       if (totalPaid >= coe.total) {
-        coe.payment_status = 'fully_paid';
+        coe.payment_status = 'paid';
         coe.status = 'accepted'; // Auto-accept on full payment
         coe.final_paid_at = new Date();
         coe.final_payment_id = completedPayment._id;
       } else {
-        coe.payment_status = 'partially_paid';
+        coe.payment_status = 'unpaid';
       }
     } else if (completedPayment.payment_type === 'full_payment') {
-      coe.payment_status = 'fully_paid';
+      coe.payment_status = 'paid';
       coe.status = 'accepted'; // Auto-accept on full payment
       coe.deposit_paid = completedPayment.amount;
       coe.deposit_paid_at = new Date();
       coe.deposit_payment_id = completedPayment._id;
     } else if (totalPaid >= coe.total) {
-      coe.payment_status = 'fully_paid';
+      coe.payment_status = 'paid';
       coe.status = 'accepted'; // Auto-accept on full payment
     } else {
-      coe.payment_status = 'partially_paid';
+      coe.payment_status = 'unpaid';
     }
     
     await coe.save();

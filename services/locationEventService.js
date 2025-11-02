@@ -38,10 +38,10 @@ async function inheritSeatsFromLocation(locationId, eventData) {
         category: seat.category,
         section: seat.section,
         capacity: seat.capacity,
-        min_spend: seat.minSpendUSD,
+        min_spend: seat.minSpendUSD, // Location base price
         price_tier: seat.priceTier,
-        event_price: eventData.base_price * 1.5, // Default 1.5x base price
-        event_min_spend: seat.minSpendUSD * 1.2, // Default 1.2x min spend
+        event_price: seat.minSpendUSD, // Use location base price as initial event price
+        event_min_spend: seat.minSpendUSD, // Use location base price as initial min spend
         status: 'available',
         map_anchor: seat.mapAnchor,
         polygon: seat.polygon,
@@ -68,8 +68,8 @@ async function inheritSeatsFromLocation(locationId, eventData) {
         view: unit.view,
         smoking: unit.smoking,
         floor: unit.floor,
-        min_price: unit.minPriceUSD,
-        event_price: eventData.base_price * 1.5,
+        min_price: unit.minPriceUSD, // Location base price
+        event_price: unit.minPriceUSD, // Use location base price as initial event price
         status: 'available',
         media: []
       };

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 28px; margin: 0 0 16px; color: #f8fafc; }
+        .subtitle { color: #94a3b8; margin-bottom: 16px; }
+        .card { background: #0b1220; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+        .kv { display: grid; grid-template-columns: 200px 1fr; gap: 8px 12px; }
+        .k { color: #93c5fd; }
+        .v { color: #e2e8f0; word-break: break-word; }
+        .pill { display:inline-block; padding:6px 10px; border:1px solid #1e293b; border-radius:999px; margin:2px 6px 2px 0; background:#0f172a; color:#e2e8f0; }
+        .table-wrap { overflow:auto; border:1px solid #1e293b; border-radius:8px; }
+        table { width:100%; border-collapse: collapse; min-width: 1000px; }
+        th, td { padding: 8px 10px; border-bottom: 1px solid #1e293b; text-align: left; }
+        th { background:#0f172a; color:#a3e635; }
+        .muted { color:#94a3b8; }
+        .error { background:#7f1d1d; border:1px solid #b91c1c; color:#fde68a; padding:10px; border-radius:8px; margin-bottom:12px; }
+        .json { background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:12px; white-space:pre; overflow:auto; }
+    </style>
+    <script>
+        let __GXN_FULL__ = null; // keep full payload for cross-node lookups
+        async function fetchGXN() {
+            const res = await fetch('/test/gxn-res.json');
+            if (!res.ok) throw new Error('Failed to load gxn_res.json');
+            return res.json();
+        }
+
+        function kv(entries) {
+            return entries.filter(([,v]) => v !== undefined && v !== null && v !== '')
+                .map(([k,v]) => `<div class="k">${k}</div><div class="v">${String(v)}</div>`)
+                .join('');
+        }
+
+        function renderVenues(venues) {
+            const root = document.getElementById('root');
+            if (!venues || typeof venues !== 'object' || Object.keys(venues).length === 0) {
+                root.innerHTML = '<div class="muted">No venues found under data.venues</div>';
+                return;
+            }
+            const cards = [];
+            for (const [venueCode, v] of Object.entries(venues)) {
+                const info = v?.info || {};
+                const ecozones = v?.ecozones || {};
+                const images = v?.images || {};
+                const socials = v?.socials || [];
+                const seasons = v?.seasons || {};
+                const ophours = v?.currentophours || {};
+
+                // Button toolbar for all venues
+                const toolbar = `
+                    <div style="margin:10px 0 6px; display:flex; flex-wrap:wrap; gap:8px;">
+                        <button class="pill" onclick="showVenueSection('${venueCode}','schedules')">Schedules</button>
+                        <button class="pill" onclick="showVenueSection('${venueCode}','items')">Items</button>
+                        <button class="pill" onclick="showVenueSection('${venueCode}','images')">Images</button>
+                        <button class="pill" onclick="showVenueSection('${venueCode}','socials')">Socials</button>
+                        <button class="pill" onclick="showVenueSection('${venueCode}','ecozones')">Ecozones</button>
+                        <button class="pill" onclick="showVenueSection('${venueCode}','hours')">Operating Hours</button>
+                    </div>`;
+
+                // Info block
+                const infoKV = kv([
+                    ['code', info.code],
+                    ['name', info.name],
+                    ['venuetype', info.venuetype],
+                    ['marketarea', info.marketarea],
+                    ['address', info.address],
+                    ['city', info.city],
+                    ['country', info.country],
+                    ['timezone', info.timezone],
+                    ['websiteurl', info.websiteurl],
+                    ['phone', info.phone]
+                ]);
+
+                // Ecozones table
+                let ecoHtml = '';
+                if (ecozones && Object.keys(ecozones).length) {
+                    const rows = Object.entries(ecozones).map(([eco, obj]) => `
+                        <tr><td>${eco}</td><td>${obj?.name ?? ''}</td></tr>
+                    `).join('');
+                    ecoHtml = `
+                        <div class="table-wrap" style="margin-top:10px;">
+                            <table>
+                                <thead><tr><th>Ecozone</th><th>Name</th></tr></thead>
+                                <tbody>${rows}</tbody>
+                            </table>
+                        </div>`;
+                }
+
+                // Socials pills (array)
+                const socialHtml = Array.isArray(socials) && socials.length
+                    ? `<div style="margin-top:10px;">${socials.map(s => `<span class="pill">${s.linktype || s.linktypecode}: ${s.url}</span>`).join('')}</div>`
+                    : '';
+
+                // Quick meta counts
+                const meta = `
+                    <div style="margin-top:10px;">
+                        <span class="pill">Image groups: ${Object.keys(images || {}).length}</span>
+                        <span class="pill">Seasons keys: ${Object.keys(seasons || {}).length}</span>
+                        <span class="pill">OpHours keys: ${Object.keys(ophours || {}).length}</span>
+                    </div>`;
+
+                cards.push(`
+                    <div class="card">
+                        <h2 style="margin:0 0 10px; color:#a3e635;">${venueCode}</h2>
+                        ${toolbar}
+                        <div class="kv">${infoKV || '<div class="muted">No info</div>'}</div>
+                        ${ecoHtml}
+                        ${socialHtml}
+                        ${meta}
+                        <div id="panel-${venueCode}" class="section"></div>
+                    </div>
+                `);
+            }
+            root.innerHTML = cards.join('');
+        }
+
+        function showVenueSection(venueCode, section) {
+            const panel = document.getElementById(`panel-${venueCode}`);
+            if (!panel || !__GXN_FULL__) return;
+            const data = __GXN_FULL__.data || {};
+            let html = '';
+
+            if (section === 'schedules') {
+                const schedules = data.schedules || {};
+                // schedules -> dateKey -> venueCode -> ECZ* nodes
+                const rows = [];
+                const rawList = [];
+                const detailCards = [];
+                for (const [dateKey, venuesByDate] of Object.entries(schedules)) {
+                    const vmap = venuesByDate || {};
+                    const venueEntry = vmap[venueCode];
+                    if (venueEntry && typeof venueEntry === 'object') {
+                        for (const [eco, ecoObj] of Object.entries(venueEntry)) {
+                            if (!eco || typeof ecoObj !== 'object') continue;
+                            if (!eco.startsWith('ECZ') && !eco.startsWith('ecozone')) continue;
+                            const econame = ecoObj?.econame || ecoObj?.name || '';
+                            const eventObj = ecoObj?.event || {};
+                            const eventName = eventObj?.name || '';
+                            const eventCode = eventObj?.eventcode || ecoObj?.eventcode || '';
+                            const timeStr = Array.isArray(ecoObj?.weekdays) && ecoObj.weekdays[0]?.timestring ? ecoObj.weekdays[0].timestring : '';
+                            rows.push(`<tr><td>${dateKey}</td><td>${eco}</td><td>${econame}</td><td>${eventName}</td><td>${timeStr}</td></tr>`);
+                            rawList.push({ date: dateKey, ecozone: eco, data: ecoObj });
+
+                            // Build detail card with performers and featured
+                            const featured = (data.featured || {})[eventCode];
+                            const performersFromFeatured = featured?.performers ? Object.keys(featured.performers) : [];
+                            const performersMap = data.performers || {};
+                            const performersResolved = new Map();
+                            for (const perCode of performersFromFeatured) {
+                                const p = performersMap[perCode];
+                                if (p) performersResolved.set(perCode, p);
+                            }
+                            for (const [perCode, p] of Object.entries(performersMap)) {
+                                const shows = p?.shows || {};
+                                if (shows && Object.prototype.hasOwnProperty.call(shows, eventCode)) {
+                                    performersResolved.set(perCode, p);
+                                }
+                            }
+
+                            const performersHtml = performersResolved.size
+                                ? Array.from(performersResolved.entries()).map(([code, p]) => {
+                                    const name = p?.name || p?.artistname || code;
+                                    const socials = Array.isArray(p?.socials) ? p.socials.map(s => `${s.linktype || s.linktypecode}: ${s.url}`).join(' • ') : '';
+                                    return `<div style="margin:4px 0;"><span class="pill">${code}</span> ${name}${socials ? ` — <span class="muted">${socials}</span>` : ''}</div>`;
+                                }).join('')
+                                : '<div class="muted">No performers found</div>';
+
+                            const featuredHtml = featured
+                                ? `<details><summary>Featured (${eventCode})</summary><pre class="json">${JSON.stringify(featured, null, 2)}</pre></details>`
+                                : '<div class="muted">No featured block</div>';
+
+                            detailCards.push(`
+                                <div class="card" style="margin-top:8px;">
+                                    <h3 style="margin:0 0 6px; color:#f1f5f9;">${dateKey} — ${eventName || '(no name)'} <span class="pill">${eco}</span></h3>
+                                    <div class="muted" style="margin-bottom:8px;">${econame || ''} ${timeStr ? `• ${timeStr}` : ''}</div>
+                                    <div class="section"><h4 style="margin:0 0 6px; color:#a3e635;">Performers</h4>${performersHtml}</div>
+                                    <div class="section">${featuredHtml}</div>
+                                </div>
+                            `);
+                        }
+                    }
+                }
+                html = rows.length
+                    ? `<h3 style="margin:0 0 8px; color:#f1f5f9;">Schedules</h3>
+                       <div class="table-wrap"><table><thead><tr><th>Date</th><th>Ecozone</th><th>Eco Name</th><th>Event</th><th>Time</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+                       <div class="section"><h3 style="margin:12px 0 6px; color:#f1f5f9;">Event Details</h3>${detailCards.join('')}</div>
+                       <div class="section"><details><summary>Raw schedules (this venue)</summary><pre class="json">${JSON.stringify(rawList, null, 2)}</pre></details></div>`
+                    : '<div class="muted">No schedules for this venue</div>';
+            }
+
+            if (section === 'items') {
+                const items = data.items || {};
+                const rows = [];
+                const rawList = [];
+                const detailCards = [];
+                for (const [code, item] of Object.entries(items)) {
+                    if (item?.venuecode === venueCode) {
+                        rows.push(`<tr>
+                            <td class=\"monospace\" title=\"Item Code\">${code}</td>
+                            <td title=\"Item Label/Name\">${item?.label ?? item?.name ?? ''}</td>
+                            <td class=\"monospace\" title=\"Ecozone Code\">${item?.ecocode ?? ''}</td>
+                            <td class=\"monospace\" title=\"Book Type Id\">${item?.booktypeid ?? ''}</td>
+                            <td class=\"monospace\" title=\"Global Type\">${item?.globaltype ?? ''}</td>
+                        </tr>`);
+                        rawList.push({ code, ...item });
+
+                        const fields = [
+                            ['Global Type', item?.globaltype],
+                            ['Pricing Mode', item?.pricing],
+                            ['Pay Type', item?.paytype],
+                            ['List Price', item?.listprice],
+                            ['Capacity', item?.capacity],
+                            ['Stock', item?.stock],
+                            ['Total Stock', item?.totalstock],
+                            ['Location Stock', item?.locstock],
+                            ['Min Qty', item?.minqty],
+                            ['Max Qty', item?.maxqty],
+                            ['Calendar Date', item?.caldate],
+                            ['Cutoff (tstamp)', item?.cutofftstamp],
+                            ['Ecozone', item?.ecocode ?? item?.ecozone],
+                            ['Layout Code', item?.layoutcode],
+                            ['Book Type Code', item?.booktypecode],
+                            ['Book Type Name', item?.booktypename],
+                            ['Qty Label', item?.qtylabel],
+                            ['SKU', item?.sku],
+                            ['Pay Now', item?.paynow],
+                            ['Base Display', item?.basedisplay],
+                            ['Currency', item?.currency],
+                            ['Currency Symbol', item?.currency_symbol],
+                            ['Label (CTA)', item?.label],
+                            ['Disclaimer', item?.disclaimer],
+                            ['Terms Id', item?.termid],
+                            ['State', item?.state],
+                            ['Inactive', item?.inactive],
+                            ['Master Item Code', item?.masteritemcode],
+                            ['Master Item Id', item?.masteritemid],
+                            ['Master Code', item?.mastercode],
+                            ['Master Name', item?.mastername],
+                            ['Master Highlight', item?.masterhighlight],
+                            ['Highlight', item?.highlight]
+                        ].filter(([,v]) => v !== undefined && v !== null && v !== '');
+
+                        const kvHtml = fields.map(([k,v]) => `<div class=\"k\">${k}</div><div class=\"v\">${String(v)}</div>`).join('');
+                        const qtys = Array.isArray(item?.qtys) ? item.qtys.map(q => `<span class=\"pill\">${q}</span>`).join(' ') : '';
+                        const br = item?.breakdowns ? `<details><summary>Breakdowns</summary><pre class=\"json\">${JSON.stringify(item.breakdowns, null, 2)}</pre></details>` : '';
+
+                        detailCards.push(`
+                            <div class=\"card\" style=\"margin-top:8px;\">
+                                <h3 style=\"margin:0 0 6px; color:#f1f5f9;\">${item?.itemname || item?.skuname || '(Item)'} <span class=\"pill\">${code}</span></h3>
+                                <div class=\"kv\">${kvHtml}</div>
+                                ${qtys ? `<div class=\"section\"><span class=\"muted\">Allowed Quantities:</span> ${qtys}</div>` : ''}
+                                ${br}
+                            </div>
+                        `);
+                    }
+                }
+                html = rows.length
+                    ? `<h3 style=\"margin:0 0 8px; color:#f1f5f9;\">Items</h3>
+                       <div class=\"table-wrap\"><table><thead><tr><th>Item</th><th>Label</th><th>Ecozone</th><th>BookType</th><th>GlobalType</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+                       <div class=\"section\"><h3 style=\"margin:12px 0 6px; color:#f1f5f9;\">Item Details</h3>${detailCards.join('')}</div>
+                       <div class=\"section\"><details><summary>Raw items (this venue)</summary><pre class=\"json\">${JSON.stringify(rawList, null, 2)}</pre></details></div>`
+                    : (html || '<div class=\"muted\">No items for this venue</div>');
+            }
+
+            if (section === 'images') {
+                const v = (data.venues || {})[venueCode] || {};
+                const images = v.images || {};
+                const groups = Object.entries(images).map(([grp, arr]) => `<span class="pill">${grp}: ${(Array.isArray(arr)?arr.length:0)}</span>`).join(' ');
+                html = groups ? `<h3 style="margin:0 0 8px; color:#f1f5f9;">Images</h3>${groups}` : '<div class="muted">No images</div>';
+            }
+
+            if (section === 'socials') {
+                const v = (data.venues || {})[venueCode] || {};
+                const socials = v.socials || [];
+                html = socials.length ? `<h3 style="margin:0 0 8px; color:#f1f5f9;">Socials</h3>${socials.map(s => `<span class="pill">${s.linktype || s.linktypecode}: ${s.url}</span>`).join('')}` : '<div class="muted">No socials</div>';
+            }
+
+            if (section === 'ecozones') {
+                const v = (data.venues || {})[venueCode] || {};
+                const ecozones = v.ecozones || {};
+                if (Object.keys(ecozones).length) {
+                    const rows = Object.entries(ecozones).map(([eco, obj]) => `<tr><td>${eco}</td><td>${obj?.name ?? ''}</td></tr>`).join('');
+                    html = `<h3 style="margin:0 0 8px; color:#f1f5f9;">Ecozones</h3><div class="table-wrap"><table><thead><tr><th>Ecozone</th><th>Name</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+                } else {
+                    html = '<div class="muted">No ecozones</div>';
+                }
+            }
+
+            if (section === 'hours') {
+                const v = (data.venues || {})[venueCode] || {};
+                const ophours = v.currentophours || {};
+                html = Object.keys(ophours).length ? `<h3 style="margin:0 0 8px; color:#f1f5f9;">Operating Hours</h3><pre class="muted">${JSON.stringify(ophours, null, 2)}</pre>` : '<div class="muted">No operating hours</div>';
+            }
+
+            panel.innerHTML = html;
+        }
+
+        (async function init() {
+            try {
+                const json = await fetchGXN();
+                __GXN_FULL__ = json;
+                renderVenues(json?.data?.venues);
+            } catch (e) {
+                const root = document.getElementById('root');
+                root.innerHTML = `<div class="error">${e.message}</div>`;
+            }
+        })();
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>GXN Venues</h1>
+        <div class="subtitle">Rendering only data.venues from gxn_res.json</div>
+        <div id="root"></div>
+    </div>
+</body>
+</html>
+
+

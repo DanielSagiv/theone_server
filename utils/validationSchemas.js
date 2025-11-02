@@ -281,6 +281,30 @@ const createCOESchema = Joi.object({
   total: Joi.number().min(0).default(0),
   deposit_required: Joi.number().min(0).default(0),
   deposit_paid: Joi.number().min(0).default(0),
+  covered_by_t1: Joi.object({
+    amount: Joi.number().min(0).default(0),
+    date: Joi.date().default(Date.now),
+    updated_by: Joi.string().hex().length(24)
+  }).optional(),
+  pricing_breakdown: Joi.object({
+    events: Joi.array().items(Joi.object({
+      event_id: Joi.string().hex().length(24).required(),
+      event_name: Joi.string().required(),
+      event_date: Joi.date().required(),
+      tables: Joi.array().items(Joi.object({
+        table_id: Joi.string().hex().length(24).required(),
+        table_code: Joi.string().required(),
+        base_price: Joi.number().min(0).required(),
+        event_price: Joi.number().min(0).required(),
+        price_difference: Joi.number().default(0)
+      })).optional(),
+      event_subtotal: Joi.number().min(0).required()
+    })).optional(),
+    subtotal: Joi.number().min(0).default(0),
+    taxes: Joi.number().min(0).default(0),
+    fees: Joi.number().min(0).default(0),
+    total: Joi.number().min(0).default(0)
+  }).optional(),
   start_date: Joi.date().required(),
   end_date: Joi.date().required(),
   events: Joi.array().items(coeItemSchema).optional(),

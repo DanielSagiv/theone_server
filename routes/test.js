@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 
 /**
  * GET /test/login
@@ -45,6 +46,28 @@ router.get('/dashboard', (req, res) => {
     user: null,
     token: null
   });
+});
+
+/**
+ * GET /test/gxn-sample
+ * Display a static GXN inventoryinfo sample viewer (no external calls)
+ */
+// Removed deprecated gxn-sample route
+
+// Venues-only viewer
+router.get('/gxn-venues', (req, res) => {
+  res.render('test/gxn-venues', {
+    title: 'GXN Venues'
+  });
+});
+
+/**
+ * GET /test/gxn-res.json
+ * Serve static GXN sample JSON from project root
+ */
+router.get('/gxn-res.json', (req, res) => {
+  const filePath = path.resolve(process.cwd(), 'gxn_res.json');
+  res.sendFile(filePath);
 });
 
 /**

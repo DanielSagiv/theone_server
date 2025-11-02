@@ -16,6 +16,7 @@ const EventSeatSchema = new mongoose.Schema({
   // Event-specific pricing and status
   event_price: { type: Number, min: 0 }, // Event-specific pricing
   event_min_spend: { type: Number, min: 0 }, // Event-specific minimum spend
+  price_change_reason: { type: String, default: '' }, // Why price was changed
   status: { 
     type: String, 
     enum: ['available', 'held', 'booked', 'blocked'], 
@@ -117,6 +118,7 @@ const EventSchema = new mongoose.Schema({
   base_price: { type: Number, min: 0, required: true },
   currency: { type: String, default: 'USD', index: true },
   price_tier: { type: Number, min: 1, max: 5, default: 1 },
+  
   
   // Event Status
   status: { 

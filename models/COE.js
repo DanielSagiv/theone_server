@@ -152,29 +152,107 @@ const coeSchema = new mongoose.Schema({
   deposit_required: { type: Number, min: 0, default: 0 },
   deposit_paid: { type: Number, min: 0, default: 0 },
   
-  // Payment Information (Phase 1: Global Payments Integration)
+  // THE1 Organization Coverage
+  covered_by_t1: {
+    amount: { type: Number, min: 0, default: 0 },
+    date: { type: Date, default: Date.now },
+    updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  },
+  
+  // Detailed pricing breakdown (event-specific pricing)
+  pricing_breakdown: {
+    events: [{
+      event_id: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Event', 
+        required: true 
+      },
+      event_name: { 
+        type: String, 
+        required: true 
+      },
+      event_date: { 
+        type: Date, 
+        required: true 
+      },
+      tables: [{
+        table_id: { 
+          type: mongoose.Schema.Types.ObjectId, 
+          ref: 'Table', 
+          required: true 
+        },
+        table_code: { 
+          type: String, 
+          required: true 
+        },
+        base_price: { 
+          type: Number, 
+          min: 0, 
+          required: true 
+        },
+        event_price: { 
+          type: Number, 
+          min: 0, 
+          required: true 
+        },
+        price_difference: { 
+          type: Number, 
+          default: 0 
+        } // event_price - base_price
+      }],
+      event_subtotal: { 
+        type: Number, 
+        min: 0, 
+        required: true 
+      }
+    }],
+    
+    // Overall totals
+    subtotal: { type: Number, min: 0, default: 0 },
+    taxes: { type: Number, min: 0, default: 0 },
+    fees: { type: Number, min: 0, default: 0 },
+    total: { type: Number, min: 0, default: 0 }
+  },
+  
+  // Pricing history for unpaid COEs (admin actions only)
+  pricing_history: [{
+    changed_at: { 
+      type: Date, 
+      default: Date.now 
+    },
+    previous_total: { 
+      type: Number, 
+      required: true 
+    },
+    new_total: { 
+      type: Number, 
+      required: true 
+    },
+    change_reason: { 
+      type: String, 
+      required: true 
+    },
+    changed_by: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'User', 
+      required: true 
+    } // Always admin
+  }],
+  
+  // Payment Information (Full Payment Only)
   payment_status: {
     type: String,
-    enum: ['unpaid', 'deposit_paid', 'partially_paid', 'fully_paid', 'refunded'],
+    enum: ['unpaid', 'paid'],
     default: 'unpaid',
     index: true
   },
-  deposit_amount: Number,
-  deposit_percent: {
-    type: Number,
-    default: 20
-  },
-  deposit_paid_at: Date,
-  deposit_payment_id: {
+  // Full Payment Fields
+  payment_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Payment'
   },
-  final_amount: Number,
-  final_paid_at: Date,
-  final_payment_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Payment'
-  },
+  payment_date: Date,
+  payment_amount: Number,
   total_paid: {
     type: Number,
     default: 0
@@ -184,11 +262,24 @@ const coeSchema = new mongoose.Schema({
     type: String,
     default: '20% deposit required, balance due 48 hours before event'
   },
+  // Refund Information
+  refund_status: {
+    type: String,
+    enum: ['none', 'partial', 'full'],
+    default: 'none',
+    index: true
+  },
   refund_amount: {
     type: Number,
     default: 0
   },
-  refunded_at: Date,
+  refund_date: Date,
+  refund_reason: String,
+  refund_payment_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Payment'
+  },
+  refunded_at: Date, // Keep for backward compatibility
   
   // Timeline
   request_date: { type: Date, default: Date.now },

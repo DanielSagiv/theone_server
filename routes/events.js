@@ -220,10 +220,10 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       category: seat.category,
       section: seat.section,
       capacity: seat.capacity,
-      min_spend: seat.minSpendUSD,
+      min_spend: seat.minSpendUSD, // Location base price
       price_tier: seat.priceTier,
-      event_price: value.base_price * 1.5, // Default 1.5x base price
-      event_min_spend: seat.minSpendUSD * 1.2, // Default 1.2x min spend
+      event_price: seat.minSpendUSD, // Use location base price as initial event price
+      event_min_spend: seat.minSpendUSD, // Use location base price as initial min spend
       status: 'available',
       map_anchor: seat.mapAnchor,
       polygon: seat.polygon,
@@ -239,8 +239,8 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       view: unit.view,
       smoking: unit.smoking,
       floor: unit.floor,
-      min_price: unit.minPriceUSD,
-      event_price: value.base_price * 1.5,
+      min_price: unit.minPriceUSD, // Location base price
+      event_price: unit.minPriceUSD, // Use location base price as initial event price
       status: 'available',
       media: []
     }));
@@ -938,6 +938,130 @@ router.put('/seats/bulk-status', authenticateToken, requireAdmin, async (req, re
     res.status(500).json({
       success: false,
       error: { message: 'Internal server error' }
+    });
+  }
+});
+
+/**
+ * GET /v1/events/:id/pricing
+ * Get event seat pricing (admin only)
+ * @access Admin only
+ */
+router.get('/:id/pricing', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid event ID format'
+      });
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Return seat pricing data
+    const seatPricing = event.seats.map(seat => ({
+      seat_id: seat.seat_id,
+      code: seat.code,
+      category: seat.category,
+      capacity: seat.capacity,
+      base_price: seat.min_spend, // Location base price
+      event_price: seat.event_price, // Event-specific price
+      price_change_reason: seat.price_change_reason || '',
+      status: seat.status
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        event_id: event._id,
+        event_name: event.name,
+        seat_pricing: seatPricing
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching event pricing:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch event pricing'
+    });
+  }
+});
+
+/**
+ * PUT /v1/events/:id/pricing/:seatCode
+ * Update a specific seat's price for an event (admin only)
+ * @access Admin only
+ */
+router.put('/:id/pricing/:seatCode', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id, seatCode } = req.params;
+    const { event_price, price_change_reason } = req.body;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid event ID format'
+      });
+    }
+
+    if (!event_price || typeof event_price !== 'number' || event_price < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid event_price is required'
+      });
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Find the seat by code
+    const seat = event.seats.find(s => s.code === seatCode);
+    if (!seat) {
+      return res.status(404).json({
+        success: false,
+        error: 'Seat not found in event'
+      });
+    }
+
+    // Store previous price for history
+    const previousPrice = seat.event_price;
+
+    // Update the seat price
+    seat.event_price = event_price;
+    seat.price_change_reason = price_change_reason || '';
+
+    await event.save();
+
+    res.json({
+      success: true,
+      message: 'Seat price updated successfully',
+      data: {
+        event_id: event._id,
+        seat_code: seatCode,
+        base_price: seat.min_spend,
+        previous_price: previousPrice,
+        new_price: event_price,
+        price_change_reason: price_change_reason || ''
+      }
+    });
+  } catch (error) {
+    console.error('Error updating seat price:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update seat price'
     });
   }
 });
