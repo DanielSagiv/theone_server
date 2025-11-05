@@ -2009,11 +2009,15 @@
                     <div class="card">
                         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
                             <div>
-                                <h3 style="margin:0;">Events</h3>
+                                <h3 style="margin:0;display:flex;align-items:center;gap:8px;">
+                                    <span>Events</span>
+                                    <small id="eventsHeaderTotal" style="color:#666;font-weight:500;"></small>
+                                </h3>
                                 <small>All events (admin)</small>
                     </div>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshEvents()">Refresh</button>
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importGXNEvents()">Import from GXN</button>
                                 <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateEvent()">Create Event</button>
                             </div>
                         </div>
@@ -2063,6 +2067,24 @@
                                         <tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No data loaded</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                            <!-- Events Pagination -->
+                            <div id="eventsPagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
+                                <div>
+                                    <label for="eventsPageSize" style="margin-right:8px;color:#666;">Page size</label>
+                                    <select id="eventsPageSize" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;" onchange="changeEventsPageSize(this.value)">
+                                        <option value="10">10</option>
+                                        <option value="20" selected>20</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex;gap:8px;align-items:center;">
+                                    <button class="btn btn-secondary" id="eventsPrevBtn" onclick="prevEventsPage()" disabled>Previous</button>
+                                    <span id="eventsPageInfo" style="color:#666;min-width:140px;text-align:center;">Page 1 of 1</span>
+                                    <button class="btn btn-secondary" id="eventsNextBtn" onclick="nextEventsPage()" disabled>Next</button>
+                                </div>
+                                <div id="eventsTotalInfo" style="color:#666;">0 total</div>
                             </div>
                         </div>
                     </div>
@@ -4382,11 +4404,13 @@
                     return;
                 }
 
-                currentEditLocation = result.data;
+                // Extract location data (handle nested response structure)
+                const locationData = result.data?.data || result.data;
+                currentEditLocation = locationData;
                 el_currentStep = 1;
                 
                 // Populate form with current data
-                populateEditForm(currentEditLocation);
+                populateEditForm(locationData);
                 
                 // Show modal
                 document.getElementById('editLocationModal').style.display = 'flex';
@@ -4679,6 +4703,20 @@
             
             if (Object.keys(attributes).length > 0) {
                 payload.attributes = attributes;
+            }
+            
+            // Preserve existing arrays (seats, media, units) from original location data
+            // This ensures they are not lost when updating other fields
+            if (currentEditLocation) {
+                if (currentEditLocation.seats && Array.isArray(currentEditLocation.seats)) {
+                    payload.seats = currentEditLocation.seats;
+                }
+                if (currentEditLocation.media && Array.isArray(currentEditLocation.media)) {
+                    payload.media = currentEditLocation.media;
+                }
+                if (currentEditLocation.units && Array.isArray(currentEditLocation.units)) {
+                    payload.units = currentEditLocation.units;
+                }
             }
             
             return payload;
@@ -4975,7 +5013,9 @@
         function openCreateLocation() {
             document.getElementById('createLocationModal').style.display = 'flex';
             // reset form
-            cl_isEditMode = false; cl_editLocationId = null;
+            cl_isEditMode = false; 
+            cl_editLocationId = null;
+            cl_originalLocationData = null;
             document.querySelector('#createLocationModal .modal-header h2').textContent = 'Create Location';
             document.getElementById('cl_name').value = '';
             document.getElementById('cl_type').value = 'night_club';
@@ -5009,6 +5049,7 @@
             // Reset edit mode when closing
             cl_isEditMode = false;
             cl_editLocationId = null;
+            cl_originalLocationData = null;
             console.log('After reset - Edit mode flags:', { cl_isEditMode, cl_editLocationId });
             // Reset modal title
             document.querySelector('#createLocationModal .modal-header h2').textContent = 'Create Location';
@@ -5018,6 +5059,7 @@
         // ----- Edit using Create Modal (Edit Mode) -----
         let cl_isEditMode = false;
         let cl_editLocationId = null;
+        let cl_originalLocationData = null; // Store original location data for preserving arrays
 
         async function openEditLocationFromList(locationId) {
             console.log('openEditLocationFromList called with locationId:', locationId);
@@ -5037,6 +5079,7 @@
                 console.log('Setting edit mode flags:', { locationId, loc });
                 cl_isEditMode = true;
                 cl_editLocationId = locationId;
+                cl_originalLocationData = loc; // Store original data for preserving arrays
                 console.log('Edit mode flags set:', { cl_isEditMode, cl_editLocationId });
                 // Visual confirmation
                 showAlert('Edit mode activated for: ' + loc.name, 'success');
@@ -5074,15 +5117,43 @@
                     document.getElementById('cl_checkin').value = loc.attributes?.checkInTime || '';
                     document.getElementById('cl_checkout').value = loc.attributes?.checkOutTime || '';
                 }
+                
+                // Populate existing general media
+                document.getElementById('cl_media_list').innerHTML = '';
+                if (loc.media && Array.isArray(loc.media)) {
+                    loc.media.forEach(mediaItem => {
+                        addGeneralMediaRow();
+                        const lastRow = document.querySelector('#cl_media_list .cl_media_row:last-child');
+                        if (lastRow) {
+                            lastRow.querySelector('.cl_media_type').value = mediaItem.type || 'image';
+                            lastRow.querySelector('.cl_media_url').value = mediaItem.url || '';
+                            lastRow.querySelector('.cl_media_caption').value = mediaItem.caption || '';
+                        }
+                    });
+                }
+                
                 // Inventory: clear and populate
                 document.getElementById('cl_seats_tbody').innerHTML = '';
                 (loc.seats || []).forEach(seat => {
                     addSeatRow();
                     const row = document.querySelector('#cl_seats_tbody tr:last-child');
-                    row.querySelector('.cl_seat_code').value = seat.code || '';
-                    row.querySelector('.cl_seat_category').value = seat.category || '';
-                    row.querySelector('.cl_seat_capacity').value = seat.capacity || '';
-                    row.querySelector('.cl_seat_min').value = seat.minSpendUSD || '';
+                    if (row) {
+                        row.querySelector('.cl_seat_code').value = seat.code || '';
+                        const categorySelect = row.querySelector('.cl_seat_cat');
+                        if (categorySelect && seat.category) {
+                            categorySelect.value = seat.category;
+                        }
+                        const capacityInput = row.querySelector('.cl_seat_cap');
+                        if (capacityInput) {
+                            capacityInput.value = seat.capacity || '';
+                        }
+                        const minInput = row.querySelector('.cl_seat_min');
+                        if (minInput) {
+                            minInput.value = seat.minSpendUSD || '';
+                        }
+                        // Note: Seat media can be added separately through the seat row interface
+                        // If seat has existing media, it should be preserved in the merge logic
+                    }
                 });
                 document.getElementById('cl_units_tbody').innerHTML = '';
                 (loc.units || []).forEach(unit => {
@@ -5134,7 +5205,9 @@
                         showAlert('Location updated successfully', 'success');
                         loadLocations();
                     } else {
-                        showAlert(result.error?.message || 'Failed to update location', 'error');
+                        const errorMsg = result.data?.error?.message || result.data?.message || result.error?.message || 'Failed to update location';
+                        console.error('Update location error:', result);
+                        showAlert('Failed to update location: ' + errorMsg, 'error');
                     }
                 } else {
                     console.log('❌ CREATE MODE DETECTED - Creating new location');
@@ -5394,6 +5467,13 @@
             document.getElementById('cl_step4').style.display = step === 4 ? 'block' : 'none';
             document.getElementById('cl_next_btn').style.display = step < 4 ? 'inline-block' : 'none';
             document.getElementById('cl_create_btn').style.display = step === 4 ? 'inline-block' : 'none';
+            
+            // Update button text based on edit mode
+            const createBtn = document.getElementById('cl_create_btn');
+            if (createBtn && step === 4) {
+                createBtn.textContent = cl_isEditMode ? 'Update Location' : 'Create Location';
+            }
+            
             console.log('Create button display:', document.getElementById('cl_create_btn').style.display);
             // badges
             document.getElementById('cl_step1_badge').style.opacity = step >= 1 ? '1' : '.6';
@@ -5607,7 +5687,7 @@
             if (country) address.country = country;
             if (Object.keys(address).length > 0) payload.address = address;
             
-            // General media
+            // General media - include all from form
             const gmRows = Array.from(document.querySelectorAll('.cl_media_row'));
             const generalMedia = gmRows.map(r => {
                 const url = r.querySelector('.cl_media_url').value.trim();
@@ -5618,7 +5698,18 @@
                     caption: r.querySelector('.cl_media_caption').value.trim() || undefined
                 };
             }).filter(m => m !== null);
-            if (generalMedia.length > 0) payload.media = generalMedia;
+            // In edit mode, preserve existing media if form is empty, otherwise use form data
+            if (cl_isEditMode && cl_originalLocationData) {
+                // If form has media, use it (includes both old and new)
+                // If form is empty but original had media, preserve original
+                if (generalMedia.length > 0) {
+                    payload.media = generalMedia;
+                } else if (cl_originalLocationData.media && Array.isArray(cl_originalLocationData.media) && cl_originalLocationData.media.length > 0) {
+                    payload.media = cl_originalLocationData.media;
+                }
+            } else if (generalMedia.length > 0) {
+                payload.media = generalMedia;
+            }
             
             if (type === 'night_club' || type === 'day_club') {
                 const attributes = {};
@@ -5634,7 +5725,7 @@
                 
                 // Seats
                 const rows = Array.from(document.querySelectorAll('#cl_seats_tbody tr'));
-                const seats = rows.map(r => {
+                const formSeats = rows.map(r => {
                     const code = r.querySelector('.cl_seat_code').value.trim();
                     if (!code) return null;
                     const seat = {
@@ -5657,7 +5748,63 @@
                     if (media.length > 0) seat.media = media;
                     return seat;
                 }).filter(s => s !== null);
-                if (seats.length > 0) payload.seats = seats;
+                
+                // In edit mode, merge form data with existing seat properties
+                if (cl_isEditMode && cl_originalLocationData && cl_originalLocationData.seats) {
+                    const originalSeats = cl_originalLocationData.seats;
+                    const seatsMap = new Map();
+                    
+                    // First, add all original seats to map (preserves seats not in form)
+                    originalSeats.forEach(originalSeat => {
+                        // Create a clean copy - don't include _id as Mongoose will match by position/array index
+                        const cleanSeat = {
+                            code: originalSeat.code || '',
+                            label: originalSeat.label || '',
+                            category: originalSeat.category || '',
+                            section: originalSeat.section || '',
+                            capacity: originalSeat.capacity || 0,
+                            minSpendUSD: originalSeat.minSpendUSD || 0,
+                            priceTier: originalSeat.priceTier || 1,
+                            mapAnchor: originalSeat.mapAnchor || undefined,
+                            polygon: originalSeat.polygon || [],
+                            media: originalSeat.media || [],
+                            sentiment: originalSeat.sentiment || [],
+                            gxnItemCode: originalSeat.gxnItemCode || '',
+                            gxnMasterItemCode: originalSeat.gxnMasterItemCode || ''
+                        };
+                        // Remove undefined values to avoid validation issues
+                        Object.keys(cleanSeat).forEach(key => {
+                            if (cleanSeat[key] === undefined || cleanSeat[key] === null) {
+                                delete cleanSeat[key];
+                            }
+                        });
+                        seatsMap.set(originalSeat.code, cleanSeat);
+                    });
+                    
+                    // Then, merge form seats with original data
+                    formSeats.forEach(formSeat => {
+                        const existingSeat = seatsMap.get(formSeat.code);
+                        if (existingSeat) {
+                            // Merge: update editable fields from form, preserve all other fields
+                            seatsMap.set(formSeat.code, {
+                                ...existingSeat, // Preserve all original properties
+                                code: formSeat.code, // Update from form
+                                category: formSeat.category,
+                                capacity: formSeat.capacity,
+                                minSpendUSD: formSeat.minSpendUSD,
+                                // Only update media if form has media entries, otherwise preserve original
+                                media: formSeat.media && formSeat.media.length > 0 ? formSeat.media : (existingSeat.media || [])
+                            });
+                        } else {
+                            // New seat not in original data
+                            seatsMap.set(formSeat.code, formSeat);
+                        }
+                    });
+                    
+                    payload.seats = Array.from(seatsMap.values());
+                } else if (formSeats.length > 0) {
+                    payload.seats = formSeats;
+                }
             }
             
             if (type === 'restaurant') {
@@ -5727,7 +5874,16 @@
                         minPriceUSD: parseFloat(r.querySelector('.cl_unit_min').value || '0')
                     };
                 }).filter(u => u !== null);
-                if (units.length > 0) payload.units = units;
+                // In edit mode, preserve existing units if form is empty, otherwise use form data
+                if (cl_isEditMode && cl_originalLocationData) {
+                    if (units.length > 0) {
+                        payload.units = units;
+                    } else if (cl_originalLocationData.units && Array.isArray(cl_originalLocationData.units) && cl_originalLocationData.units.length > 0) {
+                        payload.units = cl_originalLocationData.units;
+                    }
+                } else if (units.length > 0) {
+                    payload.units = units;
+                }
             }
             
             // Sentiment removed from create payload; managed post-creation
@@ -6089,20 +6245,52 @@
         let currentEventStep = 1;
         let allEvents = [];
         let allLocations = [];
+        let eventsPage = 1;
+        let eventsLimit = 20;
+        let eventsTotalPages = 1;
+        let eventsTotal = 0;
 
         /**
          * Load events for the events section
          */
-        async function loadEvents() {
+        async function loadEvents(page = eventsPage) {
             try {
-                console.log('Loading events...');
-                const result = await makeApiRequest('/events');
+                const pageSizeEl = document.getElementById('eventsPageSize');
+                if (pageSizeEl) {
+                    eventsLimit = parseInt(pageSizeEl.value) || eventsLimit;
+                }
+
+                const params = new URLSearchParams();
+                params.set('page', page);
+                params.set('limit', eventsLimit);
+
+                const locationFilter = document.getElementById('eventLocationFilter')?.value || '';
+                const statusFilter = document.getElementById('eventStatusFilter')?.value || '';
+                const typeFilter = document.getElementById('eventTypeFilter')?.value || '';
+                const searchInput = document.getElementById('eventSearchInput')?.value || '';
+
+                if (locationFilter) params.set('location_id', locationFilter);
+                if (statusFilter) params.set('status', statusFilter);
+                if (typeFilter) params.set('type', typeFilter);
+                if (searchInput) params.set('search', searchInput);
+
+                console.log('Loading events...', Object.fromEntries(params.entries()));
+                const result = await makeApiRequest(`/events?${params.toString()}`);
                 console.log('Events API result:', result);
                 
                 if (result.success && result.data) {
-                    allEvents = Array.isArray(result.data) ? result.data : result.data.data || [];
-                    console.log('Events loaded:', allEvents.length, allEvents);
+                    const dataArray = Array.isArray(result.data) ? result.data : (result.data.data || []);
+                    allEvents = dataArray;
+
+                    const pagination = result.pagination || result.data?.pagination || {};
+                    eventsPage = parseInt(pagination.page || page || 1);
+                    eventsLimit = parseInt(pagination.limit || eventsLimit);
+                    eventsTotal = parseInt(pagination.total || dataArray.length || 0);
+                    eventsTotalPages = parseInt(pagination.pages || Math.max(1, Math.ceil(eventsTotal / eventsLimit)));
+
+                    console.log('Events loaded:', allEvents.length, 'page', eventsPage, 'of', eventsTotalPages, 'total', eventsTotal);
                     displayEventsTable(allEvents);
+                    renderEventsPagination();
                     populateEventLocationFilter();
                     showAlert('Events loaded successfully!', 'success');
                 } else {
@@ -6112,6 +6300,70 @@
             } catch (error) {
                 console.error('Error loading events:', error);
                 showAlert('Error loading events: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Import events from GXN JSON file
+         */
+        async function importGXNEvents() {
+            if (!confirm('Import all events from gxn_res.json schedules? This will create Event records linked to existing Locations. Make sure venues are imported first!')) {
+                return;
+            }
+            
+            try {
+                showAlert('Starting event import from GXN...', 'info');
+                
+                const response = await makeApiRequest('/gxn/import/events', 'POST', {});
+                
+                if (response.success) {
+                    const summary = response.summary || {};
+                    showAlert(`Import complete! ${summary.imported || 0} events imported, ${summary.failed || 0} failed, ${summary.skipped || 0} skipped.`, 'success');
+                    
+                    // Display detailed results
+                    let resultsHtml = `<h4 style="margin:12px 0 8px;">Import Results</h4>`;
+                    resultsHtml += `<p><strong>Total processed:</strong> ${summary.total || 0}</p>`;
+                    resultsHtml += `<p style="color:green;"><strong>Imported:</strong> ${summary.imported || 0}</p>`;
+                    resultsHtml += `<p style="color:red;"><strong>Failed:</strong> ${summary.failed || 0}</p>`;
+                    resultsHtml += `<p style="color:orange;"><strong>Skipped:</strong> ${summary.skipped || 0}</p>`;
+                    
+                    if (response.data?.success?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;">Successfully Imported:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.success.forEach(item => {
+                            resultsHtml += `<li>${item.name} (${item.eventcode}) - ${item.seatsInherited || 0} seats - <a href="#" onclick="viewEventDetails('${item.eventId}'); return false;">View</a></li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    if (response.data?.failed?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;color:red;">Failed:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.failed.forEach(item => {
+                            resultsHtml += `<li>${item.venueCode}/${item.ecozone}: ${item.error}</li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    if (response.data?.skipped?.length > 0) {
+                        resultsHtml += `<h5 style="margin:12px 0 6px;color:orange;">Skipped:</h5><ul style="margin:0 0 12px 20px;">`;
+                        response.data.skipped.forEach(item => {
+                            resultsHtml += `<li>${item.venueCode}/${item.ecozone}: ${item.reason}${item.eventId ? ' (existing: ' + item.eventId + ')' : ''}</li>`;
+                        });
+                        resultsHtml += `</ul>`;
+                    }
+                    
+                    // Show in alert (simple for now)
+                    alert(resultsHtml.replace(/<[^>]*>/g, ''));
+                    
+                    // Reload events table
+                    await loadEvents();
+                    
+                } else {
+                    showAlert('Import failed: ' + (response.error?.message || 'Unknown error'), 'error');
+                }
+                
+            } catch (error) {
+                console.error('Import error:', error);
+                showAlert('Import error: ' + error.message, 'error');
             }
         }
 
@@ -6194,30 +6446,17 @@
          * Filter events based on selected filters
          */
         function filterEvents() {
-            const locationFilter = document.getElementById('eventLocationFilter').value;
-            const statusFilter = document.getElementById('eventStatusFilter').value;
-            const typeFilter = document.getElementById('eventTypeFilter').value;
-            const searchInput = document.getElementById('eventSearchInput').value.toLowerCase();
-
-            let filteredEvents = allEvents.filter(event => {
-                const matchesLocation = !locationFilter || event.location_id?._id === locationFilter;
-                const matchesStatus = !statusFilter || event.status === statusFilter;
-                const matchesType = !typeFilter || event.type === typeFilter;
-                const matchesSearch = !searchInput || 
-                    event.name.toLowerCase().includes(searchInput) ||
-                    event.description?.toLowerCase().includes(searchInput);
-
-                return matchesLocation && matchesStatus && matchesType && matchesSearch;
-            });
-
-            displayEventsTable(filteredEvents);
+            // On any filter change, reload from server starting at page 1
+            loadEvents(1);
         }
 
         /**
          * Search events
          */
         function searchEvents() {
-            filterEvents();
+            // Debounced server-side search
+            if (window.__eventsSearchTimeout) clearTimeout(window.__eventsSearchTimeout);
+            window.__eventsSearchTimeout = setTimeout(() => loadEvents(1), 300);
         }
 
         /**
@@ -6225,6 +6464,41 @@
          */
         function refreshEvents() {
             loadEvents();
+        }
+
+        /**
+         * Pagination controls for events
+         */
+        function renderEventsPagination() {
+            const prevBtn = document.getElementById('eventsPrevBtn');
+            const nextBtn = document.getElementById('eventsNextBtn');
+            const pageInfo = document.getElementById('eventsPageInfo');
+            const totalInfo = document.getElementById('eventsTotalInfo');
+            const headerTotal = document.getElementById('eventsHeaderTotal');
+            const pageSizeEl = document.getElementById('eventsPageSize');
+
+            if (pageInfo) pageInfo.textContent = `Page ${eventsPage} of ${eventsTotalPages}`;
+            if (totalInfo) totalInfo.textContent = `${eventsTotal} total`;
+            if (headerTotal) headerTotal.textContent = `(${eventsTotal} total)`;
+            if (prevBtn) prevBtn.disabled = eventsPage <= 1;
+            if (nextBtn) nextBtn.disabled = eventsPage >= eventsTotalPages;
+            if (pageSizeEl) pageSizeEl.value = String(eventsLimit);
+        }
+
+        function prevEventsPage() {
+            if (eventsPage > 1) loadEvents(eventsPage - 1);
+        }
+
+        function nextEventsPage() {
+            if (eventsPage < eventsTotalPages) loadEvents(eventsPage + 1);
+        }
+
+        function changeEventsPageSize(size) {
+            const newSize = parseInt(size) || 20;
+            if (newSize !== eventsLimit) {
+                eventsLimit = newSize;
+                loadEvents(1);
+            }
         }
 
         /**
@@ -8889,16 +9163,35 @@
                 const coeStartDate = document.getElementById('coec_start_date').value;
                 const coeEndDate = document.getElementById('coec_end_date').value;
                 
-                // Build API URL with date filtering
-                let apiUrl = '/events';
+                // Build API URL with date filtering and only active events
+                const params = new URLSearchParams();
                 if (coeStartDate && coeEndDate) {
-                    apiUrl += `?coe_start_date=${coeStartDate}&coe_end_date=${coeEndDate}`;
+                    params.set('coe_start_date', coeStartDate);
+                    params.set('coe_end_date', coeEndDate);
                 }
+                params.set('status', 'active');
                 
-                const result = await makeApiRequest(apiUrl);
+                // Fetch all pages (server defaults to limit=20)
+                let page = 1;
+                const limit = 100; // reasonable page size
+                let pages = 1;
+                const combined = [];
                 
-                if (result.success && result.data) {
-                    allEventsForCOE = Array.isArray(result.data) ? result.data : result.data.data || [];
+                do {
+                    params.set('page', String(page));
+                    params.set('limit', String(limit));
+                    const apiUrl = `/events?${params.toString()}`;
+                    const result = await makeApiRequest(apiUrl);
+                    if (!result.success || !result.data) break;
+                    const batch = Array.isArray(result.data) ? result.data : (result.data.data || []);
+                    combined.push(...batch);
+                    const pagination = result.pagination || result.data?.pagination || {};
+                    pages = parseInt(pagination.pages || '1');
+                    page += 1;
+                } while (page <= pages);
+
+                if (combined.length > 0) {
+                    allEventsForCOE = combined;
                     
                     // Populate location filter
                     const locationFilter = document.getElementById('coec_event_location_filter');

@@ -213,7 +213,15 @@ const createEventSchema = Joi.object({
     hours_before_event: Joi.number().min(0),
     refund_percentage: Joi.number().min(0).max(100).default(100),
     admin_fee: Joi.number().min(0).default(0)
-  }).optional()
+  }).optional(),
+  gxnEventCode: Joi.string().allow('').optional(),
+  gxnEventId: Joi.string().allow('').optional(),
+  gxnEventDate: Joi.string().allow('').optional(),
+  performers: Joi.array().items(Joi.object({
+    perfcode: Joi.string().allow('').optional(),
+    importance: Joi.string().allow('').optional(),
+    apprtime: Joi.string().allow('').optional()
+  })).optional()
 });
 
 // Update event validation schema

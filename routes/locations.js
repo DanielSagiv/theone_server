@@ -101,7 +101,31 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: error.details[0].message } });
     }
 
-    const loc = await Location.findByIdAndUpdate(req.params.id, { ...value, updatedBy: req.user._id }, { new: true });
+    // Fetch existing location to preserve arrays that aren't in update
+    const existingLocation = await Location.findById(req.params.id);
+    if (!existingLocation) {
+      return res.status(404).json({ success: false, error: { code: 'LOCATION_NOT_FOUND', message: 'Location not found' } });
+    }
+
+    // Build update object, preserving seats and media if not provided in update
+    const updateData = { ...value, updatedBy: req.user._id };
+    
+    // Preserve existing seats array if not provided in update payload
+    if (!value.hasOwnProperty('seats') || value.seats === undefined) {
+      updateData.seats = existingLocation.seats;
+    }
+    
+    // Preserve existing media array if not provided in update payload
+    if (!value.hasOwnProperty('media') || value.media === undefined) {
+      updateData.media = existingLocation.media;
+    }
+    
+    // Preserve existing units array if not provided in update payload
+    if (!value.hasOwnProperty('units') || value.units === undefined) {
+      updateData.units = existingLocation.units;
+    }
+
+    const loc = await Location.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!loc) {
       return res.status(404).json({ success: false, error: { code: 'LOCATION_NOT_FOUND', message: 'Location not found' } });
     }

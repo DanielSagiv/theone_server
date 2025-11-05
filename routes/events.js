@@ -70,7 +70,9 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
             { end_datetime: { $exists: false } },     // Event has no end date
             { end_datetime: null }                    // Event end date is null
           ]
-        }
+        },
+        // Exclude past events when selecting for COE
+        { end_datetime: { $gte: new Date() } }
       ];
     }
     

@@ -165,6 +165,16 @@ const EventSchema = new mongoose.Schema({
   is_featured: { type: Boolean, default: false }, // Featured event
   priority: { type: Number, default: 0 }, // Event priority for recommendations
   
+  // GXN integration fields
+  gxnEventCode: { type: String, trim: true, index: true, sparse: true }, // GXN event code (e.g., EVE50511500020251101) - primary unique identifier
+  gxnEventId: { type: String, trim: true }, // GXN numeric event ID (e.g., 2048373)
+  gxnEventDate: { type: String, trim: true }, // GXN date key (e.g., D251101) for reference
+  performers: [{ // Performer information from GXN
+    perfcode: { type: String, trim: true }, // Performer code (e.g., PER1242)
+    importance: { type: String, trim: true }, // Performer importance level
+    apprtime: { type: String, trim: true } // Appearance time
+  }],
+  
   // Event Settings
   requires_approval: { type: Boolean, default: false }, // Requires admin approval
   auto_approve: { type: Boolean, default: true }, // Auto-approve bookings
@@ -219,6 +229,7 @@ EventSchema.index({ start_datetime: 1, end_datetime: 1 });
 EventSchema.index({ name: 'text', description: 'text' });
 EventSchema.index({ tags: 1 });
 EventSchema.index({ created_by: 1, status: 1 });
+EventSchema.index({ gxnEventCode: 1 }); // Index for GXN event code lookups
 
 // Pre-save middleware to update availability
 EventSchema.pre('save', function(next) {

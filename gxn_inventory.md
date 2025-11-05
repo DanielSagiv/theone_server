@@ -472,5 +472,121 @@ Response:
 
 ---
 
+## Event Import from GXN Schedules
+
+### Overview
+
+The GXN `data.schedules` node contains event calendar data that can be imported into THE1 Event records. Each schedule entry represents a specific event happening at a venue on a particular date.
+
+### Schedule Structure
+
+**Path**: `data.schedules.{dateKey}.venues.{venueCode}.{ecozoneCode}`
+
+**Key Fields**:
+- `status`: "Open" or "Closed" - venue operational status
+- `source`: "Event" or "Hours of Operations" - determines if this is a real event
+- `event`: Event details object (only present if `source: "Event"`)
+- `eventcode`: Primary unique identifier (e.g., "EVE50511500020251101")
+- `eventid`: Numeric event ID (e.g., "2048373", can be null for Hours of Operations)
+- `maineventcode`: Main event code (usually same as eventcode)
+- `weekdays`: Array of timing information with human-readable `timestring`
+
+### Event Object Structure
+
+Within `schedules.{date}.venues.{venue}.{ecozone}.event`:
+- `eventid`: Numeric event ID
+- `eventcode`: Unique event code string
+- `name`: Event name
+- `descr`: Event description
+- `caldate`: Date string in "YYYY-MM-DD" format
+- `ndoorsopen`: Doors open time in seconds since midnight
+- `nstarttime`: Event start time in seconds since midnight
+- `nendtime`: Event end time in seconds since midnight (can be empty)
+- `performers`: Object mapping performer codes to performer data
+- `flyers`: Event images object (similar to venue images structure)
+
+### Import Strategy
+
+**Filtering Criteria**:
+1. Only import entries where `source === "Event"` (skip "Hours of Operations")
+2. Only import where `event.eventid` exists (has valid event ID)
+3. Match Location by `gxnVenueCode` (venue code from schedule path)
+4. Skip if Location not found in THE1 database
+
+**Data Mapping**:
+| GXN Field | Event Model Field | Conversion Notes |
+|-----------|-------------------|------------------|
+| `event.name` | `name` | Required field |
+| `event.descr` | `description` | Optional |
+| `event.caldate` + `event.nstarttime` | `start_datetime` | Convert to Date object with timezone |
+| `event.caldate` + `event.nendtime` | `end_datetime` | Convert to Date, default +4 hours if empty |
+| Location.timezone | `timezone` | Inherited from matched Location |
+| Location.type | `type` | Inherited from matched Location |
+| `event.eventcode` | `gxnEventCode` | Primary unique identifier (indexed) |
+| `event.eventid` | `gxnEventId` | Numeric event ID (optional) |
+| `dateKey` (e.g., "D251101") | `gxnEventDate` | Reference to GXN date key |
+| `event.flyers` | `media` | Extract images to media array |
+| `status: "Open"` | `status: "active"` | Status mapping |
+| Location.seats | `seats` | Inherited (existing logic) |
+
+**Time Conversion**:
+- GXN times are in seconds since midnight (e.g., "12200" = 3:23:20 AM)
+- Convert `caldate` (YYYY-MM-DD) + seconds to JavaScript Date object
+- Use Location's `timezone` field for proper timezone handling
+- If `nendtime` is empty, calculate default duration (4 hours for nightclub, 6 hours for dayclub)
+
+**Duplicate Prevention**:
+- Check for existing Event by `gxnEventCode` before creating
+- Skip if event already exists
+
+**Relationships**:
+- **Event → Location**: Matched via `gxnVenueCode` (same pattern as venue import)
+- **Event → Seats**: Events inherit seats from Location (existing inheritance logic works)
+- **Event → Performers**: Store basic performer codes in `performers` array (can be expanded later)
+
+### Import Endpoint
+
+`POST /v1/gxn/import/events`
+- Reads `gxn_res.json` file
+- Extracts events from `data.schedules` node
+- Creates Event records linked to existing Locations
+- Returns results: success/failed/skipped counts
+
+### Example: Event Import Flow
+
+```
+GXN Schedule Entry:
+schedules.D251101.venues.VEN505115.ECZ0
+  → source: "Event"
+  → event.eventcode: "EVE50511500020251101"
+  → event.eventid: "2048373"
+  → event.name: "DJ Snake, HALLOWEEN WEEKEND"
+  → event.caldate: "2025-11-01"
+  → event.nstarttime: "12200"
+
+Matches Location:
+  → Location.findOne({ gxnVenueCode: "VEN505115" })
+
+Creates Event:
+  → name: "DJ Snake, HALLOWEEN WEEKEND"
+  → location_id: <matched Location._id>
+  → start_datetime: 2025-11-01T22:00:00 (timezone: America/Los_Angeles)
+  → gxnEventCode: "EVE50511500020251101"
+  → gxnEventId: "2048373"
+  → seats: <inherited from Location>
+```
+
+### Integration with Existing Import Flow
+
+1. **First**: Import venues from `data.venues` → Creates Location records with `gxnVenueCode`
+2. **Then**: Import events from `data.schedules` → Creates Event records linked to Locations by `gxnVenueCode`
+
+This two-phase approach ensures:
+- Locations exist before events are created
+- Events can be properly linked via `location_id` reference
+- Seats are inherited from Location using existing `inheritSeatsFromLocation()` logic
+
+---
+
 *Document generated from analysis of real GXN API response structure.*
 

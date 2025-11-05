@@ -1,4 +1,6 @@
 const Location = require('../models/Location');
+const Event = require('../models/Event');
+const { inheritSeatsFromLocation } = require('./locationEventService');
 
 /**
  * Map GXN venue type to THE1 location type
@@ -279,7 +281,278 @@ async function importVenuesFromGXN(gxnData, userId) {
   return results;
 }
 
+/**
+ * Convert GXN time format to JavaScript Date object
+ * @param {string} caldate - Date string in YYYY-MM-DD format
+ * @param {string} timeSeconds - Time in seconds since midnight (e.g., "12200")
+ * @param {string} timezone - Timezone string (e.g., "America/Los_Angeles")
+ * @returns {Date} - JavaScript Date object
+ */
+function convertGXNTimeToDateTime(caldate, timeSeconds, timezone) {
+  if (!caldate || !timeSeconds) return null;
+  
+  // Parse date
+  const [year, month, day] = caldate.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  
+  // Convert seconds to hours, minutes
+  const totalSeconds = parseInt(timeSeconds) || 0;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  
+  // Create date in UTC (will be adjusted by timezone later)
+  const date = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+  
+  // Note: MongoDB stores dates in UTC, timezone is stored separately
+  return date;
+}
+
+/**
+ * Extract event media from GXN flyers object
+ * @param {Object} flyers - GXN flyers object
+ * @returns {Array} - Array of media objects
+ */
+function extractEventMedia(flyers) {
+  const media = [];
+  let order = 0;
+  
+  if (!flyers || typeof flyers !== 'object') return media;
+  
+  // Iterate through flyer image types and extract images
+  for (const [imageType, imageArray] of Object.entries(flyers)) {
+    if (Array.isArray(imageArray) && imageArray.length > 0 && order < 5) {
+      const img = imageArray[0];
+      if (img.path && img.file) {
+        media.push({
+          type: 'image',
+          url: `${img.path}/${img.file}`,
+          caption: img.imagetypename || '',
+          order: order++
+        });
+      }
+    }
+  }
+  
+  return media;
+}
+
+/**
+ * Extract performers from GXN event performers object
+ * @param {Object} performers - GXN performers object
+ * @returns {Array} - Array of performer objects
+ */
+function extractPerformers(performers) {
+  if (!performers || typeof performers !== 'object') return [];
+  
+  return Object.entries(performers).map(([perfcode, perfData]) => ({
+    perfcode: perfcode || '',
+    importance: perfData?.importance || '',
+    apprtime: perfData?.apprtime || ''
+  }));
+}
+
+/**
+ * Calculate default end time based on event type
+ * @param {Date} startDate - Event start date
+ * @param {string} eventType - Event type (night_club, day_club, etc.)
+ * @returns {Date} - Calculated end date
+ */
+function calculateDefaultEndTime(startDate, eventType) {
+  const endDate = new Date(startDate);
+  
+  // Default durations based on event type
+  const defaultDurations = {
+    'night_club': 4, // 4 hours
+    'day_club': 6, // 6 hours
+    'restaurant': 3, // 3 hours
+    'hotel': 24, // 24 hours (for overnight stays)
+    'private': 4, // 4 hours
+    'corporate': 4 // 4 hours
+  };
+  
+  const hours = defaultDurations[eventType] || 4;
+  endDate.setHours(endDate.getHours() + hours);
+  
+  return endDate;
+}
+
+/**
+ * Import events from GXN schedules data into THE1 Event records
+ * @param {Object} gxnData - Full GXN response data
+ * @param {string} userId - Admin user ID performing import
+ * @returns {Promise<Object>} Import results
+ */
+async function importEventsFromGXN(gxnData, userId) {
+  const schedules = gxnData?.data?.schedules || {};
+  const results = { success: [], failed: [], skipped: [] };
+  
+  for (const [dateKey, venuesByDate] of Object.entries(schedules)) {
+    if (!venuesByDate || typeof venuesByDate !== 'object') continue;
+    
+    for (const [venueCode, ecozones] of Object.entries(venuesByDate)) {
+      if (!ecozones || typeof ecozones !== 'object') continue;
+      
+      for (const [ecozoneCode, scheduleData] of Object.entries(ecozones)) {
+        try {
+          // Only import events where source is "Event" and has valid event data
+          if (scheduleData.source !== 'Event' || !scheduleData.event) {
+            results.skipped.push({
+              venueCode,
+              dateKey,
+              ecozone: ecozoneCode,
+              reason: scheduleData.source !== 'Event' ? 'Not an event (Hours of Operations)' : 'Missing event data'
+            });
+            continue;
+          }
+          
+          const eventData = scheduleData.event;
+          
+          // Must have eventid and eventcode
+          if (!eventData.eventid || !eventData.eventcode) {
+            results.skipped.push({
+              venueCode,
+              dateKey,
+              ecozone: ecozoneCode,
+              reason: 'Missing eventid or eventcode'
+            });
+            continue;
+          }
+          
+          // Check if event already exists
+          const existingEvent = await Event.findOne({ gxnEventCode: eventData.eventcode });
+          if (existingEvent) {
+            results.skipped.push({
+              venueCode,
+              dateKey,
+              ecozone: ecozoneCode,
+              eventcode: eventData.eventcode,
+              reason: 'Event already exists',
+              eventId: existingEvent._id
+            });
+            continue;
+          }
+          
+          // Find location by GXN venue code
+          const location = await Location.findOne({ gxnVenueCode: venueCode });
+          if (!location) {
+            results.skipped.push({
+              venueCode,
+              dateKey,
+              ecozone: ecozoneCode,
+              reason: 'Location not found (venue must be imported first)'
+            });
+            continue;
+          }
+          
+          // Convert times to Date objects
+          const startDatetime = convertGXNTimeToDateTime(
+            eventData.caldate,
+            eventData.nstarttime || eventData.ndoorsopen,
+            location.timezone || 'UTC'
+          );
+          
+          if (!startDatetime) {
+            results.skipped.push({
+              venueCode,
+              dateKey,
+              ecozone: ecozoneCode,
+              reason: 'Invalid start date/time'
+            });
+            continue;
+          }
+          
+          let endDatetime;
+          if (eventData.nendtime && eventData.nendtime !== '') {
+            endDatetime = convertGXNTimeToDateTime(
+              eventData.caldate,
+              eventData.nendtime,
+              location.timezone || 'UTC'
+            );
+          } else {
+            // Calculate default end time based on event type
+            endDatetime = calculateDefaultEndTime(startDatetime, location.type);
+          }
+          
+          // Inherit seats from location (using existing service)
+          const inheritanceResult = await inheritSeatsFromLocation(location._id, {
+            name: eventData.name,
+            type: location.type
+          });
+          
+          // Extract media and performers
+          const media = extractEventMedia(eventData.flyers);
+          const performers = extractPerformers(eventData.performers);
+          
+          // Map status
+          let eventStatus = 'active';
+          if (scheduleData.status === 'Closed') {
+            eventStatus = 'cancelled';
+          }
+          
+          // Calculate base price from location seats (minimum seat price)
+          const minSeatPrice = inheritanceResult.seats.length > 0
+            ? Math.min(...inheritanceResult.seats.map(s => s.event_price || s.min_spend || 0))
+            : 0;
+          
+          // Build event object
+          const eventObj = {
+            name: eventData.name || `Event at ${location.name}`,
+            description: eventData.descr || '',
+            type: location.type,
+            location_id: location._id,
+            start_datetime: startDatetime,
+            end_datetime: endDatetime,
+            timezone: location.timezone || 'UTC',
+            total_capacity: inheritanceResult.totalCapacity || 0,
+            total_available: inheritanceResult.totalCapacity || 0,
+            total_booked: 0,
+            total_revenue: 0,
+            base_price: minSeatPrice,
+            currency: 'USD',
+            price_tier: 1,
+            status: eventStatus,
+            media: media,
+            seats: inheritanceResult.seats,
+            units: inheritanceResult.units,
+            gxnEventCode: eventData.eventcode,
+            gxnEventId: eventData.eventid.toString(),
+            gxnEventDate: dateKey,
+            performers: performers,
+            created_by: userId,
+            updated_by: userId
+          };
+          
+          // Create event
+          const event = await Event.create(eventObj);
+          
+          results.success.push({
+            venueCode,
+            dateKey,
+            ecozone: ecozoneCode,
+            eventcode: eventData.eventcode,
+            eventId: event._id,
+            name: eventData.name,
+            seatsInherited: inheritanceResult.seats.length
+          });
+          
+        } catch (error) {
+          console.error(`Error importing event ${venueCode}/${ecozoneCode}:`, error);
+          results.failed.push({
+            venueCode,
+            dateKey,
+            ecozone: ecozoneCode,
+            error: error.message || 'Unknown error'
+          });
+        }
+      }
+    }
+  }
+  
+  return results;
+}
+
 module.exports = {
-  importVenuesFromGXN
+  importVenuesFromGXN,
+  importEventsFromGXN
 };
 
