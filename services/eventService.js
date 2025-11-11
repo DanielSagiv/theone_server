@@ -40,7 +40,9 @@ async function createEventWithSeats(eventData, userId) {
         status: 'available',
         map_anchor: seat.mapAnchor,
         polygon: seat.polygon,
-        media: seat.media || []
+        media: seat.media || [],
+        gxnItemCode: seat.gxnItemCode,
+        gxnMasterItemCode: seat.gxnMasterItemCode
       };
       
       console.log('Inherited seat:', { code: eventSeat.code, capacity: eventSeat.capacity, eventPrice: eventSeat.event_price });

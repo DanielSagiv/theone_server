@@ -28,6 +28,12 @@ const EventSeatSchema = new mongoose.Schema({
   booked_at: { type: Date }, // When it was booked
   booking_reference: { type: String, trim: true }, // COE or booking reference
   
+  /**
+   * GXN Integration Identifiers
+   */
+  gxnItemCode: { type: String, trim: true }, // GXN item mastercode for this seat instance
+  gxnMasterItemCode: { type: String, trim: true }, // GXN catalog master code
+  
   // Map coordinates (inherited from location)
   map_anchor: { x: Number, y: Number },
   polygon: [{ x: Number, y: Number }],

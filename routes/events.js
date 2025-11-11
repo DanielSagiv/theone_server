@@ -229,7 +229,9 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       status: 'available',
       map_anchor: seat.mapAnchor,
       polygon: seat.polygon,
-      media: []
+      media: [],
+      gxnItemCode: seat.gxnItemCode,
+      gxnMasterItemCode: seat.gxnMasterItemCode
     }));
 
     const inheritedUnits = location.units.map(unit => ({

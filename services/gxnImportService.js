@@ -159,10 +159,7 @@ function extractSeatsFromItems(items, venueCode) {
         capacity: parseInt(item.capacity) || 0,
         minSpendUSD: parseFloat(item.listprice) || 0,
         priceTier: 1, // Default, can be enhanced later
-        media: [],
-        // Store GXN IDs for matching and syncing
-        gxnItemCode: item.mastercode || itemCode || '', // GXN item mastercode
-        gxnMasterItemCode: item.masteritemcode || '' // GXN catalog master code
+        media: []
       };
       
       seats.push(seat);
@@ -170,6 +167,39 @@ function extractSeatsFromItems(items, venueCode) {
   }
   
   return seats;
+}
+
+/**
+ * Build lookup map for GXN seat metadata by item name.
+ * @param {Object} items - GXN items node keyed by mastercode
+ * @param {string} venueCode - GXN venue code (e.g., VEN505115)
+ * @param {string} caldate - Calendar date identifier from GXN (YYYY-MM-DD or DYYMMDD)
+ * @returns {Map<string, { mastercode: string|null, masteritemcode: string|null }>}
+ */
+function buildSeatItemLookup(items, venueCode, caldate) {
+  const map = new Map();
+  if (!items || typeof items !== 'object') {
+    return map;
+  }
+
+  for (const item of Object.values(items)) {
+    if (
+      item &&
+      item.globaltype === 'seating' &&
+      item.venuecode === venueCode &&
+      (item.caldate === caldate || item.idate === caldate)
+    ) {
+      const key = (item.itemname || '').trim().toLowerCase();
+      if (!key) continue;
+
+      map.set(key, {
+        mastercode: item.mastercode || null,
+        masteritemcode: item.masteritemcode || null
+      });
+    }
+  }
+
+  return map;
 }
 
 /**
@@ -384,6 +414,7 @@ function calculateDefaultEndTime(startDate, eventType) {
  */
 async function importEventsFromGXN(gxnData, userId) {
   const schedules = gxnData?.data?.schedules || {};
+  const gxnItems = gxnData?.data?.items || {};
   const results = { success: [], failed: [], skipped: [] };
   
   for (const [dateKey, venuesByDate] of Object.entries(schedules)) {
@@ -478,6 +509,22 @@ async function importEventsFromGXN(gxnData, userId) {
             name: eventData.name,
             type: location.type
           });
+
+          // Enrich event seats with GXN identifiers
+          const seatItemLookup = buildSeatItemLookup(gxnItems, venueCode, eventData.caldate || dateKey);
+          if (seatItemLookup.size > 0 && Array.isArray(inheritanceResult.seats)) {
+            inheritanceResult.seats.forEach(seat => {
+              if (!seat || seat.gxnItemCode) return;
+              const normalizedCode = (seat.code || seat.label || '').trim().toLowerCase();
+              if (!normalizedCode) return;
+
+              const lookup = seatItemLookup.get(normalizedCode);
+              if (lookup) {
+                seat.gxnItemCode = lookup.mastercode || undefined;
+                seat.gxnMasterItemCode = lookup.masteritemcode || undefined;
+              }
+            });
+          }
           
           // Extract media and performers
           const media = extractEventMedia(eventData.flyers);

@@ -45,7 +45,9 @@ async function inheritSeatsFromLocation(locationId, eventData) {
         status: 'available',
         map_anchor: seat.mapAnchor,
         polygon: seat.polygon,
-        media: []
+        media: [],
+        gxnItemCode: seat.gxnItemCode,
+        gxnMasterItemCode: seat.gxnMasterItemCode
       };
       
       console.log('Inherited seat:', { 

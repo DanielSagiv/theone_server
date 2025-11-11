@@ -42,9 +42,6 @@ const SeatSchema = new mongoose.Schema({
   polygon: [{ x: Number, y: Number }],
   media: [AssetSchema],
   sentiment: [SentimentSchema],
-  // GXN integration fields
-  gxnItemCode: { type: String, trim: true, index: true, sparse: true }, // GXN item mastercode (e.g., MZSUOPAIB0AOXINQB)
-  gxnMasterItemCode: { type: String, trim: true } // GXN catalog master code (e.g., MAS10510)
 }, { _id: true }); // Enable unique IDs for each seat
 
 /**

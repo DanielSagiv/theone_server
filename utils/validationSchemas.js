@@ -28,9 +28,7 @@ const seatSchema = Joi.object({
   mapAnchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
   polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
   media: Joi.array().items(assetSchema),
-  sentiment: Joi.array().items(sentimentSchema),
-  gxnItemCode: Joi.string().allow('').optional(),
-  gxnMasterItemCode: Joi.string().allow('').optional()
+  sentiment: Joi.array().items(sentimentSchema)
 });
 
 const unitSchema = Joi.object({
