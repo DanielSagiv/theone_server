@@ -647,7 +647,7 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    const coe = await coeService.updateSeatAssignments(id, value.available_seats);
+    const coe = await coeService.updateSeatAssignments(id, value.selected_seats);
 
     res.json({
       success: true,

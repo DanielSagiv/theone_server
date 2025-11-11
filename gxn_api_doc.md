@@ -1578,3 +1578,434 @@ Body
 Headers (0)
 No response body
 This request doesn't return any response body
+
+
+####START OF HOLDS###
+Holds
+The Hold APIs facilitate reservation and temporary holding of inventory items, supporting accurate inventory allocation and management.
+
+inventory_hold POST: Enables creation of inventory holds, reserving specific inventory items or quantities based on prior availability checks.
+
+item_hold POST: Adds individual items to existing hold orders, enabling precise inventory reservation management.
+
+inventory_hold DELETE: Removes existing hold orders, freeing up reserved inventory for new reservations.
+
+item_hold DELETE: Removes individual items from an existing hold, updating inventory availability accordingly.
+
+view_hold GET: Retrieves detailed information about existing holds, including item specifics, quantities reserved, and hold durations.
+
+POST
+inventory_hold
+https://apiuat.urvenue.me/v4/gxn/inventoryhold/json/?apikey=&sourceloc=postman&sourcecode=test&ext_cartref=&meta[info][0][first_name]=John&meta[info][0][last_name]=Doe&meta[info][0][dob]=2000-01-01&meta[info][0][email]=bob.smith@test.com&meta[info][0][phone]=7021112233&meta[refs][0][id]=007&meta[data-callback-url][0][success]=urcallback.com&meta[actions][0][success]=onOrderSuccess
+Overview
+Creates a temporary reservation (“hold”) on previously checked inventory, using an external cart reference. This lets you lock in items or quantities for later booking while you gather payment or customer details.
+
+Shared Query Parameters
+apikey (required): Your authentication key
+
+sourcecode (required): Code identifying the source system
+
+sourceloc (required): Code identifying the source location
+
+Endpoint‑Specific Parameters
+ext_cartref (required): External reference from a prior InventoryCheck
+Key Features
+Hold Creation: Reserve specific inventory by passing an external cart reference.
+
+Hold Details: Returns hold metadata (hold code, expiration timestamp, channel/network info).
+
+Transparent Management: Frees up or releases inventory automatically when holds expire or are deleted.
+
+Response Structure
+data.header:
+
+holdcode: Generated hold identifier
+
+ext_cartref: Echoes your external cart reference
+
+expiretstamp: UNIX timestamp when the hold lapses
+
+holdtype, partnerid, network, channelcode
+
+data.items: Always null on creation—items are added separately
+
+API Response
+We will look at the structure of the response going through each field. This is a smaller response compared to the others.
+
+Header Node
+View More
+json
+"data": {
+    "header": { 
+        "holdcode": "XDOETNBSYSCR",
+        "partnerid": "0",
+        "holdtype": "hold",
+        "ext_cartref": "ZN2PKCM6P5",
+        "expiretstamp": "1710796689",
+        "network": "marketplace",
+        "meta": null,
+        "channelcode": "CH0",
+        "fellowshipcode": ""
+    },
+    "items": null
+}
+"holdcode": Code identifying the hold.
+
+"partnerid": The identification number for the current partner.
+
+"holdtype": Type of the hold
+
+"ext_cartref": An external reference for the cart.
+
+"expiretstamp": UNIX time stamp to denote when the item is no longer available.
+
+"network": refers to the type or category of the transaction network being used for the hold.
+
+"meta": Order references and other guest meta data can be passed through to this object
+
+View More
+json
+meta='{
+    "callback-url": [{
+      "success": "INSERT_URL",
+      "complete": "INSERT_URL",
+      "incomplete": "INSERT_URL"
+  }],
+  "actions": [{
+      "success": "INSERT_FUNCTION",
+      "complete": "INSERT_FUNCTION",
+      "incomplete": "INSERT_FUNCTION"
+  }],
+  "refs": [{
+      "loyalty_id": "1234",
+    "myVar": "hello"
+    }],
+  "info": [{
+    "first_name": "Bob",
+    "last_name": "Smith",
+    "email": "test@google.com",
+    "dob": "2001-12-12",
+      "phone": "7021231234",
+    "guest_notes": "hello world"
+    }]
+}'
+"channelcode": Specific code for the channel.
+Items Node
+This will always be null as this API call only creates the hold. The next API will add indiviudal items to the hold.
+
+PARAMS
+apikey
+sourceloc
+postman
+
+sourcecode
+test
+
+ext_cartref
+meta[info][0][first_name]
+John
+
+meta[info][0][last_name]
+Doe
+
+meta[info][0][dob]
+2000-01-01
+
+meta[info][0][email]
+bob.smith@test.com
+
+meta[info][0][phone]
+7021112233
+
+meta[refs][0][id]
+007
+
+meta[data-callback-url][0][success]
+urcallback.com
+
+meta[actions][0][success]
+onOrderSuccess
+
+Example Request
+inventory_hold
+View More
+curl
+curl --location -g --request POST 'https://apiuat.urvenue.me/v4/gxn/inventoryhold/json/?apikey=&sourceloc=postman&sourcecode=test&ext_cartref=&meta[info][0][first_name]=John&meta[info][0][last_name]=Doe&meta[info][0][dob]=2000-01-01&meta[info][0][email]=bob.smith%40test.com&meta[info][0][phone]=7021112233&meta[refs][0][id]=007&meta[data-callback-url][0][success]=urcallback.com&meta[actions][0][success]=onOrderSuccess'
+Example Response
+Body
+Headers (0)
+No response body
+This request doesn't return any response body
+
+####END OF HOLDS #####
+
+####START OF BOOKINGS ####
+Bookings
+The Bookings APIs manage the finalization and retrieval of inventory bookings, ensuring efficient reservation handling.
+
+inventory_book POST: Finalizes previously held orders, including customer details and authorization codes, to officially reserve inventory.
+
+view_booking GET: Retrieves detailed booking records, including customer information, booked items, and associated transaction data.
+
+order_reference GET: Supports flexible order lookups based on custom or external references (e.g., loyalty numbers, custom booking identifiers).
+
+POST
+inventory_book
+https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourcecode=test&sourceloc=postman&holdcode=&custinfo[partyname]=John Doe&authcode=&custinfo[guestnotes]=Lorem Ipsum&custinfo[firstname]=John&custinfo[lastname]=Doe&custinfo[email]=bob.smith@test.com&custinfo[phone]=7021112233&custinfo[internalnotes]=Lorem Ipsum&custinfo[dob]=2000-01-01&bookinfo[ext_orderref]=extorderefabc&bookinfo[affid]=TESTAFID123&items[][tixs][][qrcode]=qrcodeabc&items[][tixs][][ext_tixref]=exttixrefabc&items[][item][ext_itemref]=extitemrefabc&items[][item][ext_serviceref]=extservicerefabc&agree=&items[][item][ext_bookref]=extbookrefabc&items[][tixs][][ext_tixref]=HELLO123&items[][tixs][][itemgroupid]=ITEMGID123&bookinfo[ext_affcode]=321AFFCODE&custinfo[gender]=MALE&bookinfo[microcode]=MICRO123
+Overview
+Finalizes a hold into a confirmed booking by consuming all items under a given hold code, capturing customer and payment details, and generating the official order record. Ideal for completing transactions once inventory has been reserved.
+
+Shared Query Parameters
+apikey (required): Your authentication key
+
+sourcecode (required): Code identifying the source system
+
+sourceloc (required): Code identifying the source location
+
+Endpoint‑Specific Parameters
+holdcode (required): The hold identifier to convert into a booking
+
+authcode (required): Authorization code for the booking
+
+partner_commissions_amount (optional): Commission amount owed to the partner
+
+agree (optional): Agreed total charge (if different from default)
+
+Customer Info: custinfo[firstname], custinfo[lastname], custinfo[email], custinfo[phone], custinfo[dob], custinfo[gender], plus party‑level notes (guestnotes, internalnotes)
+
+Booking Info: bookinfo[ext_orderref], bookinfo[affid], and other affiliate/owner/originator identifiers
+
+Item References: For each held item, specify ticket‑level QR codes and external references (items[holditemcode][tixs][holdtixcode][qrcode], …[ext_tixref], etc.)
+
+Payments (optional): payments[0][gateway], …[amount], …[tendertype] to record payment history
+
+Key Features
+Complete Booking: Transforms a hold into a finalized order, guaranteeing all reserved items are booked.
+
+Detailed Order Response: Returns comprehensive order payload—including order codes, authorization, item breakdowns, and price details—for downstream systems.
+
+Party & Ticket Records: Provides party grouping and per‑ticket information (QR codes, holder details), enabling seamless check‑in or fulfillment.
+
+Audit‑Ready: Captures full customer, affiliate, and payment metadata to support reconciliation and reporting.
+
+Response Structure
+json
+{
+    "success": 1,
+    "http_code": 200, 
+    "message": "success",
+    "data": {
+        "orders": {...},
+        "parties": {...}
+    }
+}
+PARAMS
+apikey
+sourcecode
+test
+
+sourceloc
+postman
+
+holdcode
+custinfo[partyname]
+John Doe
+
+required
+
+authcode
+ALWAYS needs auth code
+
+custinfo[guestnotes]
+Lorem Ipsum
+
+can be [qrcode], [ext_itemref], [guestnotes], [internalnotes], [meta]
+
+custinfo[firstname]
+John
+
+custom-> partyname
+
+custinfo[lastname]
+Doe
+
+bookinfo->auth_code ext_orderref state, meta, affid,
+
+custinfo[email]
+bob.smith@test.com
+
+custinfo[phone]
+7021112233
+
+custinfo[internalnotes]
+Lorem Ipsum
+
+custinfo[dob]
+2000-01-01
+
+bookinfo[ext_orderref]
+extorderefabc
+
+bookinfo[affid]
+TESTAFID123
+
+items[][tixs][][qrcode]
+qrcodeabc
+
+items[][tixs][][ext_tixref]
+exttixrefabc
+
+items[][item][ext_itemref]
+extitemrefabc
+
+holder_name, holder_email
+
+items[][item][ext_serviceref]
+extservicerefabc
+
+agree
+items[][item][ext_bookref]
+extbookrefabc
+
+(optional)
+
+items[][tixs][][ext_tixref]
+HELLO123
+
+items[][tixs][][itemgroupid]
+ITEMGID123
+
+bookinfo[ext_affcode]
+321AFFCODE
+
+bookinfo[ownerid]
+1234ABCD
+
+custinfo[gender]
+MALE
+
+bookinfo[originatorid]
+OGID123
+
+bookinfo[microcode]
+MICRO123
+
+bookinfo[bookerid]
+123ABC
+
+Example Request
+inventory_book
+View More
+curl
+curl --location -g --request POST 'https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourcecode=test&sourceloc=postman&holdcode=&custinfo[partyname]=John%20Doe&authcode=&custinfo[guestnotes]=Lorem%20Ipsum&custinfo[firstname]=John&custinfo[lastname]=Doe&custinfo[email]=bob.smith%40test.com&custinfo[phone]=7021112233&custinfo[internalnotes]=Lorem%20Ipsum&custinfo[dob]=2000-01-01&bookinfo[ext_orderref]=extorderefabc&bookinfo[affid]=TESTAFID123&items[][tixs][][qrcode]=qrcodeabc&items[][tixs][][ext_tixref]=exttixrefabc&items[][item][ext_itemref]=extitemrefabc&items[][item][ext_serviceref]=extservicerefabc&agree=&items[][item][ext_bookref]=extbookrefabc&items[][tixs][][ext_tixref]=HELLO123&items[][tixs][][itemgroupid]=ITEMGID123&bookinfo[ext_affcode]=321AFFCODE&custinfo[gender]=MALE&bookinfo[microcode]=MICRO123'
+Example Response
+Body
+Headers (0)
+No response body
+This request doesn't return any response body
+GET
+view_booking
+https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourceloc=postman&sourcecode=test&ordercode=
+Overview
+Retrieves a finalized booking by its order code, providing a full snapshot of the transaction—including items, pricing, customer details, and party groupings—for downstream reporting or fulfillment.
+
+Shared Query Parameters
+apikey (required): Your authentication key
+
+sourcecode (required): Identifier for the source system
+
+sourceloc (required): Identifier for the source location
+
+Endpoint‑Specific Parameters
+ordercode (required): The unique code of the booking to fetch
+Key Features
+Booking Details: Returns metadata such as order ID, authorization code, external references, and booking timestamps.
+
+Booked Items: Lists every item in the order with its identifier, description, quantity, unit pricing, and breakdown of fees and taxes.
+
+Customer & Party Info: Includes customer contact data (name, email, phone, DOB, gender), party status/groupings, and any guest/internal notes for seamless communication and check‑in.
+
+Response Structure
+json
+{
+    "success": 1,
+    "http_code": 200, 
+    "message": "success",
+    "data": {
+        "orders": {...},
+        "parties": {...}
+    }
+}
+PARAMS
+apikey
+sourceloc
+postman
+
+sourcecode
+test
+
+ordercode
+Example Request
+view_booking
+View More
+curl
+curl --location 'https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourceloc=postman&sourcecode=test&ordercode='
+Example Response
+Body
+Headers (0)
+No response body
+This request doesn't return any response body
+GET
+view_order
+https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourceloc=postman&sourcecode=test&ordercode=
+Overview
+Retrieves a finalized booking by its order code, providing a full snapshot of the transaction—including items, pricing, customer details, and party groupings—for downstream reporting or fulfillment.
+
+Shared Query Parameters
+apikey (required): Your authentication key
+
+sourcecode (required): Identifier for the source system
+
+sourceloc (required): Identifier for the source location
+
+Endpoint‑Specific Parameters
+ordercode (required): The unique code of the booking to fetch
+Key Features
+Booking Details: Returns metadata such as order ID, authorization code, external references, and booking timestamps.
+
+Booked Items: Lists every item in the order with its identifier, description, quantity, unit pricing, and breakdown of fees and taxes.
+
+Customer & Party Info: Includes customer contact data (name, email, phone, DOB, gender), party status/groupings, and any guest/internal notes for seamless communication and check‑in.
+
+Response Structure
+json
+{
+    "success": 1,
+    "http_code": 200, 
+    "message": "success",
+    "data": {
+        "orders": {...},
+        "parties": {...}
+    }
+}
+PARAMS
+apikey
+sourceloc
+postman
+
+sourcecode
+test
+
+ordercode
+Example Request
+view_order
+View More
+curl
+curl --location 'https://apiuat.urvenue.me/v4/gxn/inventorybook/json/?apikey=&sourceloc=postman&sourcecode=test&ordercode='
+Example Response
+Body
+Headers (0)
+No response body
+This request doesn't return any response body
+
+####END OF BOOKINGS ####

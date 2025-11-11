@@ -7782,7 +7782,7 @@
                 : 'Not Assigned';
             const statusText = coe.status ? coe.status.replace('_', ' ').toUpperCase() : 'UNKNOWN';
             const eventsCount = coe.events ? coe.events.length : 0;
-            const seatsCount = coe.available_seats ? coe.available_seats.length : 0;
+            const seatsCount = coe.selected_seats ? coe.selected_seats.length : 0;
 
             // Create events HTML
             const eventsHtml = coe.events && coe.events.length > 0 ? coe.events.map(event => {
@@ -7807,7 +7807,7 @@
             }).join('') : '<p style="color: #7f8c8d; text-align: center; padding: 20px;">No events selected</p>';
 
             // Create seats HTML
-            const seatsHtml = coe.available_seats && coe.available_seats.length > 0 ? coe.available_seats.map(seat => {
+            const seatsHtml = coe.selected_seats && coe.selected_seats.length > 0 ? coe.selected_seats.map(seat => {
                 return `
                     <div style="border: 1px solid #ecf0f1; border-radius: 8px; padding: 10px; margin-bottom: 8px;">
                         <div style="font-weight: bold; color: #2c3e50;">Table ${seat.seat_code || 'Unknown'}</div>
@@ -8702,7 +8702,7 @@
             updateCOESelectedEvents(); // Update selected events display
             
             // Step 3: Tables - populate immediately for visual display
-            coecSelectedSeats = coe.available_seats || [];
+            coecSelectedSeats = coe.selected_seats || [];
             populateCOESeatsContainer(); // Show seats container for all selected events
             preSelectSeatsForEdit(); // Mark selected seats as selected
             
@@ -10033,7 +10033,7 @@
                         total_price: event.base_price || 0,
                         sequence: index + 1
                     })),
-                    available_seats: coecSelectedSeats.map(seat => ({
+                    selected_seats: coecSelectedSeats.map(seat => ({
                         event_id: seat.event_id.toString(),
                         seat_id: seat.seat_id.toString(),
                         seat_code: seat.seat_code || 'TBD', // Will be populated from seat data
@@ -10041,7 +10041,8 @@
                         base_price: seat.base_price || 0, // Will be populated from seat data
                         event_price: seat.event_price || 0, // Will be populated from seat data
                         available_from: new Date(),
-                        available_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+                        available_until: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+                        status: 'selected'
                     }))
                 };
 

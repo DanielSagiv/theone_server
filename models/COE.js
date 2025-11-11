@@ -291,7 +291,7 @@ const coeSchema = new mongoose.Schema({
   
   // Content
   events: [COEItemSchema],
-  available_seats: [{ // Pre-selected available seats
+  selected_seats: [{ // Selected seats for the COE
     event_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
     seat_id: { type: mongoose.Schema.Types.ObjectId, required: true },
     seat_code: { type: String, required: true, trim: true },
@@ -299,7 +299,12 @@ const coeSchema = new mongoose.Schema({
     base_price: { type: Number, min: 0, required: true },
     event_price: { type: Number, min: 0, required: true },
     available_from: { type: Date, required: true },
-    available_until: { type: Date, required: true }
+    available_until: { type: Date, required: true },
+    status: { 
+      type: String, 
+      enum: ['selected', 'held', 'booked', 'released', 'expired', 'rejected'], 
+      default: 'selected' 
+    }
   }],
   policies: { 
     type: String, 

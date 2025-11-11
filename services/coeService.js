@@ -8,13 +8,13 @@ const User = require('../models/User');
  */
 
 /**
- * Validate that all seats are available before COE creation
- * @param {Array} availableSeats - Array of seat data
+ * Validate that all selected seats are available before COE creation
+ * @param {Array} selectedSeats - Array of seat data
  * @throws {Error} If any seat is not available
  */
-async function validateSeatAvailability(availableSeats) {
+async function validateSelectedSeats(selectedSeats) {
   try {
-    for (const seatData of availableSeats) {
+    for (const seatData of selectedSeats) {
       const event = await Event.findById(seatData.event_id);
       
       if (!event) {
@@ -32,25 +32,25 @@ async function validateSeatAvailability(availableSeats) {
       }
     }
   } catch (error) {
-    console.error('Seat availability validation failed:', error);
+    console.error('Selected seat validation failed:', error);
     throw error;
   }
 }
 
 /**
- * Update seat statuses to 'held' when COE is created
- * @param {Array} availableSeats - Array of seat data
+ * Update selected seats status to 'held' when COE is created/approved
+ * @param {Array} selectedSeats - Array of seat data
  * @param {string} coeId - COE ID for booking reference
  */
-async function updateSeatStatusesToHeld(availableSeats, coeId) {
+async function updateSelectedSeatsStatus(selectedSeats, coeId, newStatus = 'held') {
   try {
     // Use bulk update for better performance
-    const bulkOps = availableSeats.map(seatData => ({
+    const bulkOps = selectedSeats.map(seatData => ({
       updateOne: {
         filter: { '_id': seatData.event_id, 'seats._id': seatData.seat_id },
         update: {
           $set: {
-            'seats.$.status': 'held',
+            'seats.$.status': newStatus,
             'seats.$.booking_reference': coeId.toString(),
             'seats.$.booked_at': new Date()
           }
@@ -61,8 +61,21 @@ async function updateSeatStatusesToHeld(availableSeats, coeId) {
     if (bulkOps.length > 0) {
       await Event.bulkWrite(bulkOps);
     }
+
+    // Update status in COE selected_seats array
+    await COE.updateOne(
+      { '_id': coeId },
+      {
+        $set: {
+          'selected_seats.$[seat].status': newStatus
+        }
+      },
+      {
+        arrayFilters: [{ 'seat.seat_id': { $in: selectedSeats.map(s => s.seat_id) } }]
+      }
+    );
   } catch (error) {
-    console.error('Error updating seat statuses to held:', error);
+    console.error('Error updating selected seats status:', error);
     throw error;
   }
 }
@@ -92,10 +105,10 @@ async function updateSeatStatusesToBooked(coeId) {
 }
 
 /**
- * Revert seat statuses to 'available' when COE is deleted or cancelled
+ * Release selected seats when COE is deleted or cancelled
  * @param {string} coeId - COE ID
  */
-async function revertSeatStatusesToAvailable(coeId) {
+async function releaseSelectedSeats(coeId) {
   try {
     // Use bulk update for better performance
     await Event.updateMany(
@@ -112,8 +125,18 @@ async function revertSeatStatusesToAvailable(coeId) {
         arrayFilters: [{ 'seat.booking_reference': coeId.toString() }]
       }
     );
+
+    // Update status in COE selected_seats array to 'released'
+    await COE.updateOne(
+      { '_id': coeId },
+      {
+        $set: {
+          'selected_seats.$[].status': 'released'
+        }
+      }
+    );
   } catch (error) {
-    console.error('Error reverting seat statuses to available:', error);
+    console.error('Error releasing selected seats:', error);
     throw error;
   }
 }
@@ -139,9 +162,9 @@ async function createCOE(coeData, createdBy) {
       throw new Error('Admin not found');
     }
 
-    // Validate seat availability before creating COE
-    if (coeData.available_seats && coeData.available_seats.length > 0) {
-      await validateSeatAvailability(coeData.available_seats);
+    // Validate selected seats before creating COE
+    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
+      await validateSelectedSeats(coeData.selected_seats);
     }
 
     // Set creation details
@@ -153,24 +176,28 @@ async function createCOE(coeData, createdBy) {
 
     await coe.save();
     
-    // Set coe_id for all events and available_seats after COE is created
+    // Set coe_id for all events and selected_seats after COE is created
     if (coe.events && coe.events.length > 0) {
       coe.events.forEach(event => {
         event.coe_id = coe._id;
       });
     }
     
-    if (coe.available_seats && coe.available_seats.length > 0) {
-      coe.available_seats.forEach(seat => {
+    if (coe.selected_seats && coe.selected_seats.length > 0) {
+      coe.selected_seats.forEach(seat => {
         seat.coe_id = coe._id;
+        // Ensure status is set (defaults to 'selected' in schema)
+        if (!seat.status) {
+          seat.status = 'selected';
+        }
       });
     }
     
     await coe.save();
     
     // Update seat statuses to 'held' after COE is created
-    if (coeData.available_seats && coeData.available_seats.length > 0) {
-      await updateSeatStatusesToHeld(coeData.available_seats, coe._id);
+    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
+      await updateSelectedSeatsStatus(coeData.selected_seats, coe._id, 'held');
     }
     
     // Populate references
@@ -304,16 +331,16 @@ async function updateCOE(coeId, updateData) {
       throw new Error('COE not found');
     }
 
-    // Handle seat status updates if available_seats are being updated
-    if (updateData.available_seats) {
+    // Handle seat status updates if selected_seats are being updated
+    if (updateData.selected_seats) {
       // Release old seats back to available
-      await revertSeatStatusesToAvailable(coeId);
+      await releaseSelectedSeats(coeId);
       
       // Validate new seat availability
-      await validateSeatAvailability(updateData.available_seats);
+      await validateSelectedSeats(updateData.selected_seats);
       
       // Hold new seats
-      await updateSeatStatusesToHeld(updateData.available_seats, coeId);
+      await updateSelectedSeatsStatus(updateData.selected_seats, coeId, 'held');
     }
 
     const coe = await COE.findByIdAndUpdate(
@@ -354,8 +381,8 @@ async function deleteCOE(coeId) {
       throw new Error('Cannot delete COE in accepted or completed status');
     }
 
-    // Revert seat statuses to available before deleting COE
-    await revertSeatStatusesToAvailable(coeId);
+    // Release selected seats before deleting COE
+    await releaseSelectedSeats(coeId);
 
     await COE.findByIdAndDelete(coeId);
     return true;
@@ -497,9 +524,17 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     if (status === 'accepted') {
       // When COE is accepted, seats become 'booked'
       await updateSeatStatusesToBooked(coeId);
+      // Update selected_seats status in COE
+      const coe = await COE.findById(coeId);
+      if (coe && coe.selected_seats && coe.selected_seats.length > 0) {
+        coe.selected_seats.forEach(seat => {
+          seat.status = 'booked';
+        });
+        await coe.save();
+      }
     } else if (['cancelled', 'rejected', 'expired'].includes(status)) {
-      // When COE is cancelled/rejected/expired, seats revert to 'available'
-      await revertSeatStatusesToAvailable(coeId);
+      // When COE is cancelled/rejected/expired, seats are released
+      await releaseSelectedSeats(coeId);
     }
     
     return await getCOEById(coeId);
@@ -551,10 +586,10 @@ async function assignRunnerToCOE(coeId, runnerData, assignedBy) {
 /**
  * Update seat assignments for COE
  * @param {string} coeId - COE ID
- * @param {Array} availableSeats - Available seats data
+ * @param {Array} selectedSeats - Selected seats data
  * @returns {Promise<Object>} Updated COE
  */
-async function updateSeatAssignments(coeId, availableSeats) {
+async function updateSeatAssignments(coeId, selectedSeats) {
   try {
     const coe = await COE.findById(coeId);
     
@@ -563,7 +598,7 @@ async function updateSeatAssignments(coeId, availableSeats) {
     }
 
     // Validate all events and seats exist
-    for (const seat of availableSeats) {
+    for (const seat of selectedSeats) {
       const event = await Event.findById(seat.event_id);
       if (!event) {
         throw new Error(`Event ${seat.event_id} not found`);
@@ -576,7 +611,10 @@ async function updateSeatAssignments(coeId, availableSeats) {
       }
     }
 
-    coe.available_seats = availableSeats;
+    coe.selected_seats = selectedSeats.map(seat => ({
+      ...seat,
+      status: seat.status || 'selected'
+    }));
     await coe.save();
 
     return await getCOEById(coeId);
@@ -688,8 +726,8 @@ module.exports = {
   getCOEsByClient,
   getCOEsByRunner,
   getCOEStatistics,
-  validateSeatAvailability,
-  updateSeatStatusesToHeld,
+  validateSelectedSeats,
+  updateSelectedSeatsStatus,
   updateSeatStatusesToBooked,
-  revertSeatStatusesToAvailable
+  releaseSelectedSeats
 };
