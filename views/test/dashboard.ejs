@@ -398,6 +398,95 @@
             color: #00695c;
         }
 
+        /* BOT Section */
+        .bot-section {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .bot-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .bot-response-area,
+        .bot-input-area {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            padding: 24px;
+        }
+
+        .bot-response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .bot-response-feed {
+            border: 1px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #f9fafb;
+        }
+
+        .bot-placeholder-text {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+
+        .bot-placeholder-structure {
+            background: #fff;
+            border: 1px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+            font-size: 0.85rem;
+            color: #2c3e50;
+            overflow-x: auto;
+        }
+
+        .bot-input-area label {
+            display: block;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+        }
+
+        .bot-input-area textarea {
+            width: 100%;
+            min-height: 140px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 14px;
+            font-size: 0.95rem;
+            resize: vertical;
+            font-family: inherit;
+            color: #2c3e50;
+            background: #f8fafc;
+        }
+
+        .bot-input-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .bot-disabled-hint {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
         .industry-energy {
             background: #fff8e1;
             color: #f9a825;
@@ -1887,6 +1976,9 @@
                 <a href="#" class="nav-item" data-section="coes">
                     COEs
                 </a>
+                <a href="#" class="nav-item" data-section="bot">
+                    BOT
+                </a>
                 <a href="#" class="nav-item" data-section="payments">
                     Payments
                 </a>
@@ -2157,6 +2249,38 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOT Section -->
+                <div class="content-section" id="botSection">
+                    <div class="section-header">
+                        <h1>Bot Sandbox</h1>
+                        <p>Prototype and validate conversational flows before wiring the client app.</p>
+                    </div>
+                    <div class="bot-section">
+                        <div class="bot-panel">
+                            <div class="bot-response-area">
+                                <div class="bot-response-header">
+                                    <div>
+                                        <h3 style="margin:0;">Response Preview</h3>
+                                        <small class="bot-disabled-hint">Structured responses and plain text will render here.</small>
+                                    </div>
+                                </div>
+                                <div class="bot-response-feed" id="botResponseFeed">
+                                    <div class="bot-placeholder-text">No bot responses yet.</div>
+                                    <pre class="bot-placeholder-structure" id="botResponseStructure">{\n    \"message\": \"Connect the bot service to view responses\",\n    \"data\": null\n}</pre>
+                                </div>
+                            </div>
+                            <div class="bot-input-area">
+                                <label for="botPromptInput">Bot Prompt</label>
+                                <textarea id="botPromptInput" placeholder="Type a prompt to send to the bot..." disabled></textarea>
+                                <div class="bot-input-footer">
+                                    <span class="bot-disabled-hint">Bot service not connected yet. This interface is ready for future wiring.</span>
+                                    <button class="btn" style="padding:10px 20px;border-radius:8px;font-weight:600;" disabled>Send to Bot</button>
+                                </div>
                             </div>
                         </div>
                     </div>
