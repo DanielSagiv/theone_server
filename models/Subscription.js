@@ -82,9 +82,8 @@ const subscriptionSchema = new mongoose.Schema({
   
   // Global Payments
   gp_schedule_id: {
-    type: String,
-    unique: true,
-    sparse: true
+    type: String
+    // unique sparse index defined below
   },
   
   // Payment History

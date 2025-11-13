@@ -13,6 +13,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const session = require('express-session');
+const path = require('path');
 const app = express();
 const AWS = require('aws-sdk');
 
@@ -48,6 +49,8 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // Session middleware for password protection
 app.use(session({
@@ -64,10 +67,7 @@ const PORT = 80;
 let dbStatus = 'not connected';
 
 // Try to connect to DB on startup
-mongoose.connect(process.env.DB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.DB_URI)
   .then(() => {
     dbStatus = 'connected';
     console.log(' Connected to MongoDB');
@@ -95,6 +95,7 @@ const paymentRoutes = require('./routes/payments');
 const webhookRoutes = require('./routes/webhooks');
 const subscriptionRoutes = require('./routes/subscriptions');
 const gxnRoutes = require('./routes/gxn');
+const botRoutes = require('./routes/bot');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -105,6 +106,7 @@ app.use('/v1/coes', coeRoutes);
 app.use('/v1/payments', paymentRoutes);
 app.use('/v1/subscriptions', subscriptionRoutes);
 app.use('/v1/gxn', gxnRoutes);
+app.use('/v1/bot', botRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // Landing page route (password protection)

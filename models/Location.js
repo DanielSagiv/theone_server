@@ -84,7 +84,7 @@ const LocationSchema = new mongoose.Schema({
   tags: [{ type: String, trim: true }],
   status: { type: String, enum: ['draft','active','archived'], default: 'active' },
   // GXN integration field
-  gxnVenueCode: { type: String, trim: true, index: true, sparse: true }, // GXN venue code (e.g., VEN505115)
+  gxnVenueCode: { type: String, trim: true }, // GXN venue code (e.g., VEN505115) - sparse index defined below
   // GXN venue metadata
   timezone: { type: String, trim: true }, // Venue timezone (e.g., "America/Los_Angeles")
   tagline: { type: String, trim: true }, // Short marketing tagline
@@ -140,7 +140,7 @@ const LocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 LocationSchema.index({ name: 'text', description: 'text', 'address.city': 1, 'address.country': 1 });
-LocationSchema.index({ gxnVenueCode: 1 }); // Index for GXN venue code lookups
+LocationSchema.index({ gxnVenueCode: 1 }, { sparse: true }); // Index for GXN venue code lookups
 
 module.exports = mongoose.model('Location', LocationSchema);
 

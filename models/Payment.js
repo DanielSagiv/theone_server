@@ -48,9 +48,8 @@ const paymentSchema = new mongoose.Schema({
   
   // Global Payments Data
   gp_transaction_id: {
-    type: String,
-    unique: true,
-    sparse: true
+    type: String
+    // unique sparse index defined below
   },
   gp_authorization_code: String,
   gp_response_code: String,
@@ -72,9 +71,8 @@ const paymentSchema = new mongoose.Schema({
   
   // Idempotency
   idempotency_key: {
-    type: String,
-    unique: true,
-    sparse: true
+    type: String
+    // unique sparse index defined below
   },
   
   // Metadata

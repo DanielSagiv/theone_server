@@ -401,76 +401,617 @@
         /* BOT Section */
         .bot-section {
             display: flex;
+            justify-content: center;
+            padding: 20px 0;
+        }
+
+        .bot-phone {
+            width: 520px;
+            max-width: 100%;
+        }
+
+        .bot-phone-frame {
+            position: relative;
+            padding: 26px 18px 34px;
+            background: linear-gradient(145deg, #1f1f1f, #0f0f0f);
+            border-radius: 42px;
+            box-shadow: 0 20px 45px rgba(0,0,0,0.35);
+        }
+
+        .bot-phone-notch {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140px;
+            height: 18px;
+            background: #050505;
+            border-radius: 12px;
+        }
+
+        .bot-phone-screen {
+            background: linear-gradient(180deg, #111827 0%, #0b1220 100%);
+            border-radius: 28px;
+            padding: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+            min-height: 520px;
+            display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 16px;
         }
 
         .bot-panel {
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 14px;
+            height: 100%;
+            color: #e5e7eb;
         }
 
-        .bot-response-area,
-        .bot-input-area {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            padding: 24px;
+.bot-response-area,
+.bot-input-area {
+    background: transparent;
+    border-radius: 18px;
+    box-shadow: none;
+    padding: 0;
+    border: none;
+}
+
+        .bot-response-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         .bot-response-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
 
-        .bot-response-feed {
-            border: 1px dashed #d1d5db;
-            border-radius: 10px;
-            padding: 20px;
-            min-height: 200px;
+.bot-response-feed {
+    border: none;
+    border-radius: 18px;
+    padding: 14px;
+    min-height: 200px;
+    flex: 1;
+    background: rgba(15, 23, 42, 0.65);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    overflow-x: visible;
+    max-height: 450px;
+    /* Removed redundant right border/frame */
+}
+
+        .bot-message-wrapper {
+            display: flex;
+            align-items: flex-start;
+            width: 100%;
+            position: relative;
+            overflow: visible;
+        }
+
+        .bot-message-wrapper.user {
+            justify-content: flex-end;
+        }
+
+        .bot-message-wrapper.assistant {
+            justify-content: flex-start;
+        }
+
+        /* Header avatars */
+        .bot-header-avatars {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 12px;
+            margin-left: 35px;
+            width: 100%;
+        }
+
+        .bot-header-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            overflow: hidden;
+            background: #1f2937;
+            border: 2px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .bot-header-avatar-assistant {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        }
+
+        .bot-header-avatar-user {
+            background: #3b82f6;
+        }
+
+.bot-placeholder-text {
+    color: #94a3b8;
+    font-size: 0.95rem;
+}
+
+        .bot-placeholder-structure {
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    font-size: 0.85rem;
+    color: #e2e8f0;
+    overflow-x: auto;
+        }
+
+        .bot-message {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            background: #f9fafb;
+            max-width: 95%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+            position: relative;
+            overflow: visible;
         }
 
-        .bot-placeholder-text {
-            color: #7f8c8d;
+        .bot-message.user {
+            background: rgba(59, 130, 246, 0.18);
+            border-color: rgba(59, 130, 246, 0.5);
+            margin-left: auto;
+        }
+
+        .bot-message.assistant {
+            background: rgba(15, 23, 42, 0.95);
+            margin-right: auto;
+        }
+
+        .bot-message-role {
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 600;
+    color: #cbd5f5;
+            margin-bottom: 8px;
+        }
+
+        .bot-message-content {
+            white-space: normal;
+            color: #e2e8f0;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .bot-message-content pre {
+            margin: 0;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 10px;
+            padding: 12px;
+            overflow-x: auto;
+        }
+
+        /* Structured Response Styles */
+        .bot-structured-card {
+            margin-top: 12px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            position: relative;
+        }
+
+        .bot-structured-message {
+            margin-bottom: 12px;
+            color: #e2e8f0;
             font-size: 0.95rem;
         }
 
-        .bot-placeholder-structure {
-            background: #fff;
-            border: 1px solid #ecf0f1;
-            border-radius: 8px;
-            padding: 16px;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        /* COE Card Styles */
+        .bot-coe-card {
+            position: relative;
+            max-width: 100%;
+            width: 100%;
+            overflow: visible; /* Allow menu to overflow */
+        }
+
+        .coe-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .coe-card-title {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .coe-status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .coe-status-draft {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
+
+        .coe-status-approved {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .coe-status-accepted {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .coe-status-rejected {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .coe-card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            position: relative;
+            padding-bottom: 52px; /* Space for menu button at bottom (36px button + 16px padding) */
+        }
+
+        .coe-card-info {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .coe-info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .coe-info-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .coe-info-value {
+            font-size: 0.95rem;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        .coe-card-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding-top: 12px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .coe-action-btn {
+            padding: 6px 14px;
             font-size: 0.85rem;
-            color: #2c3e50;
-            overflow-x: auto;
+        }
+
+        .coe-card-menu-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            padding: 8px;
+            margin: 0;
+            z-index: 10;
+        }
+
+        .coe-menu-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(148, 163, 184, 0.15);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: #94a3b8;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            font-size: 1.1rem;
+            padding: 0;
+        }
+
+        .coe-menu-button:hover {
+            background: rgba(148, 163, 184, 0.25);
+            border-color: rgba(148, 163, 184, 0.5);
+            color: #cbd5e1;
+        }
+
+        .coe-menu-button.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.4);
+            color: #60a5fa;
+        }
+
+        .coe-menu-icon {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .coe-menu-icon-line {
+            width: 14px;
+            height: 2px;
+            background: currentColor;
+            border-radius: 1px;
+        }
+
+        .coe-menu-icon-dot {
+            width: 3px;
+            height: 3px;
+            background: currentColor;
+            border-radius: 50%;
+        }
+
+        .coe-context-menu {
+            position: absolute;
+            bottom: calc(100% + 4px);
+            left: 0;
+            margin-bottom: 0;
+            background: rgba(15, 23, 42, 0.98);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            min-width: 200px;
+            z-index: 1001;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .coe-context-menu.show {
+            display: flex;
+        }
+
+        .coe-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            font-size: 0.9rem;
+            border: none;
+            background: transparent;
+            text-align: left;
+            width: 100%;
+        }
+
+        .coe-menu-item:hover {
+            background: rgba(59, 130, 246, 0.15);
+        }
+
+        .coe-menu-item-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1rem;
+        }
+
+        .coe-menu-item-text {
+            flex: 1;
+        }
+
+        /* Event List Styles */
+        .bot-event-list {
+            max-width: 100%;
+            width: 100%;
+        }
+
+        .event-list-header {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .event-list-header h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .event-list-items {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bot-event-item {
+            padding: 14px 16px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .event-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .event-item-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .event-item-type {
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5f5;
+            text-transform: uppercase;
+        }
+
+        .event-item-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .event-map-link {
+            color: #60a5fa;
+            text-decoration: none;
+            margin-left: 4px;
+            font-size: 0.9rem;
+            transition: opacity 0.2s ease;
+        }
+
+        .event-map-link:hover {
+            opacity: 0.8;
+        }
+
+        .event-detail {
+            display: flex;
+            gap: 6px;
+        }
+
+        .event-detail-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .event-detail-value {
+            font-size: 0.85rem;
+            color: #e2e8f0;
+        }
+
+        /* COE List Styles */
+        .bot-coe-list {
+            max-width: 100%;
+        }
+
+        .coe-list-header {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .coe-list-header h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .coe-list-items {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bot-coe-list-item {
+            position: relative;
+            padding: 12px 12px 52px 12px !important; /* Space for menu button at bottom */
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+
+        .coe-list-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .coe-list-item-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .coe-list-item-details {
+            display: flex;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 12px;
+        }
+
+        .coe-list-item-menu-container {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            padding: 8px;
+            margin: 0;
+            z-index: 10;
+        }
+
+        /* List items use the same menu styles as cards - styles inherited from card menu */
+
+        .bot-empty-message {
+            color: #94a3b8;
+            font-size: 0.9rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .bot-loading-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+    color: #94a3b8;
+            font-size: 0.9rem;
         }
 
         .bot-input-area label {
             display: block;
             font-weight: 600;
-            color: #2c3e50;
+    color: #cbd5f5;
             margin-bottom: 8px;
         }
 
         .bot-input-area textarea {
             width: 100%;
-            min-height: 140px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
+            min-height: 40px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 12px;
             padding: 14px;
             font-size: 0.95rem;
             resize: vertical;
             font-family: inherit;
-            color: #2c3e50;
-            background: #f8fafc;
+    color: #e2e8f0;
+    background: rgba(15, 23, 42, 0.9);
         }
 
         .bot-input-footer {
@@ -483,7 +1024,7 @@
         }
 
         .bot-disabled-hint {
-            color: #7f8c8d;
+    color: #94a3b8;
             font-size: 0.9rem;
         }
 
@@ -601,6 +1142,12 @@
             background-color: #d1ecf1;
             color: #0c5460;
             border: 1px solid #bee5eb;
+        }
+
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
         }
 
         /* Loading */
@@ -2261,25 +2808,41 @@
                         <p>Prototype and validate conversational flows before wiring the client app.</p>
                     </div>
                     <div class="bot-section">
-                        <div class="bot-panel">
-                            <div class="bot-response-area">
-                                <div class="bot-response-header">
-                                    <div>
-                                        <h3 style="margin:0;">Response Preview</h3>
-                                        <small class="bot-disabled-hint">Structured responses and plain text will render here.</small>
+                        <div class="bot-phone">
+                            <div class="bot-phone-frame">
+                                <div class="bot-phone-notch"></div>
+                                <div class="bot-phone-screen">
+                                    <div class="bot-panel">
+                                        <div class="bot-response-area">
+                                            <div class="bot-response-header">
+                                                <div>
+                                                    <h3 style="margin:0;">THE1 Bot Response Preview</h3>
+                                                    <small class="bot-disabled-hint">Structured responses and plain text will render here.</small>
+                                                    <small class="bot-disabled-hint" id="botUserRole" style="display:block;margin-top:4px;font-size:0.85em;">You are logged in as <span id="botUserRoleText">...</span></small>
+                                                    <div class="bot-header-avatars">
+                                                        <div class="bot-header-avatar bot-header-avatar-assistant" id="botHeaderAssistantAvatar">
+                                                            <img src="/images/logo.png" alt="Assistant" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+                                                        </div>
+                                                        <span style="color:#94a3b8;font-size:0.9rem;">↔</span>
+                                                        <div class="bot-header-avatar bot-header-avatar-user" id="botHeaderUserAvatar">
+                                                            <div id="botHeaderUserInitials" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:0.85rem;text-transform:uppercase;color:#fff;">U</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="bot-response-feed" id="botResponseFeed">
+                                                <div class="bot-placeholder-text" id="botEmptyState">No bot responses yet.</div>
+                                            </div>
+                                        </div>
+                                        <div class="bot-input-area">
+                                            <textarea id="botPromptInput" placeholder="Type a prompt to send to  THE1..."></textarea>
+                                            <div class="bot-input-footer">
+                                                <span class="bot-disabled-hint" id="botStatusHint">Connected to bot sandbox. Responses may take a moment.</span>
+                                                <button class="btn" id="botSendButton" style="padding:10px 20px;border-radius:8px;font-weight:600;" onclick="sendBotPrompt()">Send</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="bot-response-feed" id="botResponseFeed">
-                                    <div class="bot-placeholder-text">No bot responses yet.</div>
-                                    <pre class="bot-placeholder-structure" id="botResponseStructure">{\n    \"message\": \"Connect the bot service to view responses\",\n    \"data\": null\n}</pre>
-                                </div>
-                            </div>
-                            <div class="bot-input-area">
-                                <label for="botPromptInput">Bot Prompt</label>
-                                <textarea id="botPromptInput" placeholder="Type a prompt to send to the bot..." disabled></textarea>
-                                <div class="bot-input-footer">
-                                    <span class="bot-disabled-hint">Bot service not connected yet. This interface is ready for future wiring.</span>
-                                    <button class="btn" style="padding:10px 20px;border-radius:8px;font-weight:600;" disabled>Send to Bot</button>
                                 </div>
                             </div>
                         </div>
@@ -3399,6 +3962,10 @@
     <script>
         let currentToken = null;
         let currentUser = null;
+        let currentUserInitials = '';
+        let currentUserAvatarUrl = '';
+        let botConversation = [];
+        let botLoading = false;
 
         // Check for existing session on page load
         window.onload = function() {
@@ -3436,21 +4003,59 @@
                 // Update avatar initials
                 const initials = (currentUser.firstName?.[0] || '') + (currentUser.lastName?.[0] || '');
                 const avatarInitialsEl = document.getElementById('avatarInitials');
-                avatarInitialsEl.textContent = initials.toUpperCase();
+                currentUserInitials = initials.toUpperCase();
+                avatarInitialsEl.textContent = currentUserInitials;
                 
                 // Update dropdown info
                 document.getElementById('dropdownName').textContent = `${currentUser.firstName} ${currentUser.lastName}`;
                 document.getElementById('dropdownEmail').textContent = currentUser.email;
                 document.getElementById('dropdownRole').textContent = currentUser.role;
                 
+                // Update bot user role display
+                const botUserRoleText = document.getElementById('botUserRoleText');
+                if (botUserRoleText && currentUser.role) {
+                    botUserRoleText.textContent = currentUser.role;
+                }
+                
                 // Update avatar image if available (use inner .avatar-img)
+                // IMPORTANT: Set currentUserAvatarUrl BEFORE updating header avatars
                 if (currentUser.avatarUrl) {
+                    currentUserAvatarUrl = currentUser.avatarUrl;
                     const avatarImgEl = document.querySelector('.user-avatar .avatar-img');
                     if (avatarImgEl) {
                         avatarImgEl.style.backgroundImage = `url('${currentUser.avatarUrl}')`;
                         avatarImgEl.style.backgroundSize = 'cover';
                         avatarImgEl.style.backgroundPosition = 'center';
                         avatarImgEl.style.color = 'transparent';
+                    }
+                } else {
+                    currentUserAvatarUrl = '';
+                }
+                
+                // Update header avatars - show actual user image
+                // This runs AFTER currentUserAvatarUrl is set
+                const botHeaderUserInitials = document.getElementById('botHeaderUserInitials');
+                const botHeaderUserAvatar = document.getElementById('botHeaderUserAvatar');
+                if (botHeaderUserInitials) {
+                    botHeaderUserInitials.textContent = currentUserInitials;
+                }
+                // Always try to show user image if available
+                if (botHeaderUserAvatar) {
+                    if (currentUserAvatarUrl) {
+                        // Show user image
+                        botHeaderUserAvatar.style.backgroundImage = `url('${currentUserAvatarUrl}')`;
+                        botHeaderUserAvatar.style.backgroundSize = 'cover';
+                        botHeaderUserAvatar.style.backgroundPosition = 'center';
+                        botHeaderUserAvatar.style.backgroundRepeat = 'no-repeat';
+                        if (botHeaderUserInitials) {
+                            botHeaderUserInitials.style.display = 'none';
+                        }
+                    } else {
+                        // Show initials if no image
+                        botHeaderUserAvatar.style.backgroundImage = 'none';
+                        if (botHeaderUserInitials) {
+                            botHeaderUserInitials.style.display = 'flex';
+                        }
                     }
                 }
             }
@@ -3519,6 +4124,9 @@
             }
             if (sectionName === 'payments') {
                 loadPaymentsSection();
+            }
+            if (sectionName === 'bot') {
+                loadBotConversation();
             }
         }
 
@@ -3659,18 +4267,736 @@
          */
         function showAlert(message, type = 'success') {
             const alertsDiv = document.getElementById('alerts');
-            let alertClass = 'alert-success';
-            if (type === 'error') {
-                alertClass = 'alert-error';
-            } else if (type === 'info') {
-                alertClass = 'alert-info';
-            }
+            const classMap = {
+                success: 'alert-success',
+                error: 'alert-error',
+                warning: 'alert-warning',
+                info: 'alert-info'
+            };
+
+            const alertClass = classMap[type] || classMap.success;
             alertsDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
             alertsDiv.style.display = 'block';
-            
+
             setTimeout(() => {
                 alertsDiv.style.display = 'none';
             }, 5000);
+        }
+
+        /**
+         * BOT helper utilities
+         */
+        function setBotLoading(isLoading, hintOverride) {
+            botLoading = !!isLoading;
+
+            const sendBtn = document.getElementById('botSendButton');
+            if (sendBtn) {
+                sendBtn.disabled = !!isLoading;
+                sendBtn.textContent = isLoading ? 'Sending...' : 'Send';
+            }
+
+            const hint = document.getElementById('botStatusHint');
+            if (hint) {
+                hint.textContent = hintOverride || (isLoading
+                    ? 'Waiting for bot response...'
+                    : 'Connected to bot sandbox. Responses may take a moment.');
+            }
+
+            const feed = document.getElementById('botResponseFeed');
+            if (!feed) return;
+
+            let indicator = document.getElementById('botLoadingIndicator');
+            if (isLoading) {
+                if (!indicator) {
+                    indicator = document.createElement('div');
+                    indicator.id = 'botLoadingIndicator';
+                    indicator.className = 'bot-loading-indicator';
+                    indicator.innerHTML = '<div class="spinner"></div><span>Generating response...</span>';
+                    feed.appendChild(indicator);
+                }
+            } else if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        function resetBotEmptyState(visible) {
+            const emptyState = document.getElementById('botEmptyState');
+            if (emptyState) {
+                emptyState.style.display = visible ? 'block' : 'none';
+            }
+        }
+
+        function createBotAvatar(role) {
+            const avatar = document.createElement('div');
+            avatar.className = 'bot-avatar';
+
+            if (role === 'assistant') {
+                const img = document.createElement('img');
+                img.src = '/images/logo.png';
+                img.alt = 'Bot';
+                avatar.appendChild(img);
+            } else if (role === 'user') {
+                if (currentUserAvatarUrl) {
+                    const img = document.createElement('img');
+                    img.src = currentUserAvatarUrl;
+                    img.alt = currentUserInitials || 'User';
+                    avatar.appendChild(img);
+                } else if (currentUserInitials) {
+                    avatar.textContent = currentUserInitials;
+                } else {
+                    avatar.textContent = 'U';
+                }
+            }
+
+            return avatar;
+        }
+
+        function parseJsonContent(content) {
+            if (typeof content !== 'string') return null;
+            const trimmed = content.trim();
+            if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(trimmed);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        /**
+         * Render structured COE card
+         */
+        function renderCOECard(coeData, actions = []) {
+            const card = document.createElement('div');
+            card.className = 'bot-structured-card bot-coe-card';
+            
+            const statusClass = `coe-status-${coeData.status || 'draft'}`;
+            const dateRange = coeData.start_date && coeData.end_date
+                ? `${new Date(coeData.start_date).toLocaleDateString()} - ${new Date(coeData.end_date).toLocaleDateString()}`
+                : 'Dates TBD';
+
+            card.innerHTML = `
+                <div class="coe-card-header">
+                    <h4 class="coe-card-title">${coeData.name || 'Untitled COE'}</h4>
+                    <span class="coe-status-badge ${statusClass}">${coeData.status || 'draft'}</span>
+                </div>
+                <div class="coe-card-body">
+                    <div class="coe-card-info">
+                        <div class="coe-info-item">
+                            <span class="coe-info-label">Dates:</span>
+                            <span class="coe-info-value">${dateRange}</span>
+                        </div>
+                        <div class="coe-info-item">
+                            <span class="coe-info-label">Events:</span>
+                            <span class="coe-info-value">${coeData.events_count || 0}</span>
+                        </div>
+                        <div class="coe-info-item">
+                            <span class="coe-info-label">Seats:</span>
+                            <span class="coe-info-value">${coeData.seats_count || 0}</span>
+                        </div>
+                        <div class="coe-info-item">
+                            <span class="coe-info-label">Total:</span>
+                            <span class="coe-info-value">${coeData.pricing?.currency || 'USD'} ${(coeData.pricing?.total || 0).toLocaleString()}</span>
+                        </div>
+                    </div>
+                    ${actions.length > 0 ? `
+                        <div class="coe-card-actions">
+                            ${actions.map(action => `
+                                <button class="btn btn-sm btn-secondary coe-action-btn" 
+                                        data-action="${action.action}" 
+                                        data-coe-id="${action.coe_id}"
+                                        ${action.confirm ? 'data-confirm="true"' : ''}>
+                                    ${action.label}
+                                </button>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="coe-card-menu-container">
+                        <button class="coe-menu-button" data-coe-id="${coeData.id || coeData._id}" aria-label="COE menu">
+                            <div class="coe-menu-icon">
+                                <div class="coe-menu-icon-line"></div>
+                                <div class="coe-menu-icon-line"></div>
+                                <div class="coe-menu-icon-line"></div>
+                                <div style="display: flex; gap: 2px; margin-top: 1px;">
+                                    <div class="coe-menu-icon-dot"></div>
+                                    <div class="coe-menu-icon-dot"></div>
+                                </div>
+                            </div>
+                        </button>
+                        <div class="coe-context-menu" data-coe-id="${coeData.id || coeData._id}">
+                            <button class="coe-menu-item" data-action="chat-runner" data-coe-id="${coeData.id || coeData._id}">
+                                <span class="coe-menu-item-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                </span>
+                                <span class="coe-menu-item-text">Chat with my runner</span>
+                            </button>
+                            <button class="coe-menu-item" data-action="chat-the1" data-coe-id="${coeData.id || coeData._id}">
+                                <span class="coe-menu-item-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                </span>
+                                <span class="coe-menu-item-text">Chat with The1</span>
+                            </button>
+                            <button class="coe-menu-item" data-action="edit" data-coe-id="${coeData.id || coeData._id}">
+                                <span class="coe-menu-item-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </span>
+                                <span class="coe-menu-item-text">Edit</span>
+                            </button>
+                            <button class="coe-menu-item" data-action="pay" data-coe-id="${coeData.id || coeData._id}">
+                                <span class="coe-menu-item-icon">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                        <line x1="1" y1="10" x2="23" y2="10"></line>
+                                    </svg>
+                                </span>
+                                <span class="coe-menu-item-text">Pay</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners to action buttons
+            card.querySelectorAll('.coe-action-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const action = btn.dataset.action;
+                    const coeId = btn.dataset.coeId;
+                    const needsConfirm = btn.dataset.confirm === 'true';
+                    
+                    if (needsConfirm && !confirm(`Are you sure you want to ${btn.textContent.toLowerCase()} this COE?`)) {
+                        return;
+                    }
+                    
+                    handleCOEAction(action, coeId);
+                });
+            });
+
+            // Attach event listeners to menu button
+            const menuButton = card.querySelector('.coe-menu-button');
+            const contextMenu = card.querySelector('.coe-context-menu');
+            
+            if (menuButton && contextMenu) {
+                // Toggle menu on button click
+                menuButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isActive = menuButton.classList.contains('active');
+                    
+                    // Close all other menus first
+                    document.querySelectorAll('.coe-menu-button.active').forEach(btn => {
+                        if (btn !== menuButton) {
+                            btn.classList.remove('active');
+                            btn.closest('.coe-card-menu-container, .coe-list-item-menu-container')
+                                ?.querySelector('.coe-context-menu')?.classList.remove('show');
+                        }
+                    });
+                    
+                    // Toggle current menu
+                    menuButton.classList.toggle('active');
+                    contextMenu.classList.toggle('show');
+                });
+                
+                // Handle menu item clicks
+                contextMenu.querySelectorAll('.coe-menu-item').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const action = item.dataset.action;
+                        const coeId = item.dataset.coeId;
+                        
+                        // Close menu
+                        menuButton.classList.remove('active');
+                        contextMenu.classList.remove('show');
+                        
+                        // Handle actions
+                        if (action === 'chat-runner') {
+                            console.log(`Chat with runner for COE ${coeId}`);
+                            showAlert('Chat with runner functionality coming soon', 'info');
+                        } else if (action === 'chat-the1') {
+                            console.log(`Chat with The1 for COE ${coeId}`);
+                            showAlert('Chat with The1 functionality coming soon', 'info');
+                        } else if (action === 'edit') {
+                            handleCOEAction('edit_coe', coeId);
+                        } else if (action === 'pay') {
+                            console.log(`Pay for COE ${coeId}`);
+                            showAlert('Payment functionality coming soon', 'info');
+                        }
+                    });
+                });
+            }
+
+            return card;
+        }
+
+        /**
+         * Render event list
+         */
+        function renderEventList(events) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-event-list';
+
+            if (events.length === 0) {
+                container.innerHTML = '<p class="bot-empty-message">No events found.</p>';
+                return container;
+            }
+
+            const eventsHtml = events.map(event => {
+                const eventDate = event.start_datetime 
+                    ? new Date(event.start_datetime).toLocaleDateString()
+                    : 'Date TBD';
+                const locationName = event.location?.name || 'Location TBD';
+                
+                // Format address
+                let addressText = 'Address TBD';
+                if (event.location?.address) {
+                    const addr = event.location.address;
+                    const parts = [];
+                    if (addr.line1) parts.push(addr.line1);
+                    if (addr.line2) parts.push(addr.line2);
+                    if (addr.city) parts.push(addr.city);
+                    if (addr.state) parts.push(addr.state);
+                    if (addr.postalCode) parts.push(addr.postalCode);
+                    if (addr.country) parts.push(addr.country);
+                    if (parts.length > 0) {
+                        addressText = parts.join(', ');
+                    }
+                }
+                
+                // Create map link from geo coordinates
+                let mapLink = null;
+                if (event.location?.geo && event.location.geo.coordinates && event.location.geo.coordinates.length >= 2) {
+                    const [longitude, latitude] = event.location.geo.coordinates;
+                    mapLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                }
+                
+                return `
+                    <div class="bot-event-item">
+                        <div class="event-item-header">
+                            <h5 class="event-item-title">${event.name || 'Untitled Event'}</h5>
+                            <span class="event-item-type">${event.type || 'event'}</span>
+                        </div>
+                        <div class="event-item-details">
+                            <div class="event-detail">
+                                <span class="event-detail-label">Date:</span>
+                                <span class="event-detail-value">${eventDate}</span>
+                            </div>
+                            <div class="event-detail">
+                                <span class="event-detail-label">Location:</span>
+                                <span class="event-detail-value">${locationName}</span>
+                            </div>
+                            <div class="event-detail">
+                                <span class="event-detail-label">Address:</span>
+                                <span class="event-detail-value">${addressText}${mapLink ? ` <a href="${mapLink}" target="_blank" class="event-map-link" title="View on map">View Map</a>` : ''}</span>
+                            </div>
+                            <div class="event-detail">
+                                <span class="event-detail-label">Price:</span>
+                                <span class="event-detail-value">${event.currency || 'USD'} ${(event.base_price || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="event-detail">
+                                <span class="event-detail-label">Available Tables:</span>
+                                <span class="event-detail-value">${event.available_seats_count || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="event-list-header">
+                    <h4>Events (${events.length})</h4>
+                </div>
+                <div class="event-list-items">
+                    ${eventsHtml}
+                </div>
+            `;
+
+            return container;
+        }
+
+        /**
+         * Render COE list
+         */
+        function renderCOEList(coes) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-coe-list';
+
+            if (coes.length === 0) {
+                container.innerHTML = '<p class="bot-empty-message">No COEs found.</p>';
+                return container;
+            }
+
+            const coesHtml = coes.map(coe => {
+                const dateRange = coe.start_date && coe.end_date
+                    ? `${new Date(coe.start_date).toLocaleDateString()} - ${new Date(coe.end_date).toLocaleDateString()}`
+                    : 'Dates TBD';
+                const statusClass = `coe-status-${coe.status || 'draft'}`;
+                const coeId = coe.id || coe._id || '';
+
+                return `
+                    <div class="bot-coe-list-item">
+                        <div class="coe-list-item-header">
+                            <h5 class="coe-list-item-title">${coe.name || 'Untitled COE'}</h5>
+                            <span class="coe-status-badge ${statusClass}">${coe.status || 'draft'}</span>
+                        </div>
+                        <div class="coe-list-item-details">
+                            <span>${dateRange}</span>
+                            <span>•</span>
+                            <span>${coe.events_count || 0} events</span>
+                            <span>•</span>
+                            <span>${coe.currency || 'USD'} ${(coe.total_price || 0).toLocaleString()}</span>
+                        </div>
+                        <div class="coe-list-item-menu-container">
+                            <button class="coe-menu-button" data-coe-id="${coeId}" aria-label="COE menu">
+                                <div class="coe-menu-icon">
+                                    <div class="coe-menu-icon-line"></div>
+                                    <div class="coe-menu-icon-line"></div>
+                                    <div class="coe-menu-icon-line"></div>
+                                    <div style="display: flex; gap: 2px; margin-top: 1px;">
+                                        <div class="coe-menu-icon-dot"></div>
+                                        <div class="coe-menu-icon-dot"></div>
+                                    </div>
+                                </div>
+                            </button>
+                            <div class="coe-context-menu" data-coe-id="${coeId}">
+                                <button class="coe-menu-item" data-action="chat-runner" data-coe-id="${coeId}">
+                                    <span class="coe-menu-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="coe-menu-item-text">Chat with my runner</span>
+                                </button>
+                                <button class="coe-menu-item" data-action="chat-the1" data-coe-id="${coeId}">
+                                    <span class="coe-menu-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="coe-menu-item-text">Chat with The1</span>
+                                </button>
+                                <button class="coe-menu-item" data-action="edit" data-coe-id="${coeId}">
+                                    <span class="coe-menu-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                        </svg>
+                                    </span>
+                                    <span class="coe-menu-item-text">Edit</span>
+                                </button>
+                                <button class="coe-menu-item" data-action="pay" data-coe-id="${coeId}">
+                                    <span class="coe-menu-item-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                            <line x1="1" y1="10" x2="23" y2="10"></line>
+                                        </svg>
+                                    </span>
+                                    <span class="coe-menu-item-text">Pay</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="coe-list-header">
+                    <h4>COEs (${coes.length})</h4>
+                </div>
+                <div class="coe-list-items">
+                    ${coesHtml}
+                </div>
+            `;
+
+            // Attach event listeners to menu buttons in list items
+            container.querySelectorAll('.coe-list-item-menu-container').forEach(containerEl => {
+                const menuButton = containerEl.querySelector('.coe-menu-button');
+                const contextMenu = containerEl.querySelector('.coe-context-menu');
+                
+                if (menuButton && contextMenu) {
+                    // Toggle menu on button click
+                    menuButton.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const isActive = menuButton.classList.contains('active');
+                        
+                        // Close all other menus first
+                        document.querySelectorAll('.coe-menu-button.active').forEach(btn => {
+                            if (btn !== menuButton) {
+                                btn.classList.remove('active');
+                                btn.closest('.coe-card-menu-container, .coe-list-item-menu-container')
+                                    ?.querySelector('.coe-context-menu')?.classList.remove('show');
+                            }
+                        });
+                        
+                        // Toggle current menu
+                        menuButton.classList.toggle('active');
+                        contextMenu.classList.toggle('show');
+                    });
+                    
+                    // Handle menu item clicks
+                    contextMenu.querySelectorAll('.coe-menu-item').forEach(item => {
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const action = item.dataset.action;
+                            const coeId = item.dataset.coeId;
+                            
+                            // Close menu
+                            menuButton.classList.remove('active');
+                            contextMenu.classList.remove('show');
+                            
+                            // Handle actions
+                            if (action === 'chat-runner') {
+                                console.log(`Chat with runner for COE ${coeId}`);
+                                showAlert('Chat with runner functionality coming soon', 'info');
+                            } else if (action === 'chat-the1') {
+                                console.log(`Chat with The1 for COE ${coeId}`);
+                                showAlert('Chat with The1 functionality coming soon', 'info');
+                            } else if (action === 'edit') {
+                                handleCOEAction('edit_coe', coeId);
+                            } else if (action === 'pay') {
+                                console.log(`Pay for COE ${coeId}`);
+                                showAlert('Payment functionality coming soon', 'info');
+                            }
+                        });
+                    });
+                }
+            });
+
+            return container;
+        }
+
+        /**
+         * Handle COE actions
+         */
+        function handleCOEAction(action, coeId) {
+            const textarea = document.getElementById('botPromptInput');
+            if (!textarea) return;
+
+            let prompt = '';
+            switch (action) {
+                case 'view_coe':
+                    prompt = `Show me details for COE ${coeId}`;
+                    break;
+                case 'edit_coe':
+                    prompt = `Edit COE ${coeId}`;
+                    break;
+                case 'delete_coe':
+                    prompt = `Delete COE ${coeId}`;
+                    break;
+                default:
+                    console.log('Unknown action:', action, coeId);
+                    return;
+            }
+
+            textarea.value = prompt;
+            sendBotPrompt();
+        }
+
+        /**
+         * Check if data is a structured response
+         */
+        function isStructuredResponse(data) {
+            return data && typeof data === 'object' && data.type && 
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list'].includes(data.type);
+        }
+
+        function renderBotMessages(messages = []) {
+            botConversation = Array.isArray(messages) ? messages : [];
+            const feed = document.getElementById('botResponseFeed');
+            if (!feed) return;
+
+            feed.innerHTML = '';
+            resetBotEmptyState(true);
+
+            const displayMessages = botConversation.filter(msg => msg.role !== 'system' && msg.role !== 'tool');
+            if (displayMessages.length === 0) {
+                return;
+            }
+
+            resetBotEmptyState(false);
+
+            displayMessages.forEach((message, index) => {
+                const wrapper = document.createElement('div');
+                wrapper.classList.add('bot-message-wrapper');
+                wrapper.classList.add(message.role === 'user' ? 'user' : 'assistant');
+
+                // No avatar in messages - removed to save space and show more content
+                const messageEl = document.createElement('div');
+                messageEl.classList.add('bot-message');
+                messageEl.classList.add(message.role === 'user' ? 'user' : 'assistant');
+
+                const roleEl = document.createElement('span');
+                roleEl.className = 'bot-message-role';
+                roleEl.textContent = message.role === 'assistant' ? 'Assistant' : 'You';
+
+                const contentEl = document.createElement('div');
+                contentEl.className = 'bot-message-content';
+
+                // Check for structured data
+                let structuredData = null;
+                
+                // First, check if message has structured_data directly
+                if (message.structured_data) {
+                    structuredData = message.structured_data;
+                }
+                
+                // If not, check for structured data in tool results (from previous tool call)
+                if (!structuredData && message.role === 'assistant' && index > 0) {
+                    // Look for tool result with structured data
+                    const prevToolMessage = botConversation.slice(0, index).reverse().find(msg => 
+                        msg.role === 'tool' && msg.structured_data
+                    );
+                    if (prevToolMessage && prevToolMessage.structured_data) {
+                        structuredData = prevToolMessage.structured_data;
+                    }
+                }
+
+                // Finally, check if message content contains structured response
+                if (!structuredData) {
+                    const parsed = parseJsonContent(message.content);
+                    if (parsed && isStructuredResponse(parsed)) {
+                        structuredData = parsed;
+                    }
+                }
+
+                if (structuredData) {
+                    // Render structured response
+                    if (structuredData.type === 'coe_created' || structuredData.type === 'coe_updated' || structuredData.type === 'coe_details') {
+                        const coeCard = renderCOECard(structuredData.coe, structuredData.actions || []);
+                        contentEl.appendChild(coeCard);
+                        
+                        // Add message text if present
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, coeCard);
+                        }
+                    } else if (structuredData.type === 'coe_list') {
+                        const coeList = renderCOEList(structuredData.coes || []);
+                        contentEl.appendChild(coeList);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, coeList);
+                        }
+                    } else if (structuredData.type === 'event_list') {
+                        const eventList = renderEventList(structuredData.events || []);
+                        contentEl.appendChild(eventList);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, eventList);
+                        }
+                    }
+                } else {
+                    // Regular text content
+                    const parsed = parseJsonContent(message.content);
+                    if (parsed) {
+                        const pre = document.createElement('pre');
+                        pre.textContent = JSON.stringify(parsed, null, 2);
+                        contentEl.appendChild(pre);
+                    } else if (message.content) {
+                        contentEl.textContent = message.content;
+                    }
+                }
+
+                messageEl.appendChild(roleEl);
+                messageEl.appendChild(contentEl);
+                // No avatar - removed to save space and show more content
+                wrapper.appendChild(messageEl);
+                feed.appendChild(wrapper);
+            });
+
+            feed.scrollTop = feed.scrollHeight;
+        }
+
+        // Global click handler to close menus when clicking outside
+        document.addEventListener('click', function(e) {
+            // Check if click is outside any menu button or menu
+            const clickedMenuButton = e.target.closest('.coe-menu-button');
+            const clickedMenu = e.target.closest('.coe-context-menu');
+            const clickedMenuItem = e.target.closest('.coe-menu-item');
+            
+            // If click is not on menu button, menu, or menu item, close all menus
+            if (!clickedMenuButton && !clickedMenu && !clickedMenuItem) {
+                document.querySelectorAll('.coe-menu-button.active').forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.closest('.coe-card-menu-container, .coe-list-item-menu-container')
+                        ?.querySelector('.coe-context-menu')?.classList.remove('show');
+                });
+            }
+        });
+
+        async function loadBotConversation() {
+            setBotLoading(true, 'Loading conversation history...');
+
+            try {
+                const result = await makeApiRequest('/bot/conversation');
+                if (result.success && result.data?.success) {
+                    renderBotMessages(result.data.data || []);
+                } else {
+                    renderBotMessages(botConversation);
+                    showAlert(result.data?.error?.message || 'Failed to load bot conversation', 'error');
+                }
+            } catch (error) {
+                console.error('Failed to load bot conversation:', error);
+                showAlert('Failed to load bot conversation', 'error');
+            } finally {
+                setBotLoading(false);
+            }
+        }
+
+        async function sendBotPrompt() {
+            if (botLoading) return;
+
+            const textarea = document.getElementById('botPromptInput');
+            if (!textarea) return;
+
+            const prompt = textarea.value.trim();
+            if (!prompt) {
+                showAlert('Please enter a prompt before sending.', 'warning');
+                return;
+            }
+
+            const previousConversation = [...botConversation];
+            const optimisticConversation = [
+                ...botConversation,
+                { role: 'user', content: prompt }
+            ];
+
+            textarea.value = '';
+            renderBotMessages(optimisticConversation);
+            setBotLoading(true);
+
+            try {
+                const response = await makeApiRequest('/bot/message', 'POST', { prompt });
+                if (response.success && response.data?.success) {
+                    renderBotMessages(response.data.data || []);
+                } else {
+                    renderBotMessages(previousConversation);
+                    const errorMsg = response.data?.error?.message || response.data?.error || 'Bot failed to respond.';
+                    showAlert(errorMsg, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending the1 prompt:', error);
+                renderBotMessages(previousConversation);
+                showAlert('Bot failed to respond.', 'error');
+            } finally {
+                setBotLoading(false);
+            }
         }
 
         /**
