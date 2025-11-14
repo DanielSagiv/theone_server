@@ -327,6 +327,51 @@ const toolRegistry = {
     schema_version: '1.0.0',
     permissions: ['admin', 'client'],
     handler: 'handleDeleteCOE'
+  },
+
+  /**
+   * Tool 7: Get Locations
+   * @description Query and list all locations (venues, restaurants, hotels, clubs)
+   */
+  get_locations: {
+    name: 'get_locations',
+    description: 'Query and list all locations (venues, restaurants, hotels, clubs). Use this tool when users ask about "locations", "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs", or want to see available locations. Returns locations with name, type, address, geo coordinates, and basic info.',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'Filter by location type (optional)',
+          enum: ['night_club', 'day_club', 'restaurant', 'hotel']
+        },
+        status: {
+          type: 'string',
+          description: 'Filter by location status (default: "active")',
+          enum: ['draft', 'active', 'archived']
+        },
+        search: {
+          type: 'string',
+          description: 'Text search in location name or description (optional)'
+        },
+        city: {
+          type: 'string',
+          description: 'Filter by city (optional)'
+        },
+        country: {
+          type: 'string',
+          description: 'Filter by country (optional)'
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (default: 100)',
+          minimum: 1,
+          maximum: 200
+        }
+      }
+    },
+    schema_version: '1.0.0',
+    permissions: ['admin', 'client', 'runner'],
+    handler: 'handleGetLocations'
   }
 };
 

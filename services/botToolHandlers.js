@@ -20,6 +20,7 @@ const {
   formatCOEResponse,
   formatEventListResponse,
   formatCOEListResponse,
+  formatLocationListResponse,
   createCOEActions,
   formatTextResponse
 } = require('./botResponseFormatter');
@@ -944,6 +945,105 @@ function formatDateRange(startDate, endDate) {
 }
 
 /**
+ * Handler 7: Get Locations
+ * @param {Object} params - Tool parameters
+ * @param {Object} user - Current user object
+ * @param {string} correlationId - Correlation ID for tracing
+ * @returns {Promise<Object>} Tool execution result
+ */
+async function handleGetLocations(params, user, correlationId) {
+  try {
+    const {
+      type,
+      status = 'active',
+      search,
+      city,
+      country,
+      limit = 100
+    } = params;
+
+    console.log('[BOT] handleGetLocations - Received parameters:', {
+      type,
+      status,
+      search,
+      city,
+      country,
+      limit
+    });
+
+    // Build filter
+    const filter = {};
+    
+    if (status) {
+      filter.status = status;
+    }
+    
+    if (type) {
+      filter.type = type;
+    }
+    
+    if (city) {
+      filter['address.city'] = { $regex: city, $options: 'i' };
+    }
+    
+    if (country) {
+      filter['address.country'] = { $regex: country, $options: 'i' };
+    }
+    
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    // Query locations
+    const locations = await Location.find(filter)
+      .select('name type description address geo media status score tags')
+      .sort({ name: 1 })
+      .limit(limit);
+
+    console.log('[BOT] handleGetLocations - Query result:', {
+      locationsFound: locations.length
+    });
+
+    // Format response
+    const formattedLocations = locations.map(location => ({
+      id: location._id.toString(),
+      name: location.name,
+      type: location.type,
+      description: location.description,
+      address: location.address || null,
+      geo: location.geo || null,
+      status: location.status,
+      score: location.score,
+      tags: location.tags || [],
+      media: location.media || []
+    }));
+
+    // Return structured response
+    const structuredResponse = formatLocationListResponse(
+      formattedLocations,
+      `Found ${formattedLocations.length} location${formattedLocations.length !== 1 ? 's' : ''}.`
+    );
+
+    return {
+      success: true,
+      data: structuredResponse,
+      count: formattedLocations.length
+    };
+  } catch (error) {
+    console.error('Error in handleGetLocations:', error);
+    return {
+      success: false,
+      error: error.code ? error : createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'Failed to retrieve locations',
+        ErrorCategories.SYSTEM,
+        false
+      )
+    };
+  }
+}
+
+/**
  * Tool handler map
  */
 const toolHandlers = {
@@ -952,7 +1052,8 @@ const toolHandlers = {
   handleUpdateCOE,
   handleGetMyCOEs,
   handleGetCOEDetails,
-  handleDeleteCOE
+  handleDeleteCOE,
+  handleGetLocations
 };
 
 module.exports = {
@@ -962,6 +1063,7 @@ module.exports = {
   handleUpdateCOE,
   handleGetMyCOEs,
   handleGetCOEDetails,
-  handleDeleteCOE
+  handleDeleteCOE,
+  handleGetLocations
 };
 

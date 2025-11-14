@@ -41,7 +41,7 @@ async function getOrCreateConversation(userId) {
       messages: [
         {
           role: 'system',
-          content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
+          content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
         },
         {
           role: 'assistant',
@@ -559,7 +559,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   // This ensures we always have the most up-to-date instructions
   const latestSystemMessage = {
     role: 'system',
-    content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
+    content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
   };
 
   // Filter out old system messages and inject the latest one
@@ -708,7 +708,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           return null;
         }
       })
-      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_list' || data.type === 'event_list'));
+      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list'));
 
     // Add final assistant reply with structured data if available
     // CRITICAL: If assistantReply has tool_calls but no content, we must not save it with tool_calls

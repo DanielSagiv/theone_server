@@ -602,7 +602,6 @@
         .bot-structured-card {
             margin-top: 12px;
             background: rgba(15, 23, 42, 0.95);
-            border: 1px solid rgba(148, 163, 184, 0.2);
             border-radius: 12px;
             padding: 16px;
             position: relative;
@@ -890,13 +889,22 @@
         .event-map-link {
             color: #60a5fa;
             text-decoration: none;
-            margin-left: 4px;
             font-size: 0.9rem;
             transition: opacity 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
         .event-map-link:hover {
             opacity: 0.8;
+        }
+
+        .event-map-icon {
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+            flex-shrink: 0;
         }
 
         .event-detail {
@@ -912,6 +920,100 @@
         .event-detail-value {
             font-size: 0.85rem;
             color: #e2e8f0;
+        }
+
+        /* Location List Styles */
+        .bot-location-list {
+            max-width: 100%;
+        }
+
+        .location-list-header {
+            margin-bottom: 12px;
+        }
+
+        .location-list-header h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .location-list-items {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bot-location-item {
+            padding: 14px 16px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .location-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .location-item-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .location-item-type {
+            padding: 2px 8px;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5f5;
+            text-transform: uppercase;
+        }
+
+        .location-item-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .location-detail {
+            display: flex;
+            gap: 6px;
+        }
+
+        .location-detail-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .location-detail-value {
+            font-size: 0.85rem;
+            color: #e2e8f0;
+        }
+
+        /* Special styling for description - label above text */
+        .location-detail-description {
+            grid-column: 1 / -1; /* Span full width */
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .location-detail-description .location-detail-label {
+            margin-bottom: 0;
+        }
+
+        .location-detail-description .location-detail-value {
+            white-space: pre-line; /* Preserve line breaks */
+            line-height: 1.5;
+            max-width: 100%;
+            word-wrap: break-word;
         }
 
         /* COE List Styles */
@@ -4595,7 +4697,7 @@
                             </div>
                             <div class="event-detail">
                                 <span class="event-detail-label">Address:</span>
-                                <span class="event-detail-value">${addressText}${mapLink ? ` <a href="${mapLink}" target="_blank" class="event-map-link" title="View on map">View Map</a>` : ''}</span>
+                                <span class="event-detail-value">${addressText}${mapLink ? ` <a href="${mapLink}" target="_blank" class="event-map-link" title="View on map"><svg class="event-map-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>View Map</a>` : ''}</span>
                             </div>
                             <div class="event-detail">
                                 <span class="event-detail-label">Price:</span>
@@ -4616,6 +4718,95 @@
                 </div>
                 <div class="event-list-items">
                     ${eventsHtml}
+                </div>
+            `;
+
+            return container;
+        }
+
+        /**
+         * Render Location list
+         */
+        function renderLocationList(locations) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-location-list';
+
+            if (locations.length === 0) {
+                container.innerHTML = '<p class="bot-empty-message">No locations found.</p>';
+                return container;
+            }
+
+            const locationsHtml = locations.map(location => {
+                // Format location type for display
+                const typeLabels = {
+                    'night_club': 'Night Club',
+                    'day_club': 'Day Club',
+                    'restaurant': 'Restaurant',
+                    'hotel': 'Hotel'
+                };
+                const typeLabel = typeLabels[location.type] || location.type || 'Location';
+                
+                // Format address
+                let addressText = 'Address TBD';
+                if (location.address) {
+                    const addr = location.address;
+                    const parts = [];
+                    if (addr.line1) parts.push(addr.line1);
+                    if (addr.line2) parts.push(addr.line2);
+                    if (addr.city) parts.push(addr.city);
+                    if (addr.state) parts.push(addr.state);
+                    if (addr.postalCode) parts.push(addr.postalCode);
+                    if (addr.country) parts.push(addr.country);
+                    if (parts.length > 0) {
+                        addressText = parts.join(', ');
+                    }
+                }
+                
+                // Create map link from geo coordinates
+                let mapLink = null;
+                if (location.geo && location.geo.coordinates && location.geo.coordinates.length >= 2) {
+                    const [longitude, latitude] = location.geo.coordinates;
+                    mapLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                }
+                
+                return `
+                    <div class="bot-location-item">
+                        <div class="location-item-header">
+                            <h5 class="location-item-title">${location.name || 'Untitled Location'}</h5>
+                            <span class="location-item-type">${typeLabel}</span>
+                        </div>
+                        <div class="location-item-details">
+                            <div class="location-detail">
+                                <span class="location-detail-label">Type:</span>
+                                <span class="location-detail-value">${typeLabel}</span>
+                            </div>
+                            <div class="location-detail">
+                                <span class="location-detail-label">Address:</span>
+                                <span class="location-detail-value">${addressText}${mapLink ? ` <a href="${mapLink}" target="_blank" class="event-map-link" title="View on map"><svg class="event-map-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>View Map</a>` : ''}</span>
+                            </div>
+                            ${location.description ? `
+                            <div class="location-detail location-detail-description">
+                                <span class="location-detail-label">Description:</span>
+                                <span class="location-detail-value">${location.description}</span>
+                            </div>
+                            ` : ''}
+                            ${location.score ? `
+                            <div class="location-detail">
+                                <span class="location-detail-label">Score:</span>
+                                <span class="location-detail-value">${location.score}/5</span>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `
+                <div class="location-list-header">
+                    <h4>Locations (${locations.length})</h4>
+                </div>
+                <div class="location-list-items">
+                    ${locationsHtml}
                 </div>
             `;
 
@@ -4805,7 +4996,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -4899,6 +5090,16 @@
                             msgText.className = 'bot-structured-message';
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, eventList);
+                        }
+                    } else if (structuredData.type === 'location_list') {
+                        const locationList = renderLocationList(structuredData.locations || []);
+                        contentEl.appendChild(locationList);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, locationList);
                         }
                     }
                 } else {

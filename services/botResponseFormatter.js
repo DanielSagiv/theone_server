@@ -189,19 +189,46 @@ function formatTextResponse(message) {
 }
 
 /**
+ * Create a structured location list response
+ * @param {Array} locations - Array of location objects
+ * @param {string} message - Human-readable message
+ * @returns {Object} Structured response
+ */
+function formatLocationListResponse(locations, message) {
+  return {
+    type: 'location_list',
+    locations: locations.map(location => ({
+      id: location.id || location._id?.toString(),
+      name: location.name,
+      type: location.type,
+      description: location.description,
+      address: location.address || null,
+      geo: location.geo || null,
+      status: location.status,
+      score: location.score,
+      tags: location.tags || [],
+      media: location.media || []
+    })),
+    count: locations.length,
+    message: message
+  };
+}
+
+/**
  * Check if a response is structured
  * @param {Object} response - Response object
  * @returns {boolean} True if structured
  */
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list'].includes(response.type);
 }
 
 module.exports = {
   formatCOEResponse,
   formatEventListResponse,
   formatCOEListResponse,
+  formatLocationListResponse,
   createCOEActions,
   formatTextResponse,
   isStructuredResponse
