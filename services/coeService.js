@@ -227,7 +227,14 @@ async function getCOEById(coeId) {
       .populate('created_by', 'firstName lastName email')
       .populate('participants.user_id', 'firstName lastName email phone')
       .populate('runner_assignment.runner_id', 'firstName lastName email phone')
-      .populate('events.event_id', 'name description location_id start_datetime end_datetime base_price currency status')
+      .populate({
+        path: 'events.event_id',
+        select: 'name description location_id start_datetime end_datetime base_price currency status',
+        populate: {
+          path: 'seats',
+          select: '_id code media'
+        }
+      })
       .populate('events.runner_assignment.runner_id', 'firstName lastName email phone');
 
     if (!coe) {

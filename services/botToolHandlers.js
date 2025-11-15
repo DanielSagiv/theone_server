@@ -740,17 +740,34 @@ async function handleGetMyCOEs(params, user, correlationId) {
       sortOrder: 'desc'
     });
 
-    // Format response
-    const formattedCOEs = result.coes.map(coe => ({
+    // Fetch full COE data with populated references (seats, runner, events)
+    const fullCOEs = await Promise.all(
+      result.coes.map(coe => coeService.getCOEById(coe._id))
+    );
+
+    // Format response with full data
+    const formattedCOEs = fullCOEs.map(coe => ({
       id: coe._id.toString(),
       name: coe.name,
       status: coe.status,
       start_date: coe.start_date,
       end_date: coe.end_date,
       events_count: coe.events?.length || 0,
+      seats_count: coe.selected_seats?.length || 0,
       total_price: coe.total,
       currency: coe.currency || 'USD',
-      created_at: coe.created_at
+      created_at: coe.created_at,
+      selected_seats: coe.selected_seats || [],
+      runner_assignment: coe.runner_assignment || null,
+      events: coe.events || [],
+      pricing: {
+        subtotal: coe.subtotal || 0,
+        taxes: coe.taxes || 0,
+        fees: coe.fees || 0,
+        total: coe.total || 0,
+        deposit_required: coe.deposit_required || 0,
+        currency: coe.currency || 'USD'
+      }
     }));
 
     // Return structured response

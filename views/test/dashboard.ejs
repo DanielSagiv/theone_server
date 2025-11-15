@@ -486,6 +486,44 @@
     /* Removed redundant right border/frame */
 }
 
+.bot-quick-actions {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    justify-content: center;
+    align-items: center;
+}
+
+.bot-quick-actions-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #60a5fa;
+    opacity: 0.8;
+}
+
+.bot-quick-action-btn {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.bot-quick-action-btn:hover {
+    background: rgba(59, 130, 246, 0.3);
+    transform: scale(1.05);
+}
+
+.bot-quick-action-btn:active {
+    transform: scale(0.98);
+}
+
         .bot-message-wrapper {
             display: flex;
             align-items: flex-start;
@@ -1284,6 +1322,233 @@
             color: #cbd5f5;
             font-size: 0.7rem;
             line-height: 1.4;
+        }
+
+        /* COE Seats Accordion Styles */
+        .coe-seats-section {
+            margin-top: 12px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+            padding-top: 12px;
+        }
+
+        .coe-seats-toggle {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+            color: #60a5fa;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .coe-seats-toggle:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .coe-seats-toggle .expand-icon {
+            transition: transform 0.3s ease;
+            font-size: 0.7rem;
+        }
+
+        .coe-seats-section.expanded .coe-seats-toggle .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .coe-seats-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            margin-top: 8px;
+        }
+
+        .coe-seats-section.expanded .coe-seats-content {
+            max-height: 3000px;
+        }
+
+        /* Seat Grouped by Event */
+        .coe-seat-event-group {
+            margin-bottom: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .coe-seat-event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(30, 41, 59, 0.5);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .coe-seat-event-header:hover {
+            background: rgba(30, 41, 59, 0.7);
+        }
+
+        .coe-seat-event-header .expand-icon {
+            transition: transform 0.3s ease;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        .coe-seat-event-group.expanded .coe-seat-event-header .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .coe-seat-event-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #cbd5f5;
+        }
+
+        .coe-seat-event-date {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-left: 8px;
+        }
+
+        .coe-seat-event-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .coe-seat-event-group.expanded .coe-seat-event-content {
+            max-height: 2000px;
+        }
+
+        /* Individual Seat Item */
+        .coe-seat-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(15, 23, 42, 0.3);
+        }
+
+        .coe-seat-item:last-child {
+            border-bottom: none;
+        }
+
+        .coe-seat-code {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 6px;
+        }
+
+        .coe-seat-costs {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #cbd5f5;
+            margin-bottom: 8px;
+        }
+
+        .coe-seat-cost-item {
+            display: flex;
+            gap: 4px;
+        }
+
+        .coe-seat-cost-label {
+            color: #94a3b8;
+        }
+
+        /* Seat Status Badge */
+        .coe-seat-status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .coe-seat-status-selected {
+            background: rgba(148, 163, 184, 0.3);
+            color: #cbd5f5;
+        }
+
+        .coe-seat-status-held {
+            background: rgba(251, 191, 36, 0.3);
+            color: #fbbf24;
+        }
+
+        .coe-seat-status-booked {
+            background: rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+        }
+
+        .coe-seat-status-released,
+        .coe-seat-status-expired,
+        .coe-seat-status-rejected {
+            background: rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        /* Seat Media Thumbnails */
+        .coe-seat-media {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .coe-seat-media-thumbnail {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .coe-seat-media-thumbnail:hover {
+            border-color: rgba(59, 130, 246, 0.6);
+            transform: scale(1.1);
+        }
+
+        /* Runner Details */
+        .coe-runner-section {
+            margin-top: 12px;
+            padding: 10px 12px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 6px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+
+        .coe-runner-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #cbd5f5;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .coe-runner-details {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: #cbd5f5;
+        }
+
+        .coe-runner-name {
+            font-weight: 600;
+            color: #60a5fa;
+        }
+
+        .coe-runner-contact {
+            color: #94a3b8;
         }
 
         /* COE List Styles */
@@ -3205,6 +3470,19 @@
                                             <div class="bot-response-feed" id="botResponseFeed">
                                                 <div class="bot-placeholder-text" id="botEmptyState">No bot responses yet.</div>
                                             </div>
+                                            <div class="bot-quick-actions">
+                                                <div class="bot-quick-actions-icon">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M11 21h-1l1-7H7.5c-.88 0-.33-.75-.13-.85L17.5 3h1l-1 7h3.5c.88 0 .33.75.13.85L11 21z"/>
+                                                    </svg>
+                                                </div>
+                                                <button class="bot-quick-action-btn" onclick="handleQuickAction('create_experience')">
+                                                    Create Experience
+                                                </button>
+                                                <button class="bot-quick-action-btn" onclick="handleQuickAction('show_next_event')">
+                                                    Show My Next Event
+                                                </button>
+                                            </div>
                                         </div>
                                         <div class="bot-input-area">
                                             <textarea id="botPromptInput" placeholder="Type a prompt to send to  THE1..."></textarea>
@@ -4785,6 +5063,155 @@
                             `).join('')}
                         </div>
                     ` : ''}
+                    ${(() => {
+                        // Generate seats accordion HTML
+                        // Debug: Log the data structure
+                        console.log('[COE Card] coeData:', coeData);
+                        console.log('[COE Card] selected_seats:', coeData.selected_seats);
+                        console.log('[COE Card] seats_count:', coeData.seats_count);
+                        
+                        const seats = coeData.selected_seats || [];
+                        if (!seats || seats.length === 0) {
+                            console.log('[COE Card] No seats found, returning empty');
+                            return '';
+                        }
+                        
+                        console.log('[COE Card] Found seats:', seats.length);
+                        
+                        // Group seats by event
+                        const seatsByEvent = {};
+                        seats.forEach(seat => {
+                            // Debug logging
+                            console.log('[COE Card Frontend] Processing seat:', {
+                                seatEventId: seat.event_id,
+                                seatEventName: seat.event_name,
+                                seatEventDate: seat.event_date,
+                                seatKeys: Object.keys(seat)
+                            });
+                            
+                            const eventId = seat.event_id?.toString() || 'unknown';
+                            if (!seatsByEvent[eventId]) {
+                                seatsByEvent[eventId] = {
+                                    event_id: eventId,
+                                    event_name: seat.event_name || 'Unknown Event',
+                                    event_date: seat.event_date,
+                                    seats: []
+                                };
+                                console.log('[COE Card Frontend] Created event group:', {
+                                    eventId,
+                                    event_name: seatsByEvent[eventId].event_name,
+                                    event_date: seatsByEvent[eventId].event_date
+                                });
+                            }
+                            seatsByEvent[eventId].seats.push(seat);
+                        });
+                        
+                        const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
+                            const seatItemsHtml = eventGroup.seats.map(seat => {
+                                // Status badge with color
+                                const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
+                                const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
+                                
+                                // Seat media thumbnails
+                                const seatMediaHtml = (seat.media || []).length > 0 ? `
+                                    <div class="coe-seat-media">
+                                        ${seat.media.filter(m => m.type === 'image').slice(0, 4).map(media => `
+                                            <img src="${media.url}" 
+                                                 alt="${media.caption || seat.seat_code || 'Seat image'}" 
+                                                 class="coe-seat-media-thumbnail"
+                                                 onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
+                                                 loading="lazy">
+                                        `).join('')}
+                                        ${seat.media.filter(m => m.type === 'image').length > 4 ? `
+                                            <div class="coe-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
+                                                +${seat.media.filter(m => m.type === 'image').length - 4}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                ` : '';
+                                
+                                const totalCost = seat.event_price || seat.base_price || 0;
+                                return `
+                                    <div class="coe-seat-item">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                            <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
+                                            <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                        </div>
+                                        <div class="coe-seat-costs">
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Capacity:</span>
+                                                <span>${seat.capacity || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Base Price:</span>
+                                                <span>$${seat.base_price || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Event Price:</span>
+                                                <span>$${seat.event_price || seat.base_price || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Total Cost:</span>
+                                                <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
+                                            </div>
+                                        </div>
+                                        ${seatMediaHtml}
+                                    </div>
+                                `;
+                            }).join('');
+                            
+                            const eventDate = eventGroup.event_date 
+                                ? new Date(eventGroup.event_date).toLocaleDateString()
+                                : 'Date TBD';
+                            
+                            return `
+                                <div class="coe-seat-event-group">
+                                    <div class="coe-seat-event-header" onclick="toggleCoeSeatEvent(this)">
+                                        <div>
+                                            <span class="coe-seat-event-title">${eventGroup.event_name}</span>
+                                            <span class="coe-seat-event-date">${eventDate}</span>
+                                        </div>
+                                        <span class="expand-icon">▼</span>
+                                    </div>
+                                    <div class="coe-seat-event-content">
+                                        ${seatItemsHtml}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        // Runner details HTML (COE-level only)
+                        const runnerHtml = coeData.runner_assignment?.runner ? `
+                            <div class="coe-runner-section">
+                                <div class="coe-runner-title">Runner Details</div>
+                                <div class="coe-runner-details">
+                                    <div class="coe-runner-name">${coeData.runner_assignment.runner.name}</div>
+                                    ${coeData.runner_assignment.runner.email ? `
+                                        <div class="coe-runner-contact">Email: ${coeData.runner_assignment.runner.email}</div>
+                                    ` : ''}
+                                    ${coeData.runner_assignment.runner.phone ? `
+                                        <div class="coe-runner-contact">Phone: ${coeData.runner_assignment.runner.phone}</div>
+                                    ` : ''}
+                                    ${coeData.runner_assignment.status ? `
+                                        <div class="coe-runner-contact">Status: ${coeData.runner_assignment.status}</div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        ` : '';
+                        
+                        return `
+                            <div class="coe-seats-section">
+                            <button class="coe-seats-toggle" onclick="toggleCoeSeats(this)">
+                                <span>View My Seats & Details (${seats.length})</span>
+                                <span class="expand-icon">▼</span>
+                            </button>
+                                <div class="coe-seats-content">
+                                    ${eventGroupsHtml}
+                                    ${runnerHtml}
+                                </div>
+                            </div>
+                        `;
+                    })()}
                 </div>
                 <div class="coe-card-menu-container">
                         <button class="coe-menu-button" data-coe-id="${coeData.id || coeData._id}" aria-label="COE menu">
@@ -5250,6 +5677,156 @@
                 const statusClass = `coe-status-${coe.status || 'draft'}`;
                 const coeId = coe.id || coe._id || '';
 
+                // Generate seats accordion HTML (same as renderCOECard)
+                const seatsHtml = (() => {
+                    // Debug: Log the data structure
+                    console.log('[COE List] coe:', coe);
+                    console.log('[COE List] selected_seats:', coe.selected_seats);
+                    console.log('[COE List] seats_count:', coe.seats_count);
+                    
+                    const seats = coe.selected_seats || [];
+                    if (!seats || seats.length === 0) {
+                        console.log('[COE List] No seats found for COE:', coe.name);
+                        return '';
+                    }
+                    
+                    console.log('[COE List] Found seats:', seats.length, 'for COE:', coe.name);
+                    
+                    // Group seats by event
+                    const seatsByEvent = {};
+                    seats.forEach(seat => {
+                        // Debug logging
+                        console.log('[COE List Frontend] Processing seat:', {
+                            seatEventId: seat.event_id,
+                            seatEventName: seat.event_name,
+                            seatEventDate: seat.event_date,
+                            seatKeys: Object.keys(seat)
+                        });
+                        
+                        const eventId = seat.event_id?.toString() || 'unknown';
+                        if (!seatsByEvent[eventId]) {
+                            seatsByEvent[eventId] = {
+                                event_id: eventId,
+                                event_name: seat.event_name || 'Unknown Event',
+                                event_date: seat.event_date,
+                                seats: []
+                            };
+                            console.log('[COE List Frontend] Created event group:', {
+                                eventId,
+                                event_name: seatsByEvent[eventId].event_name,
+                                event_date: seatsByEvent[eventId].event_date
+                            });
+                        }
+                        seatsByEvent[eventId].seats.push(seat);
+                    });
+                    
+                    const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
+                        const seatItemsHtml = eventGroup.seats.map(seat => {
+                            // Status badge with color
+                            const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
+                            const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
+                            
+                            // Seat media thumbnails
+                            const seatMediaHtml = (seat.media || []).length > 0 ? `
+                                <div class="coe-seat-media">
+                                    ${seat.media.filter(m => m.type === 'image').slice(0, 4).map(media => `
+                                        <img src="${media.url}" 
+                                             alt="${media.caption || seat.seat_code || 'Seat image'}" 
+                                             class="coe-seat-media-thumbnail"
+                                             onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
+                                             loading="lazy">
+                                    `).join('')}
+                                    ${seat.media.filter(m => m.type === 'image').length > 4 ? `
+                                        <div class="coe-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
+                                            +${seat.media.filter(m => m.type === 'image').length - 4}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : '';
+                            
+                            const totalCost = seat.event_price || seat.base_price || 0;
+                            return `
+                                <div class="coe-seat-item">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                        <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
+                                        <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                    </div>
+                                    <div class="coe-seat-costs">
+                                        <div class="coe-seat-cost-item">
+                                            <span class="coe-seat-cost-label">Capacity:</span>
+                                            <span>${seat.capacity || 0}</span>
+                                        </div>
+                                        <div class="coe-seat-cost-item">
+                                            <span class="coe-seat-cost-label">Base Price:</span>
+                                            <span>$${seat.base_price || 0}</span>
+                                        </div>
+                                        <div class="coe-seat-cost-item">
+                                            <span class="coe-seat-cost-label">Event Price:</span>
+                                            <span>$${seat.event_price || seat.base_price || 0}</span>
+                                        </div>
+                                        <div class="coe-seat-cost-item">
+                                            <span class="coe-seat-cost-label">Total Cost:</span>
+                                            <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
+                                        </div>
+                                    </div>
+                                    ${seatMediaHtml}
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        const eventDate = eventGroup.event_date 
+                            ? new Date(eventGroup.event_date).toLocaleDateString()
+                            : 'Date TBD';
+                        
+                        return `
+                            <div class="coe-seat-event-group">
+                                <div class="coe-seat-event-header" onclick="toggleCoeSeatEvent(this)">
+                                    <div>
+                                        <span class="coe-seat-event-title">${eventGroup.event_name}</span>
+                                        <span class="coe-seat-event-date">${eventDate}</span>
+                                    </div>
+                                    <span class="expand-icon">▼</span>
+                                </div>
+                                <div class="coe-seat-event-content">
+                                    ${seatItemsHtml}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    // Runner details HTML (COE-level only)
+                    const runnerHtml = coe.runner_assignment?.runner ? `
+                        <div class="coe-runner-section">
+                            <div class="coe-runner-title">Runner Details</div>
+                            <div class="coe-runner-details">
+                                <div class="coe-runner-name">${coe.runner_assignment.runner.name}</div>
+                                ${coe.runner_assignment.runner.email ? `
+                                    <div class="coe-runner-contact">Email: ${coe.runner_assignment.runner.email}</div>
+                                ` : ''}
+                                ${coe.runner_assignment.runner.phone ? `
+                                    <div class="coe-runner-contact">Phone: ${coe.runner_assignment.runner.phone}</div>
+                                ` : ''}
+                                ${coe.runner_assignment.status ? `
+                                    <div class="coe-runner-contact">Status: ${coe.runner_assignment.status}</div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    ` : '';
+                    
+                    return `
+                        <div class="coe-seats-section">
+                            <button class="coe-seats-toggle" onclick="toggleCoeSeats(this)">
+                                <span>View My Seats & Details (${seats.length})</span>
+                                <span class="expand-icon">▼</span>
+                            </button>
+                            <div class="coe-seats-content">
+                                ${eventGroupsHtml}
+                                ${runnerHtml}
+                            </div>
+                        </div>
+                    `;
+                })();
+
                 return `
                     <div class="bot-coe-list-item">
                         <div class="coe-list-item-header">
@@ -5261,8 +5838,11 @@
                             <span>•</span>
                             <span>${coe.events_count || 0} events</span>
                             <span>•</span>
+                            <span>${coe.seats_count || 0} seats</span>
+                            <span>•</span>
                             <span>${coe.currency || 'USD'} ${(coe.total_price || 0).toLocaleString()}</span>
                         </div>
+                        ${seatsHtml}
                         <div class="coe-list-item-menu-container">
                             <button class="coe-menu-button" data-coe-id="${coeId}" aria-label="COE menu">
                                 <div class="coe-menu-icon">
@@ -6353,6 +6933,30 @@
         function toggleSeatCategory(header) {
             const category = header.closest('.location-seat-category');
             category.classList.toggle('expanded');
+        }
+
+        /**
+         * Handle quick action button clicks
+         * @param {string} action - Action type: 'create_experience' or 'show_next_event'
+         */
+        function handleQuickAction(action) {
+            showAlert('TBD', 'info');
+        }
+
+        /**
+         * Toggle COE seats accordion
+         */
+        function toggleCoeSeats(button) {
+            const section = button.closest('.coe-seats-section');
+            section.classList.toggle('expanded');
+        }
+
+        /**
+         * Toggle COE seat event group
+         */
+        function toggleCoeSeatEvent(header) {
+            const group = header.closest('.coe-seat-event-group');
+            group.classList.toggle('expanded');
         }
 
         /**
