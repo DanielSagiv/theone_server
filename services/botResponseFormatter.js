@@ -207,7 +207,19 @@ function formatLocationListResponse(locations, message) {
       status: location.status,
       score: location.score,
       tags: location.tags || [],
-      media: location.media || []
+      media: location.media || [],
+      seats: location.seats ? location.seats.map(seat => ({
+        id: seat._id?.toString() || seat.id?.toString(),
+        code: seat.code,
+        label: seat.label,
+        category: seat.category,
+        section: seat.section,
+        capacity: seat.capacity,
+        minSpendUSD: seat.minSpendUSD,
+        priceTier: seat.priceTier,
+        media: seat.media || [],
+        sentiment: seat.sentiment || []
+      })) : []
     })),
     count: locations.length,
     message: message

@@ -996,7 +996,7 @@ async function handleGetLocations(params, user, correlationId) {
 
     // Query locations
     const locations = await Location.find(filter)
-      .select('name type description address geo media status score tags')
+      .select('name type description address geo media status score tags seats')
       .sort({ name: 1 })
       .limit(limit);
 
@@ -1015,7 +1015,8 @@ async function handleGetLocations(params, user, correlationId) {
       status: location.status,
       score: location.score,
       tags: location.tags || [],
-      media: location.media || []
+      media: location.media || [],
+      seats: location.seats || []
     }));
 
     // Return structured response

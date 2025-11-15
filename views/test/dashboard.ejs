@@ -1016,6 +1016,276 @@
             word-wrap: break-word;
         }
 
+        /* Location Card Image Styles */
+        .location-item-hero-image {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+            margin-bottom: 12px;
+        }
+
+        .location-item-hero-image:hover {
+            opacity: 0.9;
+        }
+
+        .location-item-image-gallery {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .location-item-thumbnail {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid rgba(148, 163, 184, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .location-item-thumbnail:hover {
+            border-color: rgba(59, 130, 246, 0.6);
+            transform: scale(1.05);
+        }
+
+        .location-item-more-images {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid rgba(148, 163, 184, 0.2);
+            color: #cbd5f5;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .location-item-more-images:hover {
+            background: rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 0.6);
+        }
+
+        /* Location Seats Accordion Styles */
+        .location-seats-section {
+            margin-top: 12px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+            padding-top: 12px;
+        }
+
+        .location-seats-toggle {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+            color: #60a5fa;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .location-seats-toggle:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .location-seats-toggle .expand-icon {
+            transition: transform 0.3s ease;
+            font-size: 0.7rem;
+        }
+
+        .location-seats-section.expanded .location-seats-toggle .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .location-seats-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            margin-top: 8px;
+        }
+
+        .location-seats-section.expanded .location-seats-content {
+            max-height: 2000px;
+        }
+
+        /* Seat Category Grouping */
+        .location-seat-category {
+            margin-bottom: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .location-seat-category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(30, 41, 59, 0.5);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .location-seat-category-header:hover {
+            background: rgba(30, 41, 59, 0.7);
+        }
+
+        .location-seat-category-header .expand-icon {
+            transition: transform 0.3s ease;
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        .location-seat-category.expanded .location-seat-category-header .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .location-seat-category-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #cbd5f5;
+            text-transform: uppercase;
+        }
+
+        .location-seat-category-count {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-left: 8px;
+        }
+
+        .location-seat-category-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .location-seat-category.expanded .location-seat-category-content {
+            max-height: 3000px;
+        }
+
+        /* Individual Seat Item */
+        .location-seat-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            background: rgba(15, 23, 42, 0.3);
+        }
+
+        .location-seat-item:last-child {
+            border-bottom: none;
+        }
+
+        .location-seat-code {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 6px;
+        }
+
+        .location-seat-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .location-seat-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+            font-size: 0.75rem;
+            color: #cbd5f5;
+            margin-bottom: 8px;
+        }
+
+        .location-seat-detail-item {
+            display: flex;
+            gap: 4px;
+        }
+
+        .location-seat-detail-label {
+            color: #94a3b8;
+        }
+
+        /* Seat Media Thumbnails */
+        .location-seat-media {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .location-seat-media-thumbnail {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .location-seat-media-thumbnail:hover {
+            border-color: rgba(59, 130, 246, 0.6);
+            transform: scale(1.1);
+        }
+
+        /* Seat Sentiment Display */
+        .location-seat-sentiment {
+            margin-top: 8px;
+            padding: 6px 8px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 4px;
+            font-size: 0.7rem;
+        }
+
+        .location-seat-sentiment-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .location-seat-sentiment-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .location-seat-sentiment-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .location-seat-sentiment-badge.type-a {
+            background: rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+        }
+
+        .location-seat-sentiment-badge.type-b {
+            background: rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+
+        .location-seat-sentiment-text {
+            color: #cbd5f5;
+            font-size: 0.7rem;
+            line-height: 1.4;
+        }
+
         /* COE List Styles */
         .bot-coe-list {
             max-width: 100%;
@@ -1037,7 +1307,7 @@
         .coe-list-items {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 4px;
         }
 
         .bot-coe-list-item {
@@ -4746,6 +5016,15 @@
                 };
                 const typeLabel = typeLabels[location.type] || location.type || 'Location';
                 
+                // Extract and sort images from media
+                const images = (location.media || [])
+                    .filter(item => item.type === 'image')
+                    .sort((a, b) => (a.order || 0) - (b.order || 0));
+                
+                const heroImage = images.length > 0 ? images[0] : null;
+                const thumbnailImages = images.length > 1 ? images.slice(1, 4) : []; // Show up to 3 thumbnails
+                const remainingCount = images.length > 4 ? images.length - 4 : 0;
+                
                 // Format address
                 let addressText = 'Address TBD';
                 if (location.address) {
@@ -4769,12 +5048,150 @@
                     mapLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
                 }
                 
+                // Generate hero image HTML
+                const heroImageHtml = heroImage ? `
+                    <img src="${heroImage.url}" 
+                         alt="${heroImage.caption || location.name || 'Location image'}" 
+                         class="location-item-hero-image"
+                         onclick="openLightbox(${JSON.stringify(heroImage).replace(/"/g, '&quot;')})"
+                         loading="lazy">
+                ` : '';
+                
+                // Generate thumbnail gallery HTML
+                const thumbnailGalleryHtml = thumbnailImages.length > 0 || remainingCount > 0 ? `
+                    <div class="location-item-image-gallery">
+                        ${thumbnailImages.map(img => `
+                            <img src="${img.url}" 
+                                 alt="${img.caption || 'Location image'}" 
+                                 class="location-item-thumbnail"
+                                 onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
+                                 loading="lazy">
+                        `).join('')}
+                        ${remainingCount > 0 ? `
+                            <div class="location-item-more-images" 
+                                 onclick="openLightbox(${JSON.stringify(images[4] || images[1] || images[0]).replace(/"/g, '&quot;')})"
+                                 title="View all ${images.length} images">
+                                +${remainingCount}
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : '';
+                
+                // Generate seats accordion HTML
+                const seatsHtml = location.seats && location.seats.length > 0 ? (() => {
+                    // Group seats by category
+                    const seatsByCategory = {};
+                    location.seats.forEach(seat => {
+                        const category = seat.category || 'Other';
+                        if (!seatsByCategory[category]) {
+                            seatsByCategory[category] = [];
+                        }
+                        seatsByCategory[category].push(seat);
+                    });
+                    
+                    const categoryHtml = Object.entries(seatsByCategory).map(([category, seatsInCategory]) => {
+                        const categoryLabel = category.replace(/_/g, ' ').toUpperCase();
+                        
+                        const seatItemsHtml = seatsInCategory.map(seat => {
+                            // Generate seat media thumbnails
+                            const seatMediaHtml = (seat.media || []).length > 0 ? `
+                                <div class="location-seat-media">
+                                    ${seat.media.slice(0, 4).map(media => `
+                                        <img src="${media.url}" 
+                                             alt="${media.caption || seat.code || 'Seat image'}" 
+                                             class="location-seat-media-thumbnail"
+                                             onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
+                                             loading="lazy">
+                                    `).join('')}
+                                    ${seat.media.length > 4 ? `<div class="location-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">+${seat.media.length - 4}</div>` : ''}
+                                </div>
+                            ` : '';
+                            
+                            // Generate seat sentiment
+                            const sentimentHtml = (seat.sentiment || []).length > 0 ? `
+                                <div class="location-seat-sentiment">
+                                    ${seat.sentiment.map(sent => `
+                                        <div class="location-seat-sentiment-item">
+                                            <span class="location-seat-sentiment-badge type-${sent.type.toLowerCase()}">Type ${sent.type}</span>
+                                            <span class="location-seat-sentiment-text">${sent.text || ''}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '';
+                            
+                            return `
+                                <div class="location-seat-item">
+                                    <div class="location-seat-code">${seat.code || 'N/A'}</div>
+                                    ${seat.label ? `<div class="location-seat-label">${seat.label}</div>` : ''}
+                                    <div class="location-seat-details">
+                                        ${seat.capacity ? `
+                                            <div class="location-seat-detail-item">
+                                                <span class="location-seat-detail-label">Capacity:</span>
+                                                <span>${seat.capacity}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${seat.minSpendUSD ? `
+                                            <div class="location-seat-detail-item">
+                                                <span class="location-seat-detail-label">Min Spend:</span>
+                                                <span>$${seat.minSpendUSD}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${seat.priceTier ? `
+                                            <div class="location-seat-detail-item">
+                                                <span class="location-seat-detail-label">Price Tier:</span>
+                                                <span>${seat.priceTier}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${seat.section ? `
+                                            <div class="location-seat-detail-item">
+                                                <span class="location-seat-detail-label">Section:</span>
+                                                <span>${seat.section}</span>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    ${seatMediaHtml}
+                                    ${sentimentHtml}
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        return `
+                            <div class="location-seat-category">
+                                <div class="location-seat-category-header" onclick="toggleSeatCategory(this)">
+                                    <div>
+                                        <span class="location-seat-category-title">${categoryLabel}</span>
+                                        <span class="location-seat-category-count">(${seatsInCategory.length})</span>
+                                    </div>
+                                    <span class="expand-icon">▼</span>
+                                </div>
+                                <div class="location-seat-category-content">
+                                    ${seatItemsHtml}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    
+                    return `
+                        <div class="location-seats-section">
+                            <button class="location-seats-toggle" onclick="toggleLocationSeats(this)">
+                                <span>View Seats (${location.seats.length})</span>
+                                <span class="expand-icon">▼</span>
+                            </button>
+                            <div class="location-seats-content">
+                                ${categoryHtml}
+                            </div>
+                        </div>
+                    `;
+                })() : '';
+                
                 return `
                     <div class="bot-location-item">
+                        ${heroImageHtml}
                         <div class="location-item-header">
                             <h5 class="location-item-title">${location.name || 'Untitled Location'}</h5>
                             <span class="location-item-type">${typeLabel}</span>
                         </div>
+                        ${thumbnailGalleryHtml}
                         <div class="location-item-details">
                             <div class="location-detail">
                                 <span class="location-detail-label">Type:</span>
@@ -4797,6 +5214,7 @@
                             </div>
                             ` : ''}
                         </div>
+                        ${seatsHtml}
                     </div>
                 `;
             }).join('');
@@ -5919,6 +6337,22 @@
                     ${mediaHtml ? `<div class="room-media">${mediaHtml}</div>` : ''}
                 </div>
             `;
+        }
+
+        /**
+         * Toggle location seats accordion
+         */
+        function toggleLocationSeats(button) {
+            const section = button.closest('.location-seats-section');
+            section.classList.toggle('expanded');
+        }
+
+        /**
+         * Toggle seat category accordion
+         */
+        function toggleSeatCategory(header) {
+            const category = header.closest('.location-seat-category');
+            category.classList.toggle('expanded');
         }
 
         /**
