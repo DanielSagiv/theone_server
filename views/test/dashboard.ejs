@@ -711,6 +711,15 @@
             padding-bottom: 52px; /* Space for menu button at bottom (36px button + 16px padding) */
         }
 
+        /* COE Card Images (reuse location image styles) */
+        .bot-coe-card .location-item-hero-image {
+            margin-bottom: 12px;
+        }
+
+        .bot-coe-card .location-item-image-gallery {
+            margin-bottom: 12px;
+        }
+
         .coe-card-info {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -5027,12 +5036,68 @@
                 ? `${new Date(coeData.start_date).toLocaleDateString()} - ${new Date(coeData.end_date).toLocaleDateString()}`
                 : 'Dates TBD';
 
+            // Collect all event and location images
+            const allEventImages = [];
+            const allLocationImages = [];
+            (coeData.events || []).forEach(event => {
+                if (event.media && event.media.length > 0) {
+                    allEventImages.push(...event.media.filter(m => m.type === 'image'));
+                }
+                if (event.location?.media && event.location.media.length > 0) {
+                    allLocationImages.push(...event.location.media.filter(m => m.type === 'image'));
+                }
+            });
+            
+            // Remove duplicates by URL
+            const uniqueEventImages = Array.from(new Map(allEventImages.map(img => [img.url, img])).values());
+            const uniqueLocationImages = Array.from(new Map(allLocationImages.map(img => [img.url, img])).values());
+            
+            // Sort images by order
+            uniqueEventImages.sort((a, b) => (a.order || 0) - (b.order || 0));
+            uniqueLocationImages.sort((a, b) => (a.order || 0) - (b.order || 0));
+            
+            // Get hero image (first event image, or first location image as fallback)
+            const heroImage = uniqueEventImages.length > 0 ? uniqueEventImages[0] : (uniqueLocationImages.length > 0 ? uniqueLocationImages[0] : null);
+            const thumbnailImages = uniqueEventImages.length > 1 ? uniqueEventImages.slice(1, 4) : (uniqueLocationImages.length > 0 && uniqueEventImages.length === 0 ? uniqueLocationImages.slice(0, 3) : []);
+            const remainingCount = (uniqueEventImages.length + uniqueLocationImages.length) > 4 ? (uniqueEventImages.length + uniqueLocationImages.length) - 4 : 0;
+            
+            // Generate hero image HTML
+            const heroImageHtml = heroImage ? `
+                <img src="${heroImage.url}" 
+                     alt="${heroImage.caption || coeData.name || 'COE image'}" 
+                     class="location-item-hero-image"
+                     onclick="openLightbox(${JSON.stringify(heroImage).replace(/"/g, '&quot;')})"
+                     loading="lazy">
+            ` : '';
+            
+            // Generate thumbnail gallery HTML
+            const thumbnailGalleryHtml = thumbnailImages.length > 0 || remainingCount > 0 ? `
+                <div class="location-item-image-gallery">
+                    ${thumbnailImages.map(img => `
+                        <img src="${img.url}" 
+                             alt="${img.caption || 'COE image'}" 
+                             class="location-item-thumbnail"
+                             onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
+                             loading="lazy">
+                    `).join('')}
+                    ${remainingCount > 0 ? `
+                        <div class="location-item-more-images" 
+                             onclick="openLightbox(${JSON.stringify((uniqueEventImages[4] || uniqueLocationImages[0] || uniqueEventImages[0] || uniqueLocationImages[0]) || heroImage).replace(/"/g, '&quot;')})"
+                             title="View all ${uniqueEventImages.length + uniqueLocationImages.length} images">
+                            +${remainingCount}
+                        </div>
+                    ` : ''}
+                </div>
+            ` : '';
+
             card.innerHTML = `
+                ${heroImageHtml}
                 <div class="coe-card-header">
                     <h4 class="coe-card-title">${coeData.name || 'Untitled COE'}</h4>
                     <span class="coe-status-badge ${statusClass}">${coeData.status || 'draft'}</span>
                 </div>
                 <div class="coe-card-body">
+                    ${thumbnailGalleryHtml}
                     <div class="coe-card-info">
                         <div class="coe-info-item">
                             <span class="coe-info-label">Dates:</span>
@@ -5077,6 +5142,16 @@
                         }
                         
                         console.log('[COE Card] Found seats:', seats.length);
+                        // Debug: Log media for first seat
+                        if (seats.length > 0) {
+                            console.log('[COE Card] First seat media check:', {
+                                seat_code: seats[0].seat_code,
+                                hasMedia: !!(seats[0].media),
+                                mediaType: typeof seats[0].media,
+                                mediaLength: seats[0].media?.length || 0,
+                                media: seats[0].media
+                            });
+                        }
                         
                         // Group seats by event
                         const seatsByEvent = {};
@@ -5113,22 +5188,41 @@
                                 const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
                                 
                                 // Seat media thumbnails
-                                const seatMediaHtml = (seat.media || []).length > 0 ? `
+                                // Debug: Log seat media before rendering
+                                console.log('[COE Card Seat Render] Seat media check:', {
+                                    seat_code: seat.seat_code,
+                                    hasMedia: !!(seat.media),
+                                    mediaType: typeof seat.media,
+                                    isArray: Array.isArray(seat.media),
+                                    mediaLength: seat.media?.length || 0,
+                                    media: seat.media
+                                });
+                                
+                                const seatMedia = seat.media || [];
+                                const imageMedia = seatMedia.filter(m => m && m.type === 'image');
+                                
+                                console.log('[COE Card Seat Render] Filtered image media:', {
+                                    totalMedia: seatMedia.length,
+                                    imageMediaCount: imageMedia.length,
+                                    imageMedia: imageMedia
+                                });
+                                
+                                const seatMediaHtml = imageMedia.length > 0 ? `
                                     <div class="coe-seat-media">
-                                        ${seat.media.filter(m => m.type === 'image').slice(0, 4).map(media => `
+                                        ${imageMedia.slice(0, 4).map(media => `
                                             <img src="${media.url}" 
                                                  alt="${media.caption || seat.seat_code || 'Seat image'}" 
                                                  class="coe-seat-media-thumbnail"
                                                  onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
                                                  loading="lazy">
                                         `).join('')}
-                                        ${seat.media.filter(m => m.type === 'image').length > 4 ? `
+                                        ${imageMedia.length > 4 ? `
                                             <div class="coe-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
-                                                +${seat.media.filter(m => m.type === 'image').length - 4}
+                                                +${imageMedia.length - 4}
                                             </div>
                                         ` : ''}
                                     </div>
-                                ` : '';
+                                ` : '<div class="coe-seat-media" style="color: #94a3b8; font-size: 0.75rem; font-style: italic;">No images available</div>';
                                 
                                 const totalCost = seat.event_price || seat.base_price || 0;
                                 return `
@@ -5677,12 +5771,76 @@
                 const statusClass = `coe-status-${coe.status || 'draft'}`;
                 const coeId = coe.id || coe._id || '';
 
+                // Collect all event and location images
+                const allEventImages = [];
+                const allLocationImages = [];
+                (coe.events || []).forEach(event => {
+                    if (event.media && event.media.length > 0) {
+                        allEventImages.push(...event.media.filter(m => m.type === 'image'));
+                    }
+                    if (event.location?.media && event.location.media.length > 0) {
+                        allLocationImages.push(...event.location.media.filter(m => m.type === 'image'));
+                    }
+                });
+                
+                // Remove duplicates by URL
+                const uniqueEventImages = Array.from(new Map(allEventImages.map(img => [img.url, img])).values());
+                const uniqueLocationImages = Array.from(new Map(allLocationImages.map(img => [img.url, img])).values());
+                
+                // Sort images by order
+                uniqueEventImages.sort((a, b) => (a.order || 0) - (b.order || 0));
+                uniqueLocationImages.sort((a, b) => (a.order || 0) - (b.order || 0));
+                
+                // Get hero image (first event image, or first location image as fallback)
+                const heroImage = uniqueEventImages.length > 0 ? uniqueEventImages[0] : (uniqueLocationImages.length > 0 ? uniqueLocationImages[0] : null);
+                const thumbnailImages = uniqueEventImages.length > 1 ? uniqueEventImages.slice(1, 4) : (uniqueLocationImages.length > 0 && uniqueEventImages.length === 0 ? uniqueLocationImages.slice(0, 3) : []);
+                const remainingCount = (uniqueEventImages.length + uniqueLocationImages.length) > 4 ? (uniqueEventImages.length + uniqueLocationImages.length) - 4 : 0;
+                
+                // Generate hero image HTML
+                const heroImageHtml = heroImage ? `
+                    <img src="${heroImage.url}" 
+                         alt="${heroImage.caption || coe.name || 'COE image'}" 
+                         class="location-item-hero-image"
+                         onclick="openLightbox(${JSON.stringify(heroImage).replace(/"/g, '&quot;')})"
+                         loading="lazy">
+                ` : '';
+                
+                // Generate thumbnail gallery HTML
+                const thumbnailGalleryHtml = thumbnailImages.length > 0 || remainingCount > 0 ? `
+                    <div class="location-item-image-gallery">
+                        ${thumbnailImages.map(img => `
+                            <img src="${img.url}" 
+                                 alt="${img.caption || 'COE image'}" 
+                                 class="location-item-thumbnail"
+                                 onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
+                                 loading="lazy">
+                        `).join('')}
+                        ${remainingCount > 0 ? `
+                            <div class="location-item-more-images" 
+                                 onclick="openLightbox(${JSON.stringify((uniqueEventImages[4] || uniqueLocationImages[0] || uniqueEventImages[0] || uniqueLocationImages[0]) || heroImage).replace(/"/g, '&quot;')})"
+                                 title="View all ${uniqueEventImages.length + uniqueLocationImages.length} images">
+                                +${remainingCount}
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : '';
+
                 // Generate seats accordion HTML (same as renderCOECard)
                 const seatsHtml = (() => {
                     // Debug: Log the data structure
                     console.log('[COE List] coe:', coe);
                     console.log('[COE List] selected_seats:', coe.selected_seats);
                     console.log('[COE List] seats_count:', coe.seats_count);
+                    // Debug: Log media for first seat if available
+                    if (coe.selected_seats && coe.selected_seats.length > 0) {
+                        console.log('[COE List] First seat media check:', {
+                            seat_code: coe.selected_seats[0].seat_code,
+                            hasMedia: !!(coe.selected_seats[0].media),
+                            mediaType: typeof coe.selected_seats[0].media,
+                            mediaLength: coe.selected_seats[0].media?.length || 0,
+                            media: coe.selected_seats[0].media
+                        });
+                    }
                     
                     const seats = coe.selected_seats || [];
                     if (!seats || seats.length === 0) {
@@ -5727,22 +5885,41 @@
                             const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
                             
                             // Seat media thumbnails
-                            const seatMediaHtml = (seat.media || []).length > 0 ? `
+                            // Debug: Log seat media before rendering
+                            console.log('[COE List Seat Render] Seat media check:', {
+                                seat_code: seat.seat_code,
+                                hasMedia: !!(seat.media),
+                                mediaType: typeof seat.media,
+                                isArray: Array.isArray(seat.media),
+                                mediaLength: seat.media?.length || 0,
+                                media: seat.media
+                            });
+                            
+                            const seatMedia = seat.media || [];
+                            const imageMedia = seatMedia.filter(m => m && m.type === 'image');
+                            
+                            console.log('[COE List Seat Render] Filtered image media:', {
+                                totalMedia: seatMedia.length,
+                                imageMediaCount: imageMedia.length,
+                                imageMedia: imageMedia
+                            });
+                            
+                            const seatMediaHtml = imageMedia.length > 0 ? `
                                 <div class="coe-seat-media">
-                                    ${seat.media.filter(m => m.type === 'image').slice(0, 4).map(media => `
+                                    ${imageMedia.slice(0, 4).map(media => `
                                         <img src="${media.url}" 
                                              alt="${media.caption || seat.seat_code || 'Seat image'}" 
                                              class="coe-seat-media-thumbnail"
                                              onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
                                              loading="lazy">
                                     `).join('')}
-                                    ${seat.media.filter(m => m.type === 'image').length > 4 ? `
+                                    ${imageMedia.length > 4 ? `
                                         <div class="coe-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
-                                            +${seat.media.filter(m => m.type === 'image').length - 4}
+                                            +${imageMedia.length - 4}
                                         </div>
                                     ` : ''}
                                 </div>
-                            ` : '';
+                            ` : '<div class="coe-seat-media" style="color: #94a3b8; font-size: 0.75rem; font-style: italic;">No images available</div>';
                             
                             const totalCost = seat.event_price || seat.base_price || 0;
                             return `
@@ -5829,10 +6006,12 @@
 
                 return `
                     <div class="bot-coe-list-item">
+                        ${heroImageHtml}
                         <div class="coe-list-item-header">
                             <h5 class="coe-list-item-title">${coe.name || 'Untitled COE'}</h5>
                             <span class="coe-status-badge ${statusClass}">${coe.status || 'draft'}</span>
                         </div>
+                        ${thumbnailGalleryHtml}
                         <div class="coe-list-item-details">
                             <span>${dateRange}</span>
                             <span>•</span>

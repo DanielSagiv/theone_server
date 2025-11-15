@@ -75,15 +75,133 @@ function formatCOEResponse(type, coe, message, actions = []) {
     
     // Find the seat in event.seats to get media
     let seatMedia = [];
-    if (event?.event_id?.seats) {
+    if (event?.event_id?.seats && Array.isArray(event.event_id.seats)) {
       const seatId = normalizeId(seat.seat_id);
-      const eventSeat = event.event_id.seats.find(s => {
+      const seatIdStr = seat.seat_id?.toString();
+      const seatCode = seat.seat_code;
+      
+      console.log('[formatCOEResponse] Looking for seat media:', {
+        seatId,
+        seatIdStr,
+        seatCode,
+        seatSeatId: seat.seat_id,
+        seatSeatIdType: typeof seat.seat_id,
+        eventSeatsCount: event.event_id.seats.length,
+        eventSeats: event.event_id.seats.map(s => ({
+          _id: s._id?.toString(),
+          _idType: typeof s._id,
+          code: s.code,
+          hasMedia: !!(s.media && s.media.length > 0),
+          mediaCount: s.media?.length || 0
+        }))
+      });
+      
+      // Try multiple matching strategies
+      let eventSeat = null;
+      
+      // Strategy 1: Match by _id (normalized)
+      eventSeat = event.event_id.seats.find(s => {
         const sId = normalizeId(s._id);
         return sId === seatId;
       });
-      if (eventSeat?.media) {
-        seatMedia = eventSeat.media;
+      
+      // Strategy 2: Match by _id (direct string comparison)
+      if (!eventSeat) {
+        eventSeat = event.event_id.seats.find(s => {
+          return s._id?.toString() === seatIdStr;
+        });
       }
+      
+      // Strategy 3: Match by _id (ObjectId comparison)
+      if (!eventSeat && seat.seat_id) {
+        eventSeat = event.event_id.seats.find(s => {
+          return s._id?.equals ? s._id.equals(seat.seat_id) : false;
+        });
+      }
+      
+      // Strategy 4: Match by code (fallback)
+      if (!eventSeat && seatCode) {
+        eventSeat = event.event_id.seats.find(s => {
+          return s.code === seatCode;
+        });
+        if (eventSeat) {
+          console.log('[formatCOEResponse] Found seat by code fallback:', {
+            seatCode,
+            eventSeatId: eventSeat._id?.toString(),
+            hasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+            media: eventSeat.media
+          });
+        }
+      }
+      
+      if (eventSeat) {
+        console.log('[formatCOEResponse] Found matching seat:', {
+          seatId,
+          seatCode,
+          eventSeatId: eventSeat._id?.toString(),
+          eventSeatCode: eventSeat.code,
+          hasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+          mediaCount: eventSeat.media?.length || 0,
+          media: eventSeat.media
+        });
+        
+        if (eventSeat.media && Array.isArray(eventSeat.media) && eventSeat.media.length > 0) {
+          seatMedia = eventSeat.media;
+          console.log('[formatCOEResponse] Seat media found in Event seat:', {
+            mediaCount: seatMedia.length,
+            media: seatMedia
+          });
+        } else {
+          // Fallback: Try to get media from Location seat (Event seats inherit from Location seats)
+          if (event?.event_id?.location_id?.seats && Array.isArray(event.event_id.location_id.seats)) {
+            const locationSeatId = eventSeat.seat_id?.toString() || normalizeId(eventSeat.seat_id);
+            const locationSeat = event.event_id.location_id.seats.find(s => {
+              return normalizeId(s._id) === locationSeatId || s._id?.toString() === locationSeatId;
+            });
+            
+            if (locationSeat?.media && Array.isArray(locationSeat.media) && locationSeat.media.length > 0) {
+              seatMedia = locationSeat.media;
+              console.log('[formatCOEResponse] Seat media found in Location seat (fallback):', {
+                locationSeatId,
+                mediaCount: seatMedia.length,
+                media: seatMedia
+              });
+            } else {
+              console.log('[formatCOEResponse] Seat found but no media in Event or Location seat:', {
+                eventSeatId: eventSeat._id?.toString(),
+                locationSeatId,
+                eventSeatHasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+                locationSeatFound: !!locationSeat,
+                locationSeatHasMedia: !!(locationSeat?.media && locationSeat.media.length > 0)
+              });
+            }
+          } else {
+            console.log('[formatCOEResponse] Seat found but no media, and no location seats available:', {
+              eventSeatId: eventSeat._id?.toString(),
+              hasLocation: !!event?.event_id?.location_id,
+              hasLocationSeats: !!(event?.event_id?.location_id?.seats),
+              locationSeatsType: typeof event?.event_id?.location_id?.seats,
+              isArray: Array.isArray(event?.event_id?.location_id?.seats)
+            });
+          }
+        }
+      } else {
+        console.log('[formatCOEResponse] No matching seat found:', {
+          seatId,
+          seatIdStr,
+          seatCode,
+          eventSeatsCodes: event.event_id.seats.map(s => s.code),
+          eventSeatsIds: event.event_id.seats.map(s => s._id?.toString())
+        });
+      }
+    } else {
+      console.log('[formatCOEResponse] No event seats available:', {
+        hasEvent: !!event,
+        hasEventId: !!event?.event_id,
+        hasSeats: !!(event?.event_id?.seats),
+        seatsType: typeof event?.event_id?.seats,
+        isArray: Array.isArray(event?.event_id?.seats)
+      });
     }
     
     // Get event name from multiple possible locations
@@ -150,7 +268,19 @@ function formatCOEResponse(type, coe, message, actions = []) {
         deposit_required: coe.deposit_required || 0,
         currency: coe.currency || 'USD'
       },
-      events: coe.events || [],
+      events: (coe.events || []).map(event => ({
+        event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+        event_name: event.event_id?.name || 'Unknown Event',
+        event_date: event.event_date,
+        event_time: event.event_time,
+        media: event.event_id?.media || [],
+        location: event.event_id?.location_id ? {
+          id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
+          name: event.event_id.location_id.name,
+          type: event.event_id.location_id.type,
+          media: event.event_id.location_id.media || []
+        } : null
+      })),
       selected_seats: enhancedSeats, // Use enhanced seats with media
       events_count: coe.events?.length || 0,
       seats_count: coe.selected_seats?.length || 0,
@@ -275,15 +405,133 @@ function formatCOEListResponse(coes, message) {
         
         // Find the seat in event.seats to get media
         let seatMedia = [];
-        if (event?.event_id?.seats) {
+        if (event?.event_id?.seats && Array.isArray(event.event_id.seats)) {
           const seatId = normalizeId(seat.seat_id);
-          const eventSeat = event.event_id.seats.find(s => {
+          const seatIdStr = seat.seat_id?.toString();
+          const seatCode = seat.seat_code;
+          
+          console.log('[formatCOEListResponse] Looking for seat media:', {
+            seatId,
+            seatIdStr,
+            seatCode,
+            seatSeatId: seat.seat_id,
+            seatSeatIdType: typeof seat.seat_id,
+            eventSeatsCount: event.event_id.seats.length,
+            eventSeats: event.event_id.seats.map(s => ({
+              _id: s._id?.toString(),
+              _idType: typeof s._id,
+              code: s.code,
+              hasMedia: !!(s.media && s.media.length > 0),
+              mediaCount: s.media?.length || 0
+            }))
+          });
+          
+          // Try multiple matching strategies
+          let eventSeat = null;
+          
+          // Strategy 1: Match by _id (normalized)
+          eventSeat = event.event_id.seats.find(s => {
             const sId = normalizeId(s._id);
             return sId === seatId;
           });
-          if (eventSeat?.media) {
-            seatMedia = eventSeat.media;
+          
+          // Strategy 2: Match by _id (direct string comparison)
+          if (!eventSeat) {
+            eventSeat = event.event_id.seats.find(s => {
+              return s._id?.toString() === seatIdStr;
+            });
           }
+          
+          // Strategy 3: Match by _id (ObjectId comparison)
+          if (!eventSeat && seat.seat_id) {
+            eventSeat = event.event_id.seats.find(s => {
+              return s._id?.equals ? s._id.equals(seat.seat_id) : false;
+            });
+          }
+          
+          // Strategy 4: Match by code (fallback)
+          if (!eventSeat && seatCode) {
+            eventSeat = event.event_id.seats.find(s => {
+              return s.code === seatCode;
+            });
+            if (eventSeat) {
+              console.log('[formatCOEListResponse] Found seat by code fallback:', {
+                seatCode,
+                eventSeatId: eventSeat._id?.toString(),
+                hasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+                media: eventSeat.media
+              });
+            }
+          }
+          
+          if (eventSeat) {
+            console.log('[formatCOEListResponse] Found matching seat:', {
+              seatId,
+              seatCode,
+              eventSeatId: eventSeat._id?.toString(),
+              eventSeatCode: eventSeat.code,
+              hasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+              mediaCount: eventSeat.media?.length || 0,
+              media: eventSeat.media
+            });
+            
+            if (eventSeat.media && Array.isArray(eventSeat.media) && eventSeat.media.length > 0) {
+              seatMedia = eventSeat.media;
+              console.log('[formatCOEListResponse] Seat media found in Event seat:', {
+                mediaCount: seatMedia.length,
+                media: seatMedia
+              });
+            } else {
+              // Fallback: Try to get media from Location seat (Event seats inherit from Location seats)
+              if (event?.event_id?.location_id?.seats && Array.isArray(event.event_id.location_id.seats)) {
+                const locationSeatId = eventSeat.seat_id?.toString() || normalizeId(eventSeat.seat_id);
+                const locationSeat = event.event_id.location_id.seats.find(s => {
+                  return normalizeId(s._id) === locationSeatId || s._id?.toString() === locationSeatId;
+                });
+                
+                if (locationSeat?.media && Array.isArray(locationSeat.media) && locationSeat.media.length > 0) {
+                  seatMedia = locationSeat.media;
+                  console.log('[formatCOEListResponse] Seat media found in Location seat (fallback):', {
+                    locationSeatId,
+                    mediaCount: seatMedia.length,
+                    media: seatMedia
+                  });
+                } else {
+                  console.log('[formatCOEListResponse] Seat found but no media in Event or Location seat:', {
+                    eventSeatId: eventSeat._id?.toString(),
+                    locationSeatId,
+                    eventSeatHasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+                    locationSeatFound: !!locationSeat,
+                    locationSeatHasMedia: !!(locationSeat?.media && locationSeat.media.length > 0)
+                  });
+                }
+              } else {
+                console.log('[formatCOEListResponse] Seat found but no media, and no location seats available:', {
+                  eventSeatId: eventSeat._id?.toString(),
+                  hasLocation: !!event?.event_id?.location_id,
+                  hasLocationSeats: !!(event?.event_id?.location_id?.seats),
+                  locationSeatsType: typeof event?.event_id?.location_id?.seats,
+                  isArray: Array.isArray(event?.event_id?.location_id?.seats)
+                });
+              }
+            }
+          } else {
+            console.log('[formatCOEListResponse] No matching seat found:', {
+              seatId,
+              seatIdStr,
+              seatCode,
+              eventSeatsCodes: event.event_id.seats.map(s => s.code),
+              eventSeatsIds: event.event_id.seats.map(s => s._id?.toString())
+            });
+          }
+        } else {
+          console.log('[formatCOEListResponse] No event seats available:', {
+            hasEvent: !!event,
+            hasEventId: !!event?.event_id,
+            hasSeats: !!(event?.event_id?.seats),
+            seatsType: typeof event?.event_id?.seats,
+            isArray: Array.isArray(event?.event_id?.seats)
+          });
         }
         
         // Get event name from multiple possible locations
@@ -351,6 +599,19 @@ function formatCOEListResponse(coes, message) {
         total_price: coe.total_price || coe.total || 0,
         currency: coe.currency || 'USD',
         created_at: coe.created_at,
+        events: (coe.events || []).map(event => ({
+          event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+          event_name: event.event_id?.name || 'Unknown Event',
+          event_date: event.event_date,
+          event_time: event.event_time,
+          media: event.event_id?.media || [],
+          location: event.event_id?.location_id ? {
+            id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
+            name: event.event_id.location_id.name,
+            type: event.event_id.location_id.type,
+            media: event.event_id.location_id.media || []
+          } : null
+        })),
         selected_seats: enhancedSeats, // Enhanced seats with media
         runner_assignment: coe.runner_assignment ? {
           type: coe.runner_assignment.type,
