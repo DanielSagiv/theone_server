@@ -1559,6 +1559,35 @@
         .coe-runner-contact {
             color: #94a3b8;
         }
+        
+        .coe-runner-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .coe-runner-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            background: rgba(30, 41, 59, 0.6);
+            color: #cbd5f5;
+            font-size: 0.75rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        
+        .coe-runner-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
 
         /* COE List Styles */
         .bot-coe-list {
@@ -3363,7 +3392,7 @@
                                         <option value="50">50</option>
                                         <option value="100">100</option>
                                     </select>
-                                </div>
+                        </div>
                                 <div style="display:flex;gap:8px;align-items:center;">
                                     <button class="btn btn-secondary" id="eventsPrevBtn" onclick="prevEventsPage()" disabled>Previous</button>
                                     <span id="eventsPageInfo" style="color:#666;min-width:140px;text-align:center;">Page 1 of 1</span>
@@ -4936,10 +4965,20 @@
             const alertClass = classMap[type] || classMap.success;
             alertsDiv.innerHTML = `<div class="alert ${alertClass}">${message}</div>`;
             alertsDiv.style.display = 'block';
-
+            
             setTimeout(() => {
                 alertsDiv.style.display = 'none';
             }, 5000);
+        }
+
+        // Helper: get initials from name or email
+        function getInitials(text) {
+            if (!text) return 'U';
+            const s = String(text).trim();
+            if (!s) return 'U';
+            const parts = s.includes('@') ? s.replace(/@.*/, '').split(/[.\s_-]+/) : s.split(/\s+/);
+            const letters = parts.filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase());
+            return letters.join('') || 'U';
         }
 
         /**
@@ -5275,23 +5314,27 @@
                         }).join('');
                         
                         // Runner details HTML (COE-level only)
-                        const runnerHtml = coeData.runner_assignment?.runner ? `
-                            <div class="coe-runner-section">
-                                <div class="coe-runner-title">Runner Details</div>
-                                <div class="coe-runner-details">
-                                    <div class="coe-runner-name">${coeData.runner_assignment.runner.name}</div>
-                                    ${coeData.runner_assignment.runner.email ? `
-                                        <div class="coe-runner-contact">Email: ${coeData.runner_assignment.runner.email}</div>
-                                    ` : ''}
-                                    ${coeData.runner_assignment.runner.phone ? `
-                                        <div class="coe-runner-contact">Phone: ${coeData.runner_assignment.runner.phone}</div>
-                                    ` : ''}
-                                    ${coeData.runner_assignment.status ? `
-                                        <div class="coe-runner-contact">Status: ${coeData.runner_assignment.status}</div>
-                                    ` : ''}
+                        const runnerHtml = coeData.runner_assignment?.runner ? (() => {
+                            const r = coeData.runner_assignment.runner;
+                            const initials = getInitials(r.name || r.email);
+                            const avatarEl = r.avatarUrl
+                                ? `<span class="coe-runner-avatar"><img src="${r.avatarUrl}" alt="${r.name || 'Runner'}" loading="lazy"></span>`
+                                : `<span class="coe-runner-avatar">${initials}</span>`;
+                            return `
+                                <div class="coe-runner-section">
+                                    <div class="coe-runner-title">Runner Details</div>
+                                    <div class="coe-runner-details">
+                                        <div class="coe-runner-row">
+                                            ${avatarEl}
+                                            <div class="coe-runner-name">${r.name}</div>
+                                        </div>
+                                        ${r.email ? `<div class="coe-runner-contact">Email: ${r.email}</div>` : ''}
+                                        ${r.phone ? `<div class="coe-runner-contact">Phone: ${r.phone}</div>` : ''}
+                                        ${coeData.runner_assignment.status ? `<div class="coe-runner-contact">Status: ${coeData.runner_assignment.status}</div>` : ''}
+                                    </div>
                                 </div>
-                            </div>
-                        ` : '';
+                            `;
+                        })() : '';
                         
                         return `
                             <div class="coe-seats-section">
@@ -5499,6 +5542,79 @@
                                 <span class="event-detail-value">${event.available_seats_count || 0}</span>
                             </div>
                         </div>
+                        ${(() => {
+                            const eventSeats = event.seats || [];
+                            if (!Array.isArray(eventSeats) || eventSeats.length === 0) return '';
+                            
+                            // Group by section (fallback to category, then 'Other')
+                            const seatsBySection = {};
+                            eventSeats.forEach(seat => {
+                                const section = seat.section || seat.category || 'Other';
+                                if (!seatsBySection[section]) seatsBySection[section] = [];
+                                seatsBySection[section].push(seat);
+                            });
+                            
+                            const sectionBlocks = Object.entries(seatsBySection).map(([section, seats]) => {
+                                const seatItemsHtml = seats.map(seat => {
+                                    const images = (seat.media || []).filter(m => m && m.type === 'image');
+                                    const mediaHtml = images.length > 0 ? `
+                                        <div class="location-seat-media">
+                                            ${images.slice(0, 4).map(m => `
+                                                <img src="${m.url}"
+                                                     alt="${m.caption || seat.code || 'Seat image'}"
+                                                     class="location-seat-media-thumbnail"
+                                                     onclick="openLightbox(${JSON.stringify(m).replace(/"/g, '&quot;')})"
+                                                     loading="lazy">
+                                            `).join('')}
+                                            ${images.length > 4 ? `
+                                                <div class="location-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
+                                                    +${images.length - 4}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    ` : `<div class="location-seat-media" style="color:#94a3b8;font-size:0.75rem;font-style:italic;">No images available</div>`;
+                                    
+                                    return `
+                                        <div class="location-seat-item">
+                                            <div class="location-seat-header">
+                                                <div class="location-seat-code">Table ${seat.code || 'N/A'}</div>
+                                                ${seat.capacity ? `<div class="location-seat-capacity">${seat.capacity} ppl</div>` : ''}
+                                            </div>
+                                            <div class="location-seat-details">
+                                                ${seat.event_price ? `<div class="location-seat-detail"><span class="location-seat-label">Event Price:</span> $${seat.event_price}</div>` : ''}
+                                                ${seat.min_spend ? `<div class="location-seat-detail"><span class="location-seat-label">Min Spend:</span> $${seat.min_spend}</div>` : ''}
+                                                ${seat.status ? `<div class="location-seat-detail"><span class="location-seat-label">Status:</span> ${seat.status}</div>` : ''}
+                                            </div>
+                                            ${mediaHtml}
+                                        </div>
+                                    `;
+                                }).join('');
+                                
+                                return `
+                                    <div class="location-seat-category">
+                                        <div class="location-seat-category-header" onclick="toggleEventSeatSection(this)">
+                                            <span class="location-seat-category-title">${section}</span>
+                                            <span class="expand-icon">▼</span>
+                                        </div>
+                                        <div class="location-seat-category-content">
+                                            ${seatItemsHtml}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('');
+                            
+                            return `
+                                <div class="location-seats-section">
+                                    <button class="location-seats-toggle" onclick="toggleEventSeats(this)">
+                                        <span>View Seats (${eventSeats.length})</span>
+                                        <span class="expand-icon">▼</span>
+                                    </button>
+                                    <div class="location-seats-content">
+                                        ${sectionBlocks}
+                                    </div>
+                                </div>
+                            `;
+                        })()}
                     </div>
                 `;
             }).join('');
@@ -5972,23 +6088,27 @@
                     }).join('');
                     
                     // Runner details HTML (COE-level only)
-                    const runnerHtml = coe.runner_assignment?.runner ? `
-                        <div class="coe-runner-section">
-                            <div class="coe-runner-title">Runner Details</div>
-                            <div class="coe-runner-details">
-                                <div class="coe-runner-name">${coe.runner_assignment.runner.name}</div>
-                                ${coe.runner_assignment.runner.email ? `
-                                    <div class="coe-runner-contact">Email: ${coe.runner_assignment.runner.email}</div>
-                                ` : ''}
-                                ${coe.runner_assignment.runner.phone ? `
-                                    <div class="coe-runner-contact">Phone: ${coe.runner_assignment.runner.phone}</div>
-                                ` : ''}
-                                ${coe.runner_assignment.status ? `
-                                    <div class="coe-runner-contact">Status: ${coe.runner_assignment.status}</div>
-                                ` : ''}
+                    const runnerHtml = coe.runner_assignment?.runner ? (() => {
+                        const r = coe.runner_assignment.runner;
+                        const initials = getInitials(r.name || r.email);
+                        const avatarEl = r.avatarUrl
+                            ? `<span class="coe-runner-avatar"><img src="${r.avatarUrl}" alt="${r.name || 'Runner'}" loading="lazy"></span>`
+                            : `<span class="coe-runner-avatar">${initials}</span>`;
+                        return `
+                            <div class="coe-runner-section">
+                                <div class="coe-runner-title">Runner Details</div>
+                                <div class="coe-runner-details">
+                                    <div class="coe-runner-row">
+                                        ${avatarEl}
+                                        <div class="coe-runner-name">${r.name}</div>
+                                    </div>
+                                    ${r.email ? `<div class="coe-runner-contact">Email: ${r.email}</div>` : ''}
+                                    ${r.phone ? `<div class="coe-runner-contact">Phone: ${r.phone}</div>` : ''}
+                                    ${coe.runner_assignment.status ? `<div class="coe-runner-contact">Status: ${coe.runner_assignment.status}</div>` : ''}
+                                </div>
                             </div>
-                        </div>
-                    ` : '';
+                        `;
+                    })() : '';
                     
                     return `
                         <div class="coe-seats-section">
@@ -7104,6 +7224,18 @@
         function toggleLocationSeats(button) {
             const section = button.closest('.location-seats-section');
             section.classList.toggle('expanded');
+        }
+
+        // Toggle Event seats accordion
+        function toggleEventSeats(button) {
+            const section = button.closest('.location-seats-section');
+            section.classList.toggle('expanded');
+        }
+
+        // Toggle Event seat section (per section)
+        function toggleEventSeatSection(header) {
+            const group = header.closest('.location-seat-category');
+            group.classList.toggle('expanded');
         }
 
         /**
@@ -12047,7 +12179,7 @@
                     params.set('page', String(page));
                     params.set('limit', String(limit));
                     const apiUrl = `/events?${params.toString()}`;
-                    const result = await makeApiRequest(apiUrl);
+                const result = await makeApiRequest(apiUrl);
                     if (!result.success || !result.data) break;
                     const batch = Array.isArray(result.data) ? result.data : (result.data.data || []);
                     combined.push(...batch);

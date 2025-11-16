@@ -226,7 +226,7 @@ async function getCOEById(coeId) {
       .populate('admin_id', 'firstName lastName email')
       .populate('created_by', 'firstName lastName email')
       .populate('participants.user_id', 'firstName lastName email phone')
-      .populate('runner_assignment.runner_id', 'firstName lastName email phone')
+      .populate('runner_assignment.runner_id', 'firstName lastName email phone avatarUrl')
       .populate({
         path: 'events.event_id',
         select: 'name description location_id start_datetime end_datetime base_price currency status media seats',
@@ -237,7 +237,7 @@ async function getCOEById(coeId) {
           }
         ]
       })
-      .populate('events.runner_assignment.runner_id', 'firstName lastName email phone');
+      .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
 
     if (!coe) {
       throw new Error('COE not found');
@@ -304,7 +304,7 @@ async function getCOEs(filters = {}, pagination = {}) {
       COE.find(query)
         .populate('client_id', 'firstName lastName email')
         .populate('admin_id', 'firstName lastName email')
-        .populate('runner_assignment.runner_id', 'firstName lastName email')
+        .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
         .sort(sort)
         .skip(skip)
         .limit(limit),
@@ -648,7 +648,7 @@ async function getCOEsByClient(clientId) {
     })
     .populate('client_id', 'firstName lastName email')
     .populate('admin_id', 'firstName lastName email')
-    .populate('runner_assignment.runner_id', 'firstName lastName email')
+    .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .sort({ created_at: -1 });
 
     return coes;
@@ -673,7 +673,7 @@ async function getCOEsByRunner(runnerId) {
     })
     .populate('client_id', 'firstName lastName email')
     .populate('admin_id', 'firstName lastName email')
-    .populate('runner_assignment.runner_id', 'firstName lastName email')
+    .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .sort({ created_at: -1 });
 
     return coes;

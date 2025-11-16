@@ -292,7 +292,8 @@ function formatCOEResponse(type, coe, message, actions = []) {
             ? `${coe.runner_assignment.runner_id.firstName} ${coe.runner_assignment.runner_id.lastName}`
             : coe.runner_assignment.runner_id.email || 'Unknown',
           email: coe.runner_assignment.runner_id.email,
-          phone: coe.runner_assignment.runner_id.phone
+          phone: coe.runner_assignment.runner_id.phone,
+          avatarUrl: coe.runner_assignment.runner_id.avatarUrl || null
         } : null,
         status: coe.runner_assignment.status,
         assigned_at: coe.runner_assignment.assigned_at,
@@ -341,6 +342,7 @@ function formatEventListResponse(events, message) {
       } : null,
       sentiment: event.sentiment || null,
       media: event.media || [],
+      seats: event.seats || [],
       available_seats_count: event.available_seats_count || 0
     })),
     count: events.length,
@@ -621,7 +623,8 @@ function formatCOEListResponse(coes, message) {
               ? `${coe.runner_assignment.runner_id.firstName} ${coe.runner_assignment.runner_id.lastName}`
               : coe.runner_assignment.runner_id.email || 'Unknown',
             email: coe.runner_assignment.runner_id.email,
-            phone: coe.runner_assignment.runner_id.phone
+            phone: coe.runner_assignment.runner_id.phone,
+            avatarUrl: coe.runner_assignment.runner_id.avatarUrl || null
           } : null,
           status: coe.runner_assignment.status,
           assigned_at: coe.runner_assignment.assigned_at,
