@@ -255,6 +255,8 @@ const coeItemSchema = Joi.object({
   quantity: Joi.number().min(1).default(1),
   total_price: Joi.number().min(0).required(),
   runner_assignment: Joi.object({
+    // Accept optional type at event level; ignored by model if not stored
+    type: Joi.string().valid('event'),
     runner_id: Joi.string().hex().length(24),
     assigned_by: Joi.string().hex().length(24),
     assigned_at: Joi.date(),

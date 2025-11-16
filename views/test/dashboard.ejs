@@ -711,14 +711,7 @@
             padding-bottom: 52px; /* Space for menu button at bottom (36px button + 16px padding) */
         }
 
-        /* COE Card Images (reuse location image styles) */
-        .bot-coe-card .location-item-hero-image {
-            margin-bottom: 12px;
-        }
-
-        .bot-coe-card .location-item-image-gallery {
-            margin-bottom: 12px;
-        }
+        /* Note: COE-level images removed per design */
 
         .coe-card-info {
             display: grid;
@@ -1438,12 +1431,8 @@
         /* Individual Seat Item */
         .coe-seat-item {
             padding: 10px 12px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            /* border-bottom removed - no separator lines */
             background: rgba(15, 23, 42, 0.3);
-        }
-
-        .coe-seat-item:last-child {
-            border-bottom: none;
         }
 
         .coe-seat-code {
@@ -1528,7 +1517,7 @@
 
         /* Runner Details */
         .coe-runner-section {
-            margin-top: 12px;
+            margin-top: 6px;
             padding: 10px 12px;
             background: rgba(30, 41, 59, 0.5);
             border-radius: 6px;
@@ -1667,6 +1656,13 @@
             gap: 12px;
     color: #94a3b8;
             font-size: 0.9rem;
+        }
+        
+        /* Small caption under location thumbnails inside event groups */
+        .event-location-caption {
+            margin-top: 4px;
+            font-size: 0.75rem;
+            color: #94a3b8;
         }
 
         .bot-input-area label {
@@ -4981,6 +4977,30 @@
             return letters.join('') || 'U';
         }
 
+        // Helper: build a full Runner Details card (same style as COE-level)
+        function buildRunnerDetailsCard(runner, statusText, titleText) {
+            if (!runner) return '';
+            const initials = getInitials(runner.name || runner.email);
+            const avatarEl = runner.avatarUrl
+                ? `<span class="coe-runner-avatar"><img src="${runner.avatarUrl}" alt="${runner.name || 'Runner'}" loading="lazy"></span>`
+                : `<span class="coe-runner-avatar">${initials}</span>`;
+            const title = titleText || 'Runner Details';
+            return `
+                <div class="coe-runner-section">
+                    <div class="coe-runner-title">${title}</div>
+                    <div class="coe-runner-details">
+                        <div class="coe-runner-row">
+                            ${avatarEl}
+                            <div class="coe-runner-name">${runner.name || 'Runner'}</div>
+                        </div>
+                        ${runner.email ? `<div class="coe-runner-contact">Email: ${runner.email}</div>` : ''}
+                        ${runner.phone ? `<div class="coe-runner-contact">Phone: ${runner.phone}</div>` : ''}
+                        ${statusText ? `<div class="coe-runner-contact">Status: ${statusText}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
         /**
          * BOT helper utilities
          */
@@ -5075,68 +5095,12 @@
                 ? `${new Date(coeData.start_date).toLocaleDateString()} - ${new Date(coeData.end_date).toLocaleDateString()}`
                 : 'Dates TBD';
 
-            // Collect all event and location images
-            const allEventImages = [];
-            const allLocationImages = [];
-            (coeData.events || []).forEach(event => {
-                if (event.media && event.media.length > 0) {
-                    allEventImages.push(...event.media.filter(m => m.type === 'image'));
-                }
-                if (event.location?.media && event.location.media.length > 0) {
-                    allLocationImages.push(...event.location.media.filter(m => m.type === 'image'));
-                }
-            });
-            
-            // Remove duplicates by URL
-            const uniqueEventImages = Array.from(new Map(allEventImages.map(img => [img.url, img])).values());
-            const uniqueLocationImages = Array.from(new Map(allLocationImages.map(img => [img.url, img])).values());
-            
-            // Sort images by order
-            uniqueEventImages.sort((a, b) => (a.order || 0) - (b.order || 0));
-            uniqueLocationImages.sort((a, b) => (a.order || 0) - (b.order || 0));
-            
-            // Get hero image (first event image, or first location image as fallback)
-            const heroImage = uniqueEventImages.length > 0 ? uniqueEventImages[0] : (uniqueLocationImages.length > 0 ? uniqueLocationImages[0] : null);
-            const thumbnailImages = uniqueEventImages.length > 1 ? uniqueEventImages.slice(1, 4) : (uniqueLocationImages.length > 0 && uniqueEventImages.length === 0 ? uniqueLocationImages.slice(0, 3) : []);
-            const remainingCount = (uniqueEventImages.length + uniqueLocationImages.length) > 4 ? (uniqueEventImages.length + uniqueLocationImages.length) - 4 : 0;
-            
-            // Generate hero image HTML
-            const heroImageHtml = heroImage ? `
-                <img src="${heroImage.url}" 
-                     alt="${heroImage.caption || coeData.name || 'COE image'}" 
-                     class="location-item-hero-image"
-                     onclick="openLightbox(${JSON.stringify(heroImage).replace(/"/g, '&quot;')})"
-                     loading="lazy">
-            ` : '';
-            
-            // Generate thumbnail gallery HTML
-            const thumbnailGalleryHtml = thumbnailImages.length > 0 || remainingCount > 0 ? `
-                <div class="location-item-image-gallery">
-                    ${thumbnailImages.map(img => `
-                        <img src="${img.url}" 
-                             alt="${img.caption || 'COE image'}" 
-                             class="location-item-thumbnail"
-                             onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
-                             loading="lazy">
-                    `).join('')}
-                    ${remainingCount > 0 ? `
-                        <div class="location-item-more-images" 
-                             onclick="openLightbox(${JSON.stringify((uniqueEventImages[4] || uniqueLocationImages[0] || uniqueEventImages[0] || uniqueLocationImages[0]) || heroImage).replace(/"/g, '&quot;')})"
-                             title="View all ${uniqueEventImages.length + uniqueLocationImages.length} images">
-                            +${remainingCount}
-                        </div>
-                    ` : ''}
-                </div>
-            ` : '';
-
             card.innerHTML = `
-                ${heroImageHtml}
                 <div class="coe-card-header">
                     <h4 class="coe-card-title">${coeData.name || 'Untitled COE'}</h4>
                     <span class="coe-status-badge ${statusClass}">${coeData.status || 'draft'}</span>
                 </div>
                 <div class="coe-card-body">
-                    ${thumbnailGalleryHtml}
                     <div class="coe-card-info">
                         <div class="coe-info-item">
                             <span class="coe-info-label">Dates:</span>
@@ -5220,7 +5184,44 @@
                             seatsByEvent[eventId].seats.push(seat);
                         });
                         
-                        const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
+                const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
+                    // Find matching event info (to get location media and name)
+                    const matchingEvent = (coeData.events || []).find(e => {
+                        return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
+                    }) || (coeData.events || []).find(e => e.event_id === eventGroup.event_id);
+
+                    // Build event-level runner details card (display at bottom of event section if present)
+                    const evRunner = matchingEvent?.runner_assignment?.runner || null;
+                    const evRunnerStatus = matchingEvent?.runner_assignment?.status || null;
+                    const eventRunnerDetailsHtml = evRunner
+                        ? buildRunnerDetailsCard(evRunner, evRunnerStatus, 'Runner Details')
+                        : '';
+
+                    // Build location thumbnails (up to 3) and +X more
+                    let locationThumbsHtml = '';
+                    if (matchingEvent?.location?.media && matchingEvent.location.media.length > 0) {
+                        const images = matchingEvent.location.media.filter(m => m && m.type === 'image');
+                        const thumbs = images.slice(0, 3);
+                        const remaining = images.length > 3 ? images.length - 3 : 0;
+                        locationThumbsHtml = `
+                            <div class="location-item-image-gallery" style="margin-top:8px;">
+                                ${thumbs.map(img => `
+                                    <img src="${img.url}"
+                                         alt="${img.caption || matchingEvent.location.name || 'Location image'}"
+                                         class="location-item-thumbnail"
+                                         onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
+                                         loading="lazy">
+                                `).join('')}
+                                ${remaining > 0 ? `
+                                    <div class="location-item-more-images"
+                                         onclick="openLightbox(${JSON.stringify(images[3] || images[0]).replace(/"/g, '&quot;')})"
+                                         title="View all ${images.length} images">+${remaining}</div>
+                                ` : ''}
+                            </div>
+                            <div class="event-location-caption">${matchingEvent.location.name || ''}</div>
+                        `;
+                    }
+
                             const seatItemsHtml = eventGroup.seats.map(seat => {
                                 // Status badge with color
                                 const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
@@ -5307,7 +5308,9 @@
                                         <span class="expand-icon">▼</span>
                                     </div>
                                     <div class="coe-seat-event-content">
+                                        ${locationThumbsHtml}
                                         ${seatItemsHtml}
+                                        ${eventRunnerDetailsHtml}
                                     </div>
                                 </div>
                             `;
@@ -5887,60 +5890,6 @@
                 const statusClass = `coe-status-${coe.status || 'draft'}`;
                 const coeId = coe.id || coe._id || '';
 
-                // Collect all event and location images
-                const allEventImages = [];
-                const allLocationImages = [];
-                (coe.events || []).forEach(event => {
-                    if (event.media && event.media.length > 0) {
-                        allEventImages.push(...event.media.filter(m => m.type === 'image'));
-                    }
-                    if (event.location?.media && event.location.media.length > 0) {
-                        allLocationImages.push(...event.location.media.filter(m => m.type === 'image'));
-                    }
-                });
-                
-                // Remove duplicates by URL
-                const uniqueEventImages = Array.from(new Map(allEventImages.map(img => [img.url, img])).values());
-                const uniqueLocationImages = Array.from(new Map(allLocationImages.map(img => [img.url, img])).values());
-                
-                // Sort images by order
-                uniqueEventImages.sort((a, b) => (a.order || 0) - (b.order || 0));
-                uniqueLocationImages.sort((a, b) => (a.order || 0) - (b.order || 0));
-                
-                // Get hero image (first event image, or first location image as fallback)
-                const heroImage = uniqueEventImages.length > 0 ? uniqueEventImages[0] : (uniqueLocationImages.length > 0 ? uniqueLocationImages[0] : null);
-                const thumbnailImages = uniqueEventImages.length > 1 ? uniqueEventImages.slice(1, 4) : (uniqueLocationImages.length > 0 && uniqueEventImages.length === 0 ? uniqueLocationImages.slice(0, 3) : []);
-                const remainingCount = (uniqueEventImages.length + uniqueLocationImages.length) > 4 ? (uniqueEventImages.length + uniqueLocationImages.length) - 4 : 0;
-                
-                // Generate hero image HTML
-                const heroImageHtml = heroImage ? `
-                    <img src="${heroImage.url}" 
-                         alt="${heroImage.caption || coe.name || 'COE image'}" 
-                         class="location-item-hero-image"
-                         onclick="openLightbox(${JSON.stringify(heroImage).replace(/"/g, '&quot;')})"
-                         loading="lazy">
-                ` : '';
-                
-                // Generate thumbnail gallery HTML
-                const thumbnailGalleryHtml = thumbnailImages.length > 0 || remainingCount > 0 ? `
-                    <div class="location-item-image-gallery">
-                        ${thumbnailImages.map(img => `
-                            <img src="${img.url}" 
-                                 alt="${img.caption || 'COE image'}" 
-                                 class="location-item-thumbnail"
-                                 onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
-                                 loading="lazy">
-                        `).join('')}
-                        ${remainingCount > 0 ? `
-                            <div class="location-item-more-images" 
-                                 onclick="openLightbox(${JSON.stringify((uniqueEventImages[4] || uniqueLocationImages[0] || uniqueEventImages[0] || uniqueLocationImages[0]) || heroImage).replace(/"/g, '&quot;')})"
-                                 title="View all ${uniqueEventImages.length + uniqueLocationImages.length} images">
-                                +${remainingCount}
-                            </div>
-                        ` : ''}
-                    </div>
-                ` : '';
-
                 // Generate seats accordion HTML (same as renderCOECard)
                 const seatsHtml = (() => {
                     // Debug: Log the data structure
@@ -5995,6 +5944,45 @@
                     });
                     
                     const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
+                        // Build event-level runner details (display at bottom of event section if present)
+                        const erMatch = (coe.events || []).find(e => {
+                            return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
+                        }) || (coe.events || []).find(e => e.event_id === eventGroup.event_id);
+                        const evRunner = erMatch?.runner_assignment?.runner || null;
+                        const evRunnerStatus = erMatch?.runner_assignment?.status || null;
+                        const eventRunnerDetailsHtml = evRunner
+                            ? buildRunnerDetailsCard(evRunner, evRunnerStatus, 'Runner Details')
+                            : '';
+                        // Find matching event (to get location media and name)
+                        const matchingEvent = (coe.events || []).find(e => {
+                            return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
+                        }) || (coe.events || []).find(e => e.event_id === eventGroup.event_id);
+
+                        // Build location thumbnails (up to 3) and +X more
+                        let locationThumbsHtml = '';
+                        if (matchingEvent?.location?.media && matchingEvent.location.media.length > 0) {
+                            const images = matchingEvent.location.media.filter(m => m && m.type === 'image');
+                            const thumbs = images.slice(0, 3);
+                            const remaining = images.length > 3 ? images.length - 3 : 0;
+                            locationThumbsHtml = `
+                                <div class="location-item-image-gallery" style="margin-top:8px;">
+                                    ${thumbs.map(img => `
+                                        <img src="${img.url}"
+                                             alt="${img.caption || matchingEvent.location.name || 'Location image'}"
+                                             class="location-item-thumbnail"
+                                             onclick="openLightbox(${JSON.stringify(img).replace(/"/g, '&quot;')})"
+                                             loading="lazy">
+                                    `).join('')}
+                                    ${remaining > 0 ? `
+                                        <div class="location-item-more-images"
+                                             onclick="openLightbox(${JSON.stringify(images[3] || images[0]).replace(/"/g, '&quot;')})"
+                                             title="View all ${images.length} images">+${remaining}</div>
+                                    ` : ''}
+                                </div>
+                                <div class="event-location-caption">${matchingEvent.location.name || ''}</div>
+                            `;
+                        }
+
                         const seatItemsHtml = eventGroup.seats.map(seat => {
                             // Status badge with color
                             const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
@@ -6081,7 +6069,9 @@
                                     <span class="expand-icon">▼</span>
                                 </div>
                                 <div class="coe-seat-event-content">
+                                    ${locationThumbsHtml}
                                     ${seatItemsHtml}
+                                    ${eventRunnerDetailsHtml}
                                 </div>
                             </div>
                         `;
@@ -6126,12 +6116,10 @@
 
                 return `
                     <div class="bot-coe-list-item">
-                        ${heroImageHtml}
                         <div class="coe-list-item-header">
                             <h5 class="coe-list-item-title">${coe.name || 'Untitled COE'}</h5>
                             <span class="coe-status-badge ${statusClass}">${coe.status || 'draft'}</span>
                         </div>
-                        ${thumbnailGalleryHtml}
                         <div class="coe-list-item-details">
                             <span>${dateRange}</span>
                             <span>•</span>
@@ -13065,6 +13053,27 @@
                             notes: document.getElementById('coec_runner_notes').value.trim()
                         };
                     }
+                } else if (runnerType === 'event') {
+                    // Mark COE runner mode so backend/formatter knows intent
+                    coeData.runner_assignment = {
+                        type: 'event',
+        notes: document.getElementById('coec_runner_notes').value.trim()
+                    };
+                    // Attach per-event runner assignments from UI selects
+                    coeData.events = coeData.events.map(ev => {
+                        const sel = document.getElementById(`coec_event_runner_${ev.event_id}`);
+                        if (sel && sel.value) {
+                            return {
+                                ...ev,
+                                runner_assignment: {
+                                    runner_id: sel.value,
+                                    status: 'assigned'
+                                }
+                            };
+                        }
+                        // no runner selected; leave as-is
+                        return ev;
+                    });
                 }
 
                 // Create or Update COE

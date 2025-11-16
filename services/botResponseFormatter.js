@@ -20,6 +20,49 @@ function normalizeId(id) {
 }
 
 /**
+ * Normalize a user document or id into a lightweight runner object
+ * @param {Object|string} user - Mongoose user doc or id
+ * @returns {{id:string,name:string,email?:string,phone?:string,avatarUrl?:string}|null}
+ */
+function toRunner(user) {
+  if (!user) return null;
+  const id = user && user._id ? String(user._id) : String(user);
+  const name = (user && user.firstName && user.lastName)
+    ? `${user.firstName} ${user.lastName}`
+    : (user && user.email) ? user.email : 'Unknown';
+  return {
+    id,
+    name,
+    email: user?.email ?? null,
+    phone: user?.phone ?? null,
+    avatarUrl: user?.avatarUrl ?? null
+  };
+}
+
+/**
+ * Build an event-level runner assignment, falling back to COE-level runner when
+ * the event's runner assignment lacks a runner_id.
+ * @param {Object} event - COE.events item (with possible runner_assignment)
+ * @param {Object} coe - Parent COE (may contain runner_assignment)
+ * @returns {{type?:string, runner?:Object, status?:string, assigned_at?:string}|null}
+ */
+function buildEventRunnerAssignment(event, coe) {
+  const evRA = event?.runner_assignment;
+  const coeRA = coe?.runner_assignment;
+  const user = evRA?.runner_id ?? coeRA?.runner_id ?? null;
+  const status = (evRA?.status ?? coeRA?.status) ?? null;
+  const type = (evRA?.type ?? coeRA?.type) ?? null;
+  const assignedAt = evRA?.assigned_at ?? coeRA?.assigned_at ?? null;
+
+  if (!user && !status && !type && !assignedAt) return null;
+  return {
+    ...(type ? { type } : {}),
+    ...(user ? { runner: toRunner(user) } : {}),
+    ...(status ? { status } : {}),
+    ...(assignedAt ? { assigned_at: assignedAt } : {})
+  };
+}
+/**
  * Create a structured COE response
  * @param {string} type - Response type: 'coe_created', 'coe_updated', 'coe_details', 'coe_list'
  * @param {Object} coe - COE object
@@ -268,19 +311,23 @@ function formatCOEResponse(type, coe, message, actions = []) {
         deposit_required: coe.deposit_required || 0,
         currency: coe.currency || 'USD'
       },
-      events: (coe.events || []).map(event => ({
-        event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
-        event_name: event.event_id?.name || 'Unknown Event',
-        event_date: event.event_date,
-        event_time: event.event_time,
-        media: event.event_id?.media || [],
-        location: event.event_id?.location_id ? {
-          id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
-          name: event.event_id.location_id.name,
-          type: event.event_id.location_id.type,
-          media: event.event_id.location_id.media || []
-        } : null
-      })),
+      events: (coe.events || []).map(event => {
+        const runner_assignment = buildEventRunnerAssignment(event, coe);
+        return {
+          event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+          event_name: event.event_id?.name || 'Unknown Event',
+          event_date: event.event_date,
+          event_time: event.event_time,
+          media: event.event_id?.media || [],
+          location: event.event_id?.location_id ? {
+            id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
+            name: event.event_id.location_id.name,
+            type: event.event_id.location_id.type,
+            media: event.event_id.location_id.media || []
+          } : null,
+          ...(runner_assignment ? { runner_assignment } : {})
+        };
+      }),
       selected_seats: enhancedSeats, // Use enhanced seats with media
       events_count: coe.events?.length || 0,
       seats_count: coe.selected_seats?.length || 0,
@@ -601,19 +648,23 @@ function formatCOEListResponse(coes, message) {
         total_price: coe.total_price || coe.total || 0,
         currency: coe.currency || 'USD',
         created_at: coe.created_at,
-        events: (coe.events || []).map(event => ({
-          event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
-          event_name: event.event_id?.name || 'Unknown Event',
-          event_date: event.event_date,
-          event_time: event.event_time,
-          media: event.event_id?.media || [],
-          location: event.event_id?.location_id ? {
-            id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
-            name: event.event_id.location_id.name,
-            type: event.event_id.location_id.type,
-            media: event.event_id.location_id.media || []
-          } : null
-        })),
+        events: (coe.events || []).map(event => {
+          const runner_assignment = buildEventRunnerAssignment(event, coe);
+          return {
+            event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+            event_name: event.event_id?.name || 'Unknown Event',
+            event_date: event.event_date,
+            event_time: event.event_time,
+            media: event.event_id?.media || [],
+            location: event.event_id?.location_id ? {
+              id: event.event_id.location_id._id?.toString() || event.event_id.location_id?.toString(),
+              name: event.event_id.location_id.name,
+              type: event.event_id.location_id.type,
+              media: event.event_id.location_id.media || []
+            } : null,
+            ...(runner_assignment ? { runner_assignment } : {})
+          };
+        }),
         selected_seats: enhancedSeats, // Enhanced seats with media
         runner_assignment: coe.runner_assignment ? {
           type: coe.runner_assignment.type,
