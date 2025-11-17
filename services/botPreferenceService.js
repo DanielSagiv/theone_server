@@ -18,8 +18,18 @@ function checkSufficientData(preferenceData) {
     missingFields.push('dates');
   }
   
+  // City is required for form submissions (Phase 2.1)
+  if (preferenceData.city === undefined && preferenceData.location_preferences?.length === 0) {
+    // Only require city if we're in form submission mode
+    // For natural language, location_preferences array is acceptable
+    if (preferenceData.seat_preferences !== undefined || preferenceData.specific_preferences !== undefined) {
+      // This looks like form submission data, city is required
+      missingFields.push('city');
+    }
+  }
+  
   // Budget and preferences are optional but help with auto-selection
-  // Minimum required: dates
+  // Minimum required: dates (and city for form submissions)
   
   return {
     sufficient: missingFields.length === 0,
@@ -138,7 +148,15 @@ async function updateConversationPreferences(userId, preferenceData, action = 'p
     throw new Error('Conversation not found');
   }
   
+  console.log('[PREFERENCE SERVICE] updateConversationPreferences called:', {
+    userId: userId.toString(),
+    action: action,
+    incomingPreferenceData: JSON.stringify(preferenceData, null, 2),
+    existingPreferenceData: JSON.stringify(conversation.preference_data || {}, null, 2)
+  });
+  
   // Merge with existing preferences
+  const previousPreferenceData = { ...conversation.preference_data };
   conversation.preference_data = {
     ...conversation.preference_data,
     ...preferenceData
@@ -154,11 +172,22 @@ async function updateConversationPreferences(userId, preferenceData, action = 'p
     action: action,
     details: {
       field: Object.keys(preferenceData)[0],
-      sufficient: sufficient.sufficient
+      sufficient: sufficient.sufficient,
+      preferenceDataKeys: Object.keys(preferenceData)
     }
   });
   
   await conversation.save();
+  
+  console.log('[PREFERENCE SERVICE] ✅ Preferences updated in conversation:', {
+    conversationId: conversation._id.toString(),
+    previousData: JSON.stringify(previousPreferenceData, null, 2),
+    newData: JSON.stringify(conversation.preference_data, null, 2),
+    sufficient: sufficient.sufficient,
+    missingFields: sufficient.missingFields,
+    collectingPreferences: conversation.collecting_preferences
+  });
+  
   return conversation;
 }
 
@@ -196,9 +225,249 @@ async function getPreferences(userId) {
   return conversation.preference_data || {};
 }
 
+/**
+ * Extract structured preferences from form submission message
+ * @description Parses the structured format from the COE preferences form
+ * @param {string} message - User message containing preferences
+ * Format: "City: Las Vegas\nStart date: 2025-11-15\nEnd date: 2025-11-20\nBudget: $5000 USD\n..."
+ * @returns {Object} Structured preferences object with validation
+ */
+function extractPreferencesFromFormSubmission(message) {
+  console.log('[PREFERENCE SERVICE] extractPreferencesFromFormSubmission called with message:', message.substring(0, 200));
+  
+  if (!message || typeof message !== 'string') {
+    console.error('[PREFERENCE SERVICE] Invalid message format');
+    return { valid: false, error: 'Invalid message format' };
+  }
+
+  const preferences = {
+    valid: true,
+    errors: []
+  };
+
+  // Pattern matching for structured format
+  const patterns = {
+    city: /City:\s*(.+?)(?:\n|$)/i,
+    start_date: /Start date:\s*(.+?)(?:\n|$)/i,
+    end_date: /End date:\s*(.+?)(?:\n|$)/i,
+    budget: /Budget:\s*\$?(\d+(?:\.\d+)?)\s*(USD)?/i,
+    party_size: /Number of people:\s*(\d+)/i,
+    seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
+    specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i
+  };
+
+  // Extract city
+  const cityMatch = message.match(patterns.city);
+  if (cityMatch && cityMatch[1]) {
+    preferences.city = cityMatch[1].trim();
+    if (!preferences.city) {
+      preferences.errors.push('City is required');
+      preferences.valid = false;
+    }
+  } else {
+    preferences.errors.push('City not found');
+    preferences.valid = false;
+  }
+
+  // Extract start date
+  const startDateMatch = message.match(patterns.start_date);
+  if (startDateMatch && startDateMatch[1]) {
+    const startDateStr = startDateMatch[1].trim();
+    const startDate = new Date(startDateStr);
+    if (!isNaN(startDate.getTime())) {
+      preferences.start_date = startDateStr; // Keep as ISO string
+      preferences.startDate = startDate; // Also provide Date object
+    } else {
+      preferences.errors.push('Invalid start date format');
+      preferences.valid = false;
+    }
+  } else {
+    preferences.errors.push('Start date not found');
+    preferences.valid = false;
+  }
+
+  // Extract end date
+  const endDateMatch = message.match(patterns.end_date);
+  if (endDateMatch && endDateMatch[1]) {
+    const endDateStr = endDateMatch[1].trim();
+    const endDate = new Date(endDateStr);
+    if (!isNaN(endDate.getTime())) {
+      preferences.end_date = endDateStr; // Keep as ISO string
+      preferences.endDate = endDate; // Also provide Date object
+      
+      // Validate end date >= start date
+      if (preferences.startDate && endDate < preferences.startDate) {
+        preferences.errors.push('End date must be on or after start date');
+        preferences.valid = false;
+      }
+    } else {
+      preferences.errors.push('Invalid end date format');
+      preferences.valid = false;
+    }
+  } else {
+    preferences.errors.push('End date not found');
+    preferences.valid = false;
+  }
+
+  // Extract budget
+  const budgetMatch = message.match(patterns.budget);
+  if (budgetMatch && budgetMatch[1]) {
+    const budgetAmount = parseFloat(budgetMatch[1]);
+    if (!isNaN(budgetAmount) && budgetAmount > 0) {
+      preferences.budget = {
+        amount: budgetAmount,
+        currency: (budgetMatch[2] || 'USD').toUpperCase()
+      };
+    } else {
+      preferences.errors.push('Invalid budget amount');
+      preferences.valid = false;
+    }
+  } else {
+    preferences.errors.push('Budget not found');
+    preferences.valid = false;
+  }
+
+  // Extract party size
+  const partySizeMatch = message.match(patterns.party_size);
+  if (partySizeMatch && partySizeMatch[1]) {
+    const partySize = parseInt(partySizeMatch[1]);
+    if (!isNaN(partySize) && partySize >= 1) {
+      preferences.party_size = partySize;
+    } else {
+      preferences.errors.push('Invalid party size (must be >= 1)');
+      preferences.valid = false;
+    }
+  } else {
+    preferences.errors.push('Party size not found');
+    preferences.valid = false;
+  }
+
+  // Extract seat preferences (optional)
+  const seatPrefsMatch = message.match(patterns.seat_preferences);
+  if (seatPrefsMatch && seatPrefsMatch[1]) {
+    preferences.seat_preferences = seatPrefsMatch[1].trim();
+  } else {
+    preferences.seat_preferences = '';
+  }
+
+  // Extract specific preferences (optional)
+  const specificPrefsMatch = message.match(patterns.specific_preferences);
+  if (specificPrefsMatch && specificPrefsMatch[1]) {
+    preferences.specific_preferences = specificPrefsMatch[1].trim();
+  } else {
+    preferences.specific_preferences = '';
+  }
+
+  // Convert to format compatible with existing preference storage
+  const formattedPreferences = {
+    city: preferences.city,
+    dates: {
+      startDate: preferences.startDate,
+      endDate: preferences.endDate,
+      isRange: true
+    },
+    budget: {
+      min: preferences.budget?.amount || 0,
+      max: preferences.budget?.amount || 0,
+      currency: preferences.budget?.currency || 'USD'
+    },
+    party_size: preferences.party_size,
+    location_preferences: preferences.city ? [preferences.city] : [],
+    seat_preferences: preferences.seat_preferences,
+    specific_preferences: preferences.specific_preferences,
+    notes: `${preferences.seat_preferences}\n${preferences.specific_preferences}`.trim()
+  };
+
+  const result = {
+    ...preferences,
+    formatted: formattedPreferences,
+    raw: {
+      city: preferences.city,
+      start_date: preferences.start_date,
+      end_date: preferences.end_date,
+      budget: preferences.budget,
+      party_size: preferences.party_size,
+      seat_preferences: preferences.seat_preferences,
+      specific_preferences: preferences.specific_preferences
+    }
+  };
+
+  console.log('[PREFERENCE SERVICE] ✅ extractPreferencesFromFormSubmission result:', {
+    valid: result.valid,
+    errors: result.errors,
+    extractedFields: {
+      city: result.city,
+      start_date: result.start_date,
+      end_date: result.end_date,
+      budget: result.budget,
+      party_size: result.party_size,
+      hasSeatPreferences: !!result.seat_preferences,
+      hasSpecificPreferences: !!result.specific_preferences
+    },
+    formatted: JSON.stringify(result.formatted, null, 2)
+  });
+
+  return result;
+}
+
+/**
+ * Convert text preferences to sentiment keywords
+ * @description Extracts keywords from free-text preferences for sentiment matching
+ * Note: This is a basic implementation. Phase 2.3 will enhance this with OpenAI.
+ * @param {string} seatPreferences - Seat/table preferences text
+ * @param {string} specificPreferences - Specific preferences text
+ * @returns {Array<string>} Array of preference keywords
+ */
+function extractPreferenceKeywords(seatPreferences, specificPreferences) {
+  const combinedText = `${seatPreferences || ''} ${specificPreferences || ''}`.toLowerCase();
+  
+  if (!combinedText.trim()) {
+    return [];
+  }
+
+  // Keyword mapping to sentiment categories
+  const keywordMap = {
+    luxury: ['vip', 'premium', 'exclusive', 'elite', 'luxury', 'high-end', 'upscale', 'upscale'],
+    music: ['edm', 'electronic', 'house', 'techno', 'hip-hop', 'rap', 'dj', 'live music', 'concert', 'music'],
+    atmosphere: ['atmosphere', 'vibe', 'energy', 'ambiance', 'mood', 'party', 'celebration', 'birthday'],
+    location: ['near stage', 'by window', 'outdoor', 'indoor', 'private', 'booth', 'table'],
+    dining: ['restaurant', 'cuisine', 'chef', 'menu', 'dining', 'food'],
+    nightlife: ['nightclub', 'club', 'nightlife', 'night', 'dancing']
+  };
+
+  const extractedKeywords = [];
+  
+  // Check for category keywords
+  for (const [category, keywords] of Object.entries(keywordMap)) {
+    for (const keyword of keywords) {
+      if (combinedText.includes(keyword)) {
+        extractedKeywords.push(category);
+        break; // Only add category once
+      }
+    }
+  }
+
+  // Also extract specific phrases
+  const phrases = [
+    'near the stage', 'by the window', 'private booth', 'birthday celebration',
+    'upscale atmosphere', 'live dj', 'edm music', 'vip table'
+  ];
+
+  for (const phrase of phrases) {
+    if (combinedText.includes(phrase)) {
+      extractedKeywords.push(phrase);
+    }
+  }
+
+  // Remove duplicates
+  return [...new Set(extractedKeywords)];
+}
+
 module.exports = {
   checkSufficientData,
   extractPreferencesFromMessage,
+  extractPreferencesFromFormSubmission,
+  extractPreferenceKeywords,
   getNextQuestion,
   updateConversationPreferences,
   clearPreferences,

@@ -17,6 +17,7 @@ const {
 } = require('../utils/botUtils');
 const {
   extractPreferencesFromMessage,
+  extractPreferencesFromFormSubmission,
   checkSufficientData,
   getNextQuestion,
   updateConversationPreferences,
@@ -554,7 +555,39 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   
   try {
     const existingPreferences = conversation.preference_data || {};
-    const extractedPreferences = extractPreferencesFromMessage(prompt, existingPreferences);
+    
+    // Phase 2.1: Detect if this is a structured form submission
+    const isFormSubmission = prompt.includes('Build my experience with the following preferences:') ||
+                             prompt.includes('City:') && prompt.includes('Start date:') && prompt.includes('Budget:');
+    
+    let extractedPreferences;
+    let extractionResult;
+    
+    if (isFormSubmission) {
+      // Use structured form extraction (Phase 2.1)
+      console.log('[BOT] ✅ Phase 2.1: Detected form submission, using extractPreferencesFromFormSubmission');
+      extractionResult = extractPreferencesFromFormSubmission(prompt);
+      
+      console.log('[BOT] Phase 2.1: Extraction result:', {
+        valid: extractionResult.valid,
+        errors: extractionResult.errors,
+        raw: extractionResult.raw,
+        formatted: extractionResult.formatted
+      });
+      
+      if (!extractionResult.valid) {
+        console.error('[BOT] Phase 2.1: Form submission validation failed:', extractionResult.errors);
+        // Still continue, but log the errors
+      }
+      
+      // Use formatted preferences for storage
+      extractedPreferences = extractionResult.formatted || {};
+      console.log('[BOT] Phase 2.1: Extracted preferences (formatted for storage):', JSON.stringify(extractedPreferences, null, 2));
+    } else {
+      // Use natural language extraction (existing behavior)
+      extractedPreferences = extractPreferencesFromMessage(prompt, existingPreferences);
+      console.log('[BOT] Using natural language extraction, extracted preferences:', JSON.stringify(extractedPreferences, null, 2));
+    }
     
     // Only update preferences if NEW preferences were extracted (not just existing ones)
     const existingKeys = Object.keys(existingPreferences);
@@ -562,11 +595,27 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     const hasNewPreferences = extractedKeys.some(key => !existingKeys.includes(key)) || 
                               extractedKeys.length > existingKeys.length;
     
+    console.log('[BOT] Phase 2.1: Preference update check:', {
+      existingKeys: existingKeys,
+      extractedKeys: extractedKeys,
+      hasNewPreferences: hasNewPreferences,
+      existingPreferences: JSON.stringify(existingPreferences, null, 2)
+    });
+    
     if (hasNewPreferences) {
+      console.log('[BOT] Phase 2.1: Storing new preferences in conversation context...');
       await updateConversationPreferences(userId, extractedPreferences, 'preference_collected');
       // Refresh conversation to get updated preferences
       await conversation.populate('active_coe_id');
       conversation = await BotConversation.findById(conversation._id);
+      
+      console.log('[BOT] Phase 2.1: ✅ Preferences stored in conversation context:', {
+        conversationId: conversation._id.toString(),
+        preferenceData: JSON.stringify(conversation.preference_data, null, 2),
+        collectingPreferences: conversation.collecting_preferences,
+        eventLogCount: conversation.event_log?.length || 0,
+        lastEventLog: conversation.event_log?.[conversation.event_log.length - 1] || null
+      });
       
       // CRITICAL: Re-check rule AFTER conversation refresh (always check)
       const recheckNormalizedPrompt = prompt.toLowerCase().trim();
