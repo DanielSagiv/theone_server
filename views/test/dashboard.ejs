@@ -1114,6 +1114,166 @@
             border-color: rgba(59, 130, 246, 0.6);
         }
 
+        /* COE Preferences Form Styles */
+        .bot-coe-preferences-form {
+            max-width: 100%;
+            width: 100%;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+        }
+
+        .coe-preferences-form-header {
+            margin-bottom: 20px;
+        }
+
+        .coe-preferences-form-header h3 {
+            margin: 0;
+            color: #cbd5f5;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .coe-preferences-form-header p {
+            margin: 8px 0 0 0;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+
+        .coe-preferences-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .coe-preferences-field-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .coe-preferences-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .coe-preferences-field label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #cbd5f5;
+        }
+
+        .coe-preferences-field .required {
+            color: #ef4444;
+        }
+
+        .coe-preferences-input-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        .coe-preferences-input,
+        .coe-preferences-textarea,
+        select.coe-preferences-input {
+            padding: 10px 12px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+        
+        select.coe-preferences-input {
+            cursor: pointer;
+        }
+        
+        select.coe-preferences-input option {
+            background: rgba(15, 23, 42, 0.95);
+            color: #e2e8f0;
+        }
+
+        .coe-preferences-input-with-icon {
+            padding-right: 32px;
+        }
+
+        .coe-preferences-input-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #cbd5f5;
+            font-weight: 600;
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+
+        .coe-preferences-input:focus,
+        .coe-preferences-textarea:focus,
+        select.coe-preferences-input:focus {
+            outline: none;
+            border-color: rgba(59, 130, 246, 0.6);
+            background: rgba(30, 41, 59, 0.9);
+        }
+
+        .coe-preferences-textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        .coe-preferences-form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 8px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .coe-preferences-form-actions button {
+            padding: 8px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .coe-preferences-form-actions .btn-secondary {
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5f5;
+        }
+
+        .coe-preferences-form-actions .btn-secondary:hover {
+            background: rgba(148, 163, 184, 0.3);
+            transform: scale(1.02);
+        }
+
+        .coe-preferences-form-actions .btn-primary {
+            background: rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+        }
+
+        .coe-preferences-form-actions .btn-primary:hover {
+            background: rgba(59, 130, 246, 0.4);
+            transform: scale(1.02);
+        }
+
+        .coe-preferences-form-actions button:active {
+            transform: scale(0.98);
+        }
+
+        @media (max-width: 768px) {
+            .coe-preferences-field-group {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Location Seats Accordion Styles */
         .location-seats-section {
             margin-top: 12px;
@@ -5635,6 +5795,221 @@
         }
 
         /**
+         * Render COE Preferences Form
+         * @param {Object} formData - Form data with fields and message
+         * @returns {HTMLElement} Form card element
+         */
+        function renderCOEPreferencesForm(formData) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-coe-preferences-form';
+            
+            const fields = formData.fields || {};
+            const message = formData.message || 'Please fill in your preferences to build your experience.';
+            
+            // Get today's date for min date validation
+            const today = new Date().toISOString().split('T')[0];
+            
+            container.innerHTML = `
+                <div class="coe-preferences-form-header">
+                    <h3 style="margin: 0; color: #cbd5f5; font-size: 1.1rem;">Build Your Experience</h3>
+                    <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 0.9rem;">${message}</p>
+                </div>
+                <form id="coePreferencesForm" class="coe-preferences-form" onsubmit="handleCOEPreferencesSubmit(event)">
+                    <div class="coe-preferences-field">
+                        <label for="pref_city">
+                            ${fields.city?.label || 'City'} <span class="required">*</span>
+                        </label>
+                        <select 
+                            id="pref_city" 
+                            name="city" 
+                            required
+                            class="coe-preferences-input"
+                        >
+                            <option value="">${fields.city?.placeholder || 'Select a city'}</option>
+                        </select>
+                    </div>
+                    
+                    <div class="coe-preferences-field-group">
+                        <div class="coe-preferences-field">
+                            <label for="pref_start_date">
+                                ${fields.start_date?.label || 'Start Date'} <span class="required">*</span>
+                            </label>
+                            <input 
+                                type="date" 
+                                id="pref_start_date" 
+                                name="start_date" 
+                                required
+                                min="${today}"
+                                placeholder="${fields.start_date?.placeholder || 'Select start date'}"
+                                class="coe-preferences-input"
+                            />
+                        </div>
+                        <div class="coe-preferences-field">
+                            <label for="pref_end_date">
+                                ${fields.end_date?.label || 'End Date'} <span class="required">*</span>
+                            </label>
+                            <input 
+                                type="date" 
+                                id="pref_end_date" 
+                                name="end_date" 
+                                required
+                                min="${today}"
+                                placeholder="${fields.end_date?.placeholder || 'Select end date'}"
+                                class="coe-preferences-input"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div class="coe-preferences-field-group">
+                        <div class="coe-preferences-field">
+                            <label for="pref_budget">
+                                ${fields.budget?.label || 'Budget'} <span class="required">*</span>
+                            </label>
+                            <div class="coe-preferences-input-wrapper">
+                                <input 
+                                    type="number" 
+                                    id="pref_budget" 
+                                    name="budget" 
+                                    required
+                                    min="1"
+                                    step="0.01"
+                                    placeholder="${fields.budget?.placeholder || 'Enter your budget'}"
+                                    class="coe-preferences-input coe-preferences-input-with-icon"
+                                />
+                                <span class="coe-preferences-input-icon">$</span>
+                            </div>
+                        </div>
+                        <div class="coe-preferences-field">
+                            <label for="pref_party_size">
+                                ${fields.party_size?.label || 'Number of People'} <span class="required">*</span>
+                            </label>
+                            <input 
+                                type="number" 
+                                id="pref_party_size" 
+                                name="party_size" 
+                                required
+                                min="1"
+                                placeholder="${fields.party_size?.placeholder || 'Enter number of people'}"
+                                class="coe-preferences-input"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div class="coe-preferences-field">
+                        <label for="pref_seat_preferences">
+                            ${fields.seat_preferences?.label || 'Seat/Table Preferences'}
+                        </label>
+                        <textarea 
+                            id="pref_seat_preferences" 
+                            name="seat_preferences" 
+                            rows="3"
+                            placeholder="${fields.seat_preferences?.placeholder || 'E.g., VIP table near the stage, private booth, outdoor seating'}"
+                            class="coe-preferences-textarea"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="coe-preferences-field">
+                        <label for="pref_specific_preferences">
+                            ${fields.specific_preferences?.label || 'Specific Preferences'}
+                        </label>
+                        <textarea 
+                            id="pref_specific_preferences" 
+                            name="specific_preferences" 
+                            rows="3"
+                            placeholder="${fields.specific_preferences?.placeholder || 'E.g., EDM music, upscale atmosphere, birthday celebration'}"
+                            class="coe-preferences-textarea"
+                        ></textarea>
+                    </div>
+                    
+                    <div class="coe-preferences-form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="cancelCOEPreferencesForm()">
+                            Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            Continue
+                        </button>
+                    </div>
+                </form>
+            `;
+            
+            // Add date validation: end_date must be >= start_date
+            const startDateInput = container.querySelector('#pref_start_date');
+            const endDateInput = container.querySelector('#pref_end_date');
+            
+            if (startDateInput && endDateInput) {
+                startDateInput.addEventListener('change', function() {
+                    endDateInput.min = this.value;
+                    if (endDateInput.value && endDateInput.value < this.value) {
+                        endDateInput.value = this.value;
+                    }
+                });
+            }
+            
+            // Fetch and populate cities
+            const citySelect = container.querySelector('#pref_city');
+            if (citySelect) {
+                loadCitiesIntoSelect(citySelect);
+            }
+            
+            return container;
+        }
+        
+        /**
+         * Load cities into select dropdown
+         * @param {HTMLElement} selectElement - The select element to populate
+         */
+        async function loadCitiesIntoSelect(selectElement) {
+            try {
+                console.log('Loading cities into dropdown...');
+                const result = await makeApiRequest('/locations/cities');
+                console.log('Cities API response:', result);
+                
+                if (result.success && result.data && Array.isArray(result.data)) {
+                    console.log(`Found ${result.data.length} cities:`, result.data);
+                    
+                    // Clear existing options except the first placeholder
+                    const placeholder = selectElement.querySelector('option[value=""]');
+                    selectElement.innerHTML = '';
+                    if (placeholder) {
+                        selectElement.appendChild(placeholder);
+                    }
+                    
+                    // Add city options
+                    if (result.data.length > 0) {
+                        result.data.forEach(city => {
+                            const option = document.createElement('option');
+                            option.value = city;
+                            option.textContent = city;
+                            selectElement.appendChild(option);
+                        });
+                        console.log('Cities populated in dropdown');
+                    } else {
+                        console.warn('No cities found in response');
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = 'No cities available';
+                        option.disabled = true;
+                        selectElement.appendChild(option);
+                    }
+                } else {
+                    console.error('Failed to load cities - invalid response:', result);
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'Error loading cities';
+                    option.disabled = true;
+                    selectElement.appendChild(option);
+                }
+            } catch (error) {
+                console.error('Error loading cities:', error);
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Error loading cities';
+                option.disabled = true;
+                selectElement.appendChild(option);
+            }
+        }
+
+        /**
          * Render Location list
          */
         function renderLocationList(locations) {
@@ -6281,7 +6656,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -6386,6 +6761,9 @@
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, locationList);
                         }
+                    } else if (structuredData.type === 'coe_preferences_form') {
+                        const preferencesForm = renderCOEPreferencesForm(structuredData);
+                        contentEl.appendChild(preferencesForm);
                     }
                 } else {
                     // Regular text content
@@ -7239,7 +7617,97 @@
          * @param {string} action - Action type: 'create_experience' or 'show_next_event'
          */
         function handleQuickAction(action) {
-            showAlert('TBD', 'info');
+            const promptInput = document.getElementById('botPromptInput');
+            if (!promptInput) return;
+
+            if (action === 'create_experience') {
+                // Send "build my experience" message to bot
+                promptInput.value = 'build my experience';
+                sendBotPrompt();
+            } else if (action === 'show_next_event') {
+                // Send "show me my next event" message to bot
+                promptInput.value = 'show me my next event';
+                sendBotPrompt();
+            }
+        }
+
+        /**
+         * Handle COE preferences form submission
+         * @param {Event} event - Form submit event
+         */
+        async function handleCOEPreferencesSubmit(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            
+            // Get form values
+            const city = formData.get('city');
+            const startDate = formData.get('start_date');
+            const endDate = formData.get('end_date');
+            const budget = parseFloat(formData.get('budget'));
+            const partySize = parseInt(formData.get('party_size'));
+            const seatPreferences = formData.get('seat_preferences') || '';
+            const specificPreferences = formData.get('specific_preferences') || '';
+            
+            // Validate city
+            if (!city || city.trim() === '') {
+                showAlert('Please select a city', 'error');
+                return;
+            }
+            
+            // Validate dates
+            if (new Date(endDate) < new Date(startDate)) {
+                showAlert('End date must be on or after start date', 'error');
+                return;
+            }
+            
+            // Validate budget
+            if (!budget || budget <= 0) {
+                showAlert('Please enter a valid budget amount', 'error');
+                return;
+            }
+            
+            // Validate party size
+            if (!partySize || partySize < 1) {
+                showAlert('Please enter a valid number of people (minimum 1)', 'error');
+                return;
+            }
+            
+            // Build preferences message to send to bot
+            let preferencesMessage = `Build my experience with the following preferences:\n`;
+            preferencesMessage += `City: ${city}\n`;
+            preferencesMessage += `Start date: ${startDate}\n`;
+            preferencesMessage += `End date: ${endDate}\n`;
+            preferencesMessage += `Budget: $${budget} USD\n`;
+            preferencesMessage += `Number of people: ${partySize}\n`;
+            if (seatPreferences) {
+                preferencesMessage += `Seat/Table preferences: ${seatPreferences}\n`;
+            }
+            if (specificPreferences) {
+                preferencesMessage += `Specific preferences: ${specificPreferences}\n`;
+            }
+            
+            // Send preferences to bot
+            const promptInput = document.getElementById('botPromptInput');
+            if (promptInput) {
+                promptInput.value = preferencesMessage.trim();
+                sendBotPrompt();
+            }
+        }
+
+        /**
+         * Cancel COE preferences form
+         */
+        function cancelCOEPreferencesForm() {
+            // Remove the form from the feed
+            const form = document.getElementById('coePreferencesForm');
+            if (form) {
+                const card = form.closest('.bot-coe-preferences-form');
+                if (card) {
+                    card.remove();
+                }
+            }
         }
 
         /**

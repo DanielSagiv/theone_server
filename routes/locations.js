@@ -9,6 +9,7 @@ const {
   getLocationAnalytics,
   validateLocationCapacity 
 } = require('../services/locationEventService');
+const { getAllCitiesWithLocations } = require('../services/locationService');
 const multer = require('multer');
 const { uploadBufferToS3, extFromMime } = require('../utils/s3');
 const crypto = require('crypto');
@@ -52,6 +53,42 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Get locations error:', { error: error.message, timestamp: new Date().toISOString() });
     res.status(500).json({ success: false, error: { code: 'LOCATIONS_LIST_FAILED', message: 'Failed to retrieve locations' } });
+  }
+});
+
+/**
+ * GET /v1/locations/cities
+ * Get all unique cities that have locations
+ */
+router.get('/cities', authenticateToken, async (req, res) => {
+  try {
+    const { status = 'active' } = req.query;
+    console.log('[GET /v1/locations/cities] Request received:', { status, query: req.query });
+    
+    const cities = await getAllCitiesWithLocations({ 
+      status: status || 'active' 
+    });
+    
+    console.log('[GET /v1/locations/cities] Cities retrieved:', { 
+      count: cities.length, 
+      cities: cities 
+    });
+    
+    res.json({
+      success: true,
+      data: cities,
+      count: cities.length,
+      message: 'Cities retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get cities error:', { error: error.message, stack: error.stack, timestamp: new Date().toISOString() });
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        code: 'CITIES_LIST_FAILED', 
+        message: 'Failed to retrieve cities' 
+      } 
+    });
   }
 });
 

@@ -22,6 +22,7 @@ const {
   updateConversationPreferences,
   getPreferences
 } = require('./botPreferenceService');
+const { formatCOEPreferencesFormResponse } = require('./botResponseFormatter');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
@@ -454,7 +455,80 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     console.log('[BOT] ❌ Rule 1 did NOT match for prompt:', prompt);
   }
 
-  // Add user message (only if rule didn't match)
+  // Rule 2: Build my experience - Show preferences form
+  // Expanded patterns for flexible language matching
+  const buildExperiencePatterns = [
+    'build my experience',
+    'build me an experience',
+    'build me experience',
+    'build me a experience',
+    'lets build my experience',
+    'lets build me experience',
+    "let's build my experience",
+    "let's build me experience",
+    'create my experience',
+    'create experience',
+    'create me experience',
+    'create me an experience',
+    'lets create my experience',
+    'lets create me experience',
+    "let's create my experience",
+    "let's create me experience",
+    'plan my experience',
+    'plan experience',
+    'plan me experience',
+    'build experience',
+    'make my experience',
+    'make me experience',
+    'lets make my experience',
+    "let's make my experience"
+  ];
+  
+  // First check exact pattern matches
+  let matchesBuildExperience = buildExperiencePatterns.some(pattern => {
+    const exactMatch = normalizedPrompt === pattern;
+    const includesMatch = normalizedPrompt.includes(pattern);
+    return exactMatch || includesMatch;
+  });
+  
+  // If no exact match, check for flexible keyword combinations
+  // Normalize prompt: remove punctuation and handle contractions
+  const normalizedForBuild = normalizedPrompt.replace(/[.,!?'"]/g, ' ').replace(/\s+/g, ' ').trim();
+  
+  if (!matchesBuildExperience) {
+    // Check for key action words + "experience"
+    const actionWords = ['build', 'create', 'plan', 'make', 'design', 'organize'];
+    const hasActionWord = actionWords.some(word => normalizedForBuild.includes(word));
+    const hasExperience = normalizedForBuild.includes('experience');
+    
+    // Match if contains action word + experience (flexible word order)
+    if (hasActionWord && hasExperience) {
+      matchesBuildExperience = true;
+      console.log('[BOT] Rule 2 flexible match - action word + experience detected');
+    }
+  }
+  
+  if (matchesBuildExperience) {
+    console.log('[BOT] ✅ Rule 2 (Build Experience) matched for prompt:', prompt);
+    // Add user message
+    conversation.messages.push({
+      role: 'user',
+      content: prompt
+    });
+    // Return preferences form as structured response
+    const preferencesForm = formatCOEPreferencesFormResponse('Let\'s build your perfect experience! Please fill in your preferences below.');
+    const ruleReply = {
+      role: 'assistant',
+      content: JSON.stringify(preferencesForm),
+      structured_data: preferencesForm
+    };
+    conversation.messages.push(ruleReply);
+    await conversation.save();
+    console.log('[BOT] Rule 2 returning preferences form - EXITING FUNCTION');
+    return conversation.messages;
+  }
+
+  // Add user message (only if rules didn't match)
   conversation.messages.push({
     role: 'user',
     content: prompt

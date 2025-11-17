@@ -810,13 +810,72 @@ function formatLocationListResponse(locations, message) {
 }
 
 /**
+ * Create a structured COE preferences form response
+ * @param {string} message - Human-readable message
+ * @returns {Object} Structured response
+ */
+function formatCOEPreferencesFormResponse(message) {
+  return {
+    type: 'coe_preferences_form',
+    message: message || 'Please fill in your preferences to build your experience.',
+    fields: {
+      city: {
+        label: 'City',
+        type: 'select',
+        required: true,
+        placeholder: 'Select a city',
+        options: [] // Will be populated from API
+      },
+      start_date: {
+        label: 'Start Date',
+        type: 'date',
+        required: true,
+        placeholder: 'Select start date'
+      },
+      end_date: {
+        label: 'End Date',
+        type: 'date',
+        required: true,
+        placeholder: 'Select end date'
+      },
+      budget: {
+        label: 'Budget',
+        type: 'number',
+        required: true,
+        placeholder: 'Enter your budget',
+        currency: 'USD'
+      },
+      party_size: {
+        label: 'Number of People',
+        type: 'number',
+        required: true,
+        placeholder: 'Enter number of people',
+        min: 1
+      },
+      seat_preferences: {
+        label: 'Seat/Table Preferences',
+        type: 'textarea',
+        required: false,
+        placeholder: 'E.g., VIP table near the stage, private booth, outdoor seating'
+      },
+      specific_preferences: {
+        label: 'Specific Preferences',
+        type: 'textarea',
+        required: false,
+        placeholder: 'E.g., EDM music, upscale atmosphere, birthday celebration'
+      }
+    }
+  };
+}
+
+/**
  * Check if a response is structured
  * @param {Object} response - Response object
  * @returns {boolean} True if structured
  */
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(response.type);
 }
 
 module.exports = {
@@ -824,6 +883,7 @@ module.exports = {
   formatEventListResponse,
   formatCOEListResponse,
   formatLocationListResponse,
+  formatCOEPreferencesFormResponse,
   createCOEActions,
   formatTextResponse,
   isStructuredResponse
