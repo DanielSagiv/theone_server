@@ -5964,8 +5964,11 @@
                 const result = await makeApiRequest('/locations/cities');
                 console.log('Cities API response:', result);
                 
-                if (result.success && result.data && Array.isArray(result.data)) {
-                    console.log(`Found ${result.data.length} cities:`, result.data);
+                // makeApiRequest returns { success, data: { success, data: [...], ... } }
+                const cities = result.success && result.data?.success ? result.data.data : null;
+                
+                if (cities && Array.isArray(cities)) {
+                    console.log(`Found ${cities.length} cities:`, cities);
                     
                     // Clear existing options except the first placeholder
                     const placeholder = selectElement.querySelector('option[value=""]');
@@ -5975,8 +5978,8 @@
                     }
                     
                     // Add city options
-                    if (result.data.length > 0) {
-                        result.data.forEach(city => {
+                    if (cities.length > 0) {
+                        cities.forEach(city => {
                             const option = document.createElement('option');
                             option.value = city;
                             option.textContent = city;
