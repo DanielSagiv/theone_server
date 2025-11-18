@@ -697,6 +697,23 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
             return conversation.messages;
           } else {
             console.error('[BOT] Phase 2.4: COE creation failed:', toolResult.error);
+            
+            // If error response has structured data (NO_SEATS_AVAILABLE), use it
+            if (toolResult.data && toolResult.data.type === 'error') {
+              const errorResponse = toolResult.data;
+              
+              // Add assistant message with error response
+              const assistantMessage = {
+                role: 'assistant',
+                content: errorResponse.message || 'We couldn\'t find any available seats/tables matching your preferences.',
+                structured_data: errorResponse
+              };
+              conversation.messages.push(assistantMessage);
+              await conversation.save();
+              
+              console.log('[BOT] Phase 2.4: Returning error response to user');
+              return conversation.messages;
+            }
             // Continue to normal flow - let OpenAI handle the error or provide feedback
             const errorMessage = {
               role: 'assistant',
@@ -922,12 +939,13 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
       .map(tr => {
         try {
           const result = JSON.parse(tr.content);
-          return result.success && result.data ? result.data : null;
+          // Include error responses as well
+          return result.data ? result.data : null;
         } catch {
           return null;
         }
       })
-      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list'));
+      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'error'));
 
     // Add final assistant reply with structured data if available
     // CRITICAL: If assistantReply has tool_calls but no content, we must not save it with tool_calls

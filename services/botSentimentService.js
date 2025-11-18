@@ -180,6 +180,8 @@ async function extractStructuredPreferences(seatPreferences, specificPreferences
       keywords: [],
       intent: '',
       requirements: [],
+      exclusions: [],
+      exclusion_intent: '',
       priority: 'medium'
     };
   }
@@ -191,12 +193,14 @@ async function extractStructuredPreferences(seatPreferences, specificPreferences
       keywords: [],
       intent: '',
       requirements: [],
+      exclusions: [],
+      exclusion_intent: '',
       priority: 'medium'
     };
   }
 
   try {
-    const prompt = `Extract and categorize user preferences from this text:
+    const prompt = `Extract and categorize user preferences from this text. Pay special attention to negative preferences (things the user does NOT want):
 "${combinedText}"
 
 Return JSON with:
@@ -205,15 +209,23 @@ Return JSON with:
   "keywords": ["VIP", "EDM", "upscale", "birthday"],
   "intent": "special occasion celebration with premium experience",
   "requirements": ["private area", "live music", "upscale atmosphere"],
+  "exclusions": ["toilet", "bathroom", "restroom", "noisy"],
+  "exclusion_intent": "do not want seats near toilets or bathrooms",
   "priority": "high"
-}`;
+}
+
+IMPORTANT: 
+- Extract negative preferences (things user explicitly does NOT want) into the "exclusions" array
+- Look for phrases like "do not want", "avoid", "not", "no", "never", "under no circumstances"
+- Extract the actual keywords/terms from negative statements (e.g., "do not want toilets" -> "toilet" in exclusions)
+- Include a brief "exclusion_intent" description if negative preferences are found`;
 
     const completion = await openaiClient.chat.completions.create({
       model: MODEL,
       messages: [
         {
           role: 'system',
-          content: 'You are an expert at understanding user preferences for events and experiences. Always return valid JSON.'
+          content: 'You are an expert at understanding user preferences for events and experiences. You must identify both positive preferences (what they want) and negative preferences (what they do NOT want). Always return valid JSON with exclusions array for negative preferences.'
         },
         {
           role: 'user',
@@ -228,6 +240,7 @@ Return JSON with:
     console.log('[SENTIMENT SERVICE] Phase 2.3: Extracted structured preferences:', {
       categories: result.categories?.length || 0,
       keywords: result.keywords?.length || 0,
+      exclusions: result.exclusions?.length || 0,
       intent: result.intent?.substring(0, 50) || ''
     });
     
@@ -236,6 +249,8 @@ Return JSON with:
       keywords: result.keywords || [],
       intent: result.intent || '',
       requirements: result.requirements || [],
+      exclusions: result.exclusions || [],
+      exclusion_intent: result.exclusion_intent || '',
       priority: result.priority || 'medium'
     };
   } catch (error) {
@@ -246,6 +261,8 @@ Return JSON with:
       keywords: [],
       intent: '',
       requirements: [],
+      exclusions: [],
+      exclusion_intent: '',
       priority: 'medium'
     };
   }

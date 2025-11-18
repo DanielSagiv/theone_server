@@ -645,6 +645,137 @@
             position: relative;
         }
 
+        .bot-error-card {
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            background: rgba(30, 41, 59, 0.95);
+        }
+
+        .bot-error-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .bot-error-header h3 {
+            margin: 0;
+            color: #f87171;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .bot-error-body {
+            padding: 20px;
+        }
+
+        .bot-error-message {
+            color: #e2e8f0;
+            margin-bottom: 16px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .bot-error-detail {
+            margin-bottom: 12px;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
+        .bot-error-detail strong {
+            color: #e2e8f0;
+            margin-right: 8px;
+        }
+
+        .bot-error-attempts {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .bot-error-attempts strong {
+            color: #e2e8f0;
+            display: block;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .bot-error-attempts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .bot-error-attempt-item {
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+            border-left: 3px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .bot-error-attempt-strategy {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: capitalize;
+            margin-bottom: 8px;
+        }
+
+        .bot-error-attempt-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: #cbd5e1;
+        }
+
+        .bot-error-attempt-details span {
+            padding: 4px 8px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 4px;
+        }
+
+        .bot-error-success {
+            color: #86efac !important;
+        }
+
+        .bot-error-failure {
+            color: #f87171 !important;
+        }
+
+        .bot-error-attempt-reason {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            font-style: italic;
+        }
+
+        .bot-error-suggestions {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .bot-error-suggestions strong {
+            color: #e2e8f0;
+            display: block;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .bot-error-suggestions-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .bot-error-suggestions-list li {
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 3px solid #3b82f6;
+            border-radius: 4px;
+            color: #cbd5e1;
+            font-size: 0.9rem;
+        }
+
         .bot-structured-message {
             margin-bottom: 12px;
             color: #e2e8f0;
@@ -5344,6 +5475,91 @@
         /**
          * Render structured COE card
          */
+        /**
+         * Render error response card
+         * @param {Object} errorData - Error response data
+         * @returns {HTMLElement} Error card element
+         */
+        function renderErrorResponse(errorData) {
+            const card = document.createElement('div');
+            card.className = 'bot-structured-card bot-error-card';
+            
+            const details = errorData.details || {};
+            const attempts = details.attempts || [];
+            const suggestions = details.suggestions || [];
+            
+            let html = `
+                <div class="bot-error-header">
+                    <h3>Unable to Find Available Seats</h3>
+                </div>
+                <div class="bot-error-body">
+                    <p class="bot-error-message">${errorData.message || 'We couldn\'t find any available seats/tables matching your preferences.'}</p>
+                    
+                    ${details.searched_dates ? `
+                        <div class="bot-error-detail">
+                            <strong>Searched Dates:</strong> 
+                            ${new Date(details.searched_dates.start).toLocaleDateString()} - ${new Date(details.searched_dates.end).toLocaleDateString()}
+                        </div>
+                    ` : ''}
+                    
+                    ${details.searched_city ? `
+                        <div class="bot-error-detail">
+                            <strong>City:</strong> ${details.searched_city}
+                        </div>
+                    ` : ''}
+                    
+                    ${details.budget_range ? `
+                        <div class="bot-error-detail">
+                            <strong>Budget:</strong> $${details.budget_range.max.toLocaleString()}
+                        </div>
+                    ` : ''}
+                    
+                    ${details.party_size ? `
+                        <div class="bot-error-detail">
+                            <strong>Party Size:</strong> ${details.party_size} people
+                        </div>
+                    ` : ''}
+                    
+                    ${attempts.length > 0 ? `
+                        <div class="bot-error-attempts">
+                            <strong>Search Attempts:</strong>
+                            <div class="bot-error-attempts-list">
+                                ${attempts.map(attempt => `
+                                    <div class="bot-error-attempt-item">
+                                        <div class="bot-error-attempt-strategy">${attempt.strategy.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</div>
+                                        <div class="bot-error-attempt-details">
+                                            <span>Events tried: ${attempt.events_tried}</span>
+                                            ${attempt.locations_tried && attempt.locations_tried.length > 0 ? `
+                                                <span>Locations: ${attempt.locations_tried.slice(0, 3).join(', ')}${attempt.locations_tried.length > 3 ? '...' : ''}</span>
+                                            ` : ''}
+                                            ${attempt.events_with_seats > 0 ? `
+                                                <span class="bot-error-success">Found ${attempt.events_with_seats} events with seats</span>
+                                            ` : `
+                                                <span class="bot-error-failure">No seats found</span>
+                                            `}
+                                        </div>
+                                        ${attempt.reason ? `<div class="bot-error-attempt-reason">${attempt.reason}</div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${suggestions.length > 0 ? `
+                        <div class="bot-error-suggestions">
+                            <strong>Suggestions:</strong>
+                            <ul class="bot-error-suggestions-list">
+                                ${suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            card.innerHTML = html;
+            return card;
+        }
+
         function renderCOECard(coeData, actions = []) {
             const card = document.createElement('div');
             card.className = 'bot-structured-card bot-coe-card';
@@ -6788,7 +7004,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -6896,6 +7112,16 @@
                     } else if (structuredData.type === 'coe_preferences_form') {
                         const preferencesForm = renderCOEPreferencesForm(structuredData);
                         contentEl.appendChild(preferencesForm);
+                    } else if (structuredData.type === 'error') {
+                        const errorCard = renderErrorResponse(structuredData);
+                        contentEl.appendChild(errorCard);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, errorCard);
+                        }
                     }
                 } else {
                     // Regular text content

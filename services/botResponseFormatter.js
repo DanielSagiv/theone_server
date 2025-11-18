@@ -262,8 +262,10 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
     });
     
     // Get event date from multiple possible locations
-    const eventDate = event?.event_date || 
-                     event?.event_id?.start_datetime || 
+    // Prioritize populated event_id.start_datetime (actual event date from DB)
+    // Fall back to event.event_date (stored in COE) if event_id not populated
+    const eventDate = event?.event_id?.start_datetime || 
+                     event?.event_date || 
                      null;
     
     // Create a plain object to ensure all fields are included
@@ -321,10 +323,13 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
       },
       events: (coe.events || []).map(event => {
         const runner_assignment = buildEventRunnerAssignment(event, coe);
+        // Prioritize populated event_id.start_datetime (actual event date from DB)
+        // Fall back to event.event_date (stored in COE) if event_id not populated
+        const eventDate = event.event_id?.start_datetime || event.event_date || null;
         return {
           event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
           event_name: event.event_id?.name || 'Unknown Event',
-          event_date: event.event_date,
+          event_date: eventDate,
           event_time: event.event_time,
           media: event.event_id?.media || [],
           location: event.event_id?.location_id ? {
@@ -898,9 +903,65 @@ function formatCOEPreferencesFormResponse(message) {
  * @param {Object} response - Response object
  * @returns {boolean} True if structured
  */
+/**
+ * Format error response when no seats are available
+ * @param {Object} errorData - Error data with searchAttempts and preferences
+ * @returns {Object} Formatted error response
+ */
+function formatNoSeatsAvailableResponse(errorData) {
+  const { searchAttempts = [], preferences = {} } = errorData;
+  
+  const startDate = preferences.start_date || preferences.startDate;
+  const endDate = preferences.end_date || preferences.endDate;
+  const city = preferences.city;
+  const budget = preferences.budget?.max || preferences.budget_range?.max;
+  const partySize = preferences.party_size;
+  
+  // Generate suggestions based on search attempts
+  const suggestions = [];
+  
+  // Always suggest trying a different date range (most common solution)
+  suggestions.push('Try a different date range');
+  
+  if (budget && budget !== Infinity) {
+    suggestions.push('Consider increasing your budget');
+  }
+  if (city) {
+    suggestions.push('Try a different city');
+  }
+  if (partySize && partySize > 2) {
+    suggestions.push('Consider reducing party size');
+  }
+  
+  return {
+    type: 'error',
+    error_type: 'NO_SEATS_AVAILABLE',
+    message: errorData.message || 'We couldn\'t find any available seats/tables matching your preferences.',
+    details: {
+      searched_dates: startDate && endDate ? {
+        start: new Date(startDate).toISOString().split('T')[0],
+        end: new Date(endDate).toISOString().split('T')[0]
+      } : null,
+      searched_city: city || null,
+      budget_range: budget && budget !== Infinity ? { min: 0, max: budget } : null,
+      party_size: partySize || null,
+      attempts: searchAttempts.map(attempt => ({
+        strategy: attempt.strategy,
+        events_tried: attempt.events_tried || 0,
+        locations_tried: attempt.locations_tried || [],
+        events_with_seats: attempt.events_with_seats || 0,
+        reason: attempt.reason || 'No available seats matching criteria',
+        date_adjustment: attempt.date_adjustment || null,
+        budget_adjustment: attempt.budget_adjustment || null
+      })),
+      suggestions
+    }
+  };
+}
+
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error'].includes(response.type);
 }
 
 module.exports = {
@@ -909,6 +970,7 @@ module.exports = {
   formatCOEListResponse,
   formatLocationListResponse,
   formatCOEPreferencesFormResponse,
+  formatNoSeatsAvailableResponse,
   createCOEActions,
   formatTextResponse,
   isStructuredResponse

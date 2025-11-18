@@ -21,6 +21,7 @@ const {
   formatEventListResponse,
   formatCOEListResponse,
   formatLocationListResponse,
+  formatNoSeatsAvailableResponse,
   createCOEActions,
   formatTextResponse
 } = require('./botResponseFormatter');
@@ -31,7 +32,7 @@ const {
   getErrorCategory
 } = require('../utils/botUtils');
 const { autoSelectEventsBySentiment } = require('./botSentimentService');
-const { autoFillCOEData, selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
+const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
 const { getPreferences } = require('./botPreferenceService');
 const { parseAndNormalizeDate } = require('../utils/dateParser');
 
@@ -442,11 +443,12 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             event_id: eventId, // Keep as ObjectId or string as-is
             // Don't pre-select seats - let budget-aware selection handle it after fetching from DB
             selected_seats: [],
-            // Phase 2.5: Store sentiment match data
+            // Phase 2.5: Store sentiment match data (including structuredPreferences with exclusions)
             sentiment_match: item.sentimentScore !== undefined ? {
               score: item.sentimentScore,
               reasons: item.matchReasons || item.sentimentHighlights || [],
-              highlights: item.sentimentHighlights || item.matchReasons || []
+              highlights: item.sentimentHighlights || item.matchReasons || [],
+              structuredPreferences: item.structuredPreferences || null
             } : null
           };
         }).filter(Boolean); // Remove null entries
@@ -474,7 +476,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         continue; // Skip events without event_id
       }
       
-      const event = await Event.findById(eventData.event_id);
+      // Fetch event with location populated (including seats for sentiment checking)
+      const event = await Event.findById(eventData.event_id)
+        .populate('location_id', 'seats');
       if (!event) {
         console.error('[BOT] Error: Event not found for event_id:', eventData.event_id);
         continue; // Skip missing events
@@ -489,9 +493,14 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
       // If seats not provided, use budget-aware selection
       if (!eventData.selected_seats || eventData.selected_seats.length === 0) {
-        const autoSeats = selectSeatsByBudgetAndCapacity(
+        // Pass structured preferences (including exclusions) to seat selection
+        const preferencesWithStructured = {
+          ...conversationPreferences,
+          structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
+        };
+        const autoSeats = await selectSeatsByBudgetAndCapacity(
           event,
-          conversationPreferences,
+          preferencesWithStructured,
           conversationPreferences.budget?.max
         );
         eventData.selected_seats = autoSeats;
@@ -544,8 +553,119 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
     
     // Validate we have at least some seats selected
+    // If no seats found, try alternative events before giving up
     if (selectedSeats.length === 0) {
-      console.warn('[BOT] Warning: No valid seats selected for COE. This may cause issues.');
+      console.log('[BOT] No seats found for initial events. Attempting alternative search...');
+      
+      // Get original events with location info for exclusion
+      const originalEventsWithLocations = [];
+      for (const eventData of finalEvents) {
+        if (eventData.event_id) {
+          const event = await Event.findById(eventData.event_id).populate('location_id', '_id name');
+          if (event) {
+            originalEventsWithLocations.push({
+              event_id: eventData.event_id,
+              location_id: event.location_id
+            });
+          }
+        }
+      }
+      
+      // Try to find alternative events with seats
+      const alternativeResult = await findAlternativeEventsWithSeats(
+        originalEventsWithLocations,
+        conversationPreferences,
+        [],
+        autoSelectEventsBySentiment,
+        3
+      );
+      
+      if (alternativeResult.success && alternativeResult.events.length > 0) {
+        console.log('[BOT] Alternative events found:', alternativeResult.events.length, 'events with seats');
+        
+        // Replace finalEvents with alternative events
+        finalEvents = alternativeResult.events.map(item => ({
+          event_id: item.event_id || (item.event && (item.event._id || item.event.id)),
+          selected_seats: [],
+          sentiment_match: item.sentimentScore !== undefined ? {
+            score: item.sentimentScore,
+            reasons: item.matchReasons || item.sentimentHighlights || [],
+            highlights: item.sentimentHighlights || item.matchReasons || [],
+            structuredPreferences: item.structuredPreferences || null
+          } : null
+        })).filter(e => e.event_id);
+        
+        // Re-select seats for alternative events
+        selectedSeats.length = 0; // Clear array
+        for (const eventData of finalEvents) {
+          if (!eventData.event_id) continue;
+          
+          // Fetch event with location populated (including seats for sentiment checking)
+          const event = await Event.findById(eventData.event_id)
+            .populate('location_id', 'seats');
+          if (!event) continue;
+          
+          const eventId = event._id || eventData.event_id;
+          if (!eventId) continue;
+          
+          // Pass structured preferences (including exclusions) to seat selection
+          const preferencesWithStructured = {
+            ...conversationPreferences,
+            structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
+          };
+          const autoSeats = await selectSeatsByBudgetAndCapacity(
+            event,
+            preferencesWithStructured,
+            conversationPreferences.budget?.max
+          );
+          
+          if (autoSeats.length > 0) {
+            for (const seatData of autoSeats) {
+              if (!seatData.seat_id) continue;
+              
+              const seatIdStr = seatData.seat_id.toString();
+              const eventSeat = event.seats.find(s => {
+                const sId = s._id ? s._id.toString() : null;
+                return sId === seatIdStr;
+              });
+              
+              if (!eventSeat || eventSeat.status !== 'available') continue;
+              
+              selectedSeats.push({
+                event_id: eventId,
+                seat_id: seatData.seat_id,
+                seat_code: seatData.seat_code || eventSeat.code,
+                capacity: seatData.capacity || eventSeat.capacity,
+                base_price: eventSeat.min_spend || 0,
+                event_price: eventSeat.event_price || eventSeat.min_spend || 0,
+                available_from: event.start_datetime,
+                available_until: event.end_datetime || event.start_datetime,
+                status: 'selected'
+              });
+            }
+          }
+        }
+        
+        if (selectedSeats.length === 0) {
+          // Still no seats after alternative search - return error
+          console.log('[BOT] No seats found even after alternative search');
+          throw {
+            type: 'NO_SEATS_AVAILABLE',
+            message: 'We couldn\'t find any available seats/tables matching your preferences.',
+            searchAttempts: alternativeResult.searchAttempts,
+            preferences: conversationPreferences
+          };
+        }
+      } else {
+        // No alternative events found - return error
+        console.log('[BOT] No alternative events found with available seats');
+        throw {
+          type: 'NO_SEATS_AVAILABLE',
+          message: 'We couldn\'t find any available seats/tables matching your preferences.',
+          searchAttempts: alternativeResult.searchAttempts || [],
+          preferences: conversationPreferences
+        };
+      }
     }
 
     // Final validation: Ensure all seats have event_id
@@ -656,6 +776,23 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     return result;
   } catch (error) {
     console.error('Error in handleCreateCOEDraft:', error);
+    
+    // Handle NO_SEATS_AVAILABLE error specially
+    if (error && error.type === 'NO_SEATS_AVAILABLE') {
+      const errorResponse = formatNoSeatsAvailableResponse(error);
+      return {
+        success: false,
+        error: {
+          code: 'NO_SEATS_AVAILABLE',
+          message: error.message || 'No seats available',
+          category: 'validation', // lowercase for BotAuditLog enum
+          userFacing: true
+        },
+        data: errorResponse,
+        message: errorResponse.message
+      };
+    }
+    
     return {
       success: false,
       error: error.code ? error : createError(
