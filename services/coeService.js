@@ -15,16 +15,34 @@ const User = require('../models/User');
 async function validateSelectedSeats(selectedSeats) {
   try {
     for (const seatData of selectedSeats) {
+      // Validate event_id exists
+      if (!seatData.event_id) {
+        throw new Error(`Seat data missing event_id: ${JSON.stringify(seatData)}`);
+      }
+      
+      // Validate seat_id exists
+      if (!seatData.seat_id) {
+        throw new Error(`Seat data missing seat_id: ${JSON.stringify(seatData)}`);
+      }
+      
       const event = await Event.findById(seatData.event_id);
       
       if (!event) {
         throw new Error(`Event ${seatData.event_id} not found`);
       }
       
-      const seat = event.seats.find(s => s._id.toString() === seatData.seat_id);
+      // Normalize seat_id for comparison (handle both ObjectId and string)
+      const seatIdStr = seatData.seat_id.toString();
+      const seat = event.seats.find(s => {
+        if (!s._id) return false;
+        const sIdStr = s._id.toString();
+        return sIdStr === seatIdStr;
+      });
       
       if (!seat) {
-        throw new Error(`Seat ${seatData.seat_id} not found in event ${event.name}`);
+        // Provide helpful error message with available seat IDs
+        const availableSeatIds = event.seats.map(s => s._id?.toString()).filter(Boolean);
+        throw new Error(`Seat ${seatIdStr} not found in event ${event.name}. Available seat IDs: ${availableSeatIds.join(', ')}`);
       }
       
       if (seat.status !== 'available') {

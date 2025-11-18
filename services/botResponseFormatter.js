@@ -70,7 +70,7 @@ function buildEventRunnerAssignment(event, coe) {
  * @param {Array} actions - Available actions for this COE
  * @returns {Object} Structured response
  */
-function formatCOEResponse(type, coe, message, actions = []) {
+function formatCOEResponse(type, coe, message, actions = [], budget = null) {
   // Enhance selected_seats with media and event info
   const enhancedSeats = (coe.selected_seats || []).map(seat => {
     // Normalize seat event_id for comparison
@@ -309,7 +309,15 @@ function formatCOEResponse(type, coe, message, actions = []) {
         fees: coe.fees || 0,
         total: coe.total || 0,
         deposit_required: coe.deposit_required || 0,
-        currency: coe.currency || 'USD'
+        currency: coe.currency || 'USD',
+        // Phase 2.5: Budget comparison
+        ...(budget ? {
+          budget: budget.max || budget.amount || budget,
+          over_budget: (coe.total || 0) > (budget.max || budget.amount || budget),
+          over_amount: Math.max(0, (coe.total || 0) - (budget.max || budget.amount || budget)),
+          under_budget: (coe.total || 0) < (budget.max || budget.amount || budget),
+          under_amount: Math.max(0, (budget.max || budget.amount || budget) - (coe.total || 0))
+        } : {})
       },
       events: (coe.events || []).map(event => {
         const runner_assignment = buildEventRunnerAssignment(event, coe);
@@ -324,6 +332,12 @@ function formatCOEResponse(type, coe, message, actions = []) {
             name: event.event_id.location_id.name,
             type: event.event_id.location_id.type,
             media: event.event_id.location_id.media || []
+          } : null,
+          // Phase 2.5: Include sentiment match data if available
+          sentiment_match: event.sentiment_match ? {
+            score: event.sentiment_match.score || 0,
+            reasons: event.sentiment_match.reasons || event.sentiment_match.highlights || [],
+            highlights: event.sentiment_match.highlights || event.sentiment_match.reasons || []
           } : null,
           ...(runner_assignment ? { runner_assignment } : {})
         };
@@ -746,6 +760,17 @@ function createCOEActions(coe, userRole) {
     });
   }
 
+  // Phase 2.5: Cancel - available for draft COEs (clients can cancel their own drafts)
+  if (status === 'draft' && (userRole === 'client' || userRole === 'admin')) {
+    actions.push({
+      label: 'Cancel',
+      action: 'cancel_draft',
+      coe_id: coeId,
+      type: 'button',
+      confirm: true
+    });
+  }
+
   // Send - only for admins on approved COEs
   if (userRole === 'admin' && status === 'approved') {
     actions.push({
@@ -875,7 +900,7 @@ function formatCOEPreferencesFormResponse(message) {
  */
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(response.type);
 }
 
 module.exports = {

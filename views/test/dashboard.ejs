@@ -742,13 +742,41 @@
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
-            padding-top: 12px;
+            padding: 0;
+            margin: 12px 0 0 0;
             border-top: 1px solid rgba(148, 163, 184, 0.2);
+            padding-top: 12px;
+            width: 100%;
+            align-items: center;
+            justify-content: flex-start;
+            box-sizing: border-box;
+            /* Ensure alignment with card content */
+            position: relative;
+            left: 0;
         }
 
-        .coe-action-btn {
-            padding: 6px 14px;
-            font-size: 0.85rem;
+        .coe-card-actions .coe-action-btn,
+        .coe-card-actions .btn {
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            border-radius: 12px;
+            flex: 0 0 auto;
+            margin: 0;
+            box-sizing: border-box;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            /* Match status badge style */
+            background: rgba(148, 163, 184, 0.2);
+            color: #cbd5f5;
+        }
+
+        .coe-card-actions .coe-action-btn:hover,
+        .coe-card-actions .btn:hover {
+            background: rgba(148, 163, 184, 0.3);
+            transform: scale(1.02);
         }
 
         .coe-card-menu-container {
@@ -1586,6 +1614,76 @@
 
         .coe-seat-event-group.expanded .coe-seat-event-content {
             max-height: 2000px;
+        }
+
+        /* Phase 2.5: Sentiment Match Styles */
+        .coe-sentiment-match {
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 6px;
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+
+        .coe-sentiment-score {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .coe-sentiment-score-label {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .coe-sentiment-score-value {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .coe-sentiment-reasons {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .coe-sentiment-reason {
+            font-size: 0.8rem;
+            color: #cbd5f5;
+            padding-left: 12px;
+            position: relative;
+        }
+
+        .coe-sentiment-reason::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: #60a5fa;
+        }
+
+        /* Phase 2.5: Budget Comparison Styles */
+        .coe-budget-comparison {
+            display: block;
+            font-size: 0.75rem;
+            margin-top: 4px;
+        }
+
+        .coe-budget-over {
+            color: #ef4444;
+        }
+
+        .coe-budget-under {
+            color: #10b981;
+        }
+
+        .coe-budget-label {
+            color: #94a3b8;
+            font-size: 0.7rem;
+            margin-left: 8px;
         }
 
         /* Individual Seat Item */
@@ -5276,7 +5374,16 @@
                         </div>
                         <div class="coe-info-item">
                             <span class="coe-info-label">Total:</span>
-                            <span class="coe-info-value">${coeData.pricing?.currency || 'USD'} ${(coeData.pricing?.total || 0).toLocaleString()}</span>
+                            <span class="coe-info-value ${coeData.pricing?.over_budget ? 'coe-budget-over' : ''} ${coeData.pricing?.under_budget ? 'coe-budget-under' : ''}">
+                                ${coeData.pricing?.currency || 'USD'} ${(coeData.pricing?.total || 0).toLocaleString()}
+                                ${coeData.pricing?.budget ? `
+                                    <span class="coe-budget-comparison">
+                                        ${coeData.pricing.over_budget ? ` (Over by $${coeData.pricing.over_amount.toLocaleString()})` : ''}
+                                        ${coeData.pricing.under_budget ? ` (Under by $${coeData.pricing.under_amount.toLocaleString()})` : ''}
+                                        <span class="coe-budget-label">Budget: $${coeData.pricing.budget.toLocaleString()}</span>
+                                    </span>
+                                ` : ''}
+                            </span>
                         </div>
                     </div>
                     ${actions.length > 0 ? `
@@ -5349,6 +5456,27 @@
                     const matchingEvent = (coeData.events || []).find(e => {
                         return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
                     }) || (coeData.events || []).find(e => e.event_id === eventGroup.event_id);
+
+                    // Phase 2.5: Build sentiment match indicator
+                    const sentimentMatch = matchingEvent?.sentiment_match;
+                    const sentimentMatchHtml = sentimentMatch ? `
+                        <div class="coe-sentiment-match">
+                            <div class="coe-sentiment-score">
+                                <span class="coe-sentiment-score-label">Match Score:</span>
+                                <span class="coe-sentiment-score-value" style="
+                                    color: ${sentimentMatch.score >= 0.7 ? '#10b981' : sentimentMatch.score >= 0.5 ? '#f59e0b' : '#ef4444'};
+                                    font-weight: 600;
+                                ">${(sentimentMatch.score * 100).toFixed(0)}%</span>
+                            </div>
+                            ${sentimentMatch.reasons && sentimentMatch.reasons.length > 0 ? `
+                                <div class="coe-sentiment-reasons">
+                                    ${sentimentMatch.reasons.map(reason => `
+                                        <div class="coe-sentiment-reason">${reason}</div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : '';
 
                     // Build event-level runner details card (display at bottom of event section if present)
                     const evRunner = matchingEvent?.runner_assignment?.runner || null;
@@ -5468,6 +5596,7 @@
                                         <span class="expand-icon">▼</span>
                                     </div>
                                     <div class="coe-seat-event-content">
+                                        ${sentimentMatchHtml}
                                         ${locationThumbsHtml}
                                         ${seatItemsHtml}
                                         ${eventRunnerDetailsHtml}
@@ -6659,7 +6788,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -6723,7 +6852,7 @@
 
                 if (structuredData) {
                     // Render structured response
-                    if (structuredData.type === 'coe_created' || structuredData.type === 'coe_updated' || structuredData.type === 'coe_details') {
+                    if (structuredData.type === 'coe_created' || structuredData.type === 'coe_updated' || structuredData.type === 'coe_details' || structuredData.type === 'coe_draft') {
                         const coeCard = renderCOECard(structuredData.coe, structuredData.actions || []);
                         contentEl.appendChild(coeCard);
                         

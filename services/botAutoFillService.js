@@ -247,12 +247,16 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
   }
 
   // 3. Budget-aware seat selection (if events provided)
-  if (selectedEvents.length > 0 && preferences.budget) {
+  // Only auto-select seats if baseData doesn't already have selected_seats
+  if (selectedEvents.length > 0 && preferences.budget && (!baseData.selected_seats || baseData.selected_seats.length === 0)) {
     let remainingBudget = preferences.budget.max;
     const allSelectedSeats = [];
 
     for (const eventData of selectedEvents) {
-      const event = await Event.findById(eventData.event_id || eventData._id || eventData);
+      const eventId = eventData.event_id || eventData._id || eventData;
+      if (!eventId) continue;
+      
+      const event = await Event.findById(eventId);
       if (!event) continue;
 
       const seats = selectSeatsByBudgetAndCapacity(
@@ -262,9 +266,53 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
       );
 
       if (seats.length > 0) {
-        allSelectedSeats.push(...seats);
-        const seatCost = seats.reduce((sum, s) => sum + (s.event_price || 0), 0);
-        remainingBudget -= seatCost;
+        // Validate seats exist in event before adding
+        const validSeats = seats.filter(seat => {
+          if (!seat.seat_id) {
+            console.warn('[AUTO-FILL] Warning: Seat missing seat_id:', seat);
+            return false;
+          }
+          
+          // Find seat in event to ensure it exists
+          const seatIdStr = seat.seat_id.toString();
+          const eventSeat = event.seats.find(s => {
+            const sId = s._id ? s._id.toString() : null;
+            return sId === seatIdStr;
+          });
+          
+          if (!eventSeat) {
+            console.warn('[AUTO-FILL] Warning: Seat not found in event, skipping:', {
+              seat_id: seat.seat_id,
+              seat_id_str: seatIdStr,
+              event_id: eventId,
+              event_name: event.name,
+              available_seat_ids: event.seats.map(s => s._id?.toString()).filter(Boolean)
+            });
+            return false;
+          }
+          
+          // Check seat is available
+          if (eventSeat.status !== 'available') {
+            console.warn('[AUTO-FILL] Warning: Seat is not available, skipping:', {
+              seat_id: seat.seat_id,
+              status: eventSeat.status
+            });
+            return false;
+          }
+          
+          return true;
+        });
+        
+        if (validSeats.length > 0) {
+          // Ensure each valid seat has event_id
+          const seatsWithEventId = validSeats.map(seat => ({
+            ...seat,
+            event_id: eventId // Add event_id to each seat
+          }));
+          allSelectedSeats.push(...seatsWithEventId);
+          const seatCost = validSeats.reduce((sum, s) => sum + (s.event_price || 0), 0);
+          remainingBudget -= seatCost;
+        }
       }
     }
 

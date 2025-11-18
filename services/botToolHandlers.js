@@ -364,12 +364,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       );
     }
 
-    // Auto-generate COE name if not provided
+    // Auto-generate COE name and description if not provided
+    const { formatDateRange } = require('../utils/dateParser');
+    const dateStr = formatDateRange(startDate, endDate || startDate);
+    
+    // Get client full name
+    const clientFullName = client.firstName && client.lastName 
+      ? `${client.firstName} ${client.lastName}`
+      : client.firstName || client.email || 'Client';
+    
+    // Generate description: "<client full name> experience, <start date> to <end date>"
+    let coeDescription = description;
+    if (!coeDescription || coeDescription.trim() === '') {
+      coeDescription = `${clientFullName} experience, ${dateStr}`;
+    }
+    
+    // Auto-generate COE name (same as description for now)
     let coeName = name;
     if (!coeName) {
-      const { formatDateRange } = require('../utils/dateParser');
-      const dateStr = formatDateRange(startDate, endDate || startDate);
-      coeName = `${client.firstName} experience for ${dateStr}`;
+      coeName = coeDescription; // Use same as description
     }
 
     // Get preferences from conversation context
@@ -396,7 +409,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         start_datetime: { $gte: startDate, $lte: endDate },
         end_datetime: { $gte: new Date() }
       })
-      .populate('location_id', 'name sentiment')
+      .populate('location_id', 'name sentiment attributes')
       .limit(50);
 
       if (availableEvents.length > 0) {
@@ -407,16 +420,36 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           5 // Max 5 events
         );
         
-        finalEvents = selectedEvents.map(item => ({
-          event_id: item.event_id || item.event._id || item.event.id,
-          selected_seats: item.event.seats?.filter(s => s.status === 'available').slice(0, 1).map(seat => ({
-            seat_id: seat._id,
-            seat_code: seat.code,
-            capacity: seat.capacity,
-            base_price: seat.min_spend || 0,
-            event_price: seat.event_price || seat.min_spend || 0
-          })) || []
-        }));
+        // Phase 2.5: Preserve sentiment match data for display
+        // Note: Don't pre-select seats here - let budget-aware selection handle it to ensure seats exist in DB
+        finalEvents = selectedEvents.map(item => {
+          // Ensure event_id is properly extracted - normalize to ObjectId or string
+          const eventId = item.event_id || 
+                          (item.event && (item.event._id || item.event.id)) || 
+                          null;
+          
+          if (!eventId) {
+            console.error('[BOT] Warning: No event_id found for selected event item:', {
+              hasEventId: !!item.event_id,
+              hasEvent: !!item.event,
+              eventIdType: typeof item.event_id,
+              eventIdValue: item.event_id
+            });
+            return null; // Will be filtered out
+          }
+          
+          return {
+            event_id: eventId, // Keep as ObjectId or string as-is
+            // Don't pre-select seats - let budget-aware selection handle it after fetching from DB
+            selected_seats: [],
+            // Phase 2.5: Store sentiment match data
+            sentiment_match: item.sentimentScore !== undefined ? {
+              score: item.sentimentScore,
+              reasons: item.matchReasons || item.sentimentHighlights || [],
+              highlights: item.sentimentHighlights || item.matchReasons || []
+            } : null
+          };
+        }).filter(Boolean); // Remove null entries
       }
     }
 
@@ -435,9 +468,23 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Build selected_seats array from events (with budget-aware selection if needed)
     const selectedSeats = [];
     for (const eventData of finalEvents) {
+      // Validate event_id exists
+      if (!eventData.event_id) {
+        console.error('[BOT] Error: eventData missing event_id:', eventData);
+        continue; // Skip events without event_id
+      }
+      
       const event = await Event.findById(eventData.event_id);
       if (!event) {
+        console.error('[BOT] Error: Event not found for event_id:', eventData.event_id);
         continue; // Skip missing events
+      }
+
+      // Ensure event has _id (should always be true for found documents, but add safety check)
+      const eventId = event._id || eventData.event_id;
+      if (!eventId) {
+        console.error('[BOT] Error: No valid event_id available for event:', event);
+        continue; // Skip if no valid event_id
       }
 
       // If seats not provided, use budget-aware selection
@@ -452,13 +499,37 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
       if (eventData.selected_seats && eventData.selected_seats.length > 0) {
         for (const seatData of eventData.selected_seats) {
-          const eventSeat = event.seats.find(s => s._id.toString() === seatData.seat_id);
+          // Validate seat_id exists
+          if (!seatData.seat_id) {
+            console.warn('[BOT] Warning: Seat data missing seat_id:', seatData);
+            continue; // Skip invalid seat data
+          }
+          
+          // Find seat in event - normalize both IDs for comparison
+          const seatIdStr = seatData.seat_id.toString();
+          const eventSeat = event.seats.find(s => {
+            const sId = s._id ? s._id.toString() : null;
+            return sId === seatIdStr;
+          });
+          
           if (!eventSeat) {
+            console.warn('[BOT] Warning: Seat not found in event:', {
+              seat_id: seatData.seat_id,
+              seat_id_str: seatIdStr,
+              event_id: eventId,
+              available_seat_ids: event.seats.map(s => s._id?.toString()).filter(Boolean)
+            });
             continue; // Skip missing seats
           }
 
+          // Ensure eventId is valid before adding
+          if (!eventId) {
+            console.error('[BOT] Error: Cannot add seat - eventId is undefined');
+            continue; // Skip if eventId is invalid
+          }
+
           selectedSeats.push({
-            event_id: event._id,
+            event_id: eventId, // Use validated event_id (from event._id or fallback to eventData.event_id)
             seat_id: seatData.seat_id,
             seat_code: seatData.seat_code || eventSeat.code,
             capacity: seatData.capacity || eventSeat.capacity,
@@ -471,11 +542,29 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         }
       }
     }
+    
+    // Validate we have at least some seats selected
+    if (selectedSeats.length === 0) {
+      console.warn('[BOT] Warning: No valid seats selected for COE. This may cause issues.');
+    }
+
+    // Final validation: Ensure all seats have event_id
+    const validatedSeats = selectedSeats.filter(seat => {
+      if (!seat.event_id) {
+        console.error('[BOT] Error: Seat missing event_id, removing from selection:', seat);
+        return false;
+      }
+      return true;
+    });
+
+    if (validatedSeats.length === 0 && selectedSeats.length > 0) {
+      throw new Error('All selected seats are missing event_id. Cannot create COE.');
+    }
 
     // Build base COE data
     const baseCoeData = {
       name: coeName,
-      description: description,
+      description: coeDescription,
       start_date: startDate,
       end_date: endDate,
       client_id: targetClientId,
@@ -488,9 +577,11 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         base_price: 0,
         quantity: 1,
         total_price: 0,
-        sequence: finalEvents.indexOf(e) + 1
+        sequence: finalEvents.indexOf(e) + 1,
+        // Phase 2.5: Store sentiment match data in event item (will be preserved in COE)
+        sentiment_match: e.sentiment_match || null
       })),
-      selected_seats: selectedSeats,
+      selected_seats: validatedSeats, // Use validated seats
       participants: [],
       tags: [],
       sharable: false
@@ -502,6 +593,20 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       conversationPreferences,
       finalEvents.map(e => ({ event_id: e.event_id }))
     );
+    
+    // Final check: Ensure autoFillCOEData didn't remove event_id from seats
+    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
+      const seatsWithoutEventId = coeData.selected_seats.filter(s => !s.event_id);
+      if (seatsWithoutEventId.length > 0) {
+        console.error('[BOT] Error: autoFillCOEData returned seats without event_id. This should not happen with the fix. Removing invalid seats:', seatsWithoutEventId);
+        // Remove seats without event_id (shouldn't happen with our fix, but defensive)
+        coeData.selected_seats = coeData.selected_seats.filter(s => s.event_id);
+        
+        if (coeData.selected_seats.length === 0) {
+          throw new Error('All seats lost event_id during autoFillCOEData. Cannot create COE.');
+        }
+      }
+    }
 
     // Create COE
     const coe = await coeService.createCOE(coeData, user._id);
@@ -512,12 +617,19 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Create actions
     const actions = createCOEActions(populatedCOE, user.role);
 
-    // Format structured response
+    // Format structured response with budget comparison (Phase 2.5)
+    const budgetForComparison = conversationPreferences.budget || 
+                                (conversationPreferences.budget_range ? { max: conversationPreferences.budget_range.max } : null);
+    // Phase 2.5: Use 'coe_draft' type for draft COEs to enable enhanced display
+    const responseType = populatedCOE.status === 'draft' ? 'coe_draft' : 'coe_created';
     const structuredResponse = formatCOEResponse(
-      'coe_created',
+      responseType,
       populatedCOE,
-      'COE created successfully in draft status. It requires approval before it can be accepted.',
-      actions
+      populatedCOE.status === 'draft' 
+        ? 'Your experience draft has been created! Review the selected events and details below.'
+        : 'COE created successfully in draft status. It requires approval before it can be accepted.',
+      actions,
+      budgetForComparison
     );
 
     const result = {
