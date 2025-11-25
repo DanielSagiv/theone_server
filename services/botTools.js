@@ -372,6 +372,61 @@ const toolRegistry = {
     schema_version: '1.0.0',
     permissions: ['admin', 'client', 'runner'],
     handler: 'handleGetLocations'
+  },
+
+  /**
+   * Tool 8: Get User Profile
+   * @description Get user profile information
+   */
+  get_user_profile: {
+    name: 'get_user_profile',
+    description: 'Get user profile information. Use this tool when users ask to view a profile, show account details, or see user information. For clients, this returns their own profile. For admins and runners, can return any user\'s profile by providing user_id. If user_id is not provided, returns the current user\'s profile.',
+    parameters: {
+      type: 'object',
+      properties: {
+        user_id: {
+          type: 'string',
+          description: 'User ID (optional - defaults to current user). Only admins and runners can specify other user IDs. Clients can only view their own profile.'
+        }
+      }
+    },
+    schema_version: '1.0.0',
+    permissions: ['admin', 'client', 'runner'],
+    handler: 'handleGetUserProfile'
+  },
+
+  /**
+   * Tool 9: Get Clients List
+   * @description Get list of clients with search and pagination (admin/runner only)
+   */
+  get_clients: {
+    name: 'get_clients',
+    description: 'Get a list of clients (users with role "client"). Use this tool when admins or runners ask to search for clients, find a client profile, show client list, or look for a client by name or email. This tool supports search by name or email and pagination. Only admins and runners can use this tool.',
+    parameters: {
+      type: 'object',
+      properties: {
+        search: {
+          type: 'string',
+          description: 'Search term to filter clients by name (firstName, lastName) or email (optional)'
+        },
+        page: {
+          type: 'number',
+          description: 'Page number for pagination (default: 1)',
+          minimum: 1,
+          default: 1
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of results per page (default: 20, max: 100)',
+          minimum: 1,
+          maximum: 100,
+          default: 20
+        }
+      }
+    },
+    schema_version: '1.0.0',
+    permissions: ['admin', 'runner'],
+    handler: 'handleGetClients'
   }
 };
 

@@ -22,6 +22,8 @@ const {
   formatCOEListResponse,
   formatLocationListResponse,
   formatNoSeatsAvailableResponse,
+  formatProfileResponse,
+  formatClientListResponse,
   createCOEActions,
   formatTextResponse
 } = require('./botResponseFormatter');
@@ -1311,6 +1313,261 @@ async function handleGetLocations(params, user, correlationId) {
 }
 
 /**
+ * Handler 8: Get User Profile
+ * @param {Object} params - Tool parameters
+ * @param {Object} user - Current user object
+ * @param {string} correlationId - Correlation ID for tracing
+ * @returns {Promise<Object>} Tool execution result
+ */
+async function handleGetUserProfile(params, user, correlationId) {
+  try {
+    const { user_id } = params || {};
+    
+    console.log('[BOT] handleGetUserProfile - Received parameters:', {
+      user_id,
+      currentUserId: user._id.toString(),
+      currentUserRole: user.role
+    });
+
+    // Security validation: Determine target user ID
+    let targetUserId;
+    
+    if (user_id) {
+      // User specified a user_id - check permissions
+      if (user.role === 'client') {
+        // Clients can only view their own profile
+        if (user_id !== user._id.toString()) {
+          throw createError(
+            ErrorCodes.PERMISSION_DENIED,
+            'Clients can only view their own profile.',
+            ErrorCategories.PERMISSION,
+            false
+          );
+        }
+        targetUserId = user._id.toString();
+      } else if (user.role === 'admin' || user.role === 'runner') {
+        // Admins and runners can view any profile
+        targetUserId = user_id;
+      } else {
+        throw createError(
+          ErrorCodes.PERMISSION_DENIED,
+          'You do not have permission to view user profiles.',
+          ErrorCategories.PERMISSION,
+          false
+        );
+      }
+    } else {
+      // No user_id specified - return current user's profile
+      targetUserId = user._id.toString();
+    }
+
+    // Fetch user profile
+    const targetUser = await User.findById(targetUserId);
+    
+    if (!targetUser) {
+      throw createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'User not found.',
+        ErrorCategories.SERVICE,
+        false
+      );
+    }
+
+    // Get profile data
+    const profileData = targetUser.getProfile ? targetUser.getProfile() : {
+      _id: targetUser._id,
+      firstName: targetUser.firstName,
+      lastName: targetUser.lastName,
+      email: targetUser.email,
+      phone: targetUser.phone,
+      role: targetUser.role,
+      avatarUrl: targetUser.avatarUrl,
+      dateOfBirth: targetUser.dateOfBirth,
+      industry: targetUser.industry,
+      userTier: targetUser.userTier,
+      entity_status: targetUser.entity_status,
+      visibilityStatus: targetUser.visibilityStatus,
+      socialMedia: targetUser.socialMedia,
+      createdAt: targetUser.createdAt,
+      updatedAt: targetUser.updatedAt,
+      lastLogin: targetUser.lastLogin
+    };
+
+    console.log('[BOT] handleGetUserProfile - Profile retrieved:', {
+      userId: targetUserId,
+      name: profileData.firstName && profileData.lastName 
+        ? `${profileData.firstName} ${profileData.lastName}`
+        : profileData.email
+    });
+
+    // Format response
+    const profileResponse = formatProfileResponse(
+      profileData,
+      targetUserId === user._id.toString() 
+        ? 'Here is your profile information.'
+        : `Here is ${profileData.firstName && profileData.lastName ? `${profileData.firstName} ${profileData.lastName}` : 'the user'}'s profile information.`
+    );
+
+    return {
+      success: true,
+      data: profileResponse,
+      message: 'Profile retrieved successfully',
+      structured_data: profileResponse
+    };
+
+  } catch (error) {
+    console.error('[BOT] Error in handleGetUserProfile:', {
+      error: error.message,
+      code: error.code,
+      category: error.category,
+      correlationId
+    });
+
+    return {
+      success: false,
+      error: error.code ? error : createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'Failed to retrieve user profile',
+        ErrorCategories.SYSTEM,
+        false
+      )
+    };
+  }
+}
+
+/**
+ * Handler 9: Get Clients List
+ * @param {Object} params - Tool parameters
+ * @param {Object} user - Current user object
+ * @param {string} correlationId - Correlation ID for tracing
+ * @returns {Promise<Object>} Tool execution result
+ */
+async function handleGetClients(params, user, correlationId) {
+  try {
+    // Security check: Only admins and runners can access
+    if (user.role !== 'admin' && user.role !== 'runner') {
+      throw createError(
+        ErrorCodes.PERMISSION_DENIED,
+        'Only admins and runners can view client lists.',
+        ErrorCategories.PERMISSION,
+        false
+      );
+    }
+
+    const {
+      search,
+      page = 1,
+      limit = 20
+    } = params || {};
+
+    console.log('[BOT] handleGetClients - Received parameters:', {
+      search,
+      page,
+      limit,
+      currentUserRole: user.role
+    });
+
+    // Build filter - only clients
+    const filter = { role: 'client' };
+
+    // Add search filter if provided
+    if (search && search.trim()) {
+      const searchRegex = { $regex: search.trim(), $options: 'i' };
+      filter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { $expr: { 
+          $regexMatch: { 
+            input: { $concat: ['$firstName', ' ', '$lastName'] }, 
+            regex: search.trim(), 
+            options: 'i' 
+          } 
+        }}
+      ];
+    }
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+    const validLimit = Math.min(Math.max(1, limit), 100); // Clamp between 1 and 100
+
+    // Query clients
+    const clients = await User.find(filter)
+      .select('firstName lastName email avatarUrl role entity_status createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(validLimit);
+
+    // Get total count for pagination
+    const total = await User.countDocuments(filter);
+    const totalPages = Math.ceil(total / validLimit);
+
+    console.log('[BOT] handleGetClients - Query result:', {
+      clientsFound: clients.length,
+      total,
+      page,
+      totalPages
+    });
+
+    // Format clients
+    const formattedClients = clients.map(client => ({
+      id: client._id.toString(),
+      name: client.firstName && client.lastName 
+        ? `${client.firstName} ${client.lastName}`
+        : client.firstName || client.email || 'Unknown',
+      firstName: client.firstName || null,
+      lastName: client.lastName || null,
+      email: client.email || null,
+      avatarUrl: client.avatarUrl || null,
+      role: client.role || 'client',
+      entity_status: client.entity_status || null,
+      createdAt: client.createdAt || null
+    }));
+
+    // Return structured response
+    const structuredResponse = formatClientListResponse(
+      formattedClients,
+      {
+        page,
+        limit: validLimit,
+        total,
+        totalPages
+      },
+      search ? `Found ${total} client${total !== 1 ? 's' : ''} matching "${search}".` : `Found ${total} client${total !== 1 ? 's' : ''}.`
+    );
+
+    return {
+      success: true,
+      data: structuredResponse,
+      count: formattedClients.length,
+      pagination: {
+        page,
+        limit: validLimit,
+        total,
+        totalPages
+      }
+    };
+  } catch (error) {
+    console.error('[BOT] Error in handleGetClients:', {
+      error: error.message,
+      code: error.code,
+      category: error.category,
+      correlationId
+    });
+
+    return {
+      success: false,
+      error: error.code ? error : createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'Failed to retrieve clients',
+        ErrorCategories.SYSTEM,
+        false
+      )
+    };
+  }
+}
+
+/**
  * Tool handler map
  */
 const toolHandlers = {
@@ -1320,7 +1577,9 @@ const toolHandlers = {
   handleGetMyCOEs,
   handleGetCOEDetails,
   handleDeleteCOE,
-  handleGetLocations
+  handleGetLocations,
+  handleGetUserProfile,
+  handleGetClients
 };
 
 module.exports = {
@@ -1331,6 +1590,8 @@ module.exports = {
   handleGetMyCOEs,
   handleGetCOEDetails,
   handleDeleteCOE,
-  handleGetLocations
+  handleGetLocations,
+  handleGetUserProfile,
+  handleGetClients
 };
 

@@ -24,7 +24,7 @@ const {
   updateConversationPreferences,
   getPreferences
 } = require('./botPreferenceService');
-const { formatCOEPreferencesFormResponse } = require('./botResponseFormatter');
+const { formatCOEPreferencesFormResponse, formatProfileResponse } = require('./botResponseFormatter');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
@@ -44,7 +44,7 @@ async function getOrCreateConversation(userId) {
       messages: [
         {
           role: 'system',
-          content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
+          content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nWhen users ask to view a profile, show account details, or see user information (e.g., "show me my profile", "view profile of user X", "show John\'s profile"), use the get_user_profile tool. For clients, only return their own profile. For admins and runners, you can return any user\'s profile by providing the user_id parameter.\n\nWhen admins or runners ask to search for clients, find a client, show client list, or look for a client by name or email (e.g., "show me client john", "im looking for a client profile", "find client with email john@example.com", "show me clients"), use the get_clients tool. This tool supports search by name or email and pagination. Only admins and runners can use this tool.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
         },
         {
           role: 'assistant',
@@ -537,6 +537,74 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     console.log('[BOT] Form submission detected, skipping Rule 2 to process preferences');
   }
 
+  // Rule 3: Show my profile (pattern-based detection for own profile)
+  // Note: For other users' profiles (admins/runners), let OpenAI handle it via get_user_profile tool
+  const profilePatterns = [
+    'show me my profile',
+    'my profile',
+    'view my profile',
+    'display my profile',
+    'profile information',
+    'my account',
+    'account details',
+    'user profile',
+    'show profile'
+  ];
+  
+  // Check if it's a request for own profile (not other user's profile)
+  const matchesOwnProfile = profilePatterns.some(pattern => {
+    const exactMatch = normalizedPrompt === pattern;
+    const includesMatch = normalizedPrompt.includes(pattern) && 
+                         !normalizedPrompt.includes('user') && // Avoid matching "show user X profile"
+                         !normalizedPrompt.match(/\b(user|profile)\s+(of|for)\s+/i); // Avoid "profile of X"
+    return exactMatch || includesMatch;
+  });
+  
+  if (matchesOwnProfile) {
+    console.log('[BOT] ✅ Rule 3 (Show Own Profile) matched for prompt:', prompt);
+    // Add user message
+    conversation.messages.push({
+      role: 'user',
+      content: prompt
+    });
+    
+    // Fetch user profile - use req.user which should have profile data
+    // For own profile, we use the current user from the request
+    const profileData = user.getProfile ? user.getProfile() : {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      avatarUrl: user.avatarUrl,
+      dateOfBirth: user.dateOfBirth,
+      industry: user.industry,
+      userTier: user.userTier,
+      entity_status: user.entity_status,
+      visibilityStatus: user.visibilityStatus,
+      socialMedia: user.socialMedia,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      lastLogin: user.lastLogin
+    };
+    
+    // Return profile as structured response
+    const profileResponse = formatProfileResponse(profileData, 'Here is your profile information.');
+    const ruleReply = {
+      role: 'assistant',
+      content: JSON.stringify(profileResponse),
+      structured_data: profileResponse
+    };
+    conversation.messages.push(ruleReply);
+    await conversation.save();
+    console.log('[BOT] Rule 3 returning own profile response - EXITING FUNCTION');
+    return conversation.messages;
+  }
+  
+  // Note: Requests for other users' profiles will be handled by OpenAI via get_user_profile tool
+  // This allows flexible language like "show me John's profile" or "view profile of user X"
+
   // Add user message (only if rules didn't match)
   conversation.messages.push({
     role: 'user',
@@ -795,7 +863,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   // This ensures we always have the most up-to-date instructions
   const latestSystemMessage = {
     role: 'system',
-    content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
+    content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nWhen users ask to view a profile, show account details, or see user information (e.g., "show me my profile", "view profile of user X", "show John\'s profile"), use the get_user_profile tool. For clients, only return their own profile. For admins and runners, you can return any user\'s profile by providing the user_id parameter.\n\nWhen admins or runners ask to search for clients, find a client, show client list, or look for a client by name or email (e.g., "show me client john", "im looking for a client profile", "find client with email john@example.com", "show me clients"), use the get_clients tool. This tool supports search by name or email and pagination. Only admins and runners can use this tool.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
   };
 
   // Filter out old system messages and inject the latest one
@@ -945,7 +1013,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           return null;
         }
       })
-      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'error'));
+      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'coe_preferences_form' || data.type === 'error' || data.type === 'user_profile' || data.type === 'client_list'));
 
     // Add final assistant reply with structured data if available
     // CRITICAL: If assistantReply has tool_calls but no content, we must not save it with tool_calls

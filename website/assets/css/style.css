@@ -1,0 +1,848 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+}
+
+img {
+    border: none;
+    outline: none;
+    box-shadow: none;
+}
+
+html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    box-sizing: border-box;
+    border: 0;
+    outline: 0;
+    background-color: transparent;
+}
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100vh;
+    width: 100vw;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: transparent !important;
+    overflow: hidden;
+    position: relative;
+    box-sizing: border-box;
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+
+.container {
+    max-width: 100vw;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    box-sizing: border-box;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+}
+
+/* Navigation */
+.navbar {
+    background: #0a1419;
+    background-image: url('/website/assets/main.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+    color: #fff;
+    padding: 1rem 0;
+    margin: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    z-index: 1000;
+    box-shadow: none;
+    box-sizing: border-box;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    padding: 0 2rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.nav-brand {
+    padding: 0 2rem;
+    flex-shrink: 0;
+}
+
+.nav-brand {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #fff;
+}
+
+.nav-menu {
+    display: flex;
+    list-style: none;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    flex: 0;
+    justify-content: flex-start;
+}
+
+.nav-menu li {
+    margin: 0;
+    padding: 0;
+}
+
+.nav-menu a {
+    color: #fff;
+    text-decoration: none;
+    padding: 0.75rem 2rem;
+    border-radius: 0;
+    transition: all 0.3s ease;
+    display: block;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    position: relative;
+    background: transparent;
+}
+
+.nav-menu a:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4af37;
+    transform: translateY(-2px);
+}
+
+.nav-menu a.active {
+    background: rgba(212, 175, 55, 0.15);
+    color: #d4af37;
+    font-weight: 600;
+}
+
+.nav-menu a.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(to right, transparent, #d4af37, transparent);
+}
+
+/* Main Content */
+.main-content {
+    width: 100vw;
+    height: calc(100vh - 60px);
+    padding: 0;
+    margin: 0;
+    background-image: url('/website/assets/main.png');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-color: #0a1419;
+    overflow: hidden;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    box-sizing: border-box;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+/* Vision Page Specific Styles */
+.vision-page {
+    padding: 2rem;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.vision-logo {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    z-index: 10;
+    max-width: 300px;
+}
+
+.vision-logo-image {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.vision-content-box {
+    
+    padding: 4rem 3rem;
+    max-width: 90%;
+    width: 100%;
+    margin: 8rem auto 0;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 5;
+}
+
+.vision-title {
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 1.5rem 0;
+    line-height: 1.1;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+.vision-slogan {
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 2rem 0;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    text-align: center;
+}
+
+.vision-text {
+    font-size: clamp(1rem, 2.5vw, 1.25rem);
+    font-weight: 400;
+    color: #d4af37;
+    margin: 0;
+    line-height: 1.8;
+    letter-spacing: 0.01em;
+    text-align: center;
+    max-width: 100%;
+}
+
+/* Experience Page Specific Styles */
+.experience-page {
+    display: flex;
+    flex-direction: row;
+    padding: 0;
+    align-items: stretch;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+.experience-left {
+    flex: 1;
+    background-image: url('/website/assets/main.png');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-color: #0a1419;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow-y: auto;
+}
+
+.experience-logo {
+    margin-bottom: 3rem;
+    max-width: 300px;
+}
+
+.experience-logo-image {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.experience-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    max-width: 90%;
+}
+
+.experience-item {
+    margin-bottom: 0;
+}
+
+.experience-heading {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0 0 1rem 0;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+}
+
+.experience-text {
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    font-weight: 400;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.8;
+    letter-spacing: 0.01em;
+}
+
+.experience-right {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.experience-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+}
+
+/* Membership Page Specific Styles */
+.membership-page {
+    padding: 2rem;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+    overflow-y: auto;
+}
+
+.membership-logo {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    z-index: 10;
+    max-width: 300px;
+}
+
+.membership-logo-image {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.membership-title {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    color: #ffffff;
+    margin: 8rem auto 3rem;
+    text-align: center;
+    width: 100%;
+    max-width: 90%;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+    position: relative;
+    z-index: 5;
+}
+
+.membership-tiers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    width: 100%;
+    max-width: 95%;
+    margin: 0 auto;
+    position: relative;
+    z-index: 5;
+    padding: 0 1rem;
+}
+
+.membership-tier {
+    background-color: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 2.5rem 2rem;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.tier-name {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0 0 1.5rem 0;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    text-align: center;
+}
+
+.tier-benefits {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.tier-benefits li {
+    font-size: clamp(0.95rem, 1.8vw, 1.1rem);
+    font-weight: 400;
+    color: #ffffff;
+    margin: 0 0 1rem 0;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+    padding-left: 1.5rem;
+    position: relative;
+}
+
+.tier-benefits li::before {
+    content: '•';
+    position: absolute;
+    left: 0;
+    color: #ffffff;
+    font-size: 1.2em;
+    line-height: 1.6;
+}
+
+.tier-benefits li:last-child {
+    margin-bottom: 0;
+}
+
+.logo-section {
+    width: 100%;
+    max-width: 500px;
+    margin-bottom: 2rem;
+    z-index: 10;
+}
+
+.logo-image {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.hero-content-wrapper {
+    max-width: 90%;
+    width: 100%;
+    padding: 0 2rem;
+    z-index: 10;
+}
+
+.hero-title {
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0 0 2rem 0;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+    line-height: 1.2;
+    letter-spacing: 0.02em;
+}
+
+.hero-subtitle {
+    font-size: clamp(1rem, 2.5vw, 1.5rem);
+    font-weight: 300;
+    color: #ffffff;
+    margin: 0;
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.7);
+    line-height: 1.6;
+    letter-spacing: 0.01em;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Home Page */
+.home-page {
+    overflow: hidden;
+    background-color: transparent;
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    box-sizing: border-box;
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+}
+
+.hero {
+    text-align: center;
+    padding: 2rem 0;
+    color: #fff;
+    margin-bottom: 3rem;
+}
+
+.hero h1 {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.hero .lead {
+    font-size: 1.5rem;
+    opacity: 0.95;
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.content-section {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+    border: none;
+    outline: none;
+}
+
+.content-section h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+.content-section p {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #666;
+}
+
+/* Footer */
+.footer {
+    background-color: #1a1a1a;
+    color: #fff;
+    text-align: center;
+    padding: 0.5rem 0;
+    margin: 0;
+    width: 100vw;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+}
+
+.footer .container {
+    margin: 0;
+    padding: 0 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.footer p {
+    margin: 0;
+    opacity: 0.8;
+}
+
+
+/* Tabs Section */
+.tabs-section {
+    margin-top: 4rem;
+}
+
+.tabs-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.tab-item {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 2rem 1.5rem;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.tab-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 1);
+}
+
+.tab-item.active {
+    background: rgba(102, 126, 234, 0.95);
+    color: #fff;
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.4);
+}
+
+.tab-content {
+    text-align: center;
+}
+
+.tab-content h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.tab-content p {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin: 0;
+}
+
+.tab-item.active .tab-content p {
+    opacity: 0.9;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .navbar {
+        padding: 0.5rem 0;
+    }
+
+    .navbar .container {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0 15px;
+    }
+
+    .nav-brand {
+        font-size: 1.25rem;
+    }
+
+    .nav-menu {
+        flex-direction: row;
+        gap: 0;
+        width: 100%;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .nav-menu a {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .main-content {
+        height: calc(100vh - 140px);
+    }
+
+    .vision-page {
+        padding: 1.5rem;
+    }
+
+    .vision-logo {
+        top: 1rem;
+        left: 1rem;
+        max-width: 200px;
+    }
+
+    .vision-content-box {
+        padding: 2.5rem 2rem;
+        margin-top: 6rem;
+        max-width: 95%;
+    }
+
+    .vision-title {
+        margin-bottom: 1rem;
+    }
+
+    .vision-slogan {
+        margin-bottom: 1.5rem;
+    }
+
+    .logo-section {
+        max-width: 90%;
+        margin-bottom: 1.5rem;
+    }
+
+    .hero-content-wrapper {
+        padding: 0 1.5rem;
+    }
+
+    .hero-title {
+        margin-bottom: 1.5rem;
+    }
+
+    .footer {
+        padding: 0.75rem 0;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .navbar {
+        padding: 0.4rem 0;
+    }
+
+    .nav-brand {
+        font-size: 1.1rem;
+    }
+
+    .nav-menu {
+        gap: 0;
+    }
+
+    .nav-menu a {
+        padding: 0.5rem 0.8rem;
+        font-size: 0.75rem;
+    }
+
+    .main-content {
+        height: calc(100vh - 130px);
+    }
+
+    .vision-page {
+        padding: 1rem;
+    }
+
+    .vision-logo {
+        top: 0.5rem;
+        left: 0.5rem;
+        max-width: 150px;
+    }
+
+    .vision-content-box {
+        padding: 2rem 1.5rem;
+        margin-top: 5rem;
+        max-width: 98%;
+    }
+
+    .vision-title {
+        margin-bottom: 0.75rem;
+    }
+
+    .vision-slogan {
+        margin-bottom: 1rem;
+        font-size: clamp(1.2rem, 3vw, 1.8rem);
+    }
+
+    .vision-text {
+        font-size: clamp(0.9rem, 2vw, 1.1rem);
+    }
+
+    .membership-page {
+        padding: 1rem;
+    }
+
+    .membership-logo {
+        top: 0.5rem;
+        left: 0.5rem;
+        max-width: 150px;
+    }
+
+    .membership-title {
+        margin-top: 5rem;
+        margin-bottom: 1.5rem;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
+    }
+
+    .membership-tiers {
+        gap: 1rem;
+    }
+
+    .membership-tier {
+        padding: 1.5rem 1rem;
+    }
+
+    .tier-name {
+        margin-bottom: 1rem;
+    }
+
+    .experience-page {
+        flex-direction: column;
+    }
+
+    .experience-left {
+        flex: 1;
+        padding: 1.5rem;
+    }
+
+    .experience-logo {
+        max-width: 200px;
+        margin-bottom: 2rem;
+    }
+
+    .experience-content {
+        gap: 2rem;
+        max-width: 100%;
+    }
+
+    .experience-right {
+        flex: 1;
+        min-height: 400px;
+    }
+
+    .membership-page {
+        padding: 1.5rem;
+    }
+
+    .membership-logo {
+        top: 1rem;
+        left: 1rem;
+        max-width: 200px;
+    }
+
+    .membership-title {
+        margin-top: 6rem;
+        margin-bottom: 2rem;
+    }
+
+    .membership-tiers {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        max-width: 100%;
+        padding: 0;
+    }
+
+    .membership-tier {
+        padding: 2rem 1.5rem;
+    }
+
+    .logo-section {
+        max-width: 85%;
+        margin-bottom: 1rem;
+    }
+
+    .hero-content-wrapper {
+        padding: 0 1rem;
+    }
+
+    .hero-title {
+        margin-bottom: 1rem;
+    }
+
+    .footer {
+        padding: 0.5rem 0;
+        font-size: 0.85rem;
+    }
+}
+
+@media (min-width: 1200px) {
+    .content-image {
+        object-fit: contain;
+    }
+}
+

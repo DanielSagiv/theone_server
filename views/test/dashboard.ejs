@@ -1967,6 +1967,542 @@
             display: block;
         }
 
+        /* Profile Card Styles */
+        .bot-profile-card {
+            max-width: 100%;
+            padding: 16px;
+        }
+
+        .bot-profile-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            margin-bottom: 16px;
+        }
+
+        .bot-profile-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid rgba(148, 163, 184, 0.3);
+            background: rgba(30, 41, 59, 0.6);
+            color: #cbd5f5;
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .bot-profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .bot-profile-header-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .bot-profile-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5f5;
+        }
+
+        .bot-profile-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .bot-profile-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .bot-profile-role-admin {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+
+        .bot-profile-role-client {
+            background: rgba(59, 130, 246, 0.2);
+            color: #93c5fd;
+        }
+
+        .bot-profile-role-runner {
+            background: rgba(139, 92, 246, 0.2);
+            color: #c4b5fd;
+        }
+
+        .bot-profile-tier-vip {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fde047;
+        }
+
+        .bot-profile-tier-elite {
+            background: rgba(168, 85, 247, 0.2);
+            color: #d8b4fe;
+        }
+
+        .bot-profile-status-live {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+        }
+
+        .bot-profile-status-suspended {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+        }
+
+        .bot-profile-status-pendingapproval {
+            background: rgba(234, 179, 8, 0.2);
+            color: #fde047;
+        }
+
+        .bot-profile-body {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .bot-profile-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .bot-profile-section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .bot-profile-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .bot-profile-field:last-child {
+            border-bottom: none;
+        }
+
+        .bot-profile-field-label {
+            font-weight: 500;
+            color: #94a3b8;
+            font-size: 0.85rem;
+        }
+
+        .bot-profile-field-value {
+            color: #cbd5f5;
+            font-size: 0.85rem;
+            text-align: right;
+            word-break: break-word;
+        }
+
+        .bot-profile-social-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .bot-profile-social-link {
+            color: #60a5fa;
+            text-decoration: none;
+            font-size: 0.85rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(96, 165, 250, 0.1);
+            transition: background 0.2s ease;
+        }
+
+        .bot-profile-social-link:hover {
+            background: rgba(96, 165, 250, 0.2);
+            text-decoration: none;
+        }
+        
+        /* Phase 3: Edit Profile Button */
+        .bot-profile-actions {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .bot-profile-edit-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            color: #60a5fa;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .bot-profile-edit-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #93c5fd;
+        }
+        
+        .bot-profile-edit-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .bot-profile-edit-btn svg {
+            flex-shrink: 0;
+        }
+        
+        /* Phase 3: Mobile responsiveness */
+        @media (max-width: 768px) {
+            .bot-profile-card {
+                padding: 12px;
+            }
+            
+            .bot-profile-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+            
+            .bot-profile-header-info {
+                width: 100%;
+            }
+            
+            .bot-profile-badges {
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            
+            .bot-profile-section {
+                margin-bottom: 12px;
+            }
+            
+            .bot-profile-field {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            
+            .bot-profile-field-label {
+                font-size: 0.75rem;
+            }
+            
+            .bot-profile-social-links {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .bot-profile-actions {
+                margin-top: 16px;
+            }
+        }
+        
+        /* Phase 4: Client List Styles */
+        .bot-client-list {
+            max-width: 100%;
+            padding: 16px;
+        }
+        
+        .bot-client-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .bot-client-list-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5f5;
+            margin: 0;
+        }
+        
+        .bot-client-list-count {
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }
+        
+        .bot-client-search-container {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        
+        .bot-client-search-input {
+            width: 100%;
+            padding: 10px 36px 10px 12px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 8px;
+            color: #cbd5f5;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        
+        .bot-client-search-input:focus {
+            outline: none;
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(30, 41, 59, 0.8);
+        }
+        
+        .bot-client-search-icon-btn {
+            position: absolute;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            padding: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            transition: color 0.2s ease;
+            border-radius: 4px;
+        }
+        
+        .bot-client-search-icon-btn:hover {
+            color: #60a5fa;
+            background: rgba(59, 130, 246, 0.1);
+        }
+        
+        .bot-client-search-icon-btn:active {
+            background: rgba(59, 130, 246, 0.2);
+        }
+        
+        .bot-client-search-icon {
+            width: 16px;
+            height: 16px;
+            pointer-events: none;
+        }
+        
+        .bot-client-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .bot-client-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .bot-client-card:hover {
+            background: rgba(30, 41, 59, 0.6);
+            border-color: rgba(148, 163, 184, 0.3);
+        }
+        
+        .bot-client-card-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid rgba(148, 163, 184, 0.3);
+            background: rgba(30, 41, 59, 0.6);
+            overflow: hidden;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .bot-client-card-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .bot-client-avatar-initials {
+            color: #cbd5f5;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        
+        .bot-client-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .bot-client-card-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #cbd5f5;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .bot-client-card-email {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .bot-client-view-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+            color: #60a5fa;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .bot-client-view-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #93c5fd;
+        }
+        
+        .bot-client-view-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .bot-client-view-btn svg {
+            flex-shrink: 0;
+        }
+        
+        .bot-client-empty {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 32px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .bot-client-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+            flex-wrap: wrap;
+        }
+        
+        .bot-client-pagination-btn {
+            padding: 6px 12px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 6px;
+            color: #cbd5f5;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .bot-client-pagination-btn:hover:not(:disabled) {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(148, 163, 184, 0.4);
+        }
+        
+        .bot-client-pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .bot-client-pagination-pages {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .bot-client-pagination-page {
+            min-width: 32px;
+            height: 32px;
+            padding: 0 8px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 6px;
+            color: #cbd5f5;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .bot-client-pagination-page:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(148, 163, 184, 0.4);
+        }
+        
+        .bot-client-pagination-page.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #60a5fa;
+        }
+        
+        .bot-client-pagination-info {
+            font-size: 0.8rem;
+            color: #94a3b8;
+            margin-left: auto;
+        }
+        
+        /* Phase 4: Mobile responsiveness for client list */
+        @media (max-width: 768px) {
+            .bot-client-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .bot-client-pagination {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .bot-client-pagination-info {
+                margin-left: 0;
+                text-align: center;
+            }
+            
+            .bot-client-card {
+                flex-wrap: wrap;
+            }
+            
+            .bot-client-view-btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
         /* COE List Styles */
         .bot-coe-list {
             max-width: 100%;
@@ -5366,6 +5902,451 @@
             return letters.join('') || 'U';
         }
 
+        /**
+         * Render user profile card
+         * @param {Object} profileData - User profile data
+         * @returns {HTMLElement} Profile card element
+         */
+        function renderProfileCard(profileData) {
+            const card = document.createElement('div');
+            card.className = 'bot-structured-card bot-profile-card';
+            
+            // Get initials for avatar fallback
+            const initials = getInitials(profileData.name || profileData.email);
+            const avatarEl = profileData.avatarUrl
+                ? `<span class="bot-profile-avatar"><img src="${profileData.avatarUrl}" alt="${profileData.name || 'User'}" loading="lazy"></span>`
+                : `<span class="bot-profile-avatar">${initials}</span>`;
+            
+            // Format dates
+            const createdAt = profileData.createdAt 
+                ? new Date(profileData.createdAt).toLocaleDateString() 
+                : 'N/A';
+            const updatedAt = profileData.updatedAt 
+                ? new Date(profileData.updatedAt).toLocaleDateString() 
+                : 'N/A';
+            const lastLogin = profileData.lastLogin 
+                ? new Date(profileData.lastLogin).toLocaleDateString() 
+                : 'Never';
+            const dateOfBirth = profileData.dateOfBirth 
+                ? new Date(profileData.dateOfBirth).toLocaleDateString() 
+                : null;
+            
+            // Role badge
+            const roleBadge = profileData.role 
+                ? `<span class="bot-profile-badge bot-profile-role-${profileData.role}">${profileData.role}</span>`
+                : '';
+            
+            // User tier badge
+            const tierBadge = profileData.userTier && profileData.userTier !== 'member'
+                ? `<span class="bot-profile-badge bot-profile-tier-${profileData.userTier}">${profileData.userTier.toUpperCase()}</span>`
+                : '';
+            
+            // Status badge
+            const statusBadge = profileData.entity_status
+                ? `<span class="bot-profile-badge bot-profile-status-${profileData.entity_status}">${profileData.entity_status}</span>`
+                : '';
+            
+            // Social media links
+            let socialMediaHtml = '';
+            if (profileData.socialMedia) {
+                const socialLinks = [];
+                if (profileData.socialMedia.facebook) {
+                    socialLinks.push(`<a href="${profileData.socialMedia.facebook}" target="_blank" class="bot-profile-social-link">Facebook</a>`);
+                }
+                if (profileData.socialMedia.linkedin) {
+                    socialLinks.push(`<a href="${profileData.socialMedia.linkedin}" target="_blank" class="bot-profile-social-link">LinkedIn</a>`);
+                }
+                if (profileData.socialMedia.x) {
+                    socialLinks.push(`<a href="${profileData.socialMedia.x}" target="_blank" class="bot-profile-social-link">X (Twitter)</a>`);
+                }
+                if (profileData.socialMedia.instagram) {
+                    socialLinks.push(`<a href="${profileData.socialMedia.instagram}" target="_blank" class="bot-profile-social-link">Instagram</a>`);
+                }
+                if (socialLinks.length > 0) {
+                    socialMediaHtml = `
+                        <div class="bot-profile-section">
+                            <div class="bot-profile-section-title">Social Media</div>
+                            <div class="bot-profile-social-links">
+                                ${socialLinks.join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            // Profile statistics (if available)
+            let statisticsHtml = '';
+            if (profileData.statistics) {
+                const stats = profileData.statistics;
+                statisticsHtml = `
+                    <div class="bot-profile-section">
+                        <div class="bot-profile-section-title">Statistics</div>
+                        ${stats.coeCount !== undefined ? `
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Total Experiences:</span>
+                            <span class="bot-profile-field-value">${stats.coeCount || 0}</span>
+                        </div>
+                        ` : ''}
+                        ${stats.eventCount !== undefined ? `
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Events Attended:</span>
+                            <span class="bot-profile-field-value">${stats.eventCount || 0}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            // Edit Profile button - only show for own profile (all users: clients, runners, admins)
+            // Handle both _id and id formats for currentUser
+            const currentUserId = currentUser?._id?.toString() || currentUser?.id?.toString();
+            const profileUserId = profileData.id?.toString() || profileData._id?.toString();
+            const isOwnProfile = profileUserId && currentUserId && profileUserId === currentUserId;
+            const canEdit = isOwnProfile;
+            
+            const editButtonHtml = canEdit ? `
+                <div class="bot-profile-actions">
+                    <button class="bot-profile-edit-btn" onclick="handleEditProfile('${profileData.id}')">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M11.333 2.00001C11.5084 1.82445 11.7163 1.68506 11.9447 1.58981C12.1731 1.49457 12.4173 1.44531 12.6667 1.44531C12.916 1.44531 13.1602 1.49457 13.3886 1.58981C13.617 1.68506 13.8249 1.82445 14 2.00001C14.1756 2.17557 14.315 2.38345 14.4102 2.61187C14.5054 2.84029 14.5547 3.08452 14.5547 3.33334C14.5547 3.58217 14.5054 3.8264 14.4102 4.05482C14.315 4.28324 14.1756 4.49112 14 4.66668L5.00001 13.6667L1.33334 14.6667L2.33334 11L11.333 2.00001Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Edit Profile
+                    </button>
+                </div>
+            ` : '';
+            
+            card.innerHTML = `
+                <div class="bot-profile-header">
+                    ${avatarEl}
+                    <div class="bot-profile-header-info">
+                        <div class="bot-profile-name">${profileData.name || 'Unknown User'}</div>
+                        <div class="bot-profile-badges">
+                            ${roleBadge}
+                            ${tierBadge}
+                            ${statusBadge}
+                        </div>
+                    </div>
+                </div>
+                <div class="bot-profile-body">
+                    <div class="bot-profile-section">
+                        <div class="bot-profile-section-title">Contact Information</div>
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Email:</span>
+                            <span class="bot-profile-field-value">${profileData.email || 'Not provided'}</span>
+                        </div>
+                        ${profileData.phone ? `
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Phone:</span>
+                            <span class="bot-profile-field-value">${profileData.phone}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                    <div class="bot-profile-section">
+                        <div class="bot-profile-section-title">Account Details</div>
+                        ${profileData.industry ? `
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Industry:</span>
+                            <span class="bot-profile-field-value">${profileData.industry}</span>
+                        </div>
+                        ` : ''}
+                        ${dateOfBirth ? `
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Date of Birth:</span>
+                            <span class="bot-profile-field-value">${dateOfBirth}</span>
+                        </div>
+                        ` : ''}
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Member Since:</span>
+                            <span class="bot-profile-field-value">${createdAt}</span>
+                        </div>
+                        <div class="bot-profile-field">
+                            <span class="bot-profile-field-label">Last Login:</span>
+                            <span class="bot-profile-field-value">${lastLogin}</span>
+                        </div>
+                    </div>
+                    ${statisticsHtml}
+                    ${socialMediaHtml}
+                </div>
+                ${editButtonHtml}
+            `;
+            
+            return card;
+        }
+        
+        /**
+         * Handle Edit Profile button click
+         * @param {string} userId - User ID to edit
+         */
+        function handleEditProfile(userId) {
+            // Only allow editing own profile (all users: clients, runners, admins)
+            // Handle both _id and id formats for currentUser
+            const currentUserId = currentUser?._id?.toString() || currentUser?.id?.toString();
+            const isOwnProfile = userId && currentUserId && userId === currentUserId;
+            
+            if (!isOwnProfile) {
+                showAlert('You can only edit your own profile.', 'error');
+                return;
+            }
+            
+            // Call existing editProfile function
+            if (typeof editProfile === 'function') {
+                editProfile();
+            } else {
+                // Fallback: show profile modal
+                if (document.getElementById('profileModal')) {
+                    // Populate modal with profile data
+                    const profileModal = document.getElementById('profileModal');
+                    profileModal.style.display = 'block';
+                } else {
+                    showAlert('Edit profile functionality will be available soon.', 'info');
+                }
+            }
+        }
+        
+        /**
+         * Render client list card with search and pagination
+         * @param {Object} clientListData - Client list data with clients array and pagination
+         * @returns {HTMLElement} Client list card element
+         */
+        function renderClientList(clientListData) {
+            const card = document.createElement('div');
+            card.className = 'bot-structured-card bot-client-list';
+            
+            const clients = clientListData.clients || [];
+            const pagination = clientListData.pagination || { page: 1, limit: 20, total: 0, totalPages: 1 };
+            
+            // Generate client cards HTML
+            let clientsHtml = '';
+            if (clients.length === 0) {
+                clientsHtml = '<div class="bot-client-empty">No clients found.</div>';
+            } else {
+                clientsHtml = clients.map(client => {
+                    const initials = getInitials(client.name || client.email);
+                    const avatarHtml = client.avatarUrl
+                        ? `<img src="${client.avatarUrl}" alt="${client.name || 'Client'}" loading="lazy">`
+                        : `<span class="bot-client-avatar-initials">${initials}</span>`;
+                    
+                    return `
+                        <div class="bot-client-card" data-client-id="${client.id}">
+                            <div class="bot-client-card-avatar">
+                                ${avatarHtml}
+                            </div>
+                            <div class="bot-client-card-info">
+                                <div class="bot-client-card-name">${client.name || 'Unknown Client'}</div>
+                                <div class="bot-client-card-email">${client.email || 'No email'}</div>
+                            </div>
+                            <button class="bot-client-view-btn" onclick="handleViewClientProfile('${client.id}')">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 1C4.134 1 1 4.134 1 8s3.134 7 7 7 7-3.134 7-7-3.134-7-7-7zM8 13c-2.761 0-5-2.239-5-5s2.239-5 5-5 5 2.239 5 5-2.239 5-5 5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                    <path d="M8 5.5c-1.381 0-2.5 1.119-2.5 2.5s1.119 2.5 2.5 2.5 2.5-1.119 2.5-2.5-1.119-2.5-2.5-2.5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                </svg>
+                                View
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+            
+            // Pagination HTML
+            let paginationHtml = '';
+            if (pagination.totalPages > 1) {
+                const prevDisabled = pagination.page <= 1 ? 'disabled' : '';
+                const nextDisabled = pagination.page >= pagination.totalPages ? 'disabled' : '';
+                
+                // Generate page numbers (show max 5 pages)
+                let pageNumbers = [];
+                const maxPages = 5;
+                let startPage = Math.max(1, pagination.page - Math.floor(maxPages / 2));
+                let endPage = Math.min(pagination.totalPages, startPage + maxPages - 1);
+                if (endPage - startPage < maxPages - 1) {
+                    startPage = Math.max(1, endPage - maxPages + 1);
+                }
+                
+                for (let i = startPage; i <= endPage; i++) {
+                    pageNumbers.push(i);
+                }
+                
+                paginationHtml = `
+                    <div class="bot-client-pagination">
+                        <button class="bot-client-pagination-btn" ${prevDisabled} onclick="handleClientListPage(${pagination.page - 1})" ${prevDisabled ? 'disabled' : ''}>
+                            Previous
+                        </button>
+                        <div class="bot-client-pagination-pages">
+                            ${pageNumbers.map(pageNum => `
+                                <button class="bot-client-pagination-page ${pageNum === pagination.page ? 'active' : ''}" 
+                                        onclick="handleClientListPage(${pageNum})">
+                                    ${pageNum}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <button class="bot-client-pagination-btn" ${nextDisabled} onclick="handleClientListPage(${pagination.page + 1})" ${nextDisabled ? 'disabled' : ''}>
+                            Next
+                        </button>
+                        <span class="bot-client-pagination-info">
+                            Page ${pagination.page} of ${pagination.totalPages} (${pagination.total} total)
+                        </span>
+                    </div>
+                `;
+            }
+            
+            // Generate unique ID for this search input
+            const searchInputId = `clientSearchInput_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            card.innerHTML = `
+                <div class="bot-client-list-header">
+                    <h3 class="bot-client-list-title">Users</h3>
+                    <div class="bot-client-list-count">${pagination.total} user${pagination.total !== 1 ? 's' : ''}</div>
+                </div>
+                <div class="bot-client-search-container">
+                    <input type="text" 
+                           class="bot-client-search-input" 
+                           placeholder="Search by name or email..." 
+                           id="${searchInputId}"
+                           onkeyup="handleClientSearch(event, this.value)"
+                           onkeydown="if(event.key === 'Enter') { event.preventDefault(); handleClientSearchClick(this.value); }">
+                    <button type="button" class="bot-client-search-icon-btn" onclick="handleClientSearchClick(document.getElementById('${searchInputId}')?.value || '')" title="Search">
+                        <svg class="bot-client-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 12A5 5 0 1 0 7 2a5 5 0 0 0 0 10zM13 13l-3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="bot-client-grid">
+                    ${clientsHtml}
+                </div>
+                ${paginationHtml}
+            `;
+            
+            // Store pagination data and search term for navigation
+            card.dataset.currentPage = pagination.page;
+            card.dataset.totalPages = pagination.totalPages;
+            // Extract search term from message if present (e.g., "Found X clients matching 'search'")
+            const searchMatch = clientListData.message?.match(/matching\s+"([^"]+)"/);
+            card.dataset.currentSearch = searchMatch ? searchMatch[1] : '';
+            
+            return card;
+        }
+        
+        /**
+         * Handle client search (debounced for typing)
+         * @param {Event} event - Keyboard event
+         * @param {string} searchTerm - Search term
+         */
+        let clientSearchTimeout;
+        function handleClientSearch(event, searchTerm) {
+            console.log('[CLIENT LIST] handleClientSearch called:', { key: event?.key, searchTerm });
+            // Clear previous timeout
+            if (clientSearchTimeout) {
+                clearTimeout(clientSearchTimeout);
+            }
+            
+            // Store search term in the card for pagination
+            const clientListCard = document.querySelector('.bot-client-list');
+            if (clientListCard) {
+                clientListCard.dataset.currentSearch = searchTerm.trim();
+            }
+            
+            // Skip debounce for Enter key (handled by onkeydown)
+            if (event.key === 'Enter') {
+                console.log('[CLIENT LIST] Enter key detected, skipping debounce');
+                return;
+            }
+            
+            // Wait for user to stop typing (500ms delay)
+            clientSearchTimeout = setTimeout(() => {
+                const trimmedSearch = searchTerm.trim();
+                console.log('[CLIENT LIST] Debounce timeout triggered, trimmed search:', trimmedSearch);
+                if (trimmedSearch.length === 0 || trimmedSearch.length >= 2) {
+                    triggerClientSearch(trimmedSearch);
+                } else {
+                    console.log('[CLIENT LIST] Search term too short, skipping');
+                }
+            }, 500);
+        }
+        
+        /**
+         * Handle client search click or immediate search (Enter key)
+         * @param {string} searchTerm - Search term
+         */
+        function handleClientSearchClick(searchTerm) {
+            console.log('[CLIENT LIST] Search click triggered with term:', searchTerm);
+            // Clear any pending timeout
+            if (clientSearchTimeout) {
+                clearTimeout(clientSearchTimeout);
+            }
+            
+            // Store search term in the card for pagination
+            const clientListCard = document.querySelector('.bot-client-list');
+            if (clientListCard) {
+                clientListCard.dataset.currentSearch = searchTerm.trim();
+            }
+            
+            // Trigger search immediately
+            triggerClientSearch(searchTerm.trim());
+        }
+        
+        /**
+         * Trigger client search by sending message to bot
+         * @param {string} searchTerm - Search term
+         */
+        function triggerClientSearch(searchTerm) {
+            console.log('[CLIENT LIST] Triggering search with term:', searchTerm);
+            const prompt = searchTerm 
+                ? `search for client ${searchTerm}`
+                : 'show me clients';
+            
+            console.log('[CLIENT LIST] Generated prompt:', prompt);
+            const promptInput = document.getElementById('botPromptInput');
+            if (promptInput) {
+                promptInput.value = prompt;
+                console.log('[CLIENT LIST] Calling sendBotPrompt()');
+                sendBotPrompt();
+            } else {
+                console.error('[CLIENT LIST] botPromptInput not found');
+            }
+        }
+        
+        /**
+         * Handle client list pagination
+         * @param {number} page - Page number to navigate to
+         */
+        function handleClientListPage(page) {
+            // Find the client list card
+            const clientListCard = document.querySelector('.bot-client-list');
+            if (!clientListCard) return;
+            
+            const currentSearch = clientListCard.dataset.currentSearch || '';
+            const prompt = currentSearch 
+                ? `search for client ${currentSearch} page ${page}`
+                : `show me clients page ${page}`;
+            
+            const promptInput = document.getElementById('botPromptInput');
+            if (promptInput) {
+                promptInput.value = prompt;
+                sendBotPrompt();
+            } else {
+                console.error('[CLIENT LIST] botPromptInput not found in handleClientListPage');
+            }
+        }
+        
+        /**
+         * Handle View Client Profile button click
+         * @param {string} clientId - Client ID to view
+         */
+        function handleViewClientProfile(clientId) {
+            console.log('[CLIENT LIST] View profile clicked for client ID:', clientId);
+            // Send message to bot to get client profile
+            // Use natural language format that OpenAI can parse to call get_user_profile tool with user_id
+            const promptInput = document.getElementById('botPromptInput');
+            if (promptInput) {
+                // Use format that matches system message examples: "view profile of user X"
+                promptInput.value = `view profile of user ${clientId}`;
+                console.log('[CLIENT LIST] Setting prompt to:', promptInput.value);
+                sendBotPrompt();
+            } else {
+                console.error('[CLIENT LIST] botPromptInput not found');
+            }
+        }
+
         // Helper: build a full Runner Details card (same style as COE-level)
         function buildRunnerDetailsCard(runner, statusText, titleText) {
             if (!runner) return '';
@@ -7004,7 +7985,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -7121,6 +8102,26 @@
                             msgText.className = 'bot-structured-message';
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, errorCard);
+                        }
+                    } else if (structuredData.type === 'user_profile') {
+                        const profileCard = renderProfileCard(structuredData.profile);
+                        contentEl.appendChild(profileCard);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, profileCard);
+                        }
+                    } else if (structuredData.type === 'client_list') {
+                        const clientList = renderClientList(structuredData);
+                        contentEl.appendChild(clientList);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, clientList);
                         }
                     }
                 } else {

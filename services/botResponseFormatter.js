@@ -908,6 +908,40 @@ function formatCOEPreferencesFormResponse(message) {
  * @param {Object} errorData - Error data with searchAttempts and preferences
  * @returns {Object} Formatted error response
  */
+/**
+ * Format user profile response
+ * @param {Object} user - User object with profile data
+ * @param {string} message - Optional message to display
+ * @returns {Object} Structured profile response
+ */
+function formatProfileResponse(user, message) {
+  return {
+    type: 'user_profile',
+    message: message || 'Here is your profile information.',
+    profile: {
+      id: user._id?.toString() || user.id?.toString() || user._id || user.id,
+      name: user.firstName && user.lastName 
+        ? `${user.firstName} ${user.lastName}`
+        : user.name || user.email || 'Unknown',
+      firstName: user.firstName || null,
+      lastName: user.lastName || null,
+      email: user.email || null,
+      phone: user.phone || null,
+      role: user.role || null,
+      avatarUrl: user.avatarUrl || null,
+      dateOfBirth: user.dateOfBirth || null,
+      industry: user.industry || null,
+      userTier: user.userTier || 'member',
+      entity_status: user.entity_status || null,
+      visibilityStatus: user.visibilityStatus || 'public',
+      socialMedia: user.socialMedia || {},
+      createdAt: user.createdAt || null,
+      updatedAt: user.updatedAt || null,
+      lastLogin: user.lastLogin || null
+    }
+  };
+}
+
 function formatNoSeatsAvailableResponse(errorData) {
   const { searchAttempts = [], preferences = {} } = errorData;
   
@@ -959,9 +993,30 @@ function formatNoSeatsAvailableResponse(errorData) {
   };
 }
 
+/**
+ * Format client list response
+ * @param {Array} clients - Array of client objects
+ * @param {Object} pagination - Pagination info { page, limit, total, totalPages }
+ * @param {string} message - Human-readable message
+ * @returns {Object} Structured response
+ */
+function formatClientListResponse(clients, pagination, message) {
+  return {
+    type: 'client_list',
+    message: message || 'Client list retrieved successfully.',
+    clients: clients,
+    pagination: pagination || {
+      page: 1,
+      limit: 20,
+      total: clients.length,
+      totalPages: 1
+    }
+  };
+}
+
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile', 'client_list'].includes(response.type);
 }
 
 module.exports = {
@@ -971,6 +1026,8 @@ module.exports = {
   formatLocationListResponse,
   formatCOEPreferencesFormResponse,
   formatNoSeatsAvailableResponse,
+  formatProfileResponse,
+  formatClientListResponse,
   createCOEActions,
   formatTextResponse,
   isStructuredResponse
