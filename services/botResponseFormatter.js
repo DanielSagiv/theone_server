@@ -372,7 +372,9 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
           : coe.client_id.email || 'Unknown'
       } : null,
       created_at: coe.created_at,
-      updated_at: coe.updated_at
+      updated_at: coe.updated_at,
+      // Include seat upgrade offers if available
+      seat_upgrade_offers: coe.seat_upgrade_offers || []
     },
     message: message,
     actions: actions
@@ -1014,9 +1016,47 @@ function formatClientListResponse(clients, pagination, message) {
   };
 }
 
+/**
+ * Format seat upgrade offers response
+ * @param {Object} coe - COE object
+ * @param {Array} offers - Upgrade offers array
+ * @param {string} message - Optional message
+ * @returns {Object} Structured response
+ */
+function formatSeatUpgradeOffersResponse(coe, offers, message) {
+  return {
+    type: 'seat_upgrade_offers',
+    coe_id: coe._id?.toString() || coe.id,
+    message: message || 'We found some premium seating options that might interest you!',
+    offers: offers.map(offer => ({
+      current_seat: {
+        seat_id: offer.current_seat_id?.toString() || offer.current_seat_id,
+        seat_code: offer.current_seat_code,
+        event_id: offer.event_id?.toString() || offer.event_id,
+        event_name: offer.event_name,
+        current_price: offer.current_price
+      },
+      alternatives: offer.alternatives.map(alt => ({
+        seat_id: alt.seat_id?.toString() || alt.seat_id,
+        seat_code: alt.seat_code,
+        capacity: alt.capacity,
+        price: alt.event_price,
+        base_price: alt.base_price,
+        price_delta: alt.price_delta,
+        price_delta_percentage: alt.price_delta_percentage,
+        upgrade_reasons: alt.upgrade_reasons,
+        sentiment: alt.sentiment,
+        category: alt.category,
+        section: alt.section,
+        media: alt.media
+      }))
+    }))
+  };
+}
+
 function isStructuredResponse(response) {
   if (!response || typeof response !== 'object') return false;
-  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile', 'client_list'].includes(response.type);
+  return response.type && ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile', 'client_list', 'seat_upgrade_offers'].includes(response.type);
 }
 
 module.exports = {
@@ -1028,6 +1068,7 @@ module.exports = {
   formatNoSeatsAvailableResponse,
   formatProfileResponse,
   formatClientListResponse,
+  formatSeatUpgradeOffersResponse,
   createCOEActions,
   formatTextResponse,
   isStructuredResponse

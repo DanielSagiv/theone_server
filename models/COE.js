@@ -306,6 +306,99 @@ const coeSchema = new mongoose.Schema({
       default: 'selected' 
     }
   }],
+  // Seat upgrade offers (only for draft COEs)
+  seat_upgrade_offers: [{
+    current_seat_id: { 
+      type: mongoose.Schema.Types.ObjectId,
+      required: true
+    },
+    current_seat_code: { 
+      type: String,
+      required: true
+    },
+    event_id: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Event',
+      required: true
+    },
+    event_name: {
+      type: String
+    },
+    current_price: {
+      type: Number,
+      min: 0
+    },
+    alternatives: [{
+      seat_id: { 
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+      },
+      seat_code: { 
+        type: String,
+        required: true
+      },
+      capacity: {
+        type: Number,
+        min: 1
+      },
+      event_price: {
+        type: Number,
+        min: 0,
+        required: true
+      },
+      base_price: {
+        type: Number,
+        min: 0
+      },
+      price_delta: {
+        type: Number,
+        required: true
+      },
+      price_delta_percentage: {
+        type: String
+      },
+      upgrade_reasons: [{
+        type: String
+      }],
+      sentiment: [{
+        text: { type: String },
+        type: { 
+          type: String, 
+          enum: ['A', 'B'] 
+        }
+      }],
+      category: {
+        type: String
+      },
+      section: {
+        type: String
+      },
+      media: [{
+        type: { 
+          type: String, 
+          enum: ['image', 'video'] 
+        },
+        url: { type: String },
+        caption: { type: String }
+      }],
+      offered_at: { 
+        type: Date, 
+        default: Date.now 
+      },
+      status: { 
+        type: String, 
+        enum: ['pending', 'accepted', 'rejected', 'expired'],
+        default: 'pending'
+      }
+    }],
+    generated_at: { 
+      type: Date, 
+      default: Date.now 
+    },
+    expires_at: { 
+      type: Date 
+    } // Optional: offers expire when COE moves out of draft
+  }],
   policies: { 
     type: String, 
     trim: true,

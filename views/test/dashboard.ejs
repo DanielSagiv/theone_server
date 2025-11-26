@@ -2503,6 +2503,218 @@
             }
         }
 
+        /* Seat Upgrade Offers Styles */
+        .bot-upgrade-offers {
+            max-width: 100%;
+            padding: 16px;
+        }
+        
+        .upgrade-offers-header {
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .upgrade-offers-header h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5f5;
+        }
+        
+        .upgrade-offers-header p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+        
+        .upgrade-offer-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .upgrade-offer-event {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .upgrade-offer-event strong {
+            color: #cbd5f5;
+            font-size: 0.95rem;
+        }
+        
+        .upgrade-offer-comparison {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .current-seat,
+        .upgrade-seat {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
+        }
+        
+        .upgrade-seat {
+            border-color: rgba(234, 179, 8, 0.3);
+            background: rgba(234, 179, 8, 0.05);
+        }
+        
+        .seat-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .seat-code {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #cbd5f5;
+            margin-bottom: 8px;
+            font-family: monospace;
+        }
+        
+        .seat-price {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 8px;
+        }
+        
+        .price-delta {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 12px;
+        }
+        
+        .price-delta.positive {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+        
+        .upgrade-arrow {
+            font-size: 1.5rem;
+            color: #94a3b8;
+            flex-shrink: 0;
+        }
+        
+        .upgrade-reasons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        
+        .upgrade-reason-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: rgba(234, 179, 8, 0.1);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #fbbf24;
+            font-weight: 500;
+        }
+        
+        .upgrade-sentiment {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        
+        .sentiment-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #60a5fa;
+        }
+        
+        .sentiment-badge.type-a {
+            background: rgba(34, 197, 94, 0.1);
+            border-color: rgba(34, 197, 94, 0.3);
+            color: #4ade80;
+        }
+        
+        .btn-upgrade {
+            width: 100%;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            border: none;
+            border-radius: 6px;
+            color: #1e293b;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-upgrade:hover {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(234, 179, 8, 0.3);
+        }
+        
+        .btn-upgrade:active {
+            transform: translateY(0);
+        }
+        
+        .btn-keep-current {
+            width: 100%;
+            padding: 10px 16px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 6px;
+            color: #cbd5f5;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-keep-current:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(148, 163, 184, 0.4);
+        }
+        
+        .bot-upgrade-empty {
+            text-align: center;
+            padding: 32px;
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .upgrade-offer-comparison {
+                flex-direction: column;
+            }
+            
+            .upgrade-arrow {
+                transform: rotate(90deg);
+            }
+            
+            .current-seat,
+            .upgrade-seat {
+                min-width: 100%;
+            }
+        }
+
         /* COE List Styles */
         .bot-coe-list {
             max-width: 100%;
@@ -6104,6 +6316,149 @@
         }
         
         /**
+         * Render seat upgrade offers card
+         * @param {Object} offersData - Upgrade offers data
+         * @returns {HTMLElement} Upgrade offers card element
+         */
+        function renderSeatUpgradeOffers(offersData) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-upgrade-offers';
+            
+            const offers = offersData.offers || [];
+            
+            if (offers.length === 0) {
+                container.innerHTML = '<div class="bot-upgrade-empty">No upgrade offers available.</div>';
+                return container;
+            }
+            
+            let html = `
+                <div class="upgrade-offers-header">
+                    <h3>Premium Seating Upgrades Available</h3>
+                    <p>${offersData.message || 'We found some premium seating options that might interest you!'}</p>
+                </div>
+            `;
+            
+            offers.forEach((offer, offerIndex) => {
+                html += `
+                    <div class="upgrade-offer-card">
+                        <div class="upgrade-offer-event">
+                            <strong>${offer.current_seat.event_name || 'Event'}</strong>
+                        </div>
+                        
+                        <div class="upgrade-offer-comparison">
+                            <div class="current-seat">
+                                <div class="seat-label">Current Seat</div>
+                                <div class="seat-code">${offer.current_seat.seat_code}</div>
+                                <div class="seat-price">$${offer.current_seat.current_price.toLocaleString()}</div>
+                            </div>
+                            
+                            <div class="upgrade-arrow">→</div>
+                            
+                            ${offer.alternatives.map((alt, altIndex) => `
+                                <div class="upgrade-seat">
+                                    <div class="seat-label">Upgrade Option</div>
+                                    <div class="seat-code">${alt.seat_code}</div>
+                                    <div class="seat-price">$${alt.price.toLocaleString()}</div>
+                                    <div class="price-delta ${alt.price_delta > 0 ? 'positive' : ''}">
+                                        ${alt.price_delta > 0 ? '+' : ''}$${alt.price_delta.toLocaleString()}
+                                        ${alt.price_delta_percentage ? `(${alt.price_delta_percentage}%)` : ''}
+                                    </div>
+                                    
+                                    ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
+                                        <div class="upgrade-reasons">
+                                            ${alt.upgrade_reasons.map(reason => `
+                                                <span class="upgrade-reason-badge">${reason}</span>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                    
+                                    ${alt.sentiment && alt.sentiment.length > 0 ? `
+                                        <div class="upgrade-sentiment">
+                                            ${alt.sentiment.map(sent => `
+                                                <span class="sentiment-badge type-${sent.type ? sent.type.toLowerCase() : 'b'}">
+                                                    ${sent.text || `Type ${sent.type || 'B'}`}
+                                                </span>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                    
+                                    <button 
+                                        class="btn-upgrade" 
+                                        onclick="handleAcceptUpgrade('${offersData.coe_id}', '${offer.current_seat.seat_id}', '${alt.seat_id}', '${offer.current_seat.event_id}')"
+                                    >
+                                        Upgrade
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <button 
+                            class="btn-keep-current" 
+                            onclick="handleRejectUpgrade('${offersData.coe_id}', '${offer.current_seat.seat_id}')"
+                        >
+                            Keep Current Seat
+                        </button>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+            return container;
+        }
+        
+        /**
+         * Handle accepting a seat upgrade
+         * @param {string} coeId - COE ID
+         * @param {string} currentSeatId - Current seat ID
+         * @param {string} upgradeSeatId - Upgrade seat ID
+         * @param {string} eventId - Event ID
+         */
+        async function handleAcceptUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
+            try {
+                showAlert('Processing upgrade...', 'info');
+                
+                const result = await makeApiRequest(`/v1/coes/${coeId}/seat-upgrades/accept`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        current_seat_id: currentSeatId,
+                        alternative_seat_id: upgradeSeatId,
+                        event_id: eventId
+                    })
+                });
+                
+                if (result.success && result.data?.success) {
+                    showAlert('Seat upgrade accepted successfully!', 'success');
+                    // Reload conversation to show updated COE
+                    await loadBotConversation();
+                } else {
+                    showAlert(result.data?.error?.message || 'Failed to accept upgrade', 'error');
+                }
+            } catch (error) {
+                console.error('Error accepting upgrade:', error);
+                showAlert('Failed to accept upgrade', 'error');
+            }
+        }
+        
+        /**
+         * Handle rejecting a seat upgrade
+         * @param {string} coeId - COE ID
+         * @param {string} seatId - Seat ID
+         */
+        async function handleRejectUpgrade(coeId, seatId) {
+            try {
+                // For now, just hide the offer (could mark as rejected via API later)
+                const offerCard = event.target.closest('.upgrade-offer-card');
+                if (offerCard) {
+                    offerCard.style.opacity = '0.5';
+                    offerCard.style.pointerEvents = 'none';
+                }
+                showAlert('Upgrade offer declined', 'info');
+            } catch (error) {
+                console.error('Error rejecting upgrade:', error);
+            }
+        }
+        
+        /**
          * Render client list card with search and pagination
          * @param {Object} clientListData - Client list data with clients array and pagination
          * @returns {HTMLElement} Client list card element
@@ -7985,7 +8340,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile', 'client_list', 'seat_upgrade_offers'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -8122,6 +8477,46 @@
                             msgText.className = 'bot-structured-message';
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, clientList);
+                        }
+                    } else if (structuredData.type === 'seat_upgrade_offers') {
+                        const upgradeOffers = renderSeatUpgradeOffers(structuredData);
+                        contentEl.appendChild(upgradeOffers);
+                        
+                        if (structuredData.message) {
+                            const msgText = document.createElement('p');
+                            msgText.className = 'bot-structured-message';
+                            msgText.textContent = structuredData.message;
+                            contentEl.insertBefore(msgText, upgradeOffers);
+                        }
+                    }
+                    
+                    // Also check if COE response includes upgrade offers
+                    if ((structuredData.type === 'coe_created' || structuredData.type === 'coe_draft' || structuredData.type === 'coe_updated' || structuredData.type === 'coe_details')) {
+                        // Check both locations: structuredData.seat_upgrade_offers (top level) and structuredData.coe.seat_upgrade_offers (nested)
+                        const topLevelOffers = structuredData.seat_upgrade_offers;
+                        const nestedOffers = structuredData.coe?.seat_upgrade_offers;
+                        const upgradeOffersData = topLevelOffers || nestedOffers || [];
+                        
+                        console.log('[FRONTEND] Checking for upgrade offers:', {
+                            hasTopLevel: !!topLevelOffers,
+                            topLevelCount: topLevelOffers?.length || 0,
+                            hasNested: !!nestedOffers,
+                            nestedCount: nestedOffers?.length || 0,
+                            finalCount: upgradeOffersData.length,
+                            structuredDataType: structuredData.type
+                        });
+                        
+                        if (upgradeOffersData && upgradeOffersData.length > 0) {
+                            console.log('[FRONTEND] Rendering upgrade offers:', upgradeOffersData.length, 'offers');
+                            const upgradeOffers = renderSeatUpgradeOffers({
+                                type: 'seat_upgrade_offers',
+                                coe_id: structuredData.coe?.id || structuredData.coe?._id,
+                                offers: upgradeOffersData,
+                                message: 'Premium seating upgrades available for your experience!'
+                            });
+                            contentEl.appendChild(upgradeOffers);
+                        } else {
+                            console.log('[FRONTEND] No upgrade offers found in COE response');
                         }
                     }
                 } else {

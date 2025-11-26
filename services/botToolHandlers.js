@@ -37,6 +37,7 @@ const { autoSelectEventsBySentiment } = require('./botSentimentService');
 const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
 const { getPreferences } = require('./botPreferenceService');
 const { parseAndNormalizeDate } = require('../utils/dateParser');
+const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
 
 /**
  * Handler 1: Get Events by Date Range
@@ -736,6 +737,28 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Get populated COE for response
     const populatedCOE = await coeService.getCOEById(coe._id);
 
+    // Generate seat upgrade offers for draft COEs
+    if (populatedCOE.status === 'draft') {
+      try {
+        console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
+        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE);
+        
+        console.log('[BOT] Generated upgrade offers:', upgradeOffers.length, 'offers');
+        
+        if (upgradeOffers.length > 0) {
+          // Store offers in COE
+          populatedCOE.seat_upgrade_offers = upgradeOffers;
+          await populatedCOE.save();
+          console.log('[BOT] Saved upgrade offers to COE');
+        } else {
+          console.log('[BOT] No upgrade offers generated (no better seats found)');
+        }
+      } catch (error) {
+        console.error('[BOT] Error generating upgrade offers:', error);
+        // Don't fail COE creation if offers fail
+      }
+    }
+
     // Create actions
     const actions = createCOEActions(populatedCOE, user.role);
 
@@ -753,6 +776,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       actions,
       budgetForComparison
     );
+    
+    // Include upgrade offers in response if available (both top level and in coe object)
+    if (populatedCOE.seat_upgrade_offers && populatedCOE.seat_upgrade_offers.length > 0) {
+      console.log('[BOT] Including upgrade offers in response:', populatedCOE.seat_upgrade_offers.length, 'offers');
+      structuredResponse.seat_upgrade_offers = populatedCOE.seat_upgrade_offers;
+      // Also ensure it's in the coe object for consistency
+      if (structuredResponse.coe) {
+        structuredResponse.coe.seat_upgrade_offers = populatedCOE.seat_upgrade_offers;
+      }
+    } else {
+      console.log('[BOT] No upgrade offers to include in response');
+    }
 
     const result = {
       success: true,
