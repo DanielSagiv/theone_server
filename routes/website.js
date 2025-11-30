@@ -1,12 +1,33 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const { requireWebsitePasswordAuth } = require('../middleware/websitePasswordProtection');
+
+/**
+ * POST /website/login
+ * Handle password authentication for website access
+ * The middleware will process the password and redirect if correct
+ */
+router.post('/login', requireWebsitePasswordAuth, (req, res) => {
+  // If we reach here, user is authenticated, redirect to home
+  res.redirect('/website');
+});
+
+/**
+ * GET /website/login
+ * Show login page
+ * The middleware will show login form if not authenticated
+ */
+router.get('/login', requireWebsitePasswordAuth, (req, res) => {
+  // If we reach here, user is authenticated, redirect to home
+  res.redirect('/website');
+});
 
 /**
  * GET /website
- * Serve the main website page
+ * Serve the main website page (password protected)
  */
-router.get('/', (req, res) => {
+router.get('/', requireWebsitePasswordAuth, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website/index.html'));
   } catch (error) {
@@ -17,9 +38,9 @@ router.get('/', (req, res) => {
 
 /**
  * GET /website/experience
- * Serve the experience page
+ * Serve the experience page (password protected)
  */
-router.get('/experience', (req, res) => {
+router.get('/experience', requireWebsitePasswordAuth, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website/experience.html'));
   } catch (error) {
@@ -30,9 +51,9 @@ router.get('/experience', (req, res) => {
 
 /**
  * GET /website/membership
- * Serve the membership page
+ * Serve the membership page (password protected)
  */
-router.get('/membership', (req, res) => {
+router.get('/membership', requireWebsitePasswordAuth, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website/membership.html'));
   } catch (error) {
@@ -43,9 +64,9 @@ router.get('/membership', (req, res) => {
 
 /**
  * GET /website/vision
- * Serve the vision page
+ * Serve the vision page (password protected)
  */
-router.get('/vision', (req, res) => {
+router.get('/vision', requireWebsitePasswordAuth, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website/vision.html'));
   } catch (error) {

@@ -2528,6 +2528,86 @@
             color: #94a3b8;
         }
         
+        /* Budget Utilization Bar */
+        .budget-utilization-section {
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.4);
+            border-radius: 8px;
+        }
+        
+        .budget-utilization-bar {
+            height: 8px;
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        
+        .budget-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #34d399);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .budget-utilization-text {
+            font-size: 0.85rem;
+            color: #cbd5f5;
+        }
+        
+        .budget-utilization-text .utilization-pct {
+            color: #10b981;
+            font-weight: 600;
+        }
+        
+        .budget-utilization-text .remaining {
+            margin-left: 12px;
+            color: #94a3b8;
+        }
+        
+        /* Upgrade Tags */
+        .upgrade-tag {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .upgrade-tag.tag-within-budget {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+        
+        .upgrade-tag.tag-premium {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2));
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+        
+        /* Seat card variants */
+        .upgrade-seat.within-budget {
+            border-color: rgba(16, 185, 129, 0.4);
+            background: rgba(16, 185, 129, 0.05);
+        }
+        
+        .upgrade-seat.premium-upgrade {
+            border-color: rgba(245, 158, 11, 0.4);
+            background: rgba(245, 158, 11, 0.05);
+        }
+        
+        .upgrade-accepted {
+            padding: 20px;
+            text-align: center;
+            color: #10b981;
+            font-weight: 600;
+        }
+        
         .upgrade-offer-card {
             background: rgba(30, 41, 59, 0.5);
             border: 1px solid rgba(148, 163, 184, 0.15);
@@ -4874,7 +4954,7 @@
                                 <button class="btn" onclick="addSeatRow()">Add Table</button>
                             </div>
                             <table class="table">
-                                <thead><tr><th>Code</th><th>Category</th><th>Capacity</th><th>Min Spend</th><th>Media</th><th></th></tr></thead>
+                                <thead><tr><th>Code</th><th>Category</th><th>Capacity</th><th>Min Spend</th><th>Quality (1-10)</th><th>Media</th><th></th></tr></thead>
                                 <tbody id="cl_seats_tbody"></tbody>
                             </table>
                         </div>
@@ -6325,6 +6405,7 @@
             container.className = 'bot-structured-card bot-upgrade-offers';
             
             const offers = offersData.offers || [];
+            const budgetSummary = offersData.budget_summary || null;
             
             if (offers.length === 0) {
                 container.innerHTML = '<div class="bot-upgrade-empty">No upgrade offers available.</div>';
@@ -6338,29 +6419,47 @@
                 </div>
             `;
             
+            // Add budget utilization bar if budget info available
+            if (budgetSummary && budgetSummary.total_budget) {
+                const utilization = budgetSummary.utilization_percentage || 0;
+                html += `
+                    <div class="budget-utilization-section">
+                        <div class="budget-utilization-bar">
+                            <div class="budget-fill" style="width: ${Math.min(utilization, 100)}%"></div>
+                        </div>
+                        <div class="budget-utilization-text">
+                            $${(budgetSummary.coe_total || 0).toLocaleString()} / $${budgetSummary.total_budget.toLocaleString()} 
+                            <span class="utilization-pct">(${utilization}% utilized)</span>
+                            ${budgetSummary.remaining > 0 ? `<span class="remaining">$${budgetSummary.remaining.toLocaleString()} remaining</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
             offers.forEach((offer, offerIndex) => {
                 html += `
                     <div class="upgrade-offer-card">
                         <div class="upgrade-offer-event">
-                            <strong>${offer.current_seat.event_name || 'Event'}</strong>
+                            <strong>${offer.event_name || 'Event'}</strong>
                         </div>
                         
                         <div class="upgrade-offer-comparison">
                             <div class="current-seat">
                                 <div class="seat-label">Current Seat</div>
-                                <div class="seat-code">${offer.current_seat.seat_code}</div>
-                                <div class="seat-price">$${offer.current_seat.current_price.toLocaleString()}</div>
+                                <div class="seat-code">${offer.current_seat_code || 'N/A'}</div>
+                                <div class="seat-price">$${(offer.current_price || 0).toLocaleString()}</div>
                             </div>
                             
                             <div class="upgrade-arrow">→</div>
                             
-                            ${offer.alternatives.map((alt, altIndex) => `
-                                <div class="upgrade-seat">
+                            ${(offer.alternatives || []).map((alt, altIndex) => `
+                                <div class="upgrade-seat ${alt.fits_budget ? 'within-budget' : 'premium-upgrade'}">
                                     <div class="seat-label">Upgrade Option</div>
-                                    <div class="seat-code">${alt.seat_code}</div>
-                                    <div class="seat-price">$${alt.price.toLocaleString()}</div>
-                                    <div class="price-delta ${alt.price_delta > 0 ? 'positive' : ''}">
-                                        ${alt.price_delta > 0 ? '+' : ''}$${alt.price_delta.toLocaleString()}
+                                    <span class="upgrade-tag ${alt.fits_budget ? 'tag-within-budget' : 'tag-premium'}">${alt.tag || (alt.fits_budget ? 'Within Budget' : 'Premium Upgrade')}</span>
+                                    <div class="seat-code">${alt.seat_code || 'N/A'}</div>
+                                    <div class="seat-price">$${(alt.event_price || alt.price || 0).toLocaleString()}</div>
+                                    <div class="price-delta ${(alt.price_delta || 0) > 0 ? 'positive' : ''}">
+                                        ${(alt.price_delta || 0) > 0 ? '+' : ''}$${(alt.price_delta || 0).toLocaleString()}
                                         ${alt.price_delta_percentage ? `(${alt.price_delta_percentage}%)` : ''}
                                     </div>
                                     
@@ -6384,7 +6483,7 @@
                                     
                                     <button 
                                         class="btn-upgrade" 
-                                        onclick="handleAcceptUpgrade('${offersData.coe_id}', '${offer.current_seat.seat_id}', '${alt.seat_id}', '${offer.current_seat.event_id}')"
+                                        onclick="handleAcceptUpgrade('${offersData.coe_id}', '${offer.current_seat_id}', '${alt.seat_id}', '${offer.event_id}')"
                                     >
                                         Upgrade
                                     </button>
@@ -6394,7 +6493,7 @@
                         
                         <button 
                             class="btn-keep-current" 
-                            onclick="handleRejectUpgrade('${offersData.coe_id}', '${offer.current_seat.seat_id}')"
+                            onclick="handleRejectUpgrade('${offersData.coe_id}', '${offer.current_seat_id}', this)"
                         >
                             Keep Current Seat
                         </button>
@@ -6416,26 +6515,32 @@
         async function handleAcceptUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
             try {
                 showAlert('Processing upgrade...', 'info');
+                console.log('Upgrade requested:', { coeId, currentSeatId, upgradeSeatId, eventId });
                 
-                const result = await makeApiRequest(`/v1/coes/${coeId}/seat-upgrades/accept`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        current_seat_id: currentSeatId,
-                        alternative_seat_id: upgradeSeatId,
-                        event_id: eventId
-                    })
+                const result = await makeApiRequest(`/coes/${coeId}/seat-upgrades/accept`, 'POST', {
+                    current_seat_id: currentSeatId,
+                    alternative_seat_id: upgradeSeatId,
+                    event_id: eventId
                 });
                 
-                if (result.success && result.data?.success) {
-                    showAlert('Seat upgrade accepted successfully!', 'success');
-                    // Reload conversation to show updated COE
-                    await loadBotConversation();
+                if (result.success) {
+                    showAlert('Seat upgraded successfully! Your COE has been updated.', 'success');
+                    
+                    // Hide the upgrade offer card that was just accepted
+                    const upgradeCards = document.querySelectorAll('.upgrade-offer-card');
+                    upgradeCards.forEach(card => {
+                        const btn = card.querySelector(`[onclick*="${currentSeatId}"][onclick*="${upgradeSeatId}"]`);
+                        if (btn) {
+                            card.style.opacity = '0.5';
+                            card.innerHTML = '<div class="upgrade-accepted">Upgrade accepted! Your seat has been changed.</div>';
+                        }
+                    });
                 } else {
-                    showAlert(result.data?.error?.message || 'Failed to accept upgrade', 'error');
+                    showAlert(result.message || 'Failed to upgrade seat', 'error');
                 }
             } catch (error) {
                 console.error('Error accepting upgrade:', error);
-                showAlert('Failed to accept upgrade', 'error');
+                showAlert('Failed to accept upgrade: ' + (error.message || 'Unknown error'), 'error');
             }
         }
         
@@ -6444,15 +6549,15 @@
          * @param {string} coeId - COE ID
          * @param {string} seatId - Seat ID
          */
-        async function handleRejectUpgrade(coeId, seatId) {
+        async function handleRejectUpgrade(coeId, seatId, buttonElement) {
             try {
                 // For now, just hide the offer (could mark as rejected via API later)
-                const offerCard = event.target.closest('.upgrade-offer-card');
+                const offerCard = buttonElement?.closest('.upgrade-offer-card');
                 if (offerCard) {
                     offerCard.style.opacity = '0.5';
                     offerCard.style.pointerEvents = 'none';
                 }
-                showAlert('Upgrade offer declined', 'info');
+                showAlert('Upgrade offer declined - keeping current seat', 'info');
             } catch (error) {
                 console.error('Error rejecting upgrade:', error);
             }
@@ -8512,6 +8617,7 @@
                                 type: 'seat_upgrade_offers',
                                 coe_id: structuredData.coe?.id || structuredData.coe?._id,
                                 offers: upgradeOffersData,
+                                budget_summary: structuredData.coe?.budget_summary || null,
                                 message: 'Premium seating upgrades available for your experience!'
                             });
                             contentEl.appendChild(upgradeOffers);
@@ -8950,14 +9056,22 @@
          */
         function displayMainLocationMedia(media) {
             const mediaContainer = document.getElementById('mainLocationMedia');
+            if (!mediaContainer) {
+                console.warn('mainLocationMedia container not found');
+                return;
+            }
             const noMediaMessage = mediaContainer.querySelector('.no-media-message');
             
             if (media.length === 0) {
-                noMediaMessage.style.display = 'block';
+                if (noMediaMessage) {
+                    noMediaMessage.style.display = 'block';
+                }
                 return;
             }
             
-            noMediaMessage.style.display = 'none';
+            if (noMediaMessage) {
+                noMediaMessage.style.display = 'none';
+            }
             mediaContainer.innerHTML = '';
             
             media.forEach((item, index) => {
@@ -9128,6 +9242,16 @@
                     </div>
                 `;
                 seatingContainer.appendChild(areaDiv);
+                
+                // Verify buttons were created correctly (debug)
+                setTimeout(() => {
+                    const buttons = areaDiv.querySelectorAll('.add-seat-sentiment-btn');
+                    console.log(`Created ${buttons.length} sentiment buttons in category ${category}:`);
+                    buttons.forEach((btn, idx) => {
+                        const code = btn.getAttribute('data-seat-code');
+                        console.log(`  Button ${idx + 1}: seat code = "${code}"`);
+                    });
+                }, 100);
             });
         }
 
@@ -9257,7 +9381,7 @@
                         <span class="sentiment-type" style="background: ${sentiment.type === 'A' ? '#3498db' : '#e74c3c'}; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;">
                             Type ${sentiment.type}
                         </span>
-                        <button class="btn btn-sm" onclick="deleteSeatSentiment('${seat.code}', ${index})" style="padding: 2px 6px; font-size: 11px; background: #e74c3c; color: white; border: none; border-radius: 3px;">Delete</button>
+                        <button class="btn btn-sm" onclick="deleteSeatSentiment('${seat._id || seat.id || seat.code}', ${index})" style="padding: 2px 6px; font-size: 11px; background: #e74c3c; color: white; border: none; border-radius: 3px;">Delete</button>
                     </div>
                     <div class="sentiment-text" style="color: #333; line-height: 1.3; font-size: 12px;">
                         ${sentiment.text || '<em>No text provided</em>'}
@@ -9278,7 +9402,7 @@
                         ${seat.section ? `<div>Section: ${seat.section}</div>` : ''}
                     </div>
                         <div style="margin-top:8px; display:flex; gap:8px;">
-                            <button class="btn btn-secondary" onclick="openAddSentimentModal('seat', '${seat.code}')">Add Sentiment</button>
+                            <button class="btn btn-secondary add-seat-sentiment-btn" data-seat-id="${seat._id || seat.id || ''}" data-seat-code="${(seat.code || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" data-seat-context="seat" type="button">Add Sentiment</button>
                         </div>
                         ${sentimentsHtml ? `<div class="seat-sentiments" style="margin-top: 10px;"><h4 style="margin: 0 0 8px 0; font-size: 14px; color: #333;">Sentiments:</h4>${sentimentsHtml}</div>` : ''}
                     ${mediaHtml ? `<div class="seat-media">${mediaHtml}</div>` : ''}
@@ -10361,6 +10485,10 @@
                         if (minInput) {
                             minInput.value = seat.minSpendUSD || '';
                         }
+                        const qualityInput = row.querySelector('.cl_seat_quality');
+                        if (qualityInput) {
+                            qualityInput.value = seat.qualityScore || 5;
+                        }
                         // Note: Seat media can be added separately through the seat row interface
                         // If seat has existing media, it should be preserved in the merge logic
                     }
@@ -10793,6 +10921,7 @@
                 </td>
                 <td><input class="cl_seat_cap" type="number" min="0" style="width:80px"/></td>
                 <td><input class="cl_seat_min" type="number" min="0" style="width:100px"/></td>
+                <td><input class="cl_seat_quality" type="number" min="1" max="10" value="5" style="width:70px"/></td>
                 <td>
                     <div class="cl_seat_media_container"></div>
                     <div style="display:flex;gap:6px;margin-top:6px;">
@@ -10942,7 +11071,8 @@
                         code: code,
                         category: r.querySelector('.cl_seat_cat').value,
                         capacity: parseInt(r.querySelector('.cl_seat_cap').value || '0', 10),
-                        minSpendUSD: parseFloat(r.querySelector('.cl_seat_min').value || '0')
+                        minSpendUSD: parseFloat(r.querySelector('.cl_seat_min').value || '0'),
+                        qualityScore: parseInt(r.querySelector('.cl_seat_quality')?.value || '5', 10)
                     };
                     // Add media if any
                     const mediaRows = Array.from(r.querySelectorAll('.cl_seat_media_row'));
@@ -10975,6 +11105,7 @@
                             capacity: originalSeat.capacity || 0,
                             minSpendUSD: originalSeat.minSpendUSD || 0,
                             priceTier: originalSeat.priceTier || 1,
+                            qualityScore: originalSeat.qualityScore || 5,
                             mapAnchor: originalSeat.mapAnchor || undefined,
                             polygon: originalSeat.polygon || [],
                             media: originalSeat.media || [],
@@ -11000,6 +11131,7 @@
                                 category: formSeat.category,
                                 capacity: formSeat.capacity,
                                 minSpendUSD: formSeat.minSpendUSD,
+                                qualityScore: formSeat.qualityScore,
                                 // Only update media if form has media entries, otherwise preserve original
                                 media: formSeat.media && formSeat.media.length > 0 ? formSeat.media : (existingSeat.media || [])
                             });
@@ -11264,19 +11396,97 @@
         let currentSentimentContext = null; // 'location', 'seat', 'unit'
         let currentSeatCode = null;
         let currentUnitCode = null;
+        
+        // Set up document-level event delegation for seat sentiment buttons (runs once on page load)
+        (function setupSeatSentimentListener() {
+            if (window.seatSentimentListenerAttached) {
+                console.log('Seat sentiment listener already attached');
+                return;
+            }
+            
+            console.log('Setting up document-level seat sentiment listener...');
+            document.addEventListener('click', function(e) {
+                // Check if clicked element or its parent is the button
+                const btn = e.target.closest('.add-seat-sentiment-btn');
+                if (btn) {
+                    console.log('=== SEAT SENTIMENT BUTTON CLICKED (DELEGATION) ===');
+                    console.log('Event target:', e.target);
+                    console.log('Button found:', btn);
+                    console.log('Button onclick handler:', btn.onclick);
+                    console.log('Button has onclick attribute:', btn.hasAttribute('onclick'));
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    
+                    // Prioritize seat ID over code for unique identification
+                    const seatId = btn.getAttribute('data-seat-id');
+                    const seatCode = btn.getAttribute('data-seat-code');
+                    const context = btn.getAttribute('data-seat-context');
+                    console.log('Seat ID from data-seat-id attribute:', seatId);
+                    console.log('Seat code from data-seat-code attribute:', seatCode);
+                    console.log('Context from data-seat-context attribute:', context);
+                    console.log('All button attributes:', Array.from(btn.attributes).map(a => `${a.name}="${a.value}"`).join(', '));
+                    console.log('Button outerHTML:', btn.outerHTML.substring(0, 200));
+                    
+                    // Use seat ID if available, otherwise fallback to code
+                    const seatIdentifier = (seatId && seatId.trim() !== '') ? seatId.trim() : (seatCode && seatCode.trim() !== '' ? seatCode.trim() : null);
+                    
+                    if (!seatIdentifier) {
+                        console.error('❌ Seat ID and code are both empty or missing!', { seatId, seatCode, btn });
+                        showAlert('Seat identifier not found in button. Please refresh the page.', 'error');
+                        return false;
+                    }
+                    
+                    console.log('✅ Calling openAddSentimentModal with:', { context, seatIdentifier, isId: !!seatId });
+                    openAddSentimentModal(context, seatIdentifier, !!seatId);
+                    return false;
+                }
+            }, true); // Use capture phase to catch early
+            window.seatSentimentListenerAttached = true;
+            console.log('✅ Document-level seat sentiment listener attached successfully');
+        })();
 
         /**
          * Open add sentiment modal
          */
-        function openAddSentimentModal(context, refCode) {
+        function openAddSentimentModal(context, refCode, isId = false) {
             if (currentUser?.role !== 'admin') {
                 showAlert('Only administrators can add sentiments', 'error');
                 return;
             }
 
+            console.log('=== openAddSentimentModal called ===');
+            console.log('Parameters:', { context, refCode, refCodeType: typeof refCode, isId });
+            
+            // For seat context, validate and store the seat identifier (ID or code)
+            if (context === 'seat') {
+                if (!refCode || (typeof refCode === 'string' && refCode.trim() === '')) {
+                    console.error('❌ Invalid or empty seat identifier provided:', refCode);
+                    showAlert('Invalid seat identifier. Please try clicking the button again.', 'error');
+                    return;
+                }
+                const trimmedCode = typeof refCode === 'string' ? refCode.trim() : String(refCode).trim();
+                console.log('✅ Setting currentSeatCode to:', trimmedCode, 'isId:', isId);
+                currentSeatCode = trimmedCode;
+                // Store whether we're using ID or code
+                window.currentSeatIsId = isId;
+            } else {
+                currentSeatCode = null;
+                window.currentSeatIsId = false;
+            }
+            
             currentSentimentContext = context;
-            currentSeatCode = context === 'seat' ? refCode || null : null;
-            currentUnitCode = context === 'unit' ? refCode || null : null;
+            currentUnitCode = context === 'unit' ? (refCode ? String(refCode).trim() : null) : null;
+            
+            console.log('Final state:', {
+                currentSentimentContext,
+                currentSeatCode,
+                currentSeatIsId: window.currentSeatIsId,
+                currentUnitCode,
+                currentLocationId
+            });
+            
             document.getElementById('addSentimentModal').style.display = 'block';
             document.getElementById('sentimentType').value = 'A';
             document.getElementById('sentimentText').value = '';
@@ -11290,6 +11500,7 @@
             currentSentimentContext = null;
             currentSeatCode = null;
             currentUnitCode = null;
+            window.currentSeatIsId = false;
         }
 
         /**
@@ -11320,11 +11531,17 @@
                 if (currentSentimentContext === 'location') {
                     endpoint = `/locations/${currentLocationId}/sentiment`;
                 } else if (currentSentimentContext === 'seat') {
+                    console.log('Adding sentiment to seat:', { 
+                        currentSeatCode, 
+                        currentLocationId, 
+                        isId: window.currentSeatIsId || false 
+                    });
                     if (!currentSeatCode) {
-                        showAlert('Seat code not set', 'error');
+                        showAlert('Seat identifier not set', 'error');
                         return;
                     }
                     endpoint = `/locations/${currentLocationId}/seats/${currentSeatCode}/sentiment`;
+                    console.log('Seat sentiment endpoint:', endpoint, 'Using ID:', window.currentSeatIsId || false);
                 } else if (currentSentimentContext === 'unit') {
                     if (!currentUnitCode) {
                         showAlert('Unit code not set', 'error');

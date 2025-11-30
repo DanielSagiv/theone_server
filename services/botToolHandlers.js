@@ -34,7 +34,7 @@ const {
   getErrorCategory
 } = require('../utils/botUtils');
 const { autoSelectEventsBySentiment } = require('./botSentimentService');
-const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
+const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity, calculateSeatCosts } = require('./botAutoFillService');
 const { getPreferences } = require('./botPreferenceService');
 const { parseAndNormalizeDate } = require('../utils/dateParser');
 const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
@@ -717,6 +717,32 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       finalEvents.map(e => ({ event_id: e.event_id }))
     );
     
+    // Safety check: Ensure pricing is calculated if seats exist
+    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
+      const needsPricing = !coeData.subtotal || coeData.subtotal === 0;
+      if (needsPricing) {
+        console.log('[BOT] Pricing not set after autoFillCOEData, calculating now', {
+          seatsCount: coeData.selected_seats.length,
+          currentSubtotal: coeData.subtotal
+        });
+        const costs = calculateSeatCosts(coeData.selected_seats);
+        coeData.subtotal = costs.subtotal;
+        coeData.taxes = costs.taxes;
+        coeData.fees = costs.fees;
+        coeData.total = costs.total;
+        coeData.deposit_required = costs.depositRequired;
+        console.log('[BOT] Pricing calculated as safety check', {
+          subtotal: coeData.subtotal,
+          total: coeData.total
+        });
+      } else {
+        console.log('[BOT] Pricing already set', {
+          subtotal: coeData.subtotal,
+          total: coeData.total
+        });
+      }
+    }
+    
     // Final check: Ensure autoFillCOEData didn't remove event_id from seats
     if (coeData.selected_seats && coeData.selected_seats.length > 0) {
       const seatsWithoutEventId = coeData.selected_seats.filter(s => !s.event_id);
@@ -731,17 +757,46 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     }
 
+    // Log pricing before COE creation
+    console.log('[BOT] Pricing in coeData before COE creation:', {
+      subtotal: coeData.subtotal,
+      taxes: coeData.taxes,
+      fees: coeData.fees,
+      total: coeData.total,
+      deposit_required: coeData.deposit_required,
+      seatsCount: coeData.selected_seats?.length || 0
+    });
+
     // Create COE
     const coe = await coeService.createCOE(coeData, user._id);
 
+    // Log pricing after COE creation (before population)
+    console.log('[BOT] Pricing in coe after creation (before population):', {
+      subtotal: coe.subtotal,
+      taxes: coe.taxes,
+      fees: coe.fees,
+      total: coe.total,
+      deposit_required: coe.deposit_required
+    });
+
     // Get populated COE for response
     const populatedCOE = await coeService.getCOEById(coe._id);
+    
+    // Log pricing after population
+    console.log('[BOT] Pricing in populatedCOE after getCOEById:', {
+      subtotal: populatedCOE.subtotal,
+      taxes: populatedCOE.taxes,
+      fees: populatedCOE.fees,
+      total: populatedCOE.total,
+      deposit_required: populatedCOE.deposit_required
+    });
 
     // Generate seat upgrade offers for draft COEs
     if (populatedCOE.status === 'draft') {
       try {
         console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
-        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE);
+        const totalBudget = conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null;
+        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE, totalBudget);
         
         console.log('[BOT] Generated upgrade offers:', upgradeOffers.length, 'offers');
         
@@ -750,6 +805,10 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           populatedCOE.seat_upgrade_offers = upgradeOffers;
           await populatedCOE.save();
           console.log('[BOT] Saved upgrade offers to COE');
+          
+          // Refresh COE to ensure we have the latest data including upgrade offers
+          populatedCOE = await coeService.getCOEById(populatedCOE._id);
+          console.log('[BOT] Refreshed COE, upgrade offers count:', populatedCOE.seat_upgrade_offers?.length || 0);
         } else {
           console.log('[BOT] No upgrade offers generated (no better seats found)');
         }

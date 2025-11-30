@@ -25,6 +25,7 @@ const seatSchema = Joi.object({
   capacity: Joi.number().min(0),
   minSpendUSD: Joi.number().min(0),
   priceTier: Joi.number().min(1).max(5),
+  qualityScore: Joi.number().min(1).max(10),
   mapAnchor: Joi.object({ x: Joi.number(), y: Joi.number() }),
   polygon: Joi.array().items(Joi.object({ x: Joi.number(), y: Joi.number() })),
   media: Joi.array().items(assetSchema),

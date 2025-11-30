@@ -343,7 +343,12 @@ router.post('/:id/seats/:seatCode/sentiment', authenticateToken, requireAdmin, a
       });
     }
 
-    const seat = location.seats.find(s => s.code === req.params.seatCode);
+    // Try to find seat by _id first (more reliable), then fallback to code
+    let seat = location.seats.find(s => s._id && s._id.toString() === req.params.seatCode);
+    if (!seat) {
+      // Fallback to code for backward compatibility
+      seat = location.seats.find(s => s.code === req.params.seatCode);
+    }
     if (!seat) {
       return res.status(404).json({ 
         success: false, 
@@ -482,7 +487,12 @@ router.delete('/:id/seats/:seatCode/sentiment/:index', authenticateToken, requir
       });
     }
 
-    const seat = location.seats.find(s => s.code === req.params.seatCode);
+    // Try to find seat by _id first (more reliable), then fallback to code
+    let seat = location.seats.find(s => s._id && s._id.toString() === req.params.seatCode);
+    if (!seat) {
+      // Fallback to code for backward compatibility
+      seat = location.seats.find(s => s.code === req.params.seatCode);
+    }
     if (!seat) {
       return res.status(404).json({ 
         success: false, 

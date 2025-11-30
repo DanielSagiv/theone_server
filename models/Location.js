@@ -38,6 +38,7 @@ const SeatSchema = new mongoose.Schema({
   capacity: { type: Number, min: 0 },
   minSpendUSD: { type: Number, min: 0 },
   priceTier: { type: Number, min: 1, max: 5 },
+  qualityScore: { type: Number, min: 1, max: 10, default: 5 }, // Overall seat quality rating for upgrade comparisons
   mapAnchor: { x: Number, y: Number },
   polygon: [{ x: Number, y: Number }],
   media: [AssetSchema],

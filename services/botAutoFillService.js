@@ -123,7 +123,37 @@ async function extractPoliciesFromEvents(eventIds) {
 }
 
 /**
- * Select seats based on budget and capacity
+ * Calculate seat quality score based on qualityScore field and sentiment bonus
+ * @param {Object} eventSeat - Seat from event
+ * @param {Object} locationSeat - Corresponding seat from location (with sentiment)
+ * @returns {number} Quality score (higher = better)
+ */
+function calculateSeatScore(eventSeat, locationSeat) {
+  // Base score from qualityScore field (1-10) scaled to 10-100
+  const qualityScore = locationSeat?.qualityScore || eventSeat?.qualityScore || 5;
+  let score = qualityScore * 10;
+  
+  // Sentiment bonus
+  if (locationSeat?.sentiment && Array.isArray(locationSeat.sentiment)) {
+    // Type A sentiment = +5, Type B = +2
+    const hasTypeA = locationSeat.sentiment.some(s => s.type === 'A');
+    if (hasTypeA) score += 5;
+    
+    // Keyword bonuses
+    const sentimentText = locationSeat.sentiment.map(s => (s.text || '').toLowerCase()).join(' ');
+    if (sentimentText.includes('vip')) score += 2;
+    if (sentimentText.includes('premium')) score += 2;
+    if (sentimentText.includes('upper')) score += 2;
+    if (sentimentText.includes('front')) score += 1;
+    if (sentimentText.includes('center')) score += 1;
+  }
+  
+  return score;
+}
+
+/**
+ * Select seats based on budget and capacity with quality-based scoring
+ * Prioritizes: 1) Quality score, 2) Budget maximization, 3) Exclusion filtering
  * @param {Object} event - Event object (may have populated location_id with seats)
  * @param {Object} preferences - User preferences (budget, party_size, structuredPreferences with exclusions)
  * @param {number} remainingBudget - Remaining budget after other selections
@@ -142,6 +172,15 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
                      preferences.exclusions || 
                      [];
 
+  // Get location with seats if not already populated
+  let location = event.location_id;
+  if (!location || !location.seats || (typeof location === 'object' && location._id && !location.seats)) {
+    if (event.location_id) {
+      const locationId = (location && location._id) ? location._id : (typeof location === 'string' ? location : event.location_id);
+      location = await Location.findById(locationId).select('seats');
+    }
+  }
+
   // Filter available seats
   let availableSeats = event.seats.filter(seat => 
     seat.status === 'available' && 
@@ -150,63 +189,40 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   );
 
   // Filter out seats with excluded sentiment keywords
-  // Note: Event seats don't have sentiment - we need to check location seat sentiment
-  if (exclusions && exclusions.length > 0) {
+  if (exclusions && exclusions.length > 0 && location && location.seats && Array.isArray(location.seats)) {
     const exclusionKeywords = exclusions.map(ex => ex.toLowerCase().trim());
     
-    // Get location with seats if not already populated
-    let location = event.location_id;
-    if (!location || !location.seats || (typeof location === 'object' && location._id && !location.seats)) {
-      // Location not populated or only has ID - fetch it
-      if (event.location_id) {
-        const locationId = (location && location._id) ? location._id : (typeof location === 'string' ? location : event.location_id);
-        location = await Location.findById(locationId).select('seats');
-      }
-    }
-    
-    // Filter seats based on location seat sentiment
-    if (location && location.seats && Array.isArray(location.seats)) {
-      availableSeats = availableSeats.filter(eventSeat => {
-        // Match event seat to location seat via seat_id
+    availableSeats = availableSeats.filter(eventSeat => {
+      // Match event seat to location seat by code (primary) or seat_id
+      const locationSeat = location.seats.find(locSeat => {
+        if (locSeat.code === eventSeat.code) return true;
         const eventSeatId = eventSeat.seat_id ? eventSeat.seat_id.toString() : null;
-        if (!eventSeatId) {
-          // No seat_id reference - can't check sentiment, allow through
-          return true;
-        }
-        
-        // Find corresponding location seat
-        const locationSeat = location.seats.find(locSeat => {
-          const locSeatId = locSeat._id ? locSeat._id.toString() : null;
-          return locSeatId === eventSeatId;
-        });
-        
-        if (!locationSeat || !locationSeat.sentiment || !Array.isArray(locationSeat.sentiment)) {
-          // No location seat found or no sentiment - allow through
-          return true;
-        }
-        
-        // Check location seat sentiment for excluded keywords
-        const locationSeatSentimentText = locationSeat.sentiment
-          .map(s => (s.text || '').toLowerCase())
-          .join(' ');
-        
-        // Check if any exclusion keyword appears in location seat sentiment
-        const hasExcludedSentiment = exclusionKeywords.some(exclusion => 
-          locationSeatSentimentText.includes(exclusion)
-        );
-        
-        if (hasExcludedSentiment) {
-          console.log('[SEAT SELECTION] Excluding seat due to negative preference:', {
-            seat_code: eventSeat.code,
-            exclusion_matched: exclusionKeywords.find(ex => locationSeatSentimentText.includes(ex)),
-            location_seat_sentiment: locationSeat.sentiment.map(s => s.text)
-          });
-          return false;
-        }
-        
-        return true;
+        const locSeatId = locSeat._id ? locSeat._id.toString() : null;
+        return eventSeatId && locSeatId && locSeatId === eventSeatId;
       });
-    }
+      
+      if (!locationSeat || !locationSeat.sentiment || !Array.isArray(locationSeat.sentiment)) {
+        return true; // No sentiment - allow through
+      }
+      
+      const locationSeatSentimentText = locationSeat.sentiment
+        .map(s => (s.text || '').toLowerCase())
+        .join(' ');
+      
+      const hasExcludedSentiment = exclusionKeywords.some(exclusion => 
+        locationSeatSentimentText.includes(exclusion)
+      );
+      
+      if (hasExcludedSentiment) {
+        console.log('[SEAT SELECTION] Excluding seat due to negative preference:', {
+          seat_code: eventSeat.code,
+          exclusion_matched: exclusionKeywords.find(ex => locationSeatSentimentText.includes(ex))
+        });
+        return false;
+      }
+      
+      return true;
+    });
   }
 
   if (availableSeats.length === 0) {
@@ -219,15 +235,44 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     return [];
   }
 
-  // Sort by price (ascending) to stay within budget
-  availableSeats.sort((a, b) => {
-    const priceA = a.event_price || a.min_spend || 0;
-    const priceB = b.event_price || b.min_spend || 0;
-    return priceA - priceB;
+  // Score all seats and sort by: quality DESC, then price DESC (to maximize budget)
+  const scoredSeats = availableSeats.map(eventSeat => {
+    // Find corresponding location seat by code (primary) or seat_id
+    const locationSeat = location?.seats?.find(locSeat => {
+      if (locSeat.code === eventSeat.code) return true;
+      const eventSeatId = eventSeat.seat_id ? eventSeat.seat_id.toString() : null;
+      const locSeatId = locSeat._id ? locSeat._id.toString() : null;
+      return eventSeatId && locSeatId && locSeatId === eventSeatId;
+    });
+    
+    const score = calculateSeatScore(eventSeat, locationSeat);
+    const price = eventSeat.event_price || eventSeat.min_spend || 0;
+    
+    return {
+      seat: eventSeat,
+      score,
+      price
+    };
+  });
+  
+  // Sort by score DESC, then price DESC (higher price preferred to maximize budget utilization)
+  scoredSeats.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.price - a.price; // Prefer higher price among same score to max budget
   });
 
-  // Select the first seat that fits
-  const selectedSeat = availableSeats[0];
+  console.log('[SEAT SELECTION] Scored seats:', {
+    event_name: event.name,
+    total_available: scoredSeats.length,
+    top_seat: scoredSeats[0] ? {
+      code: scoredSeats[0].seat.code,
+      score: scoredSeats[0].score,
+      price: scoredSeats[0].price
+    } : null
+  });
+
+  // Select the best seat (highest score, and among same score, highest price)
+  const selectedSeat = scoredSeats[0].seat;
   
   return [{
     seat_id: selectedSeat._id,
@@ -259,14 +304,34 @@ function matchCapacity(partySize, seats) {
  * @returns {Object} Cost breakdown
  */
 function calculateSeatCosts(selectedSeats) {
-  const subtotal = selectedSeats.reduce((sum, seat) => 
-    sum + (seat.event_price || seat.base_price || 0), 0
-  );
+  console.log('[CALCULATE_COSTS] Input seats:', selectedSeats.length);
+  selectedSeats.forEach((seat, idx) => {
+    console.log(`[CALCULATE_COSTS] Seat ${idx + 1}:`, {
+      seat_code: seat.seat_code,
+      event_price: seat.event_price,
+      base_price: seat.base_price,
+      price_used: seat.event_price || seat.base_price || 0
+    });
+  });
+  
+  const subtotal = selectedSeats.reduce((sum, seat) => {
+    const price = seat.event_price || seat.base_price || 0;
+    console.log('[CALCULATE_COSTS] Adding price:', price, 'Running sum:', sum + price);
+    return sum + price;
+  }, 0);
   
   const taxes = subtotal * 0.30; // 30% default
   const fees = 0; // Default 0
   const total = subtotal + taxes + fees;
   const depositRequired = total * 0.20; // 20% default
+
+  console.log('[CALCULATE_COSTS] Final calculation:', {
+    subtotal,
+    taxes,
+    fees,
+    total,
+    depositRequired
+  });
 
   return {
     subtotal,
@@ -407,6 +472,64 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
       autoFilled.total = costs.total;
       autoFilled.deposit_required = costs.depositRequired;
     }
+  }
+
+  // 3.5. Calculate pricing if seats already exist but pricing not set
+  // This handles the case where seats are pre-selected (not auto-selected by this function)
+  if (autoFilled.selected_seats && autoFilled.selected_seats.length > 0) {
+    const currentSubtotal = autoFilled.subtotal;
+    const needsCalculation = currentSubtotal === undefined || currentSubtotal === null || currentSubtotal === 0;
+    
+    console.log('[AUTO-FILL] Checking pricing calculation', {
+      seatsCount: autoFilled.selected_seats.length,
+      currentSubtotal,
+      needsCalculation,
+      hasSubtotal: 'subtotal' in autoFilled
+    });
+    
+    if (needsCalculation) {
+      console.log('[AUTO-FILL] Calculating pricing for pre-selected seats', {
+        seatsCount: autoFilled.selected_seats.length,
+        currentSubtotal,
+        firstSeatSample: autoFilled.selected_seats[0] ? {
+          seat_code: autoFilled.selected_seats[0].seat_code,
+          event_price: autoFilled.selected_seats[0].event_price,
+          base_price: autoFilled.selected_seats[0].base_price
+        } : null
+      });
+      
+      const costs = calculateSeatCosts(autoFilled.selected_seats);
+      
+      console.log('[AUTO-FILL] Calculated costs', {
+        subtotal: costs.subtotal,
+        taxes: costs.taxes,
+        fees: costs.fees,
+        total: costs.total,
+        depositRequired: costs.depositRequired
+      });
+      
+      // Explicitly set all pricing fields
+      autoFilled.subtotal = costs.subtotal;
+      autoFilled.taxes = costs.taxes;
+      autoFilled.fees = costs.fees;
+      autoFilled.total = costs.total;
+      autoFilled.deposit_required = costs.depositRequired;
+      
+      console.log('[AUTO-FILL] Pricing set on autoFilled', {
+        subtotal: autoFilled.subtotal,
+        taxes: autoFilled.taxes,
+        total: autoFilled.total
+      });
+    } else {
+      console.log('[AUTO-FILL] Pricing already calculated, skipping', {
+        subtotal: autoFilled.subtotal
+      });
+    }
+  } else {
+    console.log('[AUTO-FILL] No seats to calculate pricing for', {
+      hasSelectedSeats: !!autoFilled.selected_seats,
+      seatsLength: autoFilled.selected_seats?.length || 0
+    });
   }
 
   // 4. Default values
@@ -740,6 +863,7 @@ module.exports = {
   findAvailableRunner,
   extractPoliciesFromEvents,
   selectSeatsByBudgetAndCapacity,
+  calculateSeatScore,
   matchCapacity,
   calculateSeatCosts,
   autoFillCOEData,

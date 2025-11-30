@@ -321,6 +321,13 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
           under_amount: Math.max(0, (budget.max || budget.amount || budget) - (coe.total || 0))
         } : {})
       },
+      // Budget summary for smart seat selection feature
+      budget_summary: budget ? {
+        total_budget: budget.max || budget.amount || budget,
+        coe_total: coe.subtotal || 0,
+        remaining: Math.max(0, (budget.max || budget.amount || budget) - (coe.subtotal || 0)),
+        utilization_percentage: Math.round(((coe.subtotal || 0) / (budget.max || budget.amount || budget)) * 100)
+      } : null,
       events: (coe.events || []).map(event => {
         const runner_assignment = buildEventRunnerAssignment(event, coe);
         // Prioritize populated event_id.start_datetime (actual event date from DB)

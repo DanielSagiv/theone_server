@@ -192,7 +192,25 @@ async function createCOE(coeData, createdBy) {
       created_method: 'manual'
     });
 
+    // Log pricing before save
+    console.log('[COE_SERVICE] Pricing in COE before save:', {
+      subtotal: coe.subtotal,
+      taxes: coe.taxes,
+      fees: coe.fees,
+      total: coe.total,
+      deposit_required: coe.deposit_required
+    });
+
     await coe.save();
+    
+    // Log pricing after save
+    console.log('[COE_SERVICE] Pricing in COE after save:', {
+      subtotal: coe.subtotal,
+      taxes: coe.taxes,
+      fees: coe.fees,
+      total: coe.total,
+      deposit_required: coe.deposit_required
+    });
     
     // Set coe_id for all events and selected_seats after COE is created
     if (coe.events && coe.events.length > 0) {
@@ -739,6 +757,82 @@ async function getCOEStatistics() {
   }
 }
 
+/**
+ * Accept a seat upgrade offer - replace current seat with upgraded seat
+ * @param {string} coeId - COE ID
+ * @param {string} currentSeatId - Current seat ID to replace
+ * @param {string} upgradeSeatId - Upgrade seat ID to use
+ * @param {string} eventId - Event ID
+ * @returns {Promise<Object>} Updated COE
+ */
+async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
+  try {
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      throw new Error('COE not found');
+    }
+
+    if (coe.status !== 'draft') {
+      throw new Error('Seat upgrades can only be accepted for draft COEs');
+    }
+
+    // Find the upgrade offer
+    const offerIndex = coe.seat_upgrade_offers.findIndex(
+      o => o.current_seat_id.toString() === currentSeatId && o.event_id.toString() === eventId
+    );
+    
+    if (offerIndex === -1) {
+      throw new Error('Upgrade offer not found');
+    }
+
+    const offer = coe.seat_upgrade_offers[offerIndex];
+    
+    // Find the alternative seat in the offer
+    const altIndex = offer.alternatives.findIndex(a => a.seat_id.toString() === upgradeSeatId);
+    if (altIndex === -1) {
+      throw new Error('Alternative seat not found in offer');
+    }
+
+    const upgradeSeat = offer.alternatives[altIndex];
+
+    // Find and update the selected seat
+    const seatIndex = coe.selected_seats.findIndex(
+      s => s.seat_id.toString() === currentSeatId && s.event_id.toString() === eventId
+    );
+
+    if (seatIndex === -1) {
+      throw new Error('Current seat not found in COE');
+    }
+
+    // Replace with upgraded seat
+    coe.selected_seats[seatIndex] = {
+      event_id: coe.selected_seats[seatIndex].event_id,
+      seat_id: upgradeSeat.seat_id,
+      seat_code: upgradeSeat.seat_code,
+      capacity: upgradeSeat.capacity || coe.selected_seats[seatIndex].capacity,
+      base_price: upgradeSeat.base_price || upgradeSeat.event_price,
+      event_price: upgradeSeat.event_price,
+      available_from: coe.selected_seats[seatIndex].available_from,
+      available_until: coe.selected_seats[seatIndex].available_until,
+      status: 'selected'
+    };
+
+    // Mark offer as accepted
+    coe.seat_upgrade_offers[offerIndex].alternatives[altIndex].status = 'accepted';
+
+    // Recalculate totals
+    const newSubtotal = coe.selected_seats.reduce((sum, s) => sum + (s.event_price || 0), 0);
+    coe.subtotal = newSubtotal;
+    coe.total = newSubtotal + (coe.taxes || 0) + (coe.fees || 0);
+
+    await coe.save();
+    return await getCOEById(coeId);
+  } catch (error) {
+    console.error('Error accepting seat upgrade:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   createCOE,
   getCOEById,
@@ -756,5 +850,6 @@ module.exports = {
   validateSelectedSeats,
   updateSelectedSeatsStatus,
   updateSeatStatusesToBooked,
-  releaseSelectedSeats
+  releaseSelectedSeats,
+  acceptSeatUpgrade
 };

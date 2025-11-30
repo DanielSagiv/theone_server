@@ -679,6 +679,53 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 /**
+ * POST /v1/coes/:id/seat-upgrades/accept
+ * Accept a seat upgrade offer
+ * @access Authenticated users (COE client only)
+ */
+router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { current_seat_id, alternative_seat_id, event_id } = req.body;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format'
+      });
+    }
+
+    if (!current_seat_id || !alternative_seat_id || !event_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'current_seat_id, alternative_seat_id, and event_id are required'
+      });
+    }
+
+    const coe = await coeService.acceptSeatUpgrade(id, current_seat_id, alternative_seat_id, event_id);
+
+    res.json({
+      success: true,
+      message: 'Seat upgrade accepted successfully',
+      data: coe
+    });
+  } catch (error) {
+    console.error('Error accepting seat upgrade:', error);
+    if (error.message === 'COE not found') {
+      return res.status(404).json({ success: false, message: 'COE not found' });
+    }
+    if (error.message.includes('not found') || error.message.includes('only be accepted')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept seat upgrade',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /v1/coes/:id/payments/full
  * Process full payment for COE
  * @access Authenticated users (COE client only)

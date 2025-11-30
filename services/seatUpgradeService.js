@@ -10,67 +10,53 @@ const Event = require('../models/Event');
 const Location = require('../models/Location');
 
 /**
- * Score a seat's quality based on sentiment, category, and price tier
+ * Score a seat's quality based on qualityScore field and sentiment bonus
  * @param {Object} seat - Seat object (from event or location)
  * @param {Object} location - Location with seat sentiments
  * @returns {number} Quality score (higher = better)
  */
 function scoreSeatQuality(seat, location) {
-  let score = 0;
+  // Find location seat by code (primary) since event seat IDs differ from location seat IDs
+  const seatCode = seat.seat_code || seat.code;
   
-  // Price tier (1-5, higher = better)
-  const priceTier = seat.priceTier || seat.price_tier || 1;
-  score += priceTier * 10;
-  
-  // Get seat sentiment from location
-  const locationSeat = location.seats.find(s => {
-    const seatId = seat.seat_id || seat._id;
-    const locationSeatId = s._id;
-    
-    // Match by ID if available
-    if (seatId && locationSeatId) {
-      return locationSeatId.toString() === seatId.toString();
-    }
-    
-    // Fallback to code matching
-    return s.code === (seat.seat_code || seat.code);
+  console.log('[SEAT_UPGRADE] scoreSeatQuality input:', {
+    seatKeys: Object.keys(seat),
+    seat_code: seat.seat_code,
+    code: seat.code,
+    resolvedCode: seatCode,
+    locationSeatsCount: location?.seats?.length,
+    locationSeatCodes: location?.seats?.map(s => s.code)
   });
   
-  if (locationSeat && locationSeat.sentiment) {
-    locationSeat.sentiment.forEach(sent => {
-      if (sent.type === 'A') score += 20;
-      if (sent.type === 'B') score += 10;
+  const locationSeat = location.seats.find(s => s.code === seatCode);
+  
+  // Convert to plain object if Mongoose document to ensure all fields are accessible
+  const locationSeatPlain = locationSeat?.toObject ? locationSeat.toObject() : locationSeat;
+  
+  // Primary score: qualityScore field (1-10) scaled to 10-100
+  const qualityScore = locationSeatPlain?.qualityScore || seat.qualityScore || 5;
+  let score = qualityScore * 10;
+  
+  // Sentiment bonus: Type A = +5, Type B = +2
+  if (locationSeatPlain?.sentiment) {
+    locationSeatPlain.sentiment.forEach(sent => {
+      if (sent.type === 'A') score += 5;
+      if (sent.type === 'B') score += 2;
     });
   }
   
-  // Category hierarchy
-  const categoryScores = {
-    'owner_tables': 50,
-    'upper_dance': 40,
-    'stage_tables': 35,
-    'lower_dance': 30,
-    'third_tier_couch': 25,
-    'large_3rd_tier_couch': 25,
-    'backwall': 20,
-    'four_tops': 15
-  };
-  const category = seat.category || locationSeat?.category;
-  score += categoryScores[category] || 0;
-  
-  // Sentiment keywords
-  if (locationSeat && locationSeat.sentiment) {
-    const sentimentText = locationSeat.sentiment
-      .map(s => s.text || '')
-      .join(' ')
-      .toLowerCase();
-    
-    if (sentimentText.includes('upper')) score += 15;
-    if (sentimentText.includes('premium')) score += 15;
-    if (sentimentText.includes('vip')) score += 20;
-    if (sentimentText.includes('exclusive')) score += 20;
-    if (sentimentText.includes('better view')) score += 10;
-    if (sentimentText.includes('best')) score += 15;
-  }
+  console.log('[SEAT_UPGRADE] scoreSeatQuality result:', {
+    seatCode,
+    locationSeatFound: !!locationSeat,
+    locationSeatKeys: locationSeat ? Object.keys(locationSeat) : [],
+    locationSeatPlainKeys: locationSeatPlain ? Object.keys(locationSeatPlain) : [],
+    locationSeatQualityScore: locationSeat?.qualityScore,
+    locationSeatPlainQualityScore: locationSeatPlain?.qualityScore,
+    qualityScore,
+    baseScore: qualityScore * 10,
+    finalScore: score,
+    hasSentiment: !!(locationSeatPlain?.sentiment?.length)
+  });
   
   return score;
 }
@@ -81,9 +67,10 @@ function scoreSeatQuality(seat, location) {
  * @param {Object} event - Event with all available seats
  * @param {Object} location - Location with seat sentiments
  * @param {number} partySize - Party size requirement
+ * @param {number} remainingBudget - Remaining budget (for fits_budget flag)
  * @returns {Promise<Array>} Array of better alternative seats (sorted by quality)
  */
-async function findBetterSeats(currentSeat, event, location, partySize = 2) {
+async function findBetterSeats(currentSeat, event, location, partySize = 2, remainingBudget = 0) {
   try {
     if (!event.seats || event.seats.length === 0) {
       console.log('[SEAT_UPGRADE] findBetterSeats: No event seats available');
@@ -131,8 +118,10 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2) {
       hasSentiment: !!(currentSeatLocation.sentiment && currentSeatLocation.sentiment.length > 0)
     });
     
+    // Convert to plain object if Mongoose document
+    const currentSeatObj = currentSeat.toObject ? currentSeat.toObject() : currentSeat;
     const currentScore = scoreSeatQuality(
-      { ...currentSeat, seat_id: currentSeat.seat_id },
+      { ...currentSeatObj, seat_id: currentSeatObj.seat_id, code: currentSeatObj.seat_code || currentSeatObj.code },
       location
     );
     
@@ -191,8 +180,10 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2) {
           return null;
         }
         
+        // Convert to plain object if Mongoose document and ensure code is available
+        const seatObj = seat.toObject ? seat.toObject() : seat;
         const seatScore = scoreSeatQuality(
-          { ...seat, seat_id: seat._id },
+          { ...seatObj, seat_id: seatObj._id, code: seatObj.code },
           location
         );
         
@@ -216,12 +207,28 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2) {
       .slice(0, 3) // Top 3 alternatives
       .map(item => item.seat);
     
-    console.log('[SEAT_UPGRADE] findBetterSeats: Final better seats', {
-      betterSeatsCount: betterSeats.length,
-      betterSeatCodes: betterSeats.map(s => s.code)
+    // Add fits_budget and tag to each seat
+    const currentPrice = currentSeat.event_price || currentSeat.base_price || 0;
+    const seatsWithBudgetInfo = betterSeats.map(seat => {
+      const seatPrice = seat.event_price || seat.min_spend || 0;
+      const priceDelta = seatPrice - currentPrice;
+      const fitsBudget = priceDelta <= remainingBudget;
+      
+      return {
+        ...seat,
+        fits_budget: fitsBudget,
+        tag: fitsBudget ? 'Within Budget' : 'Premium Upgrade'
+      };
     });
     
-    return betterSeats;
+    console.log('[SEAT_UPGRADE] findBetterSeats: Final better seats', {
+      betterSeatsCount: seatsWithBudgetInfo.length,
+      betterSeatCodes: seatsWithBudgetInfo.map(s => s.code),
+      remainingBudget,
+      seatsWithinBudget: seatsWithBudgetInfo.filter(s => s.fits_budget).length
+    });
+    
+    return seatsWithBudgetInfo;
   } catch (error) {
     console.error('[SEAT_UPGRADE] Error finding better seats:', error);
     return [];
@@ -369,18 +376,27 @@ function calculateUpgradeReasons(currentLocationSeat, upgradeLocationSeat, curre
 /**
  * Generate upgrade offers for all seats in a COE
  * @param {Object} coe - COE object with selected_seats
+ * @param {number} totalBudget - Total budget for budget summary
  * @returns {Promise<Array>} Array of upgrade offers per seat
  */
-async function generateSeatUpgradeOffers(coe) {
+async function generateSeatUpgradeOffers(coe, totalBudget = null) {
   try {
     // Only generate offers for draft COEs
     if (coe.status !== 'draft') {
+      console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: COE not in draft status:', coe.status);
       return [];
     }
     
     if (!coe.selected_seats || coe.selected_seats.length === 0) {
+      console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: No selected seats in COE');
       return [];
     }
+    
+    console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Starting', {
+      coeId: coe._id,
+      selectedSeatsCount: coe.selected_seats.length,
+      totalBudget
+    });
     
     const offers = [];
     
@@ -399,9 +415,14 @@ async function generateSeatUpgradeOffers(coe) {
     // Process each event
     for (const [eventId, seats] of Object.entries(seatsByEvent)) {
       try {
-        // Get event with location populated
+        // Get event with location populated (include all seat fields including qualityScore)
         const event = await Event.findById(eventId)
-          .populate('location_id', 'seats');
+          .populate({
+            path: 'location_id',
+            select: 'seats',
+            // Ensure all nested fields in seats array are included
+            options: { lean: false }
+          });
         
         if (!event || !event.location_id) {
           console.warn('[SEAT_UPGRADE] Event or location not found:', eventId);
@@ -411,14 +432,30 @@ async function generateSeatUpgradeOffers(coe) {
         // Get party size from COE or preferences
         const partySize = coe.preferences?.party_size || 2;
         
+        // Calculate remaining budget for fits_budget flag
+        const coeTotal = coe.subtotal || 0;
+        const remainingBudget = totalBudget ? Math.max(0, totalBudget - coeTotal) : 0;
+        
         // Find better seats for each selected seat
         for (const selectedSeat of seats) {
+          console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Processing seat', {
+            seatCode: selectedSeat.seat_code,
+            seatId: selectedSeat.seat_id?.toString(),
+            eventId: eventId
+          });
+          
           const betterSeats = await findBetterSeats(
             selectedSeat,
             event,
             event.location_id,
-            partySize
+            partySize,
+            remainingBudget
           );
+          
+          console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Found better seats', {
+            currentSeatCode: selectedSeat.seat_code,
+            betterSeatsCount: betterSeats.length
+          });
           
           if (betterSeats.length > 0) {
             // Calculate upgrade value for each alternative
@@ -454,6 +491,8 @@ async function generateSeatUpgradeOffers(coe) {
                 category: seat.category,
                 section: seat.section,
                 media: seat.media || [],
+                fits_budget: seat.fits_budget || false,
+                tag: seat.tag || 'Premium Upgrade',
                 status: 'pending',
                 offered_at: new Date()
               };
@@ -468,6 +507,11 @@ async function generateSeatUpgradeOffers(coe) {
               alternatives: alternatives,
               generated_at: new Date()
             });
+          } else {
+            console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: No better seats found for', {
+              seatCode: selectedSeat.seat_code,
+              eventName: event.name
+            });
           }
         }
       } catch (error) {
@@ -475,6 +519,11 @@ async function generateSeatUpgradeOffers(coe) {
         // Continue with other events
       }
     }
+    
+    console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Completed', {
+      totalOffers: offers.length,
+      offersPerSeat: offers.map(o => ({ seat: o.current_seat_code, alternatives: o.alternatives?.length || 0 }))
+    });
     
     return offers;
   } catch (error) {

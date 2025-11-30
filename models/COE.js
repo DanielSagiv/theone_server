@@ -460,12 +460,25 @@ coeSchema.pre('save', function(next) {
 
 // Pre-save middleware to calculate totals
 coeSchema.pre('save', function(next) {
-  if (this.events && this.events.length > 0) {
+  // Only recalculate if subtotal is not already set (0 or undefined)
+  // This allows explicit pricing to be preserved
+  const hasExplicitPricing = this.subtotal !== undefined && this.subtotal !== null && this.subtotal !== 0;
+  
+  if (!hasExplicitPricing && this.events && this.events.length > 0) {
+    // Calculate from events if pricing not explicitly set
     this.subtotal = this.events.reduce((total, event) => {
       return total + (event.total_price || 0);
     }, 0);
     
     this.total = this.subtotal + this.taxes + this.fees;
+    
+    // Set default deposit if not specified
+    if (this.deposit_required === 0 && this.total > 0) {
+      this.deposit_required = Math.round(this.total * 0.2); // 20% deposit
+    }
+  } else if (hasExplicitPricing) {
+    // If explicit pricing is set, ensure total is calculated correctly
+    this.total = (this.subtotal || 0) + (this.taxes || 0) + (this.fees || 0);
     
     // Set default deposit if not specified
     if (this.deposit_required === 0 && this.total > 0) {
