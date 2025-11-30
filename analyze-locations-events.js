@@ -143,3 +143,4 @@ async function analyzeLocationsAndEvents() {
 
 analyzeLocationsAndEvents();
 
+

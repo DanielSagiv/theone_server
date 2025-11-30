@@ -230,3 +230,4 @@ echo ""
 echo -e "${YELLOW}⏳ Deployment typically takes 2-5 minutes to complete${NC}"
 echo ""
 
+
