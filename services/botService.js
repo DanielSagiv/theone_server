@@ -692,141 +692,142 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         eventLogCount: conversation.event_log?.length || 0,
         lastEventLog: conversation.event_log?.[conversation.event_log.length - 1] || null
       });
-      
-      // Phase 2.4: Auto-trigger COE creation if this is a form submission
-      if (isFormSubmission && extractionResult && extractionResult.valid) {
-        try {
-          console.log('[BOT] Phase 2.4: Auto-triggering COE creation from form submission...');
-          
-          // Prepare tool parameters for create_coe_draft
-          const toolParams = {
-            start_date: extractionResult.raw.start_date,
-            end_date: extractionResult.raw.end_date,
-            preferences: {
-              budget_range: {
-                max: extractionResult.raw.budget?.amount || 0
-              },
-              location_preferences: extractionResult.raw.city ? [extractionResult.raw.city] : [],
-              party_size: extractionResult.raw.party_size,
-              preferences: extractPreferenceKeywords(
-                extractionResult.raw.seat_preferences || '',
-                extractionResult.raw.specific_preferences || ''
-              ),
-              notes: `${extractionResult.raw.seat_preferences || ''}\n${extractionResult.raw.specific_preferences || ''}`.trim(),
-              // Include full preference data for Phase 2.3 sentiment matching
-              seat_preferences: extractionResult.raw.seat_preferences || '',
-              specific_preferences: extractionResult.raw.specific_preferences || ''
-            }
-          };
-
-          // Add client_id if user is admin (required for admin)
-          if (user.role === 'admin') {
-            // For now, we'll let the tool handler handle this or use a default
-            // The tool will require client_id from admin
-          } else if (user.role === 'client') {
-            // Client creates COE for themselves
-            toolParams.client_id = user._id.toString();
+    }
+    
+    // Phase 2.4: Auto-trigger COE creation if this is a form submission
+    // This must run even if preferences didn't change, so users can rebuild drafts
+    if (isFormSubmission && extractionResult && extractionResult.valid) {
+      try {
+        console.log('[BOT] Phase 2.4: Auto-triggering COE creation from form submission...');
+        
+        // Prepare tool parameters for create_coe_draft
+        const toolParams = {
+          start_date: extractionResult.raw.start_date,
+          end_date: extractionResult.raw.end_date,
+          preferences: {
+            budget_range: {
+              max: extractionResult.raw.budget?.amount || 0
+            },
+            location_preferences: extractionResult.raw.city ? [extractionResult.raw.city] : [],
+            party_size: extractionResult.raw.party_size,
+            preferences: extractPreferenceKeywords(
+              extractionResult.raw.seat_preferences || '',
+              extractionResult.raw.specific_preferences || ''
+            ),
+            notes: `${extractionResult.raw.seat_preferences || ''}\n${extractionResult.raw.specific_preferences || ''}`.trim(),
+            // Include full preference data for Phase 2.3 sentiment matching
+            seat_preferences: extractionResult.raw.seat_preferences || '',
+            specific_preferences: extractionResult.raw.specific_preferences || ''
           }
-
-          console.log('[BOT] Phase 2.4: Calling create_coe_draft tool with params:', {
-            start_date: toolParams.start_date,
-            end_date: toolParams.end_date,
-            city: extractionResult.raw.city,
-            budget: extractionResult.raw.budget?.amount,
-            party_size: toolParams.preferences.party_size
-          });
-
-          // Execute create_coe_draft tool
-          const toolResult = await executeTool('create_coe_draft', toolParams, user, correlationId);
-
-          if (toolResult.success && toolResult.data) {
-            console.log('[BOT] Phase 2.4: ✅ COE draft created successfully');
+        };
+        
+        // Add client_id if user is admin (required for admin)
+        if (user.role === 'admin') {
+          // For now, we'll let the tool handler handle this or use a default
+          // The tool will require client_id from admin
+        } else if (user.role === 'client') {
+          // Client creates COE for themselves
+          toolParams.client_id = user._id.toString();
+        }
+        
+        console.log('[BOT] Phase 2.4: Calling create_coe_draft tool with params:', {
+          start_date: toolParams.start_date,
+          end_date: toolParams.end_date,
+          city: extractionResult.raw.city,
+          budget: extractionResult.raw.budget?.amount,
+          party_size: toolParams.preferences.party_size
+        });
+        
+        // Execute create_coe_draft tool
+        const toolResult = await executeTool('create_coe_draft', toolParams, user, correlationId);
+        
+        if (toolResult.success && toolResult.data) {
+          console.log('[BOT] Phase 2.4: ✅ COE draft created successfully');
+          
+          // toolResult.data is already a formatted structured response from handleCreateCOEDraft
+          const coeResponse = toolResult.data;
+          
+          // Extract COE ID from the response (could be in coe.coe_id or coe.id)
+          const coeId = coeResponse.coe_id || coeResponse.coe?.id || coeResponse.coe?._id;
+          if (coeId) {
+            conversation.active_coe_id = typeof coeId === 'string' ? coeId : coeId.toString();
+            await conversation.save();
+          }
+          
+          // Add assistant message with structured COE response
+          const assistantMessage = {
+            role: 'assistant',
+            content: coeResponse.message || toolResult.message || 'Your experience draft has been created!',
+            structured_data: coeResponse
+          };
+          conversation.messages.push(assistantMessage);
+          await conversation.save();
+          
+          console.log('[BOT] Phase 2.4: ✅ Returning draft COE response');
+          return conversation.messages;
+        } else {
+          console.error('[BOT] Phase 2.4: COE creation failed:', toolResult.error);
+          
+          // If error response has structured data (NO_SEATS_AVAILABLE), use it
+          if (toolResult.data && toolResult.data.type === 'error') {
+            const errorResponse = toolResult.data;
             
-            // toolResult.data is already a formatted structured response from handleCreateCOEDraft
-            const coeResponse = toolResult.data;
-            
-            // Extract COE ID from the response (could be in coe.coe_id or coe.id)
-            const coeId = coeResponse.coe_id || coeResponse.coe?.id || coeResponse.coe?._id;
-            if (coeId) {
-              conversation.active_coe_id = typeof coeId === 'string' ? coeId : coeId.toString();
-              await conversation.save();
-            }
-
-            // Add assistant message with structured COE response
+            // Add assistant message with error response
             const assistantMessage = {
               role: 'assistant',
-              content: coeResponse.message || toolResult.message || 'Your experience draft has been created!',
-              structured_data: coeResponse
+              content: errorResponse.message || 'We couldn\'t find any available seats/tables matching your preferences.',
+              structured_data: errorResponse
             };
             conversation.messages.push(assistantMessage);
             await conversation.save();
-
-            console.log('[BOT] Phase 2.4: ✅ Returning draft COE response');
-            return conversation.messages;
-          } else {
-            console.error('[BOT] Phase 2.4: COE creation failed:', toolResult.error);
             
-            // If error response has structured data (NO_SEATS_AVAILABLE), use it
-            if (toolResult.data && toolResult.data.type === 'error') {
-              const errorResponse = toolResult.data;
-              
-              // Add assistant message with error response
-              const assistantMessage = {
-                role: 'assistant',
-                content: errorResponse.message || 'We couldn\'t find any available seats/tables matching your preferences.',
-                structured_data: errorResponse
-              };
-              conversation.messages.push(assistantMessage);
-              await conversation.save();
-              
-              console.log('[BOT] Phase 2.4: Returning error response to user');
-              return conversation.messages;
-            }
-            // Continue to normal flow - let OpenAI handle the error or provide feedback
-            const errorMessage = {
-              role: 'assistant',
-              content: `I encountered an issue creating your experience: ${toolResult.error?.message || 'Unknown error'}. Please try again or contact support.`
-            };
-            conversation.messages.push(errorMessage);
-            await conversation.save();
+            console.log('[BOT] Phase 2.4: Returning error response to user');
             return conversation.messages;
           }
-        } catch (error) {
-          console.error('[BOT] Phase 2.4: Error in auto-trigger COE creation:', error);
-          // Continue to normal flow - don't block the conversation
-          // The error will be handled by the normal OpenAI flow
+          // Continue to normal flow - let OpenAI handle the error or provide feedback
+          const errorMessage = {
+            role: 'assistant',
+            content: `I encountered an issue creating your experience: ${toolResult.error?.message || 'Unknown error'}. Please try again or contact support.`
+          };
+          conversation.messages.push(errorMessage);
+          await conversation.save();
+          return conversation.messages;
         }
+      } catch (error) {
+        console.error('[BOT] Phase 2.4: Error in auto-trigger COE creation:', error);
+        // Continue to normal flow - don't block the conversation
+        // The error will be handled by the normal OpenAI flow
       }
-      
-      // CRITICAL: Re-check rule AFTER conversation refresh (always check)
-      const recheckNormalizedPrompt = prompt.toLowerCase().trim();
-      const recheckMatches = whoAreYouPatterns.some(pattern => 
-        recheckNormalizedPrompt === pattern || recheckNormalizedPrompt.includes(pattern)
-      );
-      
-      if (recheckMatches) {
-        console.log('[BOT] ✅ Rule 1 matched after conversation refresh - RETURNING IMMEDIATELY');
-        const ruleReply = {
-          role: 'assistant',
-          content: "I'm the one who will create your MDF experience!"
-        };
-        conversation.messages.push(ruleReply);
-        await conversation.save();
-        console.log('[BOT] Rule 1 returning after refresh - EXITING FUNCTION');
-        return conversation.messages;
-      }
-      
-      // CRITICAL: Re-add the user message after refresh, as it might have been lost
-      const hasCurrentMessage = conversation.messages.some(
-        msg => msg.role === 'user' && msg.content === prompt
-      );
-      if (!hasCurrentMessage) {
-        console.log('[BOT] Re-adding user message after conversation refresh');
-        conversation.messages.push({
-          role: 'user',
-          content: prompt
-        });
-      }
+    }
+    
+    // CRITICAL: Re-check rule AFTER conversation refresh (always check)
+    const recheckNormalizedPrompt = prompt.toLowerCase().trim();
+    const recheckMatches = whoAreYouPatterns.some(pattern => 
+      recheckNormalizedPrompt === pattern || recheckNormalizedPrompt.includes(pattern)
+    );
+    
+    if (recheckMatches) {
+      console.log('[BOT] ✅ Rule 1 matched after conversation refresh - RETURNING IMMEDIATELY');
+      const ruleReply = {
+        role: 'assistant',
+        content: "I'm the one who will create your MDF experience!"
+      };
+      conversation.messages.push(ruleReply);
+      await conversation.save();
+      console.log('[BOT] Rule 1 returning after refresh - EXITING FUNCTION');
+      return conversation.messages;
+    }
+    
+    // CRITICAL: Re-add the user message after refresh, as it might have been lost
+    const hasCurrentMessage = conversation.messages.some(
+      msg => msg.role === 'user' && msg.content === prompt
+    );
+    if (!hasCurrentMessage) {
+      console.log('[BOT] Re-adding user message after conversation refresh');
+      conversation.messages.push({
+        role: 'user',
+        content: prompt
+      });
     }
   } catch (error) {
     console.error('Error extracting preferences:', error);
@@ -1013,7 +1014,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           return null;
         }
       })
-      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'coe_preferences_form' || data.type === 'error' || data.type === 'user_profile' || data.type === 'client_list'));
+      .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'coe_preferences_form' || data.type === 'coe_create_form' || data.type === 'error' || data.type === 'user_profile' || data.type === 'client_list'));
 
     // Add final assistant reply with structured data if available
     // CRITICAL: If assistantReply has tool_calls but no content, we must not save it with tool_calls

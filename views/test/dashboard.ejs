@@ -5037,10 +5037,6 @@
                             <label>Start Date & Time</label>
                             <input id="ce_start_datetime" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
                         </div>
-                        <div class="profile-field">
-                            <label>End Date & Time</label>
-                            <input id="ce_end_datetime" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
-                        </div>
                     </div>
 
                     <!-- Step 2: Location Selection -->
@@ -6580,6 +6576,7 @@
             if (clients.length === 0) {
                 clientsHtml = '<div class="bot-client-empty">No clients found.</div>';
             } else {
+                const canCreateCOE = currentUser && currentUser.role === 'admin';
                 clientsHtml = clients.map(client => {
                     const initials = getInitials(client.name || client.email);
                     const avatarHtml = client.avatarUrl
@@ -6595,13 +6592,19 @@
                                 <div class="bot-client-card-name">${client.name || 'Unknown Client'}</div>
                                 <div class="bot-client-card-email">${client.email || 'No email'}</div>
                             </div>
-                            <button class="bot-client-view-btn" onclick="handleViewClientProfile('${client.id}')">
-                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M8 1C4.134 1 1 4.134 1 8s3.134 7 7 7 7-3.134 7-7-3.134-7-7-7zM8 13c-2.761 0-5-2.239-5-5s2.239-5 5-5 5 2.239 5 5-2.239 5-5 5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                                    <path d="M8 5.5c-1.381 0-2.5 1.119-2.5 2.5s1.119 2.5 2.5 2.5 2.5-1.119 2.5-2.5-1.119-2.5-2.5-2.5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-                                </svg>
-                                View
-                            </button>
+                            <div class="bot-client-card-actions">
+                                <button class="bot-client-view-btn" onclick="handleViewClientProfile('${client.id}')">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M8 1C4.134 1 1 4.134 1 8s3.134 7 7 7 7-3.134 7-7-3.134-7-7-7zM8 13c-2.761 0-5-2.239-5-5s2.239-5 5-5 5 2.239 5 5-2.239 5-5 5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                        <path d="M8 5.5c-1.381 0-2.5 1.119-2.5 2.5s1.119 2.5 2.5 2.5 2.5-1.119 2.5-2.5-1.119-2.5-2.5-2.5z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                                    </svg>
+                                    View
+                                </button>
+                                ${canCreateCOE ? `
+                                <button class="bot-client-view-btn" style="margin-left: 8px;" onclick="handleCreateCOEForClient('${client.id}')">
+                                    Create COE
+                                </button>` : ''}
+                            </div>
                         </div>
                     `;
                 }).join('');
@@ -6804,6 +6807,23 @@
                 sendBotPrompt();
             } else {
                 console.error('[CLIENT LIST] botPromptInput not found');
+            }
+        }
+
+        /**
+         * Handle Create COE button click for a client (admin only)
+         * @param {string} clientId - Client ID to create COE for
+         */
+        function handleCreateCOEForClient(clientId) {
+            console.log('[CLIENT LIST] Create COE clicked for client ID:', clientId);
+            const promptInput = document.getElementById('botPromptInput');
+            if (promptInput) {
+                // Use explicit instruction so the model calls the correct tool
+                promptInput.value = `Open the create COE form for client with id ${clientId}. Use the open_create_coe_for_client tool with this client_id.`;
+                console.log('[CLIENT LIST] Setting prompt for Create COE:', promptInput.value);
+                sendBotPrompt();
+            } else {
+                console.error('[CLIENT LIST] botPromptInput not found in handleCreateCOEForClient');
             }
         }
 
@@ -7262,8 +7282,9 @@
                             `;
                         }).join('');
                         
-                        // Runner details HTML (COE-level only)
-                        const runnerHtml = coeData.runner_assignment?.runner ? (() => {
+                        // Runner details / assignment (COE-level)
+                        const hasRunner = !!coeData.runner_assignment?.runner;
+                        const runnerHtml = hasRunner ? (() => {
                             const r = coeData.runner_assignment.runner;
                             const initials = getInitials(r.name || r.email);
                             const avatarEl = r.avatarUrl
@@ -7283,7 +7304,30 @@
                                     </div>
                                 </div>
                             `;
-                        })() : '';
+                        })() : (() => {
+                            // For draft COEs with no runner assigned, show a clear
+                            // call-to-action to assign a runner via the COE editor.
+                            const isDraft = (coeData.status || '').toLowerCase() === 'draft';
+                            const isAdmin = currentUser && currentUser.role === 'admin';
+                            if (!isDraft || !isAdmin) return '';
+                            const coeId = coeData.id || coeData._id || '';
+                            if (!coeId) return '';
+                            return `
+                                <div class="coe-runner-section">
+                                    <div class="coe-runner-title">Runner Assignment</div>
+                                    <div class="coe-runner-details">
+                                        <div class="coe-runner-contact">No runner assigned yet.</div>
+                                        <button 
+                                            type="button" 
+                                            class="btn btn-sm" 
+                                            onclick="handleCOEAction('edit_coe', '${coeId}')"
+                                        >
+                                            Assign Runner
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        })();
                         
                         return `
                             <div class="coe-seats-section">
@@ -7578,6 +7622,146 @@
             `;
 
             return container;
+        }
+
+        /**
+         * Render Create COE form for admin-selected client
+         * @param {Object} formData - Structured data with client and defaults
+         * @returns {HTMLElement} Form card element
+         */
+        function renderCOECreateForm(formData) {
+            const container = document.createElement('div');
+            container.className = 'bot-structured-card bot-coe-create-form';
+
+            const client = formData.client || {};
+            const defaults = formData.defaults || {};
+            const message = formData.message || 'Create a new COE draft for this client.';
+
+            const today = new Date().toISOString().split('T')[0];
+
+            container.innerHTML = `
+                <div class="coe-preferences-form-header">
+                    <h3 style="margin: 0; color: #cbd5f5; font-size: 1.1rem;">Create COE for Client</h3>
+                    <p style="margin: 4px 0 0 0; color: #94a3b8; font-size: 0.9rem;">${message}</p>
+                </div>
+                <div class="coe-create-client-summary">
+                    <div class="coe-create-client-name">${client.name || 'Unknown Client'}</div>
+                    <div class="coe-create-client-email">${client.email || ''}</div>
+                    ${client.phone ? `<div class="coe-create-client-phone">${client.phone}</div>` : ''}
+                </div>
+                <form class="coe-preferences-form" onsubmit="handleSubmitCOECreateForm(event, '${client.id}')">
+                    <div class="coe-preferences-field-group">
+                        <div class="coe-preferences-field">
+                            <label for="coe_create_start_date">Start Date <span class="required">*</span></label>
+                            <input 
+                                id="coe_create_start_date"
+                                name="start_date"
+                                type="date"
+                                required
+                                min="${today}"
+                                class="coe-preferences-input"
+                            >
+                        </div>
+                        <div class="coe-preferences-field">
+                            <label for="coe_create_end_date">End Date <span class="required">*</span></label>
+                            <input 
+                                id="coe_create_end_date"
+                                name="end_date"
+                                type="date"
+                                required
+                                min="${today}"
+                                class="coe-preferences-input"
+                            >
+                        </div>
+                    </div>
+                    <div class="coe-preferences-field-group">
+                        <div class="coe-preferences-field">
+                            <label for="coe_create_budget">Budget</label>
+                            <input 
+                                id="coe_create_budget"
+                                name="budget"
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="Enter total budget"
+                                class="coe-preferences-input"
+                            >
+                        </div>
+                        <div class="coe-preferences-field">
+                            <label for="coe_create_party_size">Number of People</label>
+                            <input 
+                                id="coe_create_party_size"
+                                name="party_size"
+                                type="number"
+                                min="1"
+                                step="1"
+                                placeholder="e.g. 8"
+                                class="coe-preferences-input"
+                            >
+                        </div>
+                    </div>
+                    <div class="coe-preferences-field">
+                        <label for="coe_create_notes">Notes (optional)</label>
+                        <textarea
+                            id="coe_create_notes"
+                            name="notes"
+                            rows="3"
+                            class="coe-preferences-textarea"
+                            placeholder="Any additional context or preferences for this client..."
+                        ></textarea>
+                    </div>
+                    <div class="coe-preferences-form-actions" style="justify-content: flex-start;">
+                        <button type="submit" class="btn btn-primary">
+                            Create COE
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            return container;
+        }
+
+        /**
+         * Handle submit of Create COE form (admin for client)
+         */
+        function handleSubmitCOECreateForm(event, clientId) {
+            event.preventDefault();
+            const form = event.target;
+            const startDate = form.querySelector('#coe_create_start_date')?.value;
+            const endDate = form.querySelector('#coe_create_end_date')?.value;
+            const budgetVal = form.querySelector('#coe_create_budget')?.value;
+            const partySizeVal = form.querySelector('#coe_create_party_size')?.value;
+            const notes = form.querySelector('#coe_create_notes')?.value || '';
+
+            if (!startDate || !endDate) {
+                showAlert('Start date and End date are required.', 'error');
+                return;
+            }
+
+            if (new Date(startDate) > new Date(endDate)) {
+                showAlert('End date must be on or after start date.', 'error');
+                return;
+            }
+
+            const parts = [];
+            parts.push(`Client ID: ${clientId}`);
+            parts.push(`Start date: ${startDate}`);
+            parts.push(`End date: ${endDate}`);
+            if (budgetVal) parts.push(`Budget: $${budgetVal} USD`);
+            if (partySizeVal) parts.push(`Number of people: ${partySizeVal}`);
+            if (notes) parts.push(`Notes: ${notes}`);
+
+            const promptInput = document.getElementById('botPromptInput');
+            if (!promptInput) {
+                console.error('[COE CREATE FORM] botPromptInput not found');
+                return;
+            }
+
+            // Structured prompt so bot can call create_coe_draft with explicit client_id
+            const prompt = `Create a COE draft using the following data:\n${parts.join('\n')}`;
+            console.log('[COE CREATE FORM] Sending prompt:', prompt);
+            promptInput.value = prompt;
+            sendBotPrompt();
         }
 
         /**
@@ -8445,7 +8629,7 @@
          */
         function isStructuredResponse(data) {
             return data && typeof data === 'object' && data.type && 
-                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'error', 'user_profile', 'client_list', 'seat_upgrade_offers'].includes(data.type);
+                   ['coe_created', 'coe_updated', 'coe_details', 'coe_draft', 'coe_list', 'event_list', 'location_list', 'coe_preferences_form', 'coe_create_form', 'error', 'user_profile', 'client_list', 'seat_upgrade_offers'].includes(data.type);
         }
 
         function renderBotMessages(messages = []) {
@@ -8583,6 +8767,9 @@
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, clientList);
                         }
+                    } else if (structuredData.type === 'coe_create_form') {
+                        const coeCreateForm = renderCOECreateForm(structuredData);
+                        contentEl.appendChild(coeCreateForm);
                     } else if (structuredData.type === 'seat_upgrade_offers') {
                         const upgradeOffers = renderSeatUpgradeOffers(structuredData);
                         contentEl.appendChild(upgradeOffers);
@@ -11966,7 +12153,6 @@
             document.getElementById('ce_description').value = '';
             document.getElementById('ce_type').value = 'night_club';
             document.getElementById('ce_start_datetime').value = '';
-            document.getElementById('ce_end_datetime').value = '';
             document.getElementById('ce_location_id').value = '';
             document.getElementById('ce_base_price').value = '';
             document.getElementById('ce_currency').value = 'USD';
@@ -12037,7 +12223,6 @@
                 case 1:
                     const name = document.getElementById('ce_name').value.trim();
                     const startDate = document.getElementById('ce_start_datetime').value;
-                    const endDate = document.getElementById('ce_end_datetime').value;
                     
                     if (!name) {
                         addCeFieldValidation('ce_name', 'Event name is required');
@@ -12045,14 +12230,6 @@
                     }
                     if (!startDate) {
                         addCeFieldValidation('ce_start_datetime', 'Start date and time is required');
-                        return false;
-                    }
-                    if (!endDate) {
-                        addCeFieldValidation('ce_end_datetime', 'End date and time is required');
-                        return false;
-                    }
-                    if (new Date(startDate) >= new Date(endDate)) {
-                        addCeFieldValidation('ce_end_datetime', 'End date must be after start date');
                         return false;
                     }
                     return true;
@@ -12082,7 +12259,7 @@
          * Clear all event validation indicators
          */
         function clearCeValidationIndicators() {
-            const fields = ['ce_name', 'ce_start_datetime', 'ce_end_datetime', 'ce_location_id', 'ce_base_price'];
+            const fields = ['ce_name', 'ce_start_datetime', 'ce_location_id', 'ce_base_price'];
             fields.forEach(fieldId => {
                 const field = document.getElementById(fieldId);
                 if (field) {
@@ -12156,7 +12333,6 @@
                 description: document.getElementById('ce_description').value,
                 type: document.getElementById('ce_type').value,
                 start_datetime: document.getElementById('ce_start_datetime').value,
-                end_datetime: document.getElementById('ce_end_datetime').value,
                 location_id: document.getElementById('ce_location_id').value,
                 base_price: document.getElementById('ce_base_price').value,
                 currency: document.getElementById('ce_currency').value,
@@ -12286,7 +12462,6 @@
                     type: document.getElementById('ce_type').value,
                     location_id: document.getElementById('ce_location_id').value,
                     start_datetime: new Date(document.getElementById('ce_start_datetime').value).toISOString(),
-                    end_datetime: new Date(document.getElementById('ce_end_datetime').value).toISOString(),
                     base_price: parseFloat(document.getElementById('ce_base_price').value),
                     currency: document.getElementById('ce_currency').value,
                     price_tier: parseInt(document.getElementById('ce_price_tier').value),
@@ -12345,7 +12520,7 @@
             document.getElementById('eventDetailType').textContent = event.type.replace('_', ' ').toUpperCase();
             document.getElementById('eventDetailLocation').textContent = event.location_id?.name || 'Unknown Location';
             document.getElementById('eventDetailStartDate').textContent = new Date(event.start_datetime).toLocaleString();
-            document.getElementById('eventDetailEndDate').textContent = new Date(event.end_datetime).toLocaleString();
+            document.getElementById('eventDetailEndDate').textContent = event.end_datetime ? new Date(event.end_datetime).toLocaleString() : 'Not specified';
             document.getElementById('eventDetailStatus').innerHTML = `<span class="status-badge status-${event.status}">${event.status.replace('_', ' ').toUpperCase()}</span>`;
             document.getElementById('eventDetailBasePrice').textContent = `${event.currency || 'USD'} ${event.base_price || 0}`;
             document.getElementById('eventDetailCapacity').textContent = event.total_capacity || 0;
@@ -12394,6 +12569,25 @@
         /**
          * Display event seats in grid
          */
+        /**
+         * Get display price for a seat:
+         * - Prefer event-specific price when present
+         * - Fall back to per-seat base/min spend
+         * - Finally fall back to event-level base price (for legacy data)
+         */
+        function getSeatDisplayPrice(seat, event) {
+            if (typeof seat.event_price === 'number') {
+                return seat.event_price;
+            }
+            if (typeof seat.min_spend === 'number') {
+                return seat.min_spend;
+            }
+            if (typeof seat.base_price === 'number') {
+                return seat.base_price;
+            }
+            return typeof event?.base_price === 'number' ? event.base_price : 0;
+        }
+
         function displayEventSeats(seats) {
             const seatsGrid = document.getElementById('eventSeatsGrid');
             
@@ -12404,7 +12598,7 @@
 
             seatsGrid.innerHTML = seats.map(seat => {
                 const status = seat.status || 'available';
-                const price = seat.price || window.currentEvent?.base_price || 0;
+                const price = getSeatDisplayPrice(seat, window.currentEvent);
                 const currency = window.currentEvent?.currency || 'USD';
                 
                 return `
@@ -12820,6 +13014,8 @@
 
         function rowToPayload(row) {
             return {
+                // Prefer stable event seat id for identification; keep code for display/logging
+                seat_id: row.getAttribute('data-seat-id'),
                 seat_code: row.getAttribute('data-seat-code'),
                 base_price: parseFloat(row.querySelector('.base-price').value),
                 event_price: parseFloat(row.querySelector('.event-price').value),
@@ -12838,7 +13034,7 @@
                 event_price: payload.event_price,
                 price_change_reason: changed ? payload.price_change_reason : (payload.price_change_reason || 'No change')
             };
-            const res = await makeApiRequest(`/events/${eventId}/pricing/${payload.seat_code}`, 'PUT', body);
+            const res = await makeApiRequest(`/events/${eventId}/pricing/${payload.seat_id}`, 'PUT', body);
             if (!res.success) return showAlert(res.error || 'Failed to update price', 'error');
             showAlert('Seat price updated', 'success');
         }
@@ -12857,7 +13053,7 @@
                     event_price: payload.event_price,
                     price_change_reason: changed ? payload.price_change_reason : (payload.price_change_reason || 'No change')
                 };
-                const res = await makeApiRequest(`/events/${eventId}/pricing/${payload.seat_code}`, 'PUT', body);
+                const res = await makeApiRequest(`/events/${eventId}/pricing/${payload.seat_id}`, 'PUT', body);
                 if (!res.success) {
                     showAlert(`Failed to update seat ${payload.seat_code}: ${res.error}`, 'error');
                     return;
@@ -12923,9 +13119,10 @@
                 const basePrice = seat.base_price ?? 0;
                 const eventPrice = seat.event_price ?? 0;
                 const reason = seat.price_change_reason || '';
+                const eventSeatId = seat.event_seat_id || seat.seat_id || ''; // Fallback to keep compatibility if needed
                 
                 return `
-                    <tr data-seat-code="${seat.code}">
+                    <tr data-seat-id="${eventSeatId}" data-seat-code="${seat.code}">
                         <td><strong>${seatName}</strong></td>
                         <td class="form-field">
                             <div style="display: flex; align-items: center;">

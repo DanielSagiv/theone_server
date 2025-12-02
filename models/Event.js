@@ -111,7 +111,7 @@ const EventSchema = new mongoose.Schema({
   
   // Event Timing
   start_datetime: { type: Date, required: true, index: true },
-  end_datetime: { type: Date, required: true, index: true },
+  end_datetime: { type: Date, required: false, index: true },
   timezone: { type: String, default: 'UTC' },
   
   // Capacity & Availability

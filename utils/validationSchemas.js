@@ -193,7 +193,7 @@ const createEventSchema = Joi.object({
   type: Joi.string().valid('night_club', 'day_club', 'restaurant', 'hotel', 'private', 'corporate').required(),
   location_id: Joi.string().hex().length(24).required(),
   start_datetime: Joi.date().required(),
-  end_datetime: Joi.date().required(),
+  end_datetime: Joi.date().optional(),
   timezone: Joi.string().default('UTC'),
   base_price: Joi.number().min(0).required(),
   currency: Joi.string().default('USD'),

@@ -972,6 +972,9 @@ router.get('/:id/pricing', authenticateToken, requireAdmin, async (req, res) => 
 
     // Return seat pricing data
     const seatPricing = event.seats.map(seat => ({
+      // Event seat subdocument identifier (used for pricing updates)
+      event_seat_id: seat._id,
+      // Location seat reference (kept for compatibility with other flows)
       seat_id: seat.seat_id,
       code: seat.code,
       category: seat.category,
@@ -1000,13 +1003,17 @@ router.get('/:id/pricing', authenticateToken, requireAdmin, async (req, res) => 
 });
 
 /**
- * PUT /v1/events/:id/pricing/:seatCode
+ * PUT /v1/events/:id/pricing/:seatKey
  * Update a specific seat's price for an event (admin only)
+ *
+ * `seatKey` is expected to be the event seat subdocument `_id`. For backward compatibility,
+ * if it is not a valid ObjectId, it will be interpreted as a seat `code` (first match).
+ *
  * @access Admin only
  */
-router.put('/:id/pricing/:seatCode', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/:id/pricing/:seatKey', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { id, seatCode } = req.params;
+    const { id, seatKey } = req.params;
     const { event_price, price_change_reason } = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
@@ -1031,8 +1038,18 @@ router.put('/:id/pricing/:seatCode', authenticateToken, requireAdmin, async (req
       });
     }
 
-    // Find the seat by code
-    const seat = event.seats.find(s => s.code === seatCode);
+    // Resolve seat either by event seat _id (preferred) or by code (legacy, first match)
+    let seat = null;
+    const isObjectId = typeof seatKey === 'string' && /^[0-9a-fA-F]{24}$/.test(seatKey);
+
+    if (isObjectId) {
+      seat = event.seats.id(seatKey);
+    }
+    if (!seat) {
+      // Fallback for any legacy callers still sending seat code
+      seat = event.seats.find(s => s.code === seatKey);
+    }
+
     if (!seat) {
       return res.status(404).json({
         success: false,
@@ -1054,7 +1071,10 @@ router.put('/:id/pricing/:seatCode', authenticateToken, requireAdmin, async (req
       message: 'Seat price updated successfully',
       data: {
         event_id: event._id,
-        seat_code: seatCode,
+        // Event seat subdocument id used for updates
+        seat_id: seat._id,
+        // Human-readable code for display/logging
+        seat_code: seat.code,
         base_price: seat.min_spend,
         previous_price: previousPrice,
         new_price: event_price,

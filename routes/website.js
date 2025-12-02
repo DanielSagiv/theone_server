@@ -75,5 +75,44 @@ router.get('/vision', requireWebsitePasswordAuth, (req, res) => {
   }
 });
 
+/**
+ * GET /website/contact
+ * Serve the contact page (password protected)
+ */
+router.get('/contact', requireWebsitePasswordAuth, (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, '../website/contact.html'));
+  } catch (error) {
+    console.error('Error serving contact page:', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
+/**
+ * GET /website/terms
+ * Serve the terms and conditions page (password protected)
+ */
+router.get('/terms', requireWebsitePasswordAuth, (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, '../website/terms.html'));
+  } catch (error) {
+    console.error('Error serving terms page:', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
+/**
+ * GET /website/privacy
+ * Serve the privacy policy page (password protected)
+ */
+router.get('/privacy', requireWebsitePasswordAuth, (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, '../website/privacy.html'));
+  } catch (error) {
+    console.error('Error serving privacy page:', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
 module.exports = router;
 

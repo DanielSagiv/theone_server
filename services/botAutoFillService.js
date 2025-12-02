@@ -352,27 +352,7 @@ function calculateSeatCosts(selectedSeats) {
 async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) {
   const autoFilled = { ...baseData };
 
-  // 1. Runner Assignment
-  if (baseData.start_date && baseData.end_date) {
-    const runner = await findAvailableRunner(
-      new Date(baseData.start_date),
-      new Date(baseData.end_date),
-      'coe' // Default to COE-level assignment
-    );
-
-    if (runner) {
-      autoFilled.runner_assignment = {
-        type: 'coe',
-        runner_id: runner._id,
-        assigned_by: baseData.created_by || null,
-        assigned_at: new Date(),
-        status: 'assigned',
-        notes: '' // Left empty as per plan
-      };
-    }
-  }
-
-  // 2. Policy Extraction
+  // 1. Policy Extraction
   if (selectedEvents.length > 0) {
     const eventIds = selectedEvents.map(e => e.event_id || e._id || e);
     const policies = await extractPoliciesFromEvents(eventIds);
@@ -382,7 +362,7 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
     }
   }
 
-  // 3. Budget-aware seat selection (if events provided)
+  // 2. Budget-aware seat selection (if events provided)
   // Only auto-select seats if baseData doesn't already have selected_seats
   if (selectedEvents.length > 0 && preferences.budget && (!baseData.selected_seats || baseData.selected_seats.length === 0)) {
     let remainingBudget = preferences.budget.max;

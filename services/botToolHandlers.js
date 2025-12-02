@@ -273,6 +273,95 @@ async function handleGetEventsByDate(params, user, correlationId) {
 }
 
 /**
+ * Handler X: Open Create COE Form For Client (Admin only)
+ * @param {Object} params - Tool parameters
+ * @param {Object} user - Current user object
+ * @param {string} correlationId - Correlation ID for tracing
+ * @returns {Promise<Object>} Tool execution result
+ */
+async function handleOpenCreateCOEForClient(params, user, correlationId) {
+  try {
+    const { client_id } = params;
+
+    console.log('[BOT] handleOpenCreateCOEForClient - Received parameters:', {
+      client_id,
+      userRole: user.role,
+      correlationId
+    });
+
+    // Only admins can open this form
+    if (user.role !== 'admin') {
+      throw createError(
+        ErrorCodes.PERMISSION_DENIED,
+        'Only admins can create COEs for clients.',
+        ErrorCategories.PERMISSION,
+        false
+      );
+    }
+
+    // Validate client_id format
+    if (!client_id || !client_id.match(/^[0-9a-fA-F]{24}$/)) {
+      throw createError(
+        ErrorCodes.MISSING_REQUIRED_FIELD,
+        'A valid client_id is required to create a COE for a client.',
+        ErrorCategories.VALIDATION,
+        false,
+        { client_id: 'Must be a 24-character hex string' }
+      );
+    }
+
+    const client = await User.findById(client_id).select('firstName lastName email phone avatarUrl');
+    if (!client) {
+      throw createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        'Client not found.',
+        ErrorCategories.SERVICE,
+        false
+      );
+    }
+
+    const clientName = client.firstName && client.lastName
+      ? `${client.firstName} ${client.lastName}`
+      : client.firstName || client.email || 'Client';
+
+    const response = {
+      type: 'coe_create_form',
+      client: {
+        id: client._id.toString(),
+        name: clientName,
+        email: client.email || null,
+        phone: client.phone || null,
+        avatarUrl: client.avatarUrl || null
+      },
+      defaults: {
+        currency: 'USD',
+        start_date: null,
+        end_date: null,
+        notes: ''
+      },
+      message: `Create a new COE draft for ${clientName}.`
+    };
+
+    return {
+      success: true,
+      data: response,
+      message: response.message
+    };
+  } catch (error) {
+    console.error('Error in handleOpenCreateCOEForClient:', error);
+    return {
+      success: false,
+      error: error.code ? error : createError(
+        ErrorCodes.SERVICE_UNAVAILABLE,
+        error.message || 'Failed to open Create COE form for client',
+        getErrorCategory(error.code || ErrorCodes.SERVICE_UNAVAILABLE),
+        false
+      )
+    };
+  }
+}
+
+/**
  * Handler 2: Create COE Draft
  * @param {Object} params - Tool parameters
  * @param {Object} user - Current user object
@@ -1673,7 +1762,8 @@ const toolHandlers = {
   handleDeleteCOE,
   handleGetLocations,
   handleGetUserProfile,
-  handleGetClients
+  handleGetClients,
+  handleOpenCreateCOEForClient
 };
 
 module.exports = {
@@ -1686,6 +1776,7 @@ module.exports = {
   handleDeleteCOE,
   handleGetLocations,
   handleGetUserProfile,
-  handleGetClients
+  handleGetClients,
+  handleOpenCreateCOEForClient
 };
 

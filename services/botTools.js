@@ -427,6 +427,28 @@ const toolRegistry = {
     schema_version: '1.0.0',
     permissions: ['admin', 'runner'],
     handler: 'handleGetClients'
+  },
+
+  /**
+   * Tool 10: Open Create COE Form For Client (Admin only)
+   * @description Open a Create COE form for a specific client selected from the client list. Admins use this to start a COE draft for a client directly from the bot UI.
+   */
+  open_create_coe_for_client: {
+    name: 'open_create_coe_for_client',
+    description: 'Open a Create COE form for a specific client. Use this tool when an admin selects a client from the client list and wants to create a new COE draft for that client.',
+    parameters: {
+      type: 'object',
+      properties: {
+        client_id: {
+          type: 'string',
+          description: 'Client MongoDB ID (24-character hex string)'
+        }
+      },
+      required: ['client_id']
+    },
+    schema_version: '1.0.0',
+    permissions: ['admin'],
+    handler: 'handleOpenCreateCOEForClient'
   }
 };
 

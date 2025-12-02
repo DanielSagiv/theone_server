@@ -382,3 +382,4 @@ aws logs tail /ecs/the1-prod-service --follow --region us-west-2
 **Last Updated:** Based on current GitHub Actions workflows and ECS configuration
 
 
+
