@@ -451,6 +451,110 @@ async function sendAdminNotificationEmail(adminEmail, subject, message) {
 }
 
 /**
+ * Send website contact form submission email to CONTACT_EMAIL recipient
+ * @param {Object} data - Contact form data
+ * @param {string} data.name - Sender name
+ * @param {string} data.email - Sender email
+ * @param {string} [data.phone] - Sender phone
+ * @param {string} data.subject - Subject from the form
+ * @param {string} data.message - Message body
+ * @returns {Promise<Object|void>} Send result or void if CONTACT_EMAIL not configured
+ */
+async function sendContactFormEmail(data) {
+  const recipient = process.env.CONTACT_EMAIL;
+
+  if (!recipient) {
+    console.warn('[EMAIL_CONTACT] CONTACT_EMAIL is not configured, skipping contact form email send', {
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+
+  const { name, email, phone, subject, message } = data;
+
+  const emailSubject = `[THE1 Website Contact] ${subject}`;
+  const safeMessage = message || '';
+
+  console.log('[EMAIL_CONTACT] Preparing to send contact form email', {
+    to: recipient,
+    from: process.env.FROM_EMAIL || 'noreply@the1.vip',
+    subject: emailSubject,
+    hasName: !!name,
+    hasEmail: !!email,
+    hasPhone: !!phone,
+    timestamp: new Date().toISOString()
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2933; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #111827; color: #f9fafb; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }
+        .row { margin-bottom: 10px; }
+        .label { font-weight: bold; color: #4b5563; }
+        .value { color: #111827; }
+        .message { margin-top: 20px; white-space: pre-wrap; }
+        .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>New Contact Form Submission</h1>
+        </div>
+        <div class="content">
+          <div class="row">
+            <span class="label">Name:</span>
+            <span class="value">${name}</span>
+          </div>
+          <div class="row">
+            <span class="label">Email:</span>
+            <span class="value">${email}</span>
+          </div>
+          <div class="row">
+            <span class="label">Phone:</span>
+            <span class="value">${phone || 'N/A'}</span>
+          </div>
+          <div class="row">
+            <span class="label">Submitted at:</span>
+            <span class="value">${new Date().toLocaleString()}</span>
+          </div>
+          <div class="message">
+            <span class="label">Message:</span>
+            <div class="value">${safeMessage.replace(/\n/g, '<br>')}</div>
+          </div>
+        </div>
+        <div class="footer">
+          THE1 Website Contact Form
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const result = await sendEmail({
+    to: recipient,
+    subject: emailSubject,
+    html
+  });
+
+  console.log('[EMAIL_CONTACT] Contact form email sent via SES', {
+    to: recipient,
+    subject: emailSubject,
+    messageId: result && result.messageId,
+    timestamp: new Date().toISOString()
+  });
+
+  return result;
+}
+
+/**
  * UTILITY FUNCTIONS
  */
 
@@ -528,6 +632,7 @@ module.exports = {
   sendCOEInvitationEmail,
   sendBookingConfirmationEmail,
   sendAdminNotificationEmail,
+  sendContactFormEmail,
   
   // Utility functions (exported for testing)
   formatDate,

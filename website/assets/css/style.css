@@ -629,6 +629,15 @@ body {
     gap: 0.5rem;
 }
 
+/* Honeypot field: visually hidden but present in DOM for bots */
+.contact-honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 .contact-form-group label {
     font-size: clamp(0.9rem, 2vw, 1.1rem);
     font-weight: 600;
@@ -688,6 +697,19 @@ body {
     background: rgba(212, 175, 55, 0.3);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+}
+
+.contact-status-message {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
+
+.contact-status-message.success {
+  color: #4ade80;
+}
+
+.contact-status-message.error {
+  color: #f87171;
 }
 
 /* Membership Page Specific Styles */

@@ -28,6 +28,11 @@
             <p class="contact-subtitle">Get in touch with The One Private Club</p>
             <div class="contact-form-container">
                 <form class="contact-form">
+                    <!-- Honeypot field for bot/spam protection: should remain empty -->
+                    <div class="contact-form-group contact-honeypot">
+                        <label for="contact-company">Company</label>
+                        <input type="text" id="contact-company" name="company" class="contact-input" autocomplete="off">
+                    </div>
                     <div class="contact-form-group">
                         <label for="contact-name">Name</label>
                         <input type="text" id="contact-name" name="name" placeholder="Enter your name" class="contact-input" required>
@@ -59,6 +64,85 @@
             <p>&copy; 2025 THE1. All rights reserved. | <a href="/website/terms" class="footer-link">Terms and Conditions</a> | <a href="/website/privacy" class="footer-link">Privacy Policy</a></p>
         </div>
     </footer>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        var form = document.querySelector('.contact-form');
+        if (!form) return;
+
+        var submitBtn = form.querySelector('.contact-submit-btn');
+        var statusEl = document.createElement('div');
+        statusEl.className = 'contact-status-message';
+        form.appendChild(statusEl);
+
+        form.addEventListener('submit', async function (e) {
+          e.preventDefault();
+
+          var name = document.getElementById('contact-name').value.trim();
+          var email = document.getElementById('contact-email').value.trim();
+          var phone = document.getElementById('contact-phone').value.trim();
+          var subject = document.getElementById('contact-subject').value.trim();
+          var message = document.getElementById('contact-message').value.trim();
+          var honeypot = document.getElementById('contact-company') ? document.getElementById('contact-company').value : '';
+
+          if (!name || !email || !subject || !message) {
+            statusEl.textContent = 'Please fill in all required fields.';
+            statusEl.classList.remove('success');
+            statusEl.classList.add('error');
+            return;
+          }
+
+          var originalText = submitBtn.textContent;
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Sending...';
+          statusEl.textContent = '';
+          statusEl.classList.remove('success', 'error');
+
+          try {
+            var resp = await fetch('/website/contact', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: name,
+                email: email,
+                phone: phone,
+                subject: subject,
+                message: message,
+                company: honeypot
+              })
+            });
+
+            var data = {};
+            try {
+              data = await resp.json();
+            } catch (parseErr) {
+              data = {};
+            }
+
+            if (resp.ok && data.success) {
+              statusEl.textContent = 'Thank you. Your message has been sent.';
+              statusEl.classList.remove('error');
+              statusEl.classList.add('success');
+              form.reset();
+            } else {
+              statusEl.textContent = (data && data.error) ? data.error : 'There was a problem sending your message. Please try again.';
+              statusEl.classList.remove('success');
+              statusEl.classList.add('error');
+            }
+          } catch (err) {
+            console.error('Error submitting contact form:', err);
+            statusEl.textContent = 'There was a problem sending your message. Please try again.';
+            statusEl.classList.remove('success');
+            statusEl.classList.add('error');
+          } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
+          }
+        });
+      });
+    </script>
 </body>
 </html>
 
