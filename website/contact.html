@@ -83,7 +83,6 @@
           var phone = document.getElementById('contact-phone').value.trim();
           var subject = document.getElementById('contact-subject').value.trim();
           var message = document.getElementById('contact-message').value.trim();
-          var honeypot = document.getElementById('contact-company') ? document.getElementById('contact-company').value : '';
 
           if (!name || !email || !subject || !message) {
             statusEl.textContent = 'Please fill in all required fields.';
@@ -109,8 +108,7 @@
                 email: email,
                 phone: phone,
                 subject: subject,
-                message: message,
-                company: honeypot
+                message: message
               })
             });
 
