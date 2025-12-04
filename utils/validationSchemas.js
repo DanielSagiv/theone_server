@@ -21,6 +21,7 @@ const seatSchema = Joi.object({
     'backwall','large_3rd_tier_couch','third_tier_couch',
     'upper_dance','lower_dance','four_tops','stage_tables','owner_tables'
   ),
+  the1Category: Joi.string().allow(''),
   section: Joi.string().allow(''),
   capacity: Joi.number().min(0),
   minSpendUSD: Joi.number().min(0),

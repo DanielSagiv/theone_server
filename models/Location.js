@@ -34,6 +34,12 @@ const SeatSchema = new mongoose.Schema({
     ],
     index: true
   },
+  // THE1 business-facing category (independent of GXN/structural category)
+  the1Category: {
+    type: String,
+    trim: true,
+    index: true
+  },
   section: { type: String, trim: true },
   capacity: { type: Number, min: 0 },
   minSpendUSD: { type: Number, min: 0 },

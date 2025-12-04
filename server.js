@@ -52,6 +52,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/website/assets', express.static(path.join(__dirname, 'website/assets')));
+app.use('/website2/assets', express.static(path.join(__dirname, 'website2/assets')));
 
 // Session middleware for password protection
 app.use(session({
@@ -98,6 +99,7 @@ const subscriptionRoutes = require('./routes/subscriptions');
 const gxnRoutes = require('./routes/gxn');
 const botRoutes = require('./routes/bot');
 const websiteRoutes = require('./routes/website');
+const website2Routes = require('./routes/website2');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -111,6 +113,7 @@ app.use('/v1/gxn', gxnRoutes);
 app.use('/v1/bot', botRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/website', websiteRoutes);
+app.use('/website2', website2Routes);
 
 // Landing page route (password protection)
 app.get('/', requirePasswordAuth);

@@ -451,6 +451,17 @@ body {
     text-align: left;
 }
 
+.terms-text ul {
+    margin: 1rem 0 1rem 2rem;
+    padding: 0;
+    list-style-type: disc;
+}
+
+.terms-text li {
+    margin: 0.5rem 0;
+    padding-left: 0.5rem;
+}
+
 /* Privacy Page Specific Styles */
 .privacy-page {
     padding: 2rem;
@@ -533,6 +544,17 @@ body {
     line-height: 1.8;
     letter-spacing: 0.01em;
     text-align: left;
+}
+
+.privacy-text ul {
+    margin: 1rem 0 1rem 2rem;
+    padding: 0;
+    list-style-type: disc;
+}
+
+.privacy-text li {
+    margin: 0.5rem 0;
+    padding-left: 0.5rem;
 }
 
 /* Contact Page Specific Styles */

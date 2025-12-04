@@ -4954,9 +4954,11 @@
                                 <button class="btn" onclick="addSeatRow()">Add Table</button>
                             </div>
                             <table class="table">
-                                <thead><tr><th>Code</th><th>Category</th><th>Capacity</th><th>Min Spend</th><th>Quality (1-10)</th><th>Media</th><th></th></tr></thead>
+                                <thead><tr><th>Code</th><th>Category</th><th>THE1 Category</th><th>Capacity</th><th>Min Spend</th><th>Quality (1-10)</th><th>Media</th><th></th></tr></thead>
                                 <tbody id="cl_seats_tbody"></tbody>
                             </table>
+                            <!-- Reusable THE1 categories for seats -->
+                            <datalist id="cl_the1cat_datalist"></datalist>
                         </div>
                         <div id="cl_inventory_restaurant" style="display:none;">
                             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -10560,6 +10562,8 @@
             document.getElementById('cl_checkout').value = '';
             document.getElementById('cl_seats_tbody').innerHTML = '';
             document.getElementById('cl_units_tbody').innerHTML = '';
+            // Load reusable THE1 categories for new locations
+            loadGlobalThe1CategoriesIntoDatalist();
             setClStep(1);
         }
 
@@ -10619,6 +10623,8 @@
                 document.getElementById('cl_country').value = loc.address?.country || '';
                 // Ensure type-specific sections visible
                 onClTypeChange();
+                // Load global THE1 categories, then enrich with location-specific ones
+                await loadGlobalThe1CategoriesIntoDatalist();
                 // Attributes
                 document.getElementById('cl_desc').value = loc.description || '';
                 if (loc.type === 'night_club' || loc.type === 'day_club') {
@@ -10653,6 +10659,9 @@
                     });
                 }
                 
+                // Build THE1 category datalist from existing seats
+                buildThe1CategoryDatalistFromLocation(loc);
+                
                 // Inventory: clear and populate
                 document.getElementById('cl_seats_tbody').innerHTML = '';
                 (loc.seats || []).forEach(seat => {
@@ -10663,6 +10672,10 @@
                         const categorySelect = row.querySelector('.cl_seat_cat');
                         if (categorySelect && seat.category) {
                             categorySelect.value = seat.category;
+                        }
+                        const the1CatInput = row.querySelector('.cl_seat_the1cat');
+                        if (the1CatInput && seat.the1Category) {
+                            the1CatInput.value = seat.the1Category;
                         }
                         const capacityInput = row.querySelector('.cl_seat_cap');
                         if (capacityInput) {
@@ -11089,6 +11102,51 @@
             document.getElementById('cl_inventory_hotel').style.display = hotel ? 'block' : 'none';
         }
         // seats
+        async function loadGlobalThe1CategoriesIntoDatalist() {
+            try {
+                const datalist = document.getElementById('cl_the1cat_datalist');
+                if (!datalist) return;
+                // Clear existing options
+                datalist.innerHTML = '';
+                const result = await makeApiRequest('/locations/the1-categories');
+                if (!result || !result.success || !Array.isArray(result.data)) {
+                    console.warn('loadGlobalThe1CategoriesIntoDatalist: unexpected response', result);
+                    return;
+                }
+                result.data.forEach((val) => {
+                    if (typeof val === 'string' && val.trim()) {
+                        const opt = document.createElement('option');
+                        opt.value = val.trim();
+                        datalist.appendChild(opt);
+                    }
+                });
+            } catch (e) {
+                console.error('loadGlobalThe1CategoriesIntoDatalist error:', e);
+            }
+        }
+
+        function buildThe1CategoryDatalistFromLocation(loc) {
+            try {
+                const datalist = document.getElementById('cl_the1cat_datalist');
+                if (!datalist) return;
+                datalist.innerHTML = '';
+                const values = new Set();
+                (loc?.seats || []).forEach(seat => {
+                    if (seat && typeof seat.the1Category === 'string') {
+                        const val = seat.the1Category.trim();
+                        if (val) values.add(val);
+                    }
+                });
+                values.forEach(val => {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    datalist.appendChild(opt);
+                });
+            } catch (e) {
+                console.error('buildThe1CategoryDatalistFromLocation error:', e);
+            }
+        }
+
         function addSeatRow() {
             const tbody = document.getElementById('cl_seats_tbody');
             const tr = document.createElement('tr');
@@ -11106,6 +11164,7 @@
                         <option value="owner_tables">Owner Tables</option>
                     </select>
                 </td>
+                <td><input class="cl_seat_the1cat" list="cl_the1cat_datalist" placeholder="THE1 category" style="width:140px"/></td>
                 <td><input class="cl_seat_cap" type="number" min="0" style="width:80px"/></td>
                 <td><input class="cl_seat_min" type="number" min="0" style="width:100px"/></td>
                 <td><input class="cl_seat_quality" type="number" min="1" max="10" value="5" style="width:70px"/></td>
@@ -11257,6 +11316,7 @@
                     const seat = {
                         code: code,
                         category: r.querySelector('.cl_seat_cat').value,
+                        the1Category: (r.querySelector('.cl_seat_the1cat')?.value || '').trim() || undefined,
                         capacity: parseInt(r.querySelector('.cl_seat_cap').value || '0', 10),
                         minSpendUSD: parseFloat(r.querySelector('.cl_seat_min').value || '0'),
                         qualityScore: parseInt(r.querySelector('.cl_seat_quality')?.value || '5', 10)
@@ -11288,6 +11348,7 @@
                             code: originalSeat.code || '',
                             label: originalSeat.label || '',
                             category: originalSeat.category || '',
+                            the1Category: originalSeat.the1Category || '',
                             section: originalSeat.section || '',
                             capacity: originalSeat.capacity || 0,
                             minSpendUSD: originalSeat.minSpendUSD || 0,
@@ -11316,6 +11377,7 @@
                                 ...existingSeat, // Preserve all original properties
                                 code: formSeat.code, // Update from form
                                 category: formSeat.category,
+                                the1Category: formSeat.the1Category !== undefined ? formSeat.the1Category : existingSeat.the1Category,
                                 capacity: formSeat.capacity,
                                 minSpendUSD: formSeat.minSpendUSD,
                                 qualityScore: formSeat.qualityScore,
