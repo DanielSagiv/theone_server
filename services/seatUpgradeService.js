@@ -125,6 +125,9 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
       location
     );
     
+    // Get current seat price for comparison
+    const currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
+    
     // Find all available seats in the same event
     const availableSeats = event.seats.filter(seat => {
       // Must be available
@@ -154,7 +157,7 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
       availableSeatCodes: availableSeats.map(s => s.code)
     });
     
-    // Score and filter better seats
+    // Score and filter better seats - include seats that are more expensive OR have higher quality
     const betterSeats = availableSeats
       .map(seat => {
         // Match event seat to location seat by code (primary) or seat_id reference
@@ -187,35 +190,97 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
           location
         );
         
+        // Get seat price
+        const seatPrice = seat.event_price || seat.min_spend || 0;
+        
+        // Consider it an upgrade if: (1) higher quality score OR (2) more expensive
+        const isBetterQuality = seatScore > currentScore;
+        const isMoreExpensive = seatPrice > currentPrice;
+        const isUpgrade = isBetterQuality || isMoreExpensive;
+        
         console.log('[SEAT_UPGRADE] findBetterSeats: Scored seat', {
           code: seat.code,
           category: seat.category || locationSeat.category,
           score: seatScore,
           currentScore: currentScore,
-          isBetter: seatScore > currentScore
+          seatPrice: seatPrice,
+          currentPrice: currentPrice,
+          isBetterQuality: isBetterQuality,
+          isMoreExpensive: isMoreExpensive,
+          isUpgrade: isUpgrade
         });
         
         return {
           seat,
           locationSeat,
           score: seatScore,
-          isBetter: seatScore > currentScore
+          price: seatPrice,
+          isBetter: isUpgrade,
+          isBetterQuality: isBetterQuality,
+          isMoreExpensive: isMoreExpensive
         };
       })
       .filter(item => item && item.isBetter)
-      .sort((a, b) => b.score - a.score) // Sort by quality (best first)
-      .slice(0, 3) // Top 3 alternatives
-      .map(item => item.seat);
+      .sort((a, b) => {
+        // Sort by: (1) more expensive first, then (2) higher quality
+        if (a.isMoreExpensive !== b.isMoreExpensive) {
+          return b.isMoreExpensive - a.isMoreExpensive; // More expensive first
+        }
+        return b.score - a.score; // Then by quality
+      })
+      .slice(0, 5) // Top 5 alternatives (increased from 3)
+      .map(item => {
+        // Preserve all seat properties and ensure code and _id are available
+        const seat = item.seat;
+        // Convert to plain object if Mongoose document
+        const seatObj = seat.toObject ? seat.toObject() : seat;
+        
+        // Ensure code and _id are preserved
+        const seatCode = seatObj.code || seatObj.seat_code || '';
+        const seatId = seatObj._id || seatObj.seat_id;
+        
+        console.log('[SEAT_UPGRADE] Mapping better seat', {
+          originalCode: seatObj.code,
+          originalSeatCode: seatObj.seat_code,
+          resolvedCode: seatCode,
+          has_id: !!seatObj._id,
+          seatKeys: Object.keys(seatObj)
+        });
+        
+        return {
+          ...seatObj,
+          _id: seatId, // Event seat _id
+          seat_id: seatObj.seat_id || seatId, // Location seat reference or event seat _id
+          code: seatCode,
+          seat_code: seatCode
+        };
+      });
     
-    // Add fits_budget and tag to each seat
-    const currentPrice = currentSeat.event_price || currentSeat.base_price || 0;
+    // Add fits_budget and tag to each seat, ensuring seat_id and code are preserved
     const seatsWithBudgetInfo = betterSeats.map(seat => {
       const seatPrice = seat.event_price || seat.min_spend || 0;
       const priceDelta = seatPrice - currentPrice;
       const fitsBudget = priceDelta <= remainingBudget;
       
+      // Ensure seat_id and code are properly set
+      const seatId = seat._id || seat.seat_id; // Use _id (event seat ID) as primary
+      const seatCode = seat.code || seat.seat_code || '';
+      
+      console.log('[SEAT_UPGRADE] Mapping seat with budget info', {
+        seatId: seatId?.toString(),
+        seatCode: seatCode,
+        seatKeys: Object.keys(seat),
+        has_id: !!seat._id,
+        has_seat_id: !!seat.seat_id,
+        has_code: !!seat.code
+      });
+      
       return {
         ...seat,
+        _id: seatId, // Ensure _id is set
+        seat_id: seatId, // Use same for seat_id
+        code: seatCode,
+        seat_code: seatCode, // Also set seat_code for compatibility
         fits_budget: fitsBudget,
         tag: fitsBudget ? 'Within Budget' : 'Premium Upgrade'
       };
@@ -478,9 +543,25 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
                 return s.code === seat.code;
               });
               
+              // Ensure seat_id and seat_code are properly extracted
+              // seat_id should be the event seat's _id (for referencing the event seat)
+              // But we also need the location seat_id reference if available
+              const eventSeatId = seat._id || seat.seat_id;
+              const seatCode = seat.code || seat.seat_code || '';
+              
+              // Get location seat ID reference (seat_id field on event seat points to location seat)
+              const locationSeatId = seat.seat_id || (locationSeat ? locationSeat._id : null);
+              
+              console.log('[SEAT_UPGRADE] Creating alternative', {
+                eventSeatId: eventSeatId?.toString(),
+                locationSeatId: locationSeatId?.toString(),
+                seatCode: seatCode,
+                seatKeys: Object.keys(seat)
+              });
+              
               return {
-                seat_id: seat._id,
-                seat_code: seat.code,
+                seat_id: eventSeatId, // Use event seat _id as the primary identifier
+                seat_code: seatCode,
                 capacity: seat.capacity,
                 event_price: seat.event_price || seat.min_spend || 0,
                 base_price: seat.min_spend || 0,

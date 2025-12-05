@@ -1893,11 +1893,123 @@
             margin-left: 8px;
         }
 
+        /* Seat Carousel Container */
+        .coe-seat-carousel-container {
+            position: relative;
+            width: 100%;
+            margin: 8px 0;
+        }
+
+        .coe-seat-carousel-wrapper {
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
+        }
+
+        .coe-seat-carousel-track {
+            display: flex;
+            transition: transform 0.3s ease;
+            will-change: transform;
+            transform: translateX(0%);
+        }
+
+        .coe-seat-carousel-slide {
+            min-width: 100%;
+            flex-shrink: 0;
+            width: 100%;
+        }
+
+        .coe-seat-carousel-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .coe-seat-carousel-btn {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #60a5fa;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .coe-seat-carousel-btn:hover {
+            background: rgba(59, 130, 246, 0.3);
+            border-color: rgba(59, 130, 246, 0.6);
+            transform: scale(1.1);
+        }
+
+        .coe-seat-carousel-btn:active {
+            transform: scale(0.95);
+        }
+
+        .coe-seat-carousel-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .coe-seat-carousel-indicators {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .coe-seat-carousel-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(148, 163, 184, 0.3);
+            border: 1px solid rgba(148, 163, 184, 0.5);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .coe-seat-carousel-dot:hover {
+            background: rgba(148, 163, 184, 0.5);
+            transform: scale(1.2);
+        }
+
+        .coe-seat-carousel-dot.active {
+            background: #60a5fa;
+            border-color: #60a5fa;
+            width: 10px;
+            height: 10px;
+        }
+
         /* Individual Seat Item */
         .coe-seat-item {
             padding: 10px 12px;
             /* border-bottom removed - no separator lines */
             background: rgba(15, 23, 42, 0.3);
+        }
+        
+        /* Upgrade Seat Item - visually distinct */
+        .coe-seat-item.upgrade-seat-item {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 6px;
+        }
+        
+        .coe-seat-item.upgrade-seat-item.within-budget {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+        
+        .coe-seat-item.upgrade-seat-item.premium-upgrade {
+            background: rgba(245, 158, 11, 0.1);
+            border-color: rgba(245, 158, 11, 0.3);
         }
 
         .coe-seat-code {
@@ -1905,6 +2017,21 @@
             font-weight: 600;
             color: #60a5fa;
             margin-bottom: 6px;
+        }
+        
+        .coe-seat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .coe-seat-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
         }
 
         .coe-seat-costs {
@@ -2711,9 +2838,8 @@
             flex-wrap: wrap;
         }
         
-        .current-seat,
-        .upgrade-seat {
-            flex: 1;
+        .current-seat {
+            flex: 0 0 auto;
             min-width: 200px;
             padding: 12px;
             background: rgba(30, 41, 59, 0.4);
@@ -2722,8 +2848,48 @@
         }
         
         .upgrade-seat {
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 8px;
             border-color: rgba(234, 179, 8, 0.3);
             background: rgba(234, 179, 8, 0.05);
+        }
+        
+        /* Carousel container within upgrade comparison */
+        .upgrade-offer-comparison .coe-seat-carousel-container {
+            flex: 1;
+            min-width: 200px;
+            max-width: 100%;
+            position: relative;
+        }
+        
+        .upgrade-offer-comparison .coe-seat-carousel-wrapper {
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            min-height: 200px;
+        }
+        
+        .upgrade-offer-comparison .coe-seat-carousel-track {
+            display: flex;
+            transition: transform 0.3s ease;
+            transform: translateX(0%) !important;
+            width: 100%;
+        }
+        
+        .upgrade-offer-comparison .coe-seat-carousel-slide {
+            min-width: 100%;
+            flex-shrink: 0;
+            width: 100%;
+            display: block;
+        }
+        
+        .upgrade-offer-comparison .upgrade-seat {
+            width: 100%;
+            box-sizing: border-box;
+            display: block;
+            min-height: 150px;
         }
         
         .seat-label {
@@ -6511,6 +6677,95 @@
             }
             
             offers.forEach((offer, offerIndex) => {
+                // Filter alternatives to only show upgrades (more expensive than current)
+                const currentPrice = Number(offer.current_price) || 0;
+                const upgradeAlternatives = (offer.alternatives || []).filter(alt => {
+                    const altPrice = Number(alt.event_price || alt.price || 0);
+                    // Only show more expensive options (strictly greater)
+                    const isUpgrade = altPrice > currentPrice;
+                    console.log('[UPGRADE FILTER]', {
+                        currentSeat: offer.current_seat_code,
+                        currentPrice: currentPrice,
+                        altSeat: alt.seat_code,
+                        altPrice: altPrice,
+                        isUpgrade: isUpgrade
+                    });
+                    return isUpgrade;
+                });
+                
+                if (upgradeAlternatives.length === 0) {
+                    return; // Skip this offer if no actual upgrades
+                }
+                
+                // Generate upgrade seat items for carousel
+                const upgradeSeatItems = upgradeAlternatives.map((alt, altIndex) => `
+                    <div class="coe-seat-carousel-slide" data-upgrade-index="${altIndex}">
+                        <div class="upgrade-seat ${alt.fits_budget ? 'within-budget' : 'premium-upgrade'}">
+                            <div class="seat-label">Upgrade Option</div>
+                            <span class="upgrade-tag ${alt.fits_budget ? 'tag-within-budget' : 'tag-premium'}">${alt.tag || (alt.fits_budget ? 'Within Budget' : 'Premium Upgrade')}</span>
+                            <div class="seat-code">${alt.seat_code || 'N/A'}</div>
+                            <div class="seat-price">$${(alt.event_price || alt.price || 0).toLocaleString()}</div>
+                            <div class="price-delta ${(alt.price_delta || 0) > 0 ? 'positive' : ''}">
+                                ${(alt.price_delta || 0) > 0 ? '+' : ''}$${(alt.price_delta || 0).toLocaleString()}
+                                ${alt.price_delta_percentage ? `(${alt.price_delta_percentage}%)` : ''}
+                            </div>
+                            
+                            ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
+                                <div class="upgrade-reasons">
+                                    ${alt.upgrade_reasons.map(reason => `
+                                        <span class="upgrade-reason-badge">${reason}</span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            ${alt.sentiment && alt.sentiment.length > 0 ? `
+                                <div class="upgrade-sentiment">
+                                    ${alt.sentiment.map(sent => `
+                                        <span class="sentiment-badge type-${sent.type ? sent.type.toLowerCase() : 'b'}">
+                                            ${sent.text || `Type ${sent.type || 'B'}`}
+                                        </span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
+                            <button 
+                                class="btn-upgrade" 
+                                onclick="handleAcceptUpgrade('${offersData.coe_id}', '${offer.current_seat_id}', '${alt.seat_id}', '${offer.event_id}')"
+                            >
+                                Upgrade
+                            </button>
+                        </div>
+                    </div>
+                `);
+                
+                // Build carousel HTML for upgrade options - ALWAYS use carousel structure
+                const upgradeCarouselHtml = `
+                    <div class="coe-seat-carousel-container" data-upgrade-offer-index="${offerIndex}">
+                        <div class="coe-seat-carousel-wrapper">
+                            <div class="coe-seat-carousel-track">
+                                ${upgradeSeatItems.join('')}
+                            </div>
+                        </div>
+                        ${upgradeSeatItems.length > 1 ? `
+                        <div class="coe-seat-carousel-controls">
+                            <button class="coe-seat-carousel-btn coe-seat-carousel-prev" onclick="slideSeatCarousel(this, -1)" aria-label="Previous upgrade">
+                                ‹
+                            </button>
+                            <div class="coe-seat-carousel-indicators">
+                                ${upgradeAlternatives.map((_, idx) => `
+                                    <button class="coe-seat-carousel-dot ${idx === 0 ? 'active' : ''}" 
+                                            onclick="goToSeatSlide(this, ${idx})" 
+                                            aria-label="Go to upgrade ${idx + 1}"></button>
+                                `).join('')}
+                            </div>
+                            <button class="coe-seat-carousel-btn coe-seat-carousel-next" onclick="slideSeatCarousel(this, 1)" aria-label="Next upgrade">
+                                ›
+                            </button>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                
                 html += `
                     <div class="upgrade-offer-card">
                         <div class="upgrade-offer-event">
@@ -6526,43 +6781,7 @@
                             
                             <div class="upgrade-arrow">→</div>
                             
-                            ${(offer.alternatives || []).map((alt, altIndex) => `
-                                <div class="upgrade-seat ${alt.fits_budget ? 'within-budget' : 'premium-upgrade'}">
-                                    <div class="seat-label">Upgrade Option</div>
-                                    <span class="upgrade-tag ${alt.fits_budget ? 'tag-within-budget' : 'tag-premium'}">${alt.tag || (alt.fits_budget ? 'Within Budget' : 'Premium Upgrade')}</span>
-                                    <div class="seat-code">${alt.seat_code || 'N/A'}</div>
-                                    <div class="seat-price">$${(alt.event_price || alt.price || 0).toLocaleString()}</div>
-                                    <div class="price-delta ${(alt.price_delta || 0) > 0 ? 'positive' : ''}">
-                                        ${(alt.price_delta || 0) > 0 ? '+' : ''}$${(alt.price_delta || 0).toLocaleString()}
-                                        ${alt.price_delta_percentage ? `(${alt.price_delta_percentage}%)` : ''}
-                                    </div>
-                                    
-                                    ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
-                                        <div class="upgrade-reasons">
-                                            ${alt.upgrade_reasons.map(reason => `
-                                                <span class="upgrade-reason-badge">${reason}</span>
-                                            `).join('')}
-                                        </div>
-                                    ` : ''}
-                                    
-                                    ${alt.sentiment && alt.sentiment.length > 0 ? `
-                                        <div class="upgrade-sentiment">
-                                            ${alt.sentiment.map(sent => `
-                                                <span class="sentiment-badge type-${sent.type ? sent.type.toLowerCase() : 'b'}">
-                                                    ${sent.text || `Type ${sent.type || 'B'}`}
-                                                </span>
-                                            `).join('')}
-                                        </div>
-                                    ` : ''}
-                                    
-                                    <button 
-                                        class="btn-upgrade" 
-                                        onclick="handleAcceptUpgrade('${offersData.coe_id}', '${offer.current_seat_id}', '${alt.seat_id}', '${offer.event_id}')"
-                                    >
-                                        Upgrade
-                                    </button>
-                                </div>
-                            `).join('')}
+                            ${upgradeCarouselHtml}
                         </div>
                         
                         <button 
@@ -6576,6 +6795,39 @@
             });
             
             container.innerHTML = html;
+            
+            // Initialize carousel touch support for all upgrade carousels
+            container.querySelectorAll('.coe-seat-carousel-container').forEach(carousel => {
+                // Initialize current index to 0
+                carousel.dataset.currentIndex = '0';
+                const track = carousel.querySelector('.coe-seat-carousel-track');
+                const slides = carousel.querySelectorAll('.coe-seat-carousel-slide');
+                const wrapper = carousel.querySelector('.coe-seat-carousel-wrapper');
+                
+                // Ensure first slide is visible by setting initial transform
+                if (track && slides.length > 0) {
+                    track.style.transform = 'translateX(0%)';
+                    track.style.display = 'flex';
+                    track.style.visibility = 'visible';
+                    track.style.opacity = '1';
+                }
+                
+                if (wrapper) {
+                    wrapper.style.visibility = 'visible';
+                    wrapper.style.opacity = '1';
+                }
+                
+                initSeatCarouselTouch(carousel);
+                
+                // Initialize button states
+                const prevBtn = carousel.querySelector('.coe-seat-carousel-prev');
+                const nextBtn = carousel.querySelector('.coe-seat-carousel-next');
+                if (slides.length > 0) {
+                    if (prevBtn) prevBtn.disabled = true; // First slide
+                    if (nextBtn) nextBtn.disabled = slides.length === 1;
+                }
+            });
+            
             return container;
         }
         
@@ -7329,30 +7581,15 @@
                         `;
                     }
 
-                            const seatItemsHtml = eventGroup.seats.map(seat => {
+                            // Generate seat items for carousel
+                            const seatItems = eventGroup.seats.map((seat, seatIndex) => {
                                 // Status badge with color
                                 const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
                                 const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
                                 
                                 // Seat media thumbnails
-                                // Debug: Log seat media before rendering
-                                console.log('[COE Card Seat Render] Seat media check:', {
-                                    seat_code: seat.seat_code,
-                                    hasMedia: !!(seat.media),
-                                    mediaType: typeof seat.media,
-                                    isArray: Array.isArray(seat.media),
-                                    mediaLength: seat.media?.length || 0,
-                                    media: seat.media
-                                });
-                                
                                 const seatMedia = seat.media || [];
                                 const imageMedia = seatMedia.filter(m => m && m.type === 'image');
-                                
-                                console.log('[COE Card Seat Render] Filtered image media:', {
-                                    totalMedia: seatMedia.length,
-                                    imageMediaCount: imageMedia.length,
-                                    imageMedia: imageMedia
-                                });
                                 
                                 const seatMediaHtml = imageMedia.length > 0 ? `
                                     <div class="coe-seat-media">
@@ -7373,33 +7610,125 @@
                                 
                                 const totalCost = seat.event_price || seat.base_price || 0;
                                 return `
-                                    <div class="coe-seat-item">
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                            <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
-                                            <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                    <div class="coe-seat-carousel-slide" data-seat-index="${seatIndex}">
+                                        <div class="coe-seat-item">
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                                <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
+                                                <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                            </div>
+                                            <div class="coe-seat-costs">
+                                                <div class="coe-seat-cost-item">
+                                                    <span class="coe-seat-cost-label">Capacity:</span>
+                                                    <span>${seat.capacity || 0}</span>
+                                                </div>
+                                                <div class="coe-seat-cost-item">
+                                                    <span class="coe-seat-cost-label">Base Price:</span>
+                                                    <span>$${seat.base_price || 0}</span>
+                                                </div>
+                                                <div class="coe-seat-cost-item">
+                                                    <span class="coe-seat-cost-label">Event Price:</span>
+                                                    <span>$${seat.event_price || seat.base_price || 0}</span>
+                                                </div>
+                                                <div class="coe-seat-cost-item">
+                                                    <span class="coe-seat-cost-label">Total Cost:</span>
+                                                    <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
+                                                </div>
+                                            </div>
+                                            ${seatMediaHtml}
                                         </div>
-                                        <div class="coe-seat-costs">
-                                            <div class="coe-seat-cost-item">
-                                                <span class="coe-seat-cost-label">Capacity:</span>
-                                                <span>${seat.capacity || 0}</span>
-                                            </div>
-                                            <div class="coe-seat-cost-item">
-                                                <span class="coe-seat-cost-label">Base Price:</span>
-                                                <span>$${seat.base_price || 0}</span>
-                                            </div>
-                                            <div class="coe-seat-cost-item">
-                                                <span class="coe-seat-cost-label">Event Price:</span>
-                                                <span>$${seat.event_price || seat.base_price || 0}</span>
-                                            </div>
-                                            <div class="coe-seat-cost-item">
-                                                <span class="coe-seat-cost-label">Total Cost:</span>
-                                                <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
-                                            </div>
-                                        </div>
-                                        ${seatMediaHtml}
                                     </div>
                                 `;
-                            }).join('');
+                            });
+                            
+                            // Check for upgrade offers for this event
+                            const eventId = eventGroup.event_id || '';
+                            const upgradeOffers = (coeData.seat_upgrade_offers || []).filter(offer => 
+                                offer.event_id === eventId || offer.event_id?.toString() === eventId.toString()
+                            );
+                            
+                            // Build upgrade option slides
+                            let upgradeSlides = [];
+                            if (upgradeOffers.length > 0) {
+                                upgradeOffers.forEach(offer => {
+                                    const currentPrice = Number(offer.current_price) || 0;
+                                    const upgradeAlternatives = (offer.alternatives || []).filter(alt => {
+                                        const altPrice = Number(alt.event_price || alt.price || 0);
+                                        return altPrice > currentPrice; // Only more expensive options
+                                    });
+                                    
+                                    upgradeAlternatives.forEach((alt, altIndex) => {
+                                        upgradeSlides.push(`
+                                            <div class="coe-seat-carousel-slide" data-seat-type="upgrade" data-upgrade-index="${altIndex}">
+                                                <div class="coe-seat-item upgrade-seat-item ${alt.fits_budget ? 'within-budget' : 'premium-upgrade'}">
+                                                    <div class="coe-seat-header">
+                                                        <span class="coe-seat-code">${alt.seat_code || 'N/A'}</span>
+                                                        <span class="upgrade-tag ${alt.fits_budget ? 'tag-within-budget' : 'tag-premium'}">${alt.tag || (alt.fits_budget ? 'Within Budget' : 'Premium Upgrade')}</span>
+                                                    </div>
+                                                    <div class="coe-seat-label">Upgrade Option</div>
+                                                    <div class="coe-seat-costs">
+                                                        <div class="coe-seat-cost-item">
+                                                            <span class="coe-seat-cost-label">Event Price:</span>
+                                                            <span>$${(alt.event_price || alt.price || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="coe-seat-cost-item">
+                                                            <span class="coe-seat-cost-label">Price Delta:</span>
+                                                            <span style="color: #10b981;">+$${(alt.price_delta || 0).toLocaleString()}</span>
+                                                        </div>
+                                                        <div class="coe-seat-cost-item">
+                                                            <span class="coe-seat-cost-label">Total Cost:</span>
+                                                            <span style="font-weight: 600; color: #60a5fa;">$${((alt.event_price || alt.price || 0) + (eventGroup.seats[0]?.base_price || 0)).toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                    ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
+                                                        <div class="upgrade-reasons" style="margin-top: 8px;">
+                                                            ${alt.upgrade_reasons.map(reason => `
+                                                                <span class="upgrade-reason-badge" style="display: inline-block; background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; margin: 2px;">${reason}</span>
+                                                            `).join('')}
+                                                        </div>
+                                                    ` : ''}
+                                                    <button 
+                                                        class="btn-upgrade" 
+                                                        style="margin-top: 12px; width: 100%; padding: 8px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;"
+                                                        onclick="handleAcceptUpgrade('${coeData.id || coeData._id}', '${offer.current_seat_id}', '${alt.seat_id}', '${eventId}')"
+                                                    >
+                                                        Upgrade to This Seat
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        `);
+                                    });
+                                });
+                            }
+                            
+                            // Combine selected seats and upgrade options
+                            const allSeatItems = seatItems.join('') + upgradeSlides.join('');
+                            const totalSlides = eventGroup.seats.length + upgradeSlides.length;
+                            
+                            // Build carousel HTML if multiple items (seats + upgrades), otherwise just show single seat
+                            const seatItemsHtml = totalSlides > 1 ? `
+                                <div class="coe-seat-carousel-container" data-event-group-id="${eventGroup.event_id || 'unknown'}">
+                                    <div class="coe-seat-carousel-wrapper">
+                                        <div class="coe-seat-carousel-track">
+                                            ${allSeatItems}
+                                        </div>
+                                    </div>
+                                    <div class="coe-seat-carousel-controls">
+                                        <button class="coe-seat-carousel-btn coe-seat-carousel-prev" onclick="slideSeatCarousel(this, -1)" aria-label="Previous">
+                                            ‹
+                                        </button>
+                                        <div class="coe-seat-carousel-indicators">
+                                            ${Array.from({ length: totalSlides }).map((_, idx) => `
+                                                <button class="coe-seat-carousel-dot ${idx === 0 ? 'active' : ''}" 
+                                                        onclick="goToSeatSlide(this, ${idx})" 
+                                                        aria-label="Go to ${idx < eventGroup.seats.length ? 'table' : 'upgrade'} ${idx + 1}"></button>
+                                            `).join('')}
+                                        </div>
+                                        <button class="coe-seat-carousel-btn coe-seat-carousel-next" onclick="slideSeatCarousel(this, 1)" aria-label="Next">
+                                            ›
+                                        </button>
+                                    </div>
+                                </div>
+                            ` : (eventGroup.seats.length > 0 ? seatItems.join('') : '');
                             
                             const eventDate = eventGroup.event_date 
                                 ? new Date(eventGroup.event_date).toLocaleDateString()
@@ -7604,6 +7933,24 @@
                     });
                 });
             }
+
+            // Initialize carousel touch support for all seat carousels
+            card.querySelectorAll('.coe-seat-carousel-container').forEach(carousel => {
+                // Initialize current index to 0
+                carousel.dataset.currentIndex = '0';
+                initSeatCarouselTouch(carousel);
+                // Initialize button states
+                const track = carousel.querySelector('.coe-seat-carousel-track');
+                const slides = carousel.querySelectorAll('.coe-seat-carousel-slide');
+                const prevBtn = carousel.querySelector('.coe-seat-carousel-prev');
+                const nextBtn = carousel.querySelector('.coe-seat-carousel-next');
+                if (slides.length > 0) {
+                    // Ensure track starts at position 0
+                    track.style.transform = 'translateX(0%)';
+                    if (prevBtn) prevBtn.disabled = true; // First slide
+                    if (nextBtn) nextBtn.disabled = slides.length === 1;
+                }
+            });
 
             return card;
         }
@@ -8473,30 +8820,15 @@
                             `;
                         }
 
-                        const seatItemsHtml = eventGroup.seats.map(seat => {
+                        // Generate seat items for carousel
+                        const seatItems = eventGroup.seats.map((seat, seatIndex) => {
                             // Status badge with color
                             const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
                             const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
                             
                             // Seat media thumbnails
-                            // Debug: Log seat media before rendering
-                            console.log('[COE List Seat Render] Seat media check:', {
-                                seat_code: seat.seat_code,
-                                hasMedia: !!(seat.media),
-                                mediaType: typeof seat.media,
-                                isArray: Array.isArray(seat.media),
-                                mediaLength: seat.media?.length || 0,
-                                media: seat.media
-                            });
-                            
                             const seatMedia = seat.media || [];
                             const imageMedia = seatMedia.filter(m => m && m.type === 'image');
-                            
-                            console.log('[COE List Seat Render] Filtered image media:', {
-                                totalMedia: seatMedia.length,
-                                imageMediaCount: imageMedia.length,
-                                imageMedia: imageMedia
-                            });
                             
                             const seatMediaHtml = imageMedia.length > 0 ? `
                                 <div class="coe-seat-media">
@@ -8517,33 +8849,61 @@
                             
                             const totalCost = seat.event_price || seat.base_price || 0;
                             return `
-                                <div class="coe-seat-item">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                        <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
-                                        <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                <div class="coe-seat-carousel-slide" data-seat-index="${seatIndex}">
+                                    <div class="coe-seat-item">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                            <div class="coe-seat-code">Table ${seat.seat_code || 'N/A'}</div>
+                                            <span class="coe-seat-status-badge ${statusClass}">${statusLabel}</span>
+                                        </div>
+                                        <div class="coe-seat-costs">
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Capacity:</span>
+                                                <span>${seat.capacity || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Base Price:</span>
+                                                <span>$${seat.base_price || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Event Price:</span>
+                                                <span>$${seat.event_price || seat.base_price || 0}</span>
+                                            </div>
+                                            <div class="coe-seat-cost-item">
+                                                <span class="coe-seat-cost-label">Total Cost:</span>
+                                                <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
+                                            </div>
+                                        </div>
+                                        ${seatMediaHtml}
                                     </div>
-                                    <div class="coe-seat-costs">
-                                        <div class="coe-seat-cost-item">
-                                            <span class="coe-seat-cost-label">Capacity:</span>
-                                            <span>${seat.capacity || 0}</span>
-                                        </div>
-                                        <div class="coe-seat-cost-item">
-                                            <span class="coe-seat-cost-label">Base Price:</span>
-                                            <span>$${seat.base_price || 0}</span>
-                                        </div>
-                                        <div class="coe-seat-cost-item">
-                                            <span class="coe-seat-cost-label">Event Price:</span>
-                                            <span>$${seat.event_price || seat.base_price || 0}</span>
-                                        </div>
-                                        <div class="coe-seat-cost-item">
-                                            <span class="coe-seat-cost-label">Total Cost:</span>
-                                            <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
-                                        </div>
-                                    </div>
-                                    ${seatMediaHtml}
                                 </div>
                             `;
-                        }).join('');
+                        });
+                        
+                        // Build carousel HTML if multiple seats, otherwise just show single seat
+                        const seatItemsHtml = eventGroup.seats.length > 1 ? `
+                            <div class="coe-seat-carousel-container" data-event-group-id="${eventGroup.event_id || 'unknown'}">
+                                <div class="coe-seat-carousel-wrapper">
+                                    <div class="coe-seat-carousel-track">
+                                        ${seatItems.join('')}
+                                    </div>
+                                </div>
+                                <div class="coe-seat-carousel-controls">
+                                    <button class="coe-seat-carousel-btn coe-seat-carousel-prev" onclick="slideSeatCarousel(this, -1)" aria-label="Previous table">
+                                        ‹
+                                    </button>
+                                    <div class="coe-seat-carousel-indicators">
+                                        ${eventGroup.seats.map((_, idx) => `
+                                            <button class="coe-seat-carousel-dot ${idx === 0 ? 'active' : ''}" 
+                                                    onclick="goToSeatSlide(this, ${idx})" 
+                                                    aria-label="Go to table ${idx + 1}"></button>
+                                        `).join('')}
+                                    </div>
+                                    <button class="coe-seat-carousel-btn coe-seat-carousel-next" onclick="slideSeatCarousel(this, 1)" aria-label="Next table">
+                                        ›
+                                    </button>
+                                </div>
+                            </div>
+                        ` : seatItems.join('');
                         
                         const eventDate = eventGroup.event_date 
                             ? new Date(eventGroup.event_date).toLocaleDateString()
@@ -8604,74 +8964,74 @@
                     `;
                 })();
 
-                return `
-                    <div class="bot-coe-list-item">
-                        <div class="coe-list-item-header">
-                            <h5 class="coe-list-item-title">${coe.name || 'Untitled COE'}</h5>
-                            <span class="coe-status-badge ${statusClass}">${coe.status || 'draft'}</span>
-                        </div>
-                        <div class="coe-list-item-details">
-                            <span>${dateRange}</span>
-                            <span>•</span>
-                            <span>${coe.events_count || 0} events</span>
-                            <span>•</span>
-                            <span>${coe.seats_count || 0} seats</span>
-                            <span>•</span>
-                            <span>${coe.currency || 'USD'} ${(coe.total_price || 0).toLocaleString()}</span>
-                        </div>
-                        ${seatsHtml}
-                        <div class="coe-list-item-menu-container">
-                            <button class="coe-menu-button" data-coe-id="${coeId}" aria-label="COE menu">
-                                <div class="coe-menu-icon">
-                                    <div class="coe-menu-icon-line"></div>
-                                    <div class="coe-menu-icon-line"></div>
-                                    <div class="coe-menu-icon-line"></div>
-                                    <div style="display: flex; gap: 2px; margin-top: 1px;">
-                                        <div class="coe-menu-icon-dot"></div>
-                                        <div class="coe-menu-icon-dot"></div>
+                    return `
+                        <div class="bot-coe-list-item">
+                            <div class="coe-list-item-header">
+                                <h5 class="coe-list-item-title">${coe.name || 'Untitled COE'}</h5>
+                                <span class="coe-status-badge ${statusClass}">${coe.status || 'draft'}</span>
+                            </div>
+                            <div class="coe-list-item-details">
+                                <span>${dateRange}</span>
+                                <span>•</span>
+                                <span>${coe.events_count || 0} events</span>
+                                <span>•</span>
+                                <span>${coe.seats_count || 0} seats</span>
+                                <span>•</span>
+                                <span>${coe.currency || 'USD'} ${(coe.total_price || 0).toLocaleString()}</span>
+                            </div>
+                            ${seatsHtml}
+                            <div class="coe-list-item-menu-container">
+                                <button class="coe-menu-button" data-coe-id="${coeId}" aria-label="COE menu">
+                                    <div class="coe-menu-icon">
+                                        <div class="coe-menu-icon-line"></div>
+                                        <div class="coe-menu-icon-line"></div>
+                                        <div class="coe-menu-icon-line"></div>
+                                        <div style="display: flex; gap: 2px; margin-top: 1px;">
+                                            <div class="coe-menu-icon-dot"></div>
+                                            <div class="coe-menu-icon-dot"></div>
+                                        </div>
                                     </div>
+                                </button>
+                                <div class="coe-context-menu" data-coe-id="${coeId}">
+                                    <button class="coe-menu-item" data-action="chat-runner" data-coe-id="${coeId}">
+                                        <span class="coe-menu-item-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="coe-menu-item-text">Chat with my runner</span>
+                                    </button>
+                                    <button class="coe-menu-item" data-action="chat-the1" data-coe-id="${coeId}">
+                                        <span class="coe-menu-item-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="coe-menu-item-text">Chat with The1</span>
+                                    </button>
+                                    <button class="coe-menu-item" data-action="edit" data-coe-id="${coeId}">
+                                        <span class="coe-menu-item-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                            </svg>
+                                        </span>
+                                        <span class="coe-menu-item-text">Edit</span>
+                                    </button>
+                                    <button class="coe-menu-item" data-action="pay" data-coe-id="${coeId}">
+                                        <span class="coe-menu-item-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                                <line x1="1" y1="10" x2="23" y2="10"></line>
+                                            </svg>
+                                        </span>
+                                        <span class="coe-menu-item-text">Pay</span>
+                                    </button>
                                 </div>
-                            </button>
-                            <div class="coe-context-menu" data-coe-id="${coeId}">
-                                <button class="coe-menu-item" data-action="chat-runner" data-coe-id="${coeId}">
-                                    <span class="coe-menu-item-icon">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                                        </svg>
-                                    </span>
-                                    <span class="coe-menu-item-text">Chat with my runner</span>
-                                </button>
-                                <button class="coe-menu-item" data-action="chat-the1" data-coe-id="${coeId}">
-                                    <span class="coe-menu-item-icon">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                                        </svg>
-                                    </span>
-                                    <span class="coe-menu-item-text">Chat with The1</span>
-                                </button>
-                                <button class="coe-menu-item" data-action="edit" data-coe-id="${coeId}">
-                                    <span class="coe-menu-item-icon">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                        </svg>
-                                    </span>
-                                    <span class="coe-menu-item-text">Edit</span>
-                                </button>
-                                <button class="coe-menu-item" data-action="pay" data-coe-id="${coeId}">
-                                    <span class="coe-menu-item-icon">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                                            <line x1="1" y1="10" x2="23" y2="10"></line>
-                                        </svg>
-                                    </span>
-                                    <span class="coe-menu-item-text">Pay</span>
-                                </button>
                             </div>
                         </div>
-                    </div>
-                `;
-            }).join('');
+                    `;
+                }).join('');
 
             container.innerHTML = `
                 <div class="coe-list-header">
@@ -8681,6 +9041,24 @@
                     ${coesHtml}
                 </div>
             `;
+
+            // Initialize carousel touch support for all seat carousels
+            container.querySelectorAll('.coe-seat-carousel-container').forEach(carousel => {
+                // Initialize current index to 0
+                carousel.dataset.currentIndex = '0';
+                initSeatCarouselTouch(carousel);
+                // Initialize button states
+                const track = carousel.querySelector('.coe-seat-carousel-track');
+                const slides = carousel.querySelectorAll('.coe-seat-carousel-slide');
+                const prevBtn = carousel.querySelector('.coe-seat-carousel-prev');
+                const nextBtn = carousel.querySelector('.coe-seat-carousel-next');
+                if (slides.length > 0) {
+                    // Ensure track starts at position 0
+                    track.style.transform = 'translateX(0%)';
+                    if (prevBtn) prevBtn.disabled = true; // First slide
+                    if (nextBtn) nextBtn.disabled = slides.length === 1;
+                }
+            });
 
             // Attach event listeners to menu buttons in list items
             container.querySelectorAll('.coe-list-item-menu-container').forEach(containerEl => {
@@ -8948,36 +9326,9 @@
                         }
                     }
                     
-                    // Also check if COE response includes upgrade offers
-                    if ((structuredData.type === 'coe_created' || structuredData.type === 'coe_draft' || structuredData.type === 'coe_updated' || structuredData.type === 'coe_details')) {
-                        // Check both locations: structuredData.seat_upgrade_offers (top level) and structuredData.coe.seat_upgrade_offers (nested)
-                        const topLevelOffers = structuredData.seat_upgrade_offers;
-                        const nestedOffers = structuredData.coe?.seat_upgrade_offers;
-                        const upgradeOffersData = topLevelOffers || nestedOffers || [];
-                        
-                        console.log('[FRONTEND] Checking for upgrade offers:', {
-                            hasTopLevel: !!topLevelOffers,
-                            topLevelCount: topLevelOffers?.length || 0,
-                            hasNested: !!nestedOffers,
-                            nestedCount: nestedOffers?.length || 0,
-                            finalCount: upgradeOffersData.length,
-                            structuredDataType: structuredData.type
-                        });
-                        
-                        if (upgradeOffersData && upgradeOffersData.length > 0) {
-                            console.log('[FRONTEND] Rendering upgrade offers:', upgradeOffersData.length, 'offers');
-                            const upgradeOffers = renderSeatUpgradeOffers({
-                                type: 'seat_upgrade_offers',
-                                coe_id: structuredData.coe?.id || structuredData.coe?._id,
-                                offers: upgradeOffersData,
-                                budget_summary: structuredData.coe?.budget_summary || null,
-                                message: 'Premium seating upgrades available for your experience!'
-                            });
-                            contentEl.appendChild(upgradeOffers);
-                        } else {
-                            console.log('[FRONTEND] No upgrade offers found in COE response');
-                        }
-                    }
+                    // Note: Upgrade offers are now integrated into the COE seat carousel
+                    // No need to render them as a separate card anymore
+                    // The upgrade options will appear as additional slides in the seat carousel
                 } else {
                     // Regular text content
                     const parsed = parseJsonContent(message.content);
@@ -9955,6 +10306,186 @@
         function toggleCoeSeatEvent(header) {
             const group = header.closest('.coe-seat-event-group');
             group.classList.toggle('expanded');
+        }
+
+        /**
+         * Slide seat carousel
+         * @param {HTMLElement} button - The navigation button clicked
+         * @param {number} direction - -1 for previous, 1 for next
+         */
+        function slideSeatCarousel(button, direction) {
+            const container = button.closest('.coe-seat-carousel-container');
+            if (!container) return;
+
+            const track = container.querySelector('.coe-seat-carousel-track');
+            const slides = container.querySelectorAll('.coe-seat-carousel-slide');
+            const dots = container.querySelectorAll('.coe-seat-carousel-dot');
+            
+            if (!track || slides.length === 0) return;
+
+            // Get current index from data attribute (more reliable than DOM calculation)
+            let currentIndex = parseInt(container.dataset.currentIndex || '0', 10);
+            if (isNaN(currentIndex) || currentIndex < 0) currentIndex = 0;
+            if (currentIndex >= slides.length) currentIndex = slides.length - 1;
+
+            let newIndex = currentIndex + direction;
+            if (newIndex < 0) newIndex = slides.length - 1;
+            if (newIndex >= slides.length) newIndex = 0;
+
+            // Use the container to find the correct dot
+            goToSeatSlide(dots[newIndex] || null, newIndex);
+        }
+
+        /**
+         * Go to specific seat slide
+         * @param {HTMLElement} dot - The dot button clicked (or null to use index)
+         * @param {number} index - The slide index to go to
+         */
+        function goToSeatSlide(dot, index) {
+            const container = dot ? dot.closest('.coe-seat-carousel-container') : null;
+            if (!container) {
+                // If no container found from dot, try to find it from the button's context
+                console.warn('[CAROUSEL] Container not found for goToSeatSlide, trying alternative method');
+                // Try to find container from event target if dot is null
+                if (index !== undefined) {
+                    // This is called from slideSeatCarousel, container should be available
+                    return;
+                }
+                return;
+            }
+
+            const track = container.querySelector('.coe-seat-carousel-track');
+            const slides = container.querySelectorAll('.coe-seat-carousel-slide');
+            const dots = container.querySelectorAll('.coe-seat-carousel-dot');
+            const prevBtn = container.querySelector('.coe-seat-carousel-prev');
+            const nextBtn = container.querySelector('.coe-seat-carousel-next');
+
+            if (!track || slides.length === 0) return;
+
+            // Determine target index
+            let targetIndex;
+            if (index !== undefined) {
+                targetIndex = index;
+            } else if (dot) {
+                targetIndex = Array.from(dots).indexOf(dot);
+            } else {
+                targetIndex = parseInt(container.dataset.currentIndex || '0', 10);
+            }
+            
+            if (targetIndex < 0 || targetIndex >= slides.length) {
+                console.warn('[CAROUSEL] Invalid target index:', targetIndex, 'slides:', slides.length);
+                return;
+            }
+
+            // Store current index in data attribute for reliable state tracking
+            container.dataset.currentIndex = targetIndex.toString();
+
+            // Use percentage-based transform (consistent with CSS)
+            track.style.transform = `translateX(-${targetIndex * 100}%)`;
+
+            // Update dots
+            dots.forEach((d, i) => {
+                d.classList.toggle('active', i === targetIndex);
+            });
+
+            // Update button states
+            if (prevBtn) prevBtn.disabled = targetIndex === 0;
+            if (nextBtn) nextBtn.disabled = targetIndex === slides.length - 1;
+        }
+
+        /**
+         * Initialize touch/swipe support for seat carousel
+         */
+        function initSeatCarouselTouch(carouselContainer) {
+            let startX = 0;
+            let currentX = 0;
+            let isDragging = false;
+            let currentIndex = 0;
+            let startTransform = 0;
+
+            const track = carouselContainer.querySelector('.coe-seat-carousel-track');
+            const wrapper = carouselContainer.querySelector('.coe-seat-carousel-wrapper');
+            const slides = carouselContainer.querySelectorAll('.coe-seat-carousel-slide');
+            if (!track || !wrapper || slides.length === 0) return;
+
+            // Get current index from data attribute (more reliable)
+            const getCurrentIndex = () => {
+                const stored = parseInt(carouselContainer.dataset.currentIndex || '0', 10);
+                if (!isNaN(stored) && stored >= 0 && stored < slides.length) {
+                    return stored;
+                }
+                // Fallback to active dot
+                const dots = carouselContainer.querySelectorAll('.coe-seat-carousel-dot');
+                const activeDot = Array.from(dots).find(d => d.classList.contains('active'));
+                return activeDot ? Array.from(dots).indexOf(activeDot) : 0;
+            };
+
+            carouselContainer.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                currentX = startX;
+                isDragging = true;
+                currentIndex = getCurrentIndex();
+                // Store the starting transform value (in percentage)
+                startTransform = currentIndex * 100;
+                track.style.transition = 'none'; // Disable transition during drag
+            }, { passive: true });
+
+            carouselContainer.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                currentX = e.touches[0].clientX;
+                const diff = startX - currentX;
+                
+                // Get wrapper width (single slide width)
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const slideWidth = wrapperRect.width;
+                
+                // Calculate drag offset as percentage
+                const dragPercent = (diff / slideWidth) * 100;
+                const newTransform = startTransform - dragPercent;
+                
+                // Clamp to valid range (0% to (slides.length - 1) * 100%)
+                const minTransform = 0;
+                const maxTransform = (slides.length - 1) * 100;
+                const clampedTransform = Math.max(minTransform, Math.min(maxTransform, newTransform));
+                
+                track.style.transform = `translateX(-${clampedTransform}%)`;
+            }, { passive: true });
+
+            carouselContainer.addEventListener('touchend', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                const diff = startX - currentX;
+                const threshold = 50; // Minimum swipe distance in pixels
+                
+                // Re-enable transition
+                track.style.transition = '';
+                
+                if (Math.abs(diff) > threshold) {
+                    if (diff > 0) {
+                        // Swipe left - next
+                        const nextBtn = carouselContainer.querySelector('.coe-seat-carousel-next');
+                        if (nextBtn && !nextBtn.disabled) {
+                            slideSeatCarousel(nextBtn, 1);
+                        } else {
+                            // Snap back to current
+                            goToSeatSlide(null, currentIndex);
+                        }
+                    } else {
+                        // Swipe right - previous
+                        const prevBtn = carouselContainer.querySelector('.coe-seat-carousel-prev');
+                        if (prevBtn && !prevBtn.disabled) {
+                            slideSeatCarousel(prevBtn, -1);
+                        } else {
+                            // Snap back to current
+                            goToSeatSlide(null, currentIndex);
+                        }
+                    }
+                } else {
+                    // Snap back to current position
+                    goToSeatSlide(null, currentIndex);
+                }
+            }, { passive: true });
         }
 
         /**
