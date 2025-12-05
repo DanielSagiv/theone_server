@@ -123,15 +123,45 @@ const registerUser = async (userData) => {
  */
 const authenticateUser = async (email, password, req) => {
   try {
+    const emailLower = email.toLowerCase();
+    console.log('[AUTH_SERVICE] authenticateUser called', {
+      email: email,
+      emailLower: emailLower,
+      passwordLength: password ? password.length : 0,
+      timestamp: new Date().toISOString()
+    });
+
     // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email: emailLower });
+    console.log('[AUTH_SERVICE] User lookup result', {
+      userFound: !!user,
+      userId: user?._id?.toString(),
+      emailVerified: user?.emailVerified,
+      isActive: user?.isActive,
+      entityStatus: user?.entity_status,
+      hasPassword: !!user?.password,
+      passwordHashLength: user?.password?.length
+    });
+
     if (!user) {
+      console.log('[AUTH_SERVICE] User not found', { email: emailLower });
       throw new Error('Invalid credentials');
     }
 
     // Verify password
+    console.log('[AUTH_SERVICE] Comparing password', {
+      userId: user._id.toString(),
+      passwordProvided: password ? 'yes' : 'no',
+      passwordLength: password?.length
+    });
     const isPasswordValid = await user.comparePassword(password);
+    console.log('[AUTH_SERVICE] Password comparison result', {
+      isValid: isPasswordValid,
+      userId: user._id.toString()
+    });
+
     if (!isPasswordValid) {
+      console.log('[AUTH_SERVICE] Password mismatch', { userId: user._id.toString() });
       throw new Error('Invalid credentials');
     }
 

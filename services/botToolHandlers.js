@@ -496,14 +496,97 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // If events not provided, use sentiment-based auto-selection
     let finalEvents = events;
     if (!finalEvents || finalEvents.length === 0) {
-      // Query events in date range
-      const availableEvents = await Event.find({
+      // Build event filter using overlap logic (same as routes/events.js COE date range filtering)
+      // Events that overlap with COE date range:
+      // Event starts before COE ends AND Event ends after COE starts
+      const now = new Date();
+      const eventFilter = {
         status: 'active',
-        start_datetime: { $gte: startDate, $lte: endDate },
-        end_datetime: { $gte: new Date() }
-      })
-      .populate('location_id', 'name sentiment attributes')
+        $and: [
+          { start_datetime: { $lt: endDate } },  // Event starts before COE ends
+          {
+            $or: [
+              { end_datetime: { $gt: startDate } },  // Event ends after COE starts
+              { end_datetime: { $exists: false } },     // Event has no end date
+              { end_datetime: null }                    // Event end date is null
+            ]
+          },
+          // Exclude past events when selecting for COE
+          {
+            $or: [
+              { end_datetime: { $gte: now } },  // Event hasn't ended yet
+              { end_datetime: { $exists: false } },  // Or has no end date
+              { end_datetime: null }  // Or end date is null
+            ]
+          }
+        ]
+      };
+      
+      // If city is specified, first find locations in that city, then filter events by those location IDs
+      if (conversationPreferences.city) {
+        // Create city matching map for common abbreviations
+        const cityMap = {
+          'las vegas': ['lv', 'las vegas', 'vegas'],
+          'new york': ['ny', 'new york', 'nyc'],
+          'los angeles': ['la', 'los angeles'],
+          'miami': ['miami', 'mia'],
+          'chicago': ['chicago', 'chi']
+        };
+        
+        const searchCity = conversationPreferences.city.toLowerCase().trim();
+        const cityVariations = cityMap[searchCity] || [searchCity];
+        
+        // Build regex pattern that matches any variation
+        const cityPattern = cityVariations.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const cityRegex = new RegExp(`^(${cityPattern})$`, 'i');
+        
+        const cityLocations = await Location.find({
+          'address.city': cityRegex
+        }).select('_id name address.city');
+        
+        const locationIds = cityLocations.map(loc => loc._id);
+        console.log('[BOT] City filter applied:', {
+          searchCity: conversationPreferences.city,
+          cityVariations: cityVariations,
+          locationsFound: locationIds.length,
+          locationNames: cityLocations.map(loc => ({ name: loc.name, city: loc.address?.city })),
+          locationIds: locationIds
+        });
+        
+        if (locationIds.length > 0) {
+          eventFilter.location_id = { $in: locationIds };
+        } else {
+          // No locations in this city, so no events will match
+          eventFilter.location_id = { $in: [] }; // Empty array = no matches
+        }
+      }
+      
+      console.log('[BOT] Querying events with overlap filter:', {
+        status: eventFilter.status,
+        coe_date_range: { from: startDate, to: endDate },
+        overlap_logic: 'Event starts before COE ends AND Event ends after COE starts',
+        exclude_past: true,
+        city_filter: conversationPreferences.city || 'none',
+        hasLocationFilter: !!eventFilter.location_id,
+        filter: JSON.stringify(eventFilter, null, 2)
+      });
+      
+      const availableEvents = await Event.find(eventFilter)
+      .populate('location_id', 'name sentiment attributes address.city')
       .limit(50);
+
+      console.log('[BOT] Events found in query:', {
+        count: availableEvents.length,
+        eventNames: availableEvents.map(e => e.name),
+        eventDetails: availableEvents.map(e => ({
+          name: e.name,
+          start: e.start_datetime,
+          end: e.end_datetime,
+          city: e.location_id?.address?.city,
+          status: e.status,
+          locationName: e.location_id?.name
+        }))
+      });
 
       if (availableEvents.length > 0) {
         // Auto-select events using sentiment matching
@@ -512,6 +595,61 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           conversationPreferences,
           5 // Max 5 events
         );
+        
+        // Check if all events were excluded due to location preferences
+        // This happens when availableEvents.length > 0 but selectedEvents.length === 0
+        // and exclusions were applied in autoSelectEventsBySentiment
+        let allExcludedByLocation = null;
+        if (availableEvents.length > 0 && selectedEvents.length === 0) {
+          // Check if we have text preferences that might contain exclusions
+          const hasTextPreferences = conversationPreferences.seat_preferences || 
+                                     conversationPreferences.specific_preferences;
+          
+          if (hasTextPreferences) {
+            // Re-extract structured preferences to get exclusions
+            // This is needed because selectedEvents is empty, so we can't get structuredPrefs from it
+            const { extractStructuredPreferences } = require('./botSentimentService');
+            try {
+              const structuredPrefs = await extractStructuredPreferences(
+                conversationPreferences.seat_preferences || '',
+                conversationPreferences.specific_preferences || ''
+              );
+              
+              const exclusions = structuredPrefs?.exclusions || [];
+              
+              // Check if all available events were from excluded locations
+              if (exclusions.length > 0) {
+                const excludedLocations = availableEvents
+                  .filter(event => {
+                    const locationName = event.location_id?.name?.toLowerCase() || '';
+                    return exclusions.some(ex => {
+                      const exLower = ex.toLowerCase();
+                      return locationName.includes(exLower) || exLower.includes(locationName);
+                    });
+                  })
+                  .map(event => event.location_id?.name)
+                  .filter(Boolean);
+                
+                // If ALL events were from excluded locations, it's a location-level exclusion
+                if (excludedLocations.length === availableEvents.length && excludedLocations.length > 0) {
+                  console.log('[BOT] All events excluded due to location preferences:', {
+                    excluded_locations: excludedLocations,
+                    exclusions: exclusions,
+                    total_events: availableEvents.length
+                  });
+                  allExcludedByLocation = {
+                    excluded_locations: [...new Set(excludedLocations)],
+                    exclusions: exclusions,
+                    total_events_found: availableEvents.length
+                  };
+                }
+              }
+            } catch (error) {
+              console.error('[BOT] Error extracting structured preferences for exclusion check:', error);
+              // Continue without exclusion info
+            }
+          }
+        }
         
         // Phase 2.5: Preserve sentiment match data for display
         // Note: Don't pre-select seats here - let budget-aware selection handle it to ensure seats exist in DB
@@ -544,6 +682,11 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             } : null
           };
         }).filter(Boolean); // Remove null entries
+        
+        // Store location exclusion info for later diagnostic creation
+        if (allExcludedByLocation) {
+          finalEvents._locationExclusionInfo = allExcludedByLocation;
+        }
       }
     }
 
@@ -561,6 +704,51 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
     // Build selected_seats array from events (with budget-aware selection if needed)
     const selectedSeats = [];
+    const eventDiagnostics = []; // Collect diagnostics from all events
+    
+    // If no events found at all, create a diagnostic for that
+    if (!finalEvents || finalEvents.length === 0) {
+      // Check if all events were excluded due to location preferences
+      if (finalEvents && finalEvents._locationExclusionInfo) {
+        const exclusionInfo = finalEvents._locationExclusionInfo;
+        console.log('[BOT] All events excluded by location preferences - creating diagnostic');
+        eventDiagnostics.push({
+          event_id: null,
+          event_name: null,
+          primary_reason: 'ALL_EVENTS_EXCLUDED_BY_PREFERENCES',
+          exclusion_type: 'location',
+          details: {
+            excluded_locations: exclusionInfo.excluded_locations,
+            exclusions: exclusionInfo.exclusions,
+            total_events_found: exclusionInfo.total_events_found
+          }
+        });
+      } else {
+        console.log('[BOT] No events found in date range/city - creating diagnostic');
+        // Extract dates from multiple possible locations
+        const diagnosticStartDate = conversationPreferences.dates?.startDate || 
+                                     conversationPreferences.start_date || 
+                                     startDate;
+        const diagnosticEndDate = conversationPreferences.dates?.endDate || 
+                                   conversationPreferences.end_date || 
+                                   endDate;
+        eventDiagnostics.push({
+          event_id: null,
+          event_name: null,
+          primary_reason: 'NO_EVENTS_IN_DATE_RANGE',
+          details: {
+            searched_city: conversationPreferences.city || null,
+            searched_dates: {
+              start: diagnosticStartDate,
+              end: diagnosticEndDate
+            },
+            party_size: conversationPreferences.party_size || null,
+            budget: conversationPreferences.budget?.max || null
+          }
+        });
+      }
+    }
+    
     for (const eventData of finalEvents) {
       // Validate event_id exists
       if (!eventData.event_id) {
@@ -590,11 +778,22 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           ...conversationPreferences,
           structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
         };
-        const autoSeats = await selectSeatsByBudgetAndCapacity(
+        const seatResult = await selectSeatsByBudgetAndCapacity(
           event,
           preferencesWithStructured,
           conversationPreferences.budget?.max
         );
+        
+        // Handle both old format (array) and new format (object with seats/diagnostics)
+        const autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
+        const seatDiagnostics = Array.isArray(seatResult) ? null : (seatResult.diagnostics || null);
+        
+        // Store diagnostics for later use in error handling
+        if (seatDiagnostics) {
+          eventData.seat_diagnostics = seatDiagnostics;
+          eventDiagnostics.push(seatDiagnostics);
+        }
+        
         eventData.selected_seats = autoSeats;
       }
 
@@ -705,11 +904,21 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             ...conversationPreferences,
             structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
           };
-          const autoSeats = await selectSeatsByBudgetAndCapacity(
+          const seatResult = await selectSeatsByBudgetAndCapacity(
             event,
             preferencesWithStructured,
             conversationPreferences.budget?.max
           );
+          
+          // Handle both old format (array) and new format (object with seats/diagnostics)
+          const autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
+          const seatDiagnostics = Array.isArray(seatResult) ? null : (seatResult.diagnostics || null);
+          
+          // Store diagnostics for later use in error handling
+          if (seatDiagnostics) {
+            eventData.seat_diagnostics = seatDiagnostics;
+            eventDiagnostics.push(seatDiagnostics);
+          }
           
           if (autoSeats.length > 0) {
             for (const seatData of autoSeats) {
@@ -739,23 +948,34 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         }
         
         if (selectedSeats.length === 0) {
-          // Still no seats after alternative search - return error
+          // Still no seats after alternative search - return error with aggregated diagnostics
           console.log('[BOT] No seats found even after alternative search');
+          
+          // Collect diagnostics from alternative events too
+          const allEventDiagnostics = [...eventDiagnostics];
+          for (const eventData of finalEvents) {
+            if (eventData.seat_diagnostics) {
+              allEventDiagnostics.push(eventData.seat_diagnostics);
+            }
+          }
+          
           throw {
             type: 'NO_SEATS_AVAILABLE',
             message: 'We couldn\'t find any available seats/tables matching your preferences.',
             searchAttempts: alternativeResult.searchAttempts,
-            preferences: conversationPreferences
+            preferences: conversationPreferences,
+            event_diagnostics: allEventDiagnostics
           };
         }
       } else {
-        // No alternative events found - return error
+        // No alternative events found - return error with diagnostics
         console.log('[BOT] No alternative events found with available seats');
         throw {
           type: 'NO_SEATS_AVAILABLE',
           message: 'We couldn\'t find any available seats/tables matching your preferences.',
           searchAttempts: alternativeResult.searchAttempts || [],
-          preferences: conversationPreferences
+          preferences: conversationPreferences,
+          event_diagnostics: eventDiagnostics
         };
       }
     }
@@ -965,6 +1185,16 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Handle NO_SEATS_AVAILABLE error specially
     if (error && error.type === 'NO_SEATS_AVAILABLE') {
       const errorResponse = formatNoSeatsAvailableResponse(error);
+      console.log('[BOT_TOOL_HANDLER] NO_SEATS_AVAILABLE error formatted:', {
+        hasSpecificReason: !!errorResponse.specific_reason,
+        specificReason: errorResponse.specific_reason,
+        hasEventDiagnostics: !!(errorResponse.details?.event_diagnostics?.length),
+        eventDiagnosticsCount: errorResponse.details?.event_diagnostics?.length || 0,
+        hasPrimaryReason: !!errorResponse.details?.primary_reason,
+        primaryReason: errorResponse.details?.primary_reason,
+        errorResponseType: errorResponse.type,
+        errorResponseKeys: Object.keys(errorResponse)
+      });
       return {
         success: false,
         error: {

@@ -159,9 +159,42 @@ function calculateSeatScore(eventSeat, locationSeat) {
  * @param {number} remainingBudget - Remaining budget after other selections
  * @returns {Array} Selected seats
  */
+/**
+ * Select seats by budget and capacity with diagnostic information
+ * @param {Object} event - Event object with seats
+ * @param {Object} preferences - User preferences
+ * @param {number} remainingBudget - Remaining budget
+ * @returns {Object} { seats: Array, diagnostics: Object }
+ */
 async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remainingBudget = null) {
+  // Initialize diagnostics
+  const diagnostics = {
+    event_id: event._id?.toString() || null,
+    event_name: event.name || 'Unknown Event',
+    total_seats: event.seats?.length || 0,
+    party_size: preferences.party_size || 2,
+    budget: remainingBudget || preferences.budget?.max || Infinity,
+    exclusions: preferences.structuredPreferences?.exclusions || preferences.exclusions || [],
+    filtering_stages: {
+      initial_count: event.seats?.length || 0,
+      after_status_filter: 0,
+      after_capacity_filter: 0,
+      after_budget_filter: 0,
+      after_exclusion_filter: 0,
+      final_count: 0
+    },
+    primary_reason: null,
+    secondary_reasons: [],
+    details: {}
+  };
+
   if (!event.seats || event.seats.length === 0) {
-    return [];
+    diagnostics.primary_reason = 'NO_SEATS_IN_EVENT';
+    diagnostics.details.no_seats_in_event = {
+      event_id: diagnostics.event_id,
+      event_name: diagnostics.event_name
+    };
+    return { seats: [], diagnostics };
   }
 
   const partySize = preferences.party_size || 2; // Default to 2
@@ -181,17 +214,71 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     }
   }
 
-  // Filter available seats
-  let availableSeats = event.seats.filter(seat => 
-    seat.status === 'available' && 
-    seat.capacity >= partySize &&
-    (seat.event_price || seat.min_spend || 0) <= budget
-  );
+  // Stage 1: Filter by status (available only)
+  let availableSeats = event.seats.filter(seat => seat.status === 'available');
+  diagnostics.filtering_stages.after_status_filter = availableSeats.length;
 
-  // Filter out seats with excluded sentiment keywords
+  if (availableSeats.length === 0) {
+    const statusCounts = {
+      total: event.seats.length,
+      available: event.seats.filter(s => s.status === 'available').length,
+      booked: event.seats.filter(s => s.status === 'booked').length,
+      held: event.seats.filter(s => s.status === 'held').length,
+      blocked: event.seats.filter(s => s.status === 'blocked').length
+    };
+    diagnostics.primary_reason = 'NO_AVAILABLE_SEATS';
+    diagnostics.details.no_available_seats = statusCounts;
+    return { seats: [], diagnostics };
+  }
+
+  // Stage 2: Filter by capacity
+  availableSeats = availableSeats.filter(seat => seat.capacity >= partySize);
+  diagnostics.filtering_stages.after_capacity_filter = availableSeats.length;
+
+  if (availableSeats.length === 0) {
+    const capacities = event.seats.map(s => s.capacity || 0).filter(c => c > 0);
+    const maxCapacity = capacities.length > 0 ? Math.max(...capacities) : 0;
+    diagnostics.primary_reason = 'CAPACITY_TOO_SMALL';
+    diagnostics.details.capacity_too_small = {
+      party_size: partySize,
+      max_capacity_found: maxCapacity,
+      seats_with_sufficient_capacity: 0
+    };
+    diagnostics.secondary_reasons.push('NO_AVAILABLE_SEATS'); // Also no available seats
+    return { seats: [], diagnostics };
+  }
+
+  // Stage 3: Filter by budget
+  availableSeats = availableSeats.filter(seat => {
+    const price = seat.event_price || seat.min_spend || 0;
+    return price <= budget;
+  });
+  diagnostics.filtering_stages.after_budget_filter = availableSeats.length;
+
+  if (availableSeats.length === 0) {
+    const prices = event.seats
+      .map(s => s.event_price || s.min_spend || 0)
+      .filter(p => p > 0);
+    const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+    const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    diagnostics.primary_reason = 'BUDGET_TOO_LOW';
+    diagnostics.details.budget_too_low = {
+      budget: budget === Infinity ? null : budget,
+      min_seat_price: minPrice,
+      max_seat_price: maxPrice,
+      seats_within_budget: 0
+    };
+    diagnostics.secondary_reasons.push('NO_AVAILABLE_SEATS'); // Also no available seats
+    return { seats: [], diagnostics };
+  }
+
+  // Stage 4: Filter out seats with excluded sentiment keywords
+  let seatsExcludedCount = 0;
+  const matchingKeywords = [];
   if (exclusions && exclusions.length > 0 && location && location.seats && Array.isArray(location.seats)) {
     const exclusionKeywords = exclusions.map(ex => ex.toLowerCase().trim());
     
+    const beforeExclusion = availableSeats.length;
     availableSeats = availableSeats.filter(eventSeat => {
       // Match event seat to location seat by code (primary) or seat_id
       const locationSeat = location.seats.find(locSeat => {
@@ -214,26 +301,39 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
       );
       
       if (hasExcludedSentiment) {
+        seatsExcludedCount++;
+        const matchedKeyword = exclusionKeywords.find(ex => locationSeatSentimentText.includes(ex));
+        if (matchedKeyword && !matchingKeywords.includes(matchedKeyword)) {
+          matchingKeywords.push(matchedKeyword);
+        }
         console.log('[SEAT SELECTION] Excluding seat due to negative preference:', {
           seat_code: eventSeat.code,
-          exclusion_matched: exclusionKeywords.find(ex => locationSeatSentimentText.includes(ex))
+          exclusion_matched: matchedKeyword
         });
         return false;
       }
       
       return true;
     });
+    
+    diagnostics.filtering_stages.after_exclusion_filter = availableSeats.length;
+    
+    if (availableSeats.length === 0 && beforeExclusion > 0) {
+      diagnostics.primary_reason = 'EXCLUDED_BY_PREFERENCES';
+      diagnostics.details.excluded_by_preferences = {
+        exclusions: exclusions,
+        seats_excluded: seatsExcludedCount,
+        matching_keywords: matchingKeywords
+      };
+      return { seats: [], diagnostics };
+    }
+  } else {
+    diagnostics.filtering_stages.after_exclusion_filter = availableSeats.length;
   }
 
-  if (availableSeats.length === 0) {
-    if (exclusions && exclusions.length > 0) {
-      console.log('[SEAT SELECTION] No seats available after filtering exclusions:', {
-        exclusions,
-        total_seats: event.seats.length
-      });
-    }
-    return [];
-  }
+  // If we reach here, we have seats available
+  diagnostics.filtering_stages.final_count = availableSeats.length;
+  diagnostics.primary_reason = null; // Success - no reason needed
 
   // Score all seats and sort by: quality DESC, then price DESC (to maximize budget)
   const scoredSeats = availableSeats.map(eventSeat => {
@@ -274,7 +374,7 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   // Select the best seat (highest score, and among same score, highest price)
   const selectedSeat = scoredSeats[0].seat;
   
-  return [{
+  const selectedSeats = [{
     seat_id: selectedSeat._id,
     seat_code: selectedSeat.code,
     capacity: selectedSeat.capacity,
@@ -284,6 +384,8 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     available_until: event.end_datetime || event.start_datetime,
     status: 'selected'
   }];
+
+  return { seats: selectedSeats, diagnostics };
 }
 
 /**
@@ -384,11 +486,15 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
                                (selectedEvents.find(e => (e.event_id || e._id || e) === eventId)?.structuredPreferences) ||
                                null
       };
-      const seats = await selectSeatsByBudgetAndCapacity(
+      const seatResult = await selectSeatsByBudgetAndCapacity(
         event,
         preferencesWithStructured,
         remainingBudget
       );
+      
+      // Handle both old format (array) and new format (object with seats/diagnostics)
+      const seats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
+      const seatDiagnostics = Array.isArray(seatResult) ? null : (seatResult.diagnostics || null);
 
       if (seats.length > 0) {
         // Validate seats exist in event before adding
@@ -544,8 +650,31 @@ async function findAlternativeEventsWithSeats(
   const Location = require('../models/Location');
   
   try {
-    const startDate = new Date(preferences.start_date || preferences.startDate);
-    const endDate = new Date(preferences.end_date || preferences.endDate);
+    // Handle different date formats in preferences
+    let startDate, endDate;
+    if (preferences.dates && preferences.dates.startDate) {
+      startDate = new Date(preferences.dates.startDate);
+      endDate = new Date(preferences.dates.endDate || preferences.dates.startDate);
+    } else {
+      startDate = new Date(preferences.start_date || preferences.startDate);
+      endDate = new Date(preferences.end_date || preferences.endDate);
+    }
+    
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      console.error('[ALTERNATIVE SEARCH] Invalid dates in preferences:', {
+        start_date: preferences.start_date || preferences.startDate || preferences.dates?.startDate,
+        end_date: preferences.end_date || preferences.endDate || preferences.dates?.endDate,
+        dates: preferences.dates
+      });
+      return {
+        success: false,
+        events: [],
+        searchAttempts: [],
+        error: 'Invalid date format in preferences'
+      };
+    }
+    
     const partySize = preferences.party_size || 2;
     const budget = preferences.budget?.max || Infinity;
     const city = preferences.city;

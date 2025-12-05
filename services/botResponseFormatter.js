@@ -951,35 +951,147 @@ function formatProfileResponse(user, message) {
   };
 }
 
+/**
+ * Format no seats available error with pinpoint diagnostics
+ * @param {Object} errorData - Error data with diagnostics
+ * @returns {Object} Formatted error response
+ */
 function formatNoSeatsAvailableResponse(errorData) {
-  const { searchAttempts = [], preferences = {} } = errorData;
+  const { searchAttempts = [], preferences = {}, event_diagnostics = [] } = errorData;
   
-  const startDate = preferences.start_date || preferences.startDate;
-  const endDate = preferences.end_date || preferences.endDate;
+  // Extract dates from multiple possible locations in preferences
+  const startDate = preferences.dates?.startDate || preferences.start_date || preferences.startDate;
+  const endDate = preferences.dates?.endDate || preferences.end_date || preferences.endDate;
   const city = preferences.city;
   const budget = preferences.budget?.max || preferences.budget_range?.max;
   const partySize = preferences.party_size;
   
-  // Generate suggestions based on search attempts
+  // Analyze diagnostics to determine primary reason
+  let primaryReason = null;
+  let specificMessage = errorData.message || 'We couldn\'t find any available seats/tables matching your preferences.';
   const suggestions = [];
+  const eventDiagnosticsDetails = [];
+  const secondaryReasons = []; // Initialize outside the if block
   
-  // Always suggest trying a different date range (most common solution)
-  suggestions.push('Try a different date range');
+  if (event_diagnostics && event_diagnostics.length > 0) {
+    // Count reasons across all events
+    const reasonCounts = {};
+    const reasonDetails = {};
+    
+    event_diagnostics.forEach(diag => {
+      if (diag && diag.primary_reason) {
+        reasonCounts[diag.primary_reason] = (reasonCounts[diag.primary_reason] || 0) + 1;
+        if (!reasonDetails[diag.primary_reason]) {
+          reasonDetails[diag.primary_reason] = [];
+        }
+        reasonDetails[diag.primary_reason].push(diag);
+      }
+      
+      // Store event diagnostics for details
+      eventDiagnosticsDetails.push({
+        event_id: diag.event_id,
+        event_name: diag.event_name,
+        reason: diag.primary_reason,
+        details: diag.details || {}
+      });
+    });
+    
+    // Determine most common reason
+    const sortedReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
+    primaryReason = sortedReasons.length > 0 ? sortedReasons[0][0] : null;
+    
+    // Build specific message based on primary reason
+    if (primaryReason === 'CAPACITY_TOO_SMALL') {
+      const capacityDetails = reasonDetails[primaryReason][0]?.details?.capacity_too_small;
+      if (capacityDetails) {
+        specificMessage = `We couldn't find any available seats/tables matching your preferences. The events${city ? ` in ${city}` : ''} don't have seats that accommodate ${capacityDetails.party_size} people. The largest available seat capacity is ${capacityDetails.max_capacity_found} people.`;
+        suggestions.push(`Consider reducing party size to ${capacityDetails.max_capacity_found} or fewer`);
+      }
+    } else if (primaryReason === 'BUDGET_TOO_LOW') {
+      const budgetDetails = reasonDetails[primaryReason][0]?.details?.budget_too_low;
+      if (budgetDetails && budgetDetails.min_seat_price > 0) {
+        const budgetFormatted = budget && budget !== Infinity ? `$${budget.toLocaleString()}` : 'your budget';
+        const minPriceFormatted = `$${Math.ceil(budgetDetails.min_seat_price).toLocaleString()}`;
+        specificMessage = `We couldn't find any available seats/tables matching your preferences. All available seats exceed ${budgetFormatted}. The minimum seat price is ${minPriceFormatted}.`;
+        suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+      }
+    } else if (primaryReason === 'NO_AVAILABLE_SEATS') {
+      specificMessage = `We couldn't find any available seats/tables matching your preferences. All seats for the selected events are currently booked or reserved.`;
+      suggestions.push('Try a different date range');
+      if (city) {
+        suggestions.push(`Try a different city`);
+      }
+    } else if (primaryReason === 'EXCLUDED_BY_PREFERENCES') {
+      const exclusionDetails = reasonDetails[primaryReason][0]?.details?.excluded_by_preferences;
+      if (exclusionDetails && exclusionDetails.matching_keywords && exclusionDetails.matching_keywords.length > 0) {
+        const keywords = exclusionDetails.matching_keywords.join(', ');
+        specificMessage = `We couldn't find any available seats/tables matching your preferences. The available seats were excluded based on your preferences: ${keywords}.`;
+        suggestions.push(`Consider removing exclusion: ${keywords}`);
+      }
+    } else if (primaryReason === 'ALL_EVENTS_EXCLUDED_BY_PREFERENCES') {
+      // Location-level exclusion: all events were from excluded locations
+      const exclusionDetails = reasonDetails[primaryReason][0]?.details;
+      const exclusionType = reasonDetails[primaryReason][0]?.exclusion_type || 'general';
+      
+      if (exclusionDetails) {
+        if (exclusionType === 'location' && exclusionDetails.excluded_locations && exclusionDetails.excluded_locations.length > 0) {
+          // Location-level exclusion: "I don't like LIV club"
+          const locationNames = exclusionDetails.excluded_locations.join(', ');
+          specificMessage = `We couldn't find any available events for you. We found events only in ${locationNames}, which you stated you don't want.`;
+          suggestions.push(`Consider removing the exclusion for ${locationNames}`);
+        } else {
+          // General exclusion (fallback)
+          const exclusions = exclusionDetails.exclusions?.join(', ') || 'your preferences';
+          specificMessage = `We couldn't find any available events matching your preferences. All available events were excluded based on: ${exclusions}.`;
+          suggestions.push(`Consider adjusting your preferences`);
+        }
+        
+        if (city) {
+          suggestions.push(`Try a different city`);
+        }
+        suggestions.push('Try a different date range');
+      }
+    } else if (primaryReason === 'NO_SEATS_IN_EVENT') {
+      specificMessage = `We couldn't find any available seats/tables matching your preferences. The selected events don't have any seats configured.`;
+      suggestions.push('Try selecting different events');
+    } else if (primaryReason === 'NO_EVENTS_IN_DATE_RANGE') {
+      const cityStr = city ? ` in ${city}` : '';
+      const startDateStr = startDate ? new Date(startDate).toLocaleDateString() : 'N/A';
+      const endDateStr = endDate ? new Date(endDate).toLocaleDateString() : 'N/A';
+      specificMessage = `We couldn't find any available events${cityStr} for the selected date range (${startDateStr} - ${endDateStr}).`;
+      suggestions.push('Try a different date range');
+      if (city) {
+        suggestions.push('Try a different city');
+      }
+    }
+    
+    // Add secondary reasons as additional context
+    event_diagnostics.forEach(diag => {
+      if (diag.secondary_reasons && diag.secondary_reasons.length > 0) {
+        secondaryReasons.push(...diag.secondary_reasons);
+      }
+    });
+  }
   
-  if (budget && budget !== Infinity) {
-    suggestions.push('Consider increasing your budget');
-  }
-  if (city) {
-    suggestions.push('Try a different city');
-  }
-  if (partySize && partySize > 2) {
-    suggestions.push('Consider reducing party size');
+  // Generate general suggestions if no specific ones
+  if (suggestions.length === 0) {
+    suggestions.push('Try a different date range');
+    if (budget && budget !== Infinity) {
+      suggestions.push('Consider increasing your budget');
+    }
+    if (city) {
+      suggestions.push('Try a different city');
+    }
+    if (partySize && partySize > 2) {
+      suggestions.push('Consider reducing party size');
+    }
   }
   
   return {
     type: 'error',
     error_type: 'NO_SEATS_AVAILABLE',
-    message: errorData.message || 'We couldn\'t find any available seats/tables matching your preferences.',
+    message: specificMessage,
+    specific_reason: primaryReason,
     details: {
       searched_dates: startDate && endDate ? {
         start: new Date(startDate).toISOString().split('T')[0],
@@ -988,6 +1100,9 @@ function formatNoSeatsAvailableResponse(errorData) {
       searched_city: city || null,
       budget_range: budget && budget !== Infinity ? { min: 0, max: budget } : null,
       party_size: partySize || null,
+      primary_reason: primaryReason,
+      secondary_reasons: [...new Set(secondaryReasons)],
+      event_diagnostics: eventDiagnosticsDetails,
       attempts: searchAttempts.map(attempt => ({
         strategy: attempt.strategy,
         events_tried: attempt.events_tried || 0,

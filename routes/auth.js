@@ -64,9 +64,30 @@ router.post('/signup', async (req, res) => {
  */
 router.post('/signin', async (req, res) => {
   try {
+    // DEBUG: Log incoming request
+    const passwordValue = req.body?.password || '';
+    const passwordPreview = passwordValue.length > 0 
+      ? `${passwordValue.substring(0, 1)}${'*'.repeat(Math.max(0, passwordValue.length - 2))}${passwordValue.substring(passwordValue.length - 1)}`
+      : 'missing';
+    console.log('[AUTH_SIGNIN] Incoming signin request', {
+      timestamp: new Date().toISOString(),
+      bodyKeys: Object.keys(req.body || {}),
+      email: req.body?.email ? `${req.body.email.substring(0, 10)}...` : 'missing',
+      hasPassword: !!req.body?.password,
+      passwordLength: passwordValue.length,
+      passwordPreview: passwordPreview,
+      passwordFirstChar: passwordValue.length > 0 ? passwordValue[0] : null,
+      passwordLastChar: passwordValue.length > 0 ? passwordValue[passwordValue.length - 1] : null,
+      contentType: req.headers['content-type']
+    });
+
     // Validate input
     const { error, value } = signinSchema.validate(req.body);
     if (error) {
+      console.log('[AUTH_SIGNIN] Validation failed', {
+        error: error.details[0].message,
+        received: { email: req.body?.email, hasPassword: !!req.body?.password }
+      });
       return res.status(400).json({
         success: false,
         error: {
@@ -75,6 +96,11 @@ router.post('/signin', async (req, res) => {
         }
       });
     }
+
+    console.log('[AUTH_SIGNIN] Validation passed', {
+      email: value.email,
+      emailLowercase: value.email.toLowerCase()
+    });
 
     // Authenticate user
     const result = await authService.authenticateUser(value.email, value.password, req);

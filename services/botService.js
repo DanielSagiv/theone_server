@@ -946,8 +946,23 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         errorPreview: toolResult.error ? JSON.stringify(toolResult.error).substring(0, 200) : null
       });
       
-      // Extract structured data if present
-      const structuredData = toolResult.success && toolResult.data ? toolResult.data : null;
+      // Extract structured data if present (check both success and error cases)
+      let structuredData = null;
+      if (toolResult.success && toolResult.data) {
+        structuredData = toolResult.data;
+      } else if (!toolResult.success && toolResult.data) {
+        // Error responses also have structured data (e.g., NO_SEATS_AVAILABLE)
+        structuredData = toolResult.data;
+        console.log('[BOT] Extracted structured_data from error response:', {
+          toolName: toolName,
+          hasData: !!toolResult.data,
+          dataType: toolResult.data?.type,
+          hasSpecificReason: !!toolResult.data?.specific_reason,
+          specificReason: toolResult.data?.specific_reason,
+          hasEventDiagnostics: !!(toolResult.data?.details?.event_diagnostics?.length),
+          eventDiagnosticsCount: toolResult.data?.details?.event_diagnostics?.length || 0
+        });
+      }
       
       // Add tool result to conversation
       // Tool messages MUST have content (the tool result JSON)
@@ -960,7 +975,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         role: 'tool',
         name: toolName,
         content: toolResultContent || '{}', // Ensure content is never null for tool messages
-        structured_data: structuredData // Include structured data for frontend rendering
+        structured_data: structuredData // Include structured data for frontend rendering (even for errors)
       });
     }
 
@@ -1004,17 +1019,46 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     }
 
     // Extract structured data from tool results for assistant message
+    // First try to get structured_data directly from tool result message (most reliable)
+    // Then fall back to parsing the content
     const structuredDataFromTools = toolResults
       .map(tr => {
+        // Prefer structured_data directly on the tool result message
+        if (tr.structured_data) {
+          console.log('[BOT] Found structured_data on tool result message:', {
+            hasStructuredData: true,
+            type: tr.structured_data?.type,
+            hasSpecificReason: !!tr.structured_data?.specific_reason
+          });
+          return tr.structured_data;
+        }
+        // Fall back to parsing content
         try {
           const result = JSON.parse(tr.content);
           // Include error responses as well
-          return result.data ? result.data : null;
+          const data = result.data ? result.data : null;
+          if (data) {
+            console.log('[BOT] Extracted structured_data from tool result content:', {
+              hasData: true,
+              type: data?.type,
+              hasSpecificReason: !!data?.specific_reason
+            });
+          }
+          return data;
         } catch {
           return null;
         }
       })
       .find(data => data && (data.type === 'coe_created' || data.type === 'coe_updated' || data.type === 'coe_details' || data.type === 'coe_draft' || data.type === 'coe_list' || data.type === 'event_list' || data.type === 'location_list' || data.type === 'coe_preferences_form' || data.type === 'coe_create_form' || data.type === 'error' || data.type === 'user_profile' || data.type === 'client_list'));
+    
+    console.log('[BOT] Final structuredDataFromTools:', {
+      found: !!structuredDataFromTools,
+      type: structuredDataFromTools?.type,
+      hasSpecificReason: !!structuredDataFromTools?.specific_reason,
+      specificReason: structuredDataFromTools?.specific_reason,
+      hasEventDiagnostics: !!(structuredDataFromTools?.details?.event_diagnostics?.length),
+      eventDiagnosticsCount: structuredDataFromTools?.details?.event_diagnostics?.length || 0
+    });
 
     // Add final assistant reply with structured data if available
     // CRITICAL: If assistantReply has tool_calls but no content, we must not save it with tool_calls
@@ -1034,6 +1078,16 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     // Include structured data reference if available
     if (structuredDataFromTools) {
       assistantMessage.structured_data = structuredDataFromTools;
+      console.log('[BOT] Attaching structured_data to assistant message:', {
+        type: structuredDataFromTools.type,
+        hasSpecificReason: !!structuredDataFromTools.specific_reason,
+        specificReason: structuredDataFromTools.specific_reason,
+        hasEventDiagnostics: !!(structuredDataFromTools.details?.event_diagnostics?.length),
+        eventDiagnosticsCount: structuredDataFromTools.details?.event_diagnostics?.length || 0,
+        hasPrimaryReason: !!structuredDataFromTools.details?.primary_reason,
+        primaryReason: structuredDataFromTools.details?.primary_reason,
+        structuredDataKeys: Object.keys(structuredDataFromTools)
+      });
       
       // Track active COE if COE was created/updated
       if (structuredDataFromTools.type === 'coe_created' || structuredDataFromTools.type === 'coe_updated') {
@@ -1046,6 +1100,8 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           });
         }
       }
+    } else {
+      console.log('[BOT] No structured_data found to attach to assistant message');
     }
 
     conversation.messages.push(assistantMessage);

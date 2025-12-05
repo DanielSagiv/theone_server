@@ -471,6 +471,82 @@ Return as JSON with a "reasons" array: {"reasons": ["reason 1", "reason 2", "rea
 }
 
 /**
+ * Filter events by location exclusions
+ * Checks if event location name matches any exclusion keywords
+ * @param {Array} events - Events to filter (with populated or unpopulated location_id)
+ * @param {Array} exclusions - Exclusion keywords from structured preferences
+ * @returns {Array} Filtered events (excluded events removed)
+ */
+/**
+ * Filter events by location exclusions
+ * Checks if event location name matches any exclusion keywords
+ * @param {Array} events - Events to filter (with populated or unpopulated location_id)
+ * @param {Array} exclusions - Exclusion keywords from structured preferences
+ * @returns {Array} Filtered events (excluded events removed)
+ */
+function filterEventsByLocationExclusions(events, exclusions) {
+  if (!exclusions || exclusions.length === 0) {
+    return events;
+  }
+
+  const exclusionKeywords = exclusions.map(ex => ex.toLowerCase().trim()).filter(Boolean);
+  if (exclusionKeywords.length === 0) {
+    return events;
+  }
+
+  const filtered = events.filter(item => {
+    // Handle both match objects (from embeddings: { event, event_id, match_score })
+    // and event objects (from basic matching: { event, sentimentScore })
+    const event = item.event || item;
+    if (!event) return true;
+
+    // Get location name - handle both populated and unpopulated location_id
+    let locationName = '';
+    if (event.location_id) {
+      if (typeof event.location_id === 'object' && event.location_id.name) {
+        // Populated location
+        locationName = (event.location_id.name || '').trim();
+      } else if (typeof event.location_id === 'string') {
+        // Unpopulated location_id (just an ID string) - cannot check exclusion, allow through
+        // This is safe because we can't exclude what we can't identify
+        return true;
+      }
+    }
+
+    if (!locationName) {
+      // No location name available - allow through (safe default)
+      return true;
+    }
+
+    // Check if location name matches any exclusion keyword (case-insensitive partial match)
+    const locationNameLower = locationName.toLowerCase();
+    const matchesExclusion = exclusionKeywords.some(keyword => {
+      // Match if location name contains keyword OR keyword contains location name
+      // This handles cases like "liv" matching "LIV" or "LIV club"
+      return locationNameLower.includes(keyword) || keyword.includes(locationNameLower);
+    });
+
+    if (matchesExclusion) {
+      const matchedKeyword = exclusionKeywords.find(k => 
+        locationNameLower.includes(k) || k.includes(locationNameLower)
+      );
+      console.log('[SENTIMENT SERVICE] Excluding event due to location exclusion:', {
+        event_name: event.name || 'Unknown',
+        event_id: event._id?.toString() || event.id || 'N/A',
+        location_name: locationName,
+        matched_exclusion: matchedKeyword,
+        all_exclusions: exclusionKeywords
+      });
+      return false;
+    }
+
+    return true;
+  });
+
+  return filtered;
+}
+
+/**
  * Auto-select events based on sentiment matching
  * Phase 2.3: Enhanced with OpenAI semantic matching when text preferences are available
  * @param {Array} events - Available events
@@ -506,6 +582,18 @@ async function autoSelectEventsBySentiment(events, preferences, maxEvents = 5) {
         filtered = matchedEvents.filter(match => {
           const eventPrice = match.event?.base_price || 0;
           return eventPrice <= preferences.budget.max;
+        });
+      }
+
+      // Step 3.5: Filter out events from excluded locations
+      if (structuredPrefs.exclusions && structuredPrefs.exclusions.length > 0) {
+        const beforeExclusion = filtered.length;
+        filtered = filterEventsByLocationExclusions(filtered, structuredPrefs.exclusions);
+        console.log('[SENTIMENT SERVICE] Location exclusion filter applied:', {
+          exclusions: structuredPrefs.exclusions,
+          before: beforeExclusion,
+          after: filtered.length,
+          excluded: beforeExclusion - filtered.length
         });
       }
 
@@ -551,6 +639,21 @@ async function autoSelectEventsBySentiment(events, preferences, maxEvents = 5) {
     filtered = ranked.filter(item => {
       const eventPrice = item.event.base_price || 0;
       return eventPrice <= preferences.budget.max;
+    });
+  }
+
+  // Filter out events from excluded locations (if exclusions provided in preferences)
+  const exclusions = preferences.structuredPreferences?.exclusions || 
+                     preferences.exclusions || 
+                     [];
+  if (exclusions.length > 0) {
+    const beforeExclusion = filtered.length;
+    filtered = filterEventsByLocationExclusions(filtered, exclusions);
+    console.log('[SENTIMENT SERVICE] Location exclusion filter applied (basic matching):', {
+      exclusions: exclusions,
+      before: beforeExclusion,
+      after: filtered.length,
+      excluded: beforeExclusion - filtered.length
     });
   }
   

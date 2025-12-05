@@ -776,6 +776,82 @@
             font-size: 0.9rem;
         }
 
+        .bot-error-reason-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 12px;
+            background: rgba(248, 113, 113, 0.2);
+            border: 1px solid rgba(248, 113, 113, 0.4);
+            border-radius: 12px;
+            color: #fca5a5;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .bot-error-diagnostics {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .bot-error-diagnostics strong {
+            color: #e2e8f0;
+            display: block;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .bot-error-diagnostics-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bot-error-diagnostic-item {
+            padding: 10px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 6px;
+            border-left: 3px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .bot-error-diagnostic-event {
+            color: #e2e8f0;
+            font-size: 0.9rem;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .bot-error-diagnostic-reason {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            text-transform: capitalize;
+        }
+
+        .bot-error-diagnostic-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: #cbd5e1;
+        }
+
+        .bot-error-diagnostic-details span {
+            padding: 3px 8px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 4px;
+        }
+
+        .bot-error-diagnostic-more {
+            color: #94a3b8;
+            font-size: 0.85rem;
+            font-style: italic;
+            text-align: center;
+            padding: 8px;
+        }
+
         .bot-structured-message {
             margin-bottom: 12px;
             color: #e2e8f0;
@@ -6944,16 +7020,52 @@
          * @returns {HTMLElement} Error card element
          */
         function renderErrorResponse(errorData) {
+            console.log('[FRONTEND] renderErrorResponse called with:', {
+                hasSpecificReason: !!errorData.specific_reason,
+                specificReason: errorData.specific_reason,
+                hasDetails: !!errorData.details,
+                hasPrimaryReason: !!errorData.details?.primary_reason,
+                primaryReason: errorData.details?.primary_reason,
+                hasEventDiagnostics: !!(errorData.details?.event_diagnostics?.length),
+                eventDiagnosticsCount: errorData.details?.event_diagnostics?.length || 0,
+                errorDataKeys: Object.keys(errorData)
+            });
+            
             const card = document.createElement('div');
             card.className = 'bot-structured-card bot-error-card';
             
             const details = errorData.details || {};
             const attempts = details.attempts || [];
             const suggestions = details.suggestions || [];
+            const specificReason = errorData.specific_reason || details.primary_reason;
+            const eventDiagnostics = details.event_diagnostics || [];
+            
+            console.log('[FRONTEND] renderErrorResponse extracted values:', {
+                specificReason: specificReason,
+                eventDiagnosticsCount: eventDiagnostics.length,
+                hasSuggestions: suggestions.length > 0
+            });
+            
+            // Build reason label for display
+            let reasonLabel = '';
+            if (specificReason) {
+                const reasonLabels = {
+                    'NO_SEATS_IN_EVENT': 'No Seats in Event',
+                    'NO_AVAILABLE_SEATS': 'No Available Seats',
+                    'CAPACITY_TOO_SMALL': 'Capacity Too Small',
+                    'BUDGET_TOO_LOW': 'Budget Too Low',
+                    'EXCLUDED_BY_PREFERENCES': 'Excluded by Preferences',
+                    'ALL_EVENTS_EXCLUDED_BY_PREFERENCES': 'All Events Excluded',
+                    'MULTIPLE_FILTERS': 'Multiple Filters',
+                    'NO_EVENTS_IN_DATE_RANGE': 'No Events in Date Range'
+                };
+                reasonLabel = reasonLabels[specificReason] || specificReason.replace(/_/g, ' ');
+            }
             
             let html = `
                 <div class="bot-error-header">
                     <h3>Unable to Find Available Seats</h3>
+                    ${reasonLabel ? `<div class="bot-error-reason-badge">${reasonLabel}</div>` : ''}
                 </div>
                 <div class="bot-error-body">
                     <p class="bot-error-message">${errorData.message || 'We couldn\'t find any available seats/tables matching your preferences.'}</p>
@@ -6980,6 +7092,34 @@
                     ${details.party_size ? `
                         <div class="bot-error-detail">
                             <strong>Party Size:</strong> ${details.party_size} people
+                        </div>
+                    ` : ''}
+                    
+                    ${eventDiagnostics.length > 0 ? `
+                        <div class="bot-error-diagnostics">
+                            <strong>Event Details:</strong>
+                            <div class="bot-error-diagnostics-list">
+                                ${eventDiagnostics.slice(0, 3).map(diag => `
+                                    <div class="bot-error-diagnostic-item">
+                                        <div class="bot-error-diagnostic-event">${diag.event_name || 'Unknown Event'}</div>
+                                        ${diag.reason ? `<div class="bot-error-diagnostic-reason">Reason: ${diag.reason.replace(/_/g, ' ')}</div>` : ''}
+                                        ${diag.details && Object.keys(diag.details).length > 0 ? `
+                                            <div class="bot-error-diagnostic-details">
+                                                ${diag.details.capacity_too_small ? `
+                                                    <span>Max capacity: ${diag.details.capacity_too_small.max_capacity_found} people</span>
+                                                ` : ''}
+                                                ${diag.details.budget_too_low ? `
+                                                    <span>Min price: $${Math.ceil(diag.details.budget_too_low.min_seat_price || 0).toLocaleString()}</span>
+                                                ` : ''}
+                                                ${diag.details.no_available_seats ? `
+                                                    <span>Available: ${diag.details.no_available_seats.available}/${diag.details.no_available_seats.total} seats</span>
+                                                ` : ''}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                                ${eventDiagnostics.length > 3 ? `<div class="bot-error-diagnostic-more">+${eventDiagnostics.length - 3} more events</div>` : ''}
+                            </div>
                         </div>
                     ` : ''}
                     
@@ -8672,6 +8812,13 @@
                 // First, check if message has structured_data directly
                 if (message.structured_data) {
                     structuredData = message.structured_data;
+                    console.log('[FRONTEND] Found structured_data on message:', {
+                        type: structuredData.type,
+                        hasSpecificReason: !!structuredData.specific_reason,
+                        specificReason: structuredData.specific_reason,
+                        hasEventDiagnostics: !!(structuredData.details?.event_diagnostics?.length),
+                        eventDiagnosticsCount: structuredData.details?.event_diagnostics?.length || 0
+                    });
                 }
                 
                 // If not, check for structured data in tool results (from previous tool call)
@@ -8682,6 +8829,11 @@
                     );
                     if (prevToolMessage && prevToolMessage.structured_data) {
                         structuredData = prevToolMessage.structured_data;
+                        console.log('[FRONTEND] Found structured_data on previous tool message:', {
+                            type: structuredData.type,
+                            hasSpecificReason: !!structuredData.specific_reason,
+                            specificReason: structuredData.specific_reason
+                        });
                     }
                 }
 
@@ -8690,7 +8842,19 @@
                     const parsed = parseJsonContent(message.content);
                     if (parsed && isStructuredResponse(parsed)) {
                         structuredData = parsed;
+                        console.log('[FRONTEND] Found structured_data in message content:', {
+                            type: structuredData.type,
+                            hasSpecificReason: !!structuredData.specific_reason
+                        });
                     }
+                }
+                
+                if (!structuredData && message.role === 'assistant') {
+                    console.log('[FRONTEND] No structured_data found for assistant message:', {
+                        messageIndex: index,
+                        hasStructuredData: !!message.structured_data,
+                        messageContent: message.content?.substring(0, 100)
+                    });
                 }
 
                 if (structuredData) {
