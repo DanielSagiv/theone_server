@@ -1146,12 +1146,26 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     );
     
     // Include upgrade offers in response if available (both top level and in coe object)
+    // Note: upgrade offers are already normalized in formatCOEResponse, so we use those
     if (populatedCOE.seat_upgrade_offers && populatedCOE.seat_upgrade_offers.length > 0) {
       console.log('[BOT] Including upgrade offers in response:', populatedCOE.seat_upgrade_offers.length, 'offers');
-      structuredResponse.seat_upgrade_offers = populatedCOE.seat_upgrade_offers;
-      // Also ensure it's in the coe object for consistency
-      if (structuredResponse.coe) {
-        structuredResponse.coe.seat_upgrade_offers = populatedCOE.seat_upgrade_offers;
+      // Use the normalized offers from structuredResponse.coe (already normalized in formatCOEResponse)
+      if (structuredResponse.coe && structuredResponse.coe.seat_upgrade_offers) {
+        structuredResponse.seat_upgrade_offers = structuredResponse.coe.seat_upgrade_offers;
+      } else {
+        // Fallback: normalize manually if not already done
+        structuredResponse.seat_upgrade_offers = populatedCOE.seat_upgrade_offers.map(offer => ({
+          ...offer.toObject ? offer.toObject() : offer,
+          event_id: offer.event_id?._id?.toString() || offer.event_id?.toString() || offer.event_id,
+          current_seat_id: offer.current_seat_id?._id?.toString() || offer.current_seat_id?.toString() || offer.current_seat_id,
+          alternatives: (offer.alternatives || []).map(alt => ({
+            ...alt.toObject ? alt.toObject() : alt,
+            seat_id: alt.seat_id?._id?.toString() || alt.seat_id?.toString() || alt.seat_id
+          }))
+        }));
+        if (structuredResponse.coe) {
+          structuredResponse.coe.seat_upgrade_offers = structuredResponse.seat_upgrade_offers;
+        }
       }
     } else {
       console.log('[BOT] No upgrade offers to include in response');

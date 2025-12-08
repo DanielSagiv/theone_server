@@ -7652,7 +7652,33 @@
                             });
                             
                             // Check for upgrade offers for this event
-                            const eventId = eventGroup.event_id || '';
+                            // Normalize event ID to string for consistent comparison
+                            const eventId = String(eventGroup.event_id || '');
+                            
+                            // Helper function to normalize event ID for comparison
+                            // Handles ObjectId objects, strings, and other formats
+                            const normalizeEventId = (id) => {
+                                if (!id && id !== 0) return '';
+                                // Handle ObjectId objects (Mongoose)
+                                if (typeof id === 'object') {
+                                    // Check if it's a Mongoose ObjectId
+                                    if (id._id) return String(id._id);
+                                    if (id.toString && typeof id.toString === 'function') {
+                                        const str = id.toString();
+                                        // ObjectId strings are 24 hex characters
+                                        if (str.length === 24 && /^[0-9a-fA-F]{24}$/.test(str)) {
+                                            return str;
+                                        }
+                                        return str;
+                                    }
+                                    // If it has a value property, use that
+                                    if (id.value) return String(id.value);
+                                    // Last resort: JSON stringify and extract
+                                    return String(JSON.parse(JSON.stringify(id)));
+                                }
+                                // Handle strings and numbers
+                                return String(id);
+                            };
                             
                             // Debug logging for upgrade offers
                             console.log('[UPGRADE_DEBUG] Checking upgrade offers:', {
@@ -7662,37 +7688,49 @@
                                 eventIdType: typeof eventId,
                                 eventGroupEventId: eventGroup.event_id,
                                 eventGroupEventIdType: typeof eventGroup.event_id,
-                                allUpgradeOffers: coeData.seat_upgrade_offers?.map(o => ({
-                                    event_id: o.event_id,
-                                    event_id_type: typeof o.event_id,
-                                    event_id_str: o.event_id?.toString(),
-                                    event_id_equals: o.event_id === eventId,
-                                    event_id_toString_equals: o.event_id?.toString() === eventId.toString(),
-                                    current_seat_code: o.current_seat_code,
-                                    alternatives_count: o.alternatives?.length || 0,
-                                    alternatives: o.alternatives?.map(alt => ({
-                                        seat_code: alt.seat_code,
-                                        event_price: alt.event_price,
-                                        price: alt.price,
-                                        price_delta: alt.price_delta
-                                    }))
-                                })) || []
+                                eventGroupEventIdNormalized: normalizeEventId(eventGroup.event_id),
+                                allUpgradeOffers: coeData.seat_upgrade_offers?.map(o => {
+                                    const normalizedOfferId = normalizeEventId(o.event_id);
+                                    const normalizedEventId = normalizeEventId(eventId);
+                                    return {
+                                        event_id: o.event_id,
+                                        event_id_type: typeof o.event_id,
+                                        event_id_isObject: typeof o.event_id === 'object',
+                                        event_id_hasToString: !!(o.event_id && o.event_id.toString),
+                                        event_id_str: o.event_id?.toString?.(),
+                                        event_id_normalized: normalizedOfferId,
+                                        eventId_normalized: normalizedEventId,
+                                        will_match: normalizedOfferId === normalizedEventId,
+                                        current_seat_code: o.current_seat_code,
+                                        alternatives_count: o.alternatives?.length || 0
+                                    };
+                                }) || []
                             });
                             
+                            // Filter upgrade offers by matching normalized event IDs
                             const upgradeOffers = (coeData.seat_upgrade_offers || []).filter(offer => {
-                                const matches = offer.event_id === eventId || 
-                                              offer.event_id?.toString() === eventId.toString() ||
-                                              (offer.event_id && eventId && String(offer.event_id) === String(eventId));
+                                const offerEventId = normalizeEventId(offer.event_id);
+                                const normalizedEventId = normalizeEventId(eventId);
+                                const matches = offerEventId === normalizedEventId;
                                 if (!matches) {
                                     console.log('[UPGRADE_DEBUG] Offer filtered out:', {
                                         offer_event_id: offer.event_id,
                                         offer_event_id_type: typeof offer.event_id,
-                                        offer_event_id_str: offer.event_id?.toString(),
+                                        offer_event_id_isObject: typeof offer.event_id === 'object',
+                                        offer_event_id_normalized: offerEventId,
                                         eventId: eventId,
-                                        eventIdType: typeof eventId,
-                                        direct_match: offer.event_id === eventId,
-                                        toString_match: offer.event_id?.toString() === eventId.toString(),
-                                        string_match: String(offer.event_id) === String(eventId)
+                                        eventId_normalized: normalizedEventId,
+                                        will_match: false,
+                                        comparison: `${offerEventId} === ${normalizedEventId}`
+                                    });
+                                } else {
+                                    console.log('[UPGRADE_DEBUG] Offer matched:', {
+                                        offer_event_id: offer.event_id,
+                                        offer_event_id_normalized: offerEventId,
+                                        eventId: eventId,
+                                        eventId_normalized: normalizedEventId,
+                                        current_seat_code: offer.current_seat_code,
+                                        alternatives_count: offer.alternatives?.length || 0
                                     });
                                 }
                                 return matches;
@@ -7834,19 +7872,24 @@
                                 selectedSeatsCount: eventGroup.seats.length,
                                 upgradeSlidesCount: upgradeSlides.length,
                                 totalSlides: totalSlides,
-                                willShowCarousel: totalSlides > 1,
+                                willShowCarousel: totalSlides > 1 || upgradeSlides.length > 0,
                                 seatItemsLength: seatItems.length,
                                 upgradeSlidesLength: upgradeSlides.length
                             });
                             
-                            // Build carousel HTML if multiple items (seats + upgrades), otherwise just show single seat
-                            const seatItemsHtml = totalSlides > 1 ? `
+                            // Build carousel HTML if:
+                            // 1. Multiple items (seats + upgrades) OR
+                            // 2. Has upgrade slides (even with single selected seat)
+                            // Otherwise just show single seat without carousel
+                            const shouldShowCarousel = totalSlides > 1 || upgradeSlides.length > 0;
+                            const seatItemsHtml = shouldShowCarousel ? `
                                 <div class="coe-seat-carousel-container" data-event-group-id="${eventGroup.event_id || 'unknown'}">
                                     <div class="coe-seat-carousel-wrapper">
                                         <div class="coe-seat-carousel-track">
                                             ${allSeatItems}
                                         </div>
                                     </div>
+                                    ${totalSlides > 1 ? `
                                     <div class="coe-seat-carousel-controls">
                                         <button class="coe-seat-carousel-btn coe-seat-carousel-prev" onclick="slideSeatCarousel(this, -1)" aria-label="Previous">
                                             ‹
@@ -7862,6 +7905,7 @@
                                             ›
                                         </button>
                                     </div>
+                                    ` : ''}
                                 </div>
                             ` : (eventGroup.seats.length > 0 ? seatItems.join('') : '');
                             
@@ -8079,12 +8123,30 @@
                 const slides = carousel.querySelectorAll('.coe-seat-carousel-slide');
                 const prevBtn = carousel.querySelector('.coe-seat-carousel-prev');
                 const nextBtn = carousel.querySelector('.coe-seat-carousel-next');
+                const controls = carousel.querySelector('.coe-seat-carousel-controls');
+                
                 if (slides.length > 0) {
                     // Ensure track starts at position 0
-                    track.style.transform = 'translateX(0%)';
+                    if (track) {
+                        track.style.transform = 'translateX(0%)';
+                    }
+                    
+                    // Show/hide controls based on slide count
+                    if (controls) {
+                        controls.style.display = slides.length > 1 ? 'flex' : 'none';
+                    }
+                    
+                    // Initialize button states
                     if (prevBtn) prevBtn.disabled = true; // First slide
                     if (nextBtn) nextBtn.disabled = slides.length === 1;
                 }
+                
+                console.log('[CAROUSEL_INIT] Initialized carousel:', {
+                    eventGroupId: carousel.dataset.eventGroupId,
+                    slidesCount: slides.length,
+                    hasControls: !!controls,
+                    controlsDisplay: controls?.style.display
+                });
             });
 
             return card;

@@ -246,27 +246,29 @@ function extractPreferencesFromFormSubmission(message) {
   };
 
   // Pattern matching for structured format
+  // Support both newline-delimited and space-delimited fields (admin flow)
   const patterns = {
-    city: /City:\s*(.+?)(?:\n|$)/i,
-    start_date: /Start date:\s*(.+?)(?:\n|$)/i,
-    end_date: /End date:\s*(.+?)(?:\n|$)/i,
+    client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+Start date:|\n|$)/i,
+    city: /City:\s*(.+?)(?:\s+(Start date:)|\n|$)/i,
+    start_date: /Start date:\s*([^\n]+?)(?:\s+End date:|\n|$)/i,
+    end_date: /End date:\s*([^\n]+?)(?:\s+Budget:|\n|$)/i,
     budget: /Budget:\s*\$?(\d+(?:\.\d+)?)\s*(USD)?/i,
     party_size: /Number of people:\s*(\d+)/i,
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i
   };
 
-  // Extract city
+  // Extract client_id (for admin COE creation flow)
+  const clientIdMatch = message.match(patterns.client_id);
+  if (clientIdMatch && clientIdMatch[1]) {
+    preferences.client_id = clientIdMatch[1].trim();
+    console.log('[PREFERENCE SERVICE] Extracted client_id:', preferences.client_id);
+  }
+
+  // Extract city (optional for admin flow)
   const cityMatch = message.match(patterns.city);
   if (cityMatch && cityMatch[1]) {
     preferences.city = cityMatch[1].trim();
-    if (!preferences.city) {
-      preferences.errors.push('City is required');
-      preferences.valid = false;
-    }
-  } else {
-    preferences.errors.push('City not found');
-    preferences.valid = false;
   }
 
   // Extract start date
@@ -281,9 +283,6 @@ function extractPreferencesFromFormSubmission(message) {
       preferences.errors.push('Invalid start date format');
       preferences.valid = false;
     }
-  } else {
-    preferences.errors.push('Start date not found');
-    preferences.valid = false;
   }
 
   // Extract end date
@@ -304,9 +303,6 @@ function extractPreferencesFromFormSubmission(message) {
       preferences.errors.push('Invalid end date format');
       preferences.valid = false;
     }
-  } else {
-    preferences.errors.push('End date not found');
-    preferences.valid = false;
   }
 
   // Extract budget
@@ -322,9 +318,6 @@ function extractPreferencesFromFormSubmission(message) {
       preferences.errors.push('Invalid budget amount');
       preferences.valid = false;
     }
-  } else {
-    preferences.errors.push('Budget not found');
-    preferences.valid = false;
   }
 
   // Extract party size
@@ -337,9 +330,6 @@ function extractPreferencesFromFormSubmission(message) {
       preferences.errors.push('Invalid party size (must be >= 1)');
       preferences.valid = false;
     }
-  } else {
-    preferences.errors.push('Party size not found');
-    preferences.valid = false;
   }
 
   // Extract seat preferences (optional)
@@ -382,6 +372,7 @@ function extractPreferencesFromFormSubmission(message) {
     ...preferences,
     formatted: formattedPreferences,
     raw: {
+      client_id: preferences.client_id,
       city: preferences.city,
       start_date: preferences.start_date,
       end_date: preferences.end_date,
@@ -396,6 +387,7 @@ function extractPreferencesFromFormSubmission(message) {
     valid: result.valid,
     errors: result.errors,
     extractedFields: {
+      client_id: result.client_id,
       city: result.city,
       start_date: result.start_date,
       end_date: result.end_date,

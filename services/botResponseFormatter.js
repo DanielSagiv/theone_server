@@ -270,8 +270,8 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
     
     // Create a plain object to ensure all fields are included
     const enhancedSeat = {
-      event_id: seat.event_id,
-      seat_id: seat.seat_id,
+      event_id: seat.event_id?._id?.toString() || seat.event_id?.toString?.() || seat.event_id,
+      seat_id: seat.seat_id?._id?.toString() || seat.seat_id?.toString?.() || seat.seat_id,
       seat_code: seat.seat_code,
       capacity: seat.capacity,
       base_price: seat.base_price,
@@ -380,8 +380,16 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
       } : null,
       created_at: coe.created_at,
       updated_at: coe.updated_at,
-      // Include seat upgrade offers if available
-      seat_upgrade_offers: coe.seat_upgrade_offers || []
+      // Include seat upgrade offers if available, with normalized event_id
+      seat_upgrade_offers: (coe.seat_upgrade_offers || []).map(offer => ({
+        ...offer.toObject ? offer.toObject() : offer,
+        event_id: offer.event_id?._id?.toString() || offer.event_id?.toString() || offer.event_id,
+        current_seat_id: offer.current_seat_id?._id?.toString() || offer.current_seat_id?.toString() || offer.current_seat_id,
+        alternatives: (offer.alternatives || []).map(alt => ({
+          ...alt.toObject ? alt.toObject() : alt,
+          seat_id: alt.seat_id?._id?.toString() || alt.seat_id?.toString() || alt.seat_id
+        }))
+      }))
     },
     message: message,
     actions: actions

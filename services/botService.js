@@ -634,7 +634,11 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     
     // Phase 2.1: Detect if this is a structured form submission
     const isFormSubmission = prompt.includes('Build my experience with the following preferences:') ||
-                             prompt.includes('City:') && prompt.includes('Start date:') && prompt.includes('Budget:');
+                             (
+                               prompt.includes('Start date:') &&
+                               prompt.includes('End date:') &&
+                               prompt.includes('Budget:')
+                             ); // Allow admin flow without City:
     
     let extractedPreferences;
     let extractionResult;
@@ -723,14 +727,21 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         
         // Add client_id if user is admin (required for admin)
         if (user.role === 'admin') {
-          // For now, we'll let the tool handler handle this or use a default
-          // The tool will require client_id from admin
+          // Extract client_id from form submission (admin COE creation flow)
+          if (extractionResult.raw.client_id) {
+            toolParams.client_id = extractionResult.raw.client_id;
+            console.log('[BOT] Phase 2.4: Extracted client_id from form submission:', toolParams.client_id);
+          } else {
+            console.warn('[BOT] Phase 2.4: Admin COE creation but client_id not found in form submission');
+            // Don't fail here - let the tool handler validate and return proper error
+          }
         } else if (user.role === 'client') {
           // Client creates COE for themselves
           toolParams.client_id = user._id.toString();
         }
         
         console.log('[BOT] Phase 2.4: Calling create_coe_draft tool with params:', {
+          client_id: toolParams.client_id,
           start_date: toolParams.start_date,
           end_date: toolParams.end_date,
           city: extractionResult.raw.city,
