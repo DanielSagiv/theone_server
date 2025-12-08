@@ -532,15 +532,37 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
               );
               
               // Get location seat for sentiment
+              // Get location seat for sentiment and media
+              // Event seat has seat_id that points to location seat _id
+              // Also try matching by code as fallback
               const locationSeat = event.location_id.seats.find(s => {
-                const seatId = seat._id?.toString();
-                const locationSeatId = s._id?.toString();
-                
-                if (seatId && locationSeatId) {
-                  return locationSeatId === seatId;
+                // First try: match by seat_id (event seat's seat_id points to location seat _id)
+                if (seat.seat_id) {
+                  const seatIdStr = seat.seat_id?.toString();
+                  const locationSeatIdStr = s._id?.toString();
+                  if (seatIdStr && locationSeatIdStr && seatIdStr === locationSeatIdStr) {
+                    return true;
+                  }
                 }
                 
-                return s.code === seat.code;
+                // Second try: match by code
+                if (seat.code && s.code && seat.code === s.code) {
+                  return true;
+                }
+                
+                return false;
+              });
+              
+              console.log('[SEAT_UPGRADE] Location seat lookup for alternative', {
+                seatCode: seat.code || seat.seat_code,
+                seatId: seat._id?.toString(),
+                seatSeatId: seat.seat_id?.toString(),
+                locationSeatsCount: event.location_id.seats.length,
+                foundLocationSeat: !!locationSeat,
+                hasMedia: !!(locationSeat?.media && locationSeat.media.length > 0),
+                mediaCount: locationSeat?.media?.length || 0,
+                eventSeatHasMedia: !!(seat.media && seat.media.length > 0),
+                eventSeatMediaCount: seat.media?.length || 0
               });
               
               // Ensure seat_id and seat_code are properly extracted
@@ -559,6 +581,10 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
                 seatKeys: Object.keys(seat)
               });
               
+              // Get media from location seat (where media is actually stored)
+              // Event seats inherit from location but media might not be populated
+              const seatMedia = locationSeat?.media || seat.media || [];
+              
               return {
                 seat_id: eventSeatId, // Use event seat _id as the primary identifier
                 seat_code: seatCode,
@@ -571,7 +597,7 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
                 sentiment: locationSeat?.sentiment || [],
                 category: seat.category,
                 section: seat.section,
-                media: seat.media || [],
+                media: seatMedia, // Use location seat media (fallback to event seat media)
                 fits_budget: seat.fits_budget || false,
                 tag: seat.tag || 'Premium Upgrade',
                 status: 'pending',

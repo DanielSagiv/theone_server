@@ -7475,6 +7475,17 @@
                         console.log('[COE Card] coeData:', coeData);
                         console.log('[COE Card] selected_seats:', coeData.selected_seats);
                         console.log('[COE Card] seats_count:', coeData.seats_count);
+                        console.log('[COE Card] seat_upgrade_offers:', {
+                            exists: !!(coeData.seat_upgrade_offers),
+                            isArray: Array.isArray(coeData.seat_upgrade_offers),
+                            count: coeData.seat_upgrade_offers?.length || 0,
+                            offers: coeData.seat_upgrade_offers?.map(o => ({
+                                event_id: o.event_id,
+                                event_id_type: typeof o.event_id,
+                                current_seat_code: o.current_seat_code,
+                                alternatives_count: o.alternatives?.length || 0
+                            })) || []
+                        });
                         
                         const seats = coeData.selected_seats || [];
                         if (!seats || seats.length === 0) {
@@ -7642,21 +7653,133 @@
                             
                             // Check for upgrade offers for this event
                             const eventId = eventGroup.event_id || '';
-                            const upgradeOffers = (coeData.seat_upgrade_offers || []).filter(offer => 
-                                offer.event_id === eventId || offer.event_id?.toString() === eventId.toString()
-                            );
+                            
+                            // Debug logging for upgrade offers
+                            console.log('[UPGRADE_DEBUG] Checking upgrade offers:', {
+                                hasUpgradeOffers: !!(coeData.seat_upgrade_offers),
+                                upgradeOffersCount: coeData.seat_upgrade_offers?.length || 0,
+                                eventId: eventId,
+                                eventIdType: typeof eventId,
+                                eventGroupEventId: eventGroup.event_id,
+                                eventGroupEventIdType: typeof eventGroup.event_id,
+                                allUpgradeOffers: coeData.seat_upgrade_offers?.map(o => ({
+                                    event_id: o.event_id,
+                                    event_id_type: typeof o.event_id,
+                                    event_id_str: o.event_id?.toString(),
+                                    event_id_equals: o.event_id === eventId,
+                                    event_id_toString_equals: o.event_id?.toString() === eventId.toString(),
+                                    current_seat_code: o.current_seat_code,
+                                    alternatives_count: o.alternatives?.length || 0,
+                                    alternatives: o.alternatives?.map(alt => ({
+                                        seat_code: alt.seat_code,
+                                        event_price: alt.event_price,
+                                        price: alt.price,
+                                        price_delta: alt.price_delta
+                                    }))
+                                })) || []
+                            });
+                            
+                            const upgradeOffers = (coeData.seat_upgrade_offers || []).filter(offer => {
+                                const matches = offer.event_id === eventId || 
+                                              offer.event_id?.toString() === eventId.toString() ||
+                                              (offer.event_id && eventId && String(offer.event_id) === String(eventId));
+                                if (!matches) {
+                                    console.log('[UPGRADE_DEBUG] Offer filtered out:', {
+                                        offer_event_id: offer.event_id,
+                                        offer_event_id_type: typeof offer.event_id,
+                                        offer_event_id_str: offer.event_id?.toString(),
+                                        eventId: eventId,
+                                        eventIdType: typeof eventId,
+                                        direct_match: offer.event_id === eventId,
+                                        toString_match: offer.event_id?.toString() === eventId.toString(),
+                                        string_match: String(offer.event_id) === String(eventId)
+                                    });
+                                }
+                                return matches;
+                            });
+                            
+                            console.log('[UPGRADE_DEBUG] Filtered upgrade offers:', {
+                                filteredCount: upgradeOffers.length,
+                                offers: upgradeOffers.map(o => ({
+                                    event_id: o.event_id,
+                                    current_seat_code: o.current_seat_code,
+                                    alternatives_count: o.alternatives?.length || 0
+                                }))
+                            });
                             
                             // Build upgrade option slides
                             let upgradeSlides = [];
                             if (upgradeOffers.length > 0) {
                                 upgradeOffers.forEach(offer => {
                                     const currentPrice = Number(offer.current_price) || 0;
+                                    console.log('[UPGRADE_DEBUG] Processing offer:', {
+                                        current_seat_code: offer.current_seat_code,
+                                        current_price: currentPrice,
+                                        alternatives_before_filter: (offer.alternatives || []).length,
+                                        alternatives: (offer.alternatives || []).map(alt => ({
+                                            seat_code: alt.seat_code,
+                                            event_price: alt.event_price,
+                                            price: alt.price,
+                                            altPrice: Number(alt.event_price || alt.price || 0),
+                                            isMoreExpensive: Number(alt.event_price || alt.price || 0) > currentPrice
+                                        }))
+                                    });
+                                    
                                     const upgradeAlternatives = (offer.alternatives || []).filter(alt => {
                                         const altPrice = Number(alt.event_price || alt.price || 0);
-                                        return altPrice > currentPrice; // Only more expensive options
+                                        const isMoreExpensive = altPrice > currentPrice;
+                                        if (!isMoreExpensive) {
+                                            console.log('[UPGRADE_DEBUG] Alternative filtered out (not more expensive):', {
+                                                seat_code: alt.seat_code,
+                                                altPrice: altPrice,
+                                                currentPrice: currentPrice
+                                            });
+                                        }
+                                        return isMoreExpensive; // Only more expensive options
+                                    });
+                                    
+                                    console.log('[UPGRADE_DEBUG] Alternatives after filter:', {
+                                        count: upgradeAlternatives.length,
+                                        alternatives: upgradeAlternatives.map(alt => ({
+                                            seat_code: alt.seat_code,
+                                            event_price: alt.event_price,
+                                            price: alt.price
+                                        }))
                                     });
                                     
                                     upgradeAlternatives.forEach((alt, altIndex) => {
+                                        // Upgrade alternative media thumbnails (same logic as selected seats)
+                                        const altMedia = alt.media || [];
+                                        const altImageMedia = altMedia.filter(m => m && m.type === 'image');
+                                        
+                                        // Debug logging for upgrade alternative media
+                                        console.log('[UPGRADE_DEBUG] Alternative media check:', {
+                                            seat_code: alt.seat_code,
+                                            hasMedia: !!(alt.media),
+                                            mediaType: typeof alt.media,
+                                            isArray: Array.isArray(alt.media),
+                                            mediaLength: alt.media?.length || 0,
+                                            imageMediaLength: altImageMedia.length,
+                                            media: alt.media
+                                        });
+                                        
+                                        const altMediaHtml = altImageMedia.length > 0 ? `
+                                            <div class="coe-seat-media">
+                                                ${altImageMedia.slice(0, 4).map(media => `
+                                                    <img src="${media.url}" 
+                                                         alt="${media.caption || alt.seat_code || 'Upgrade seat image'}" 
+                                                         class="coe-seat-media-thumbnail"
+                                                         onclick="openLightbox(${JSON.stringify(media).replace(/"/g, '&quot;')})"
+                                                         loading="lazy">
+                                                `).join('')}
+                                                ${altImageMedia.length > 4 ? `
+                                                    <div class="coe-seat-media-thumbnail" style="display:flex;align-items:center;justify-content:center;background:rgba(30,41,59,0.8);color:#cbd5f5;font-size:0.7rem;">
+                                                        +${altImageMedia.length - 4}
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        ` : '<div class="coe-seat-media" style="color: #94a3b8; font-size: 0.75rem; font-style: italic;">No images available</div>';
+                                        
                                         upgradeSlides.push(`
                                             <div class="coe-seat-carousel-slide" data-seat-type="upgrade" data-upgrade-index="${altIndex}">
                                                 <div class="coe-seat-item upgrade-seat-item ${alt.fits_budget ? 'within-budget' : 'premium-upgrade'}">
@@ -7679,6 +7802,7 @@
                                                             <span style="font-weight: 600; color: #60a5fa;">$${((alt.event_price || alt.price || 0) + (eventGroup.seats[0]?.base_price || 0)).toLocaleString()}</span>
                                                         </div>
                                                     </div>
+                                                    ${altMediaHtml}
                                                     ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
                                                         <div class="upgrade-reasons" style="margin-top: 8px;">
                                                             ${alt.upgrade_reasons.map(reason => `
@@ -7703,6 +7827,17 @@
                             // Combine selected seats and upgrade options
                             const allSeatItems = seatItems.join('') + upgradeSlides.join('');
                             const totalSlides = eventGroup.seats.length + upgradeSlides.length;
+                            
+                            console.log('[UPGRADE_DEBUG] Final carousel state:', {
+                                eventId: eventId,
+                                eventName: eventGroup.event_name,
+                                selectedSeatsCount: eventGroup.seats.length,
+                                upgradeSlidesCount: upgradeSlides.length,
+                                totalSlides: totalSlides,
+                                willShowCarousel: totalSlides > 1,
+                                seatItemsLength: seatItems.length,
+                                upgradeSlidesLength: upgradeSlides.length
+                            });
                             
                             // Build carousel HTML if multiple items (seats + upgrades), otherwise just show single seat
                             const seatItemsHtml = totalSlides > 1 ? `
