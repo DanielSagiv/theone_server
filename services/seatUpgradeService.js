@@ -10,25 +10,62 @@ const Event = require('../models/Event');
 const Location = require('../models/Location');
 
 /**
+ * Find location seat by matching seat_id first (stable reference), then code as fallback
+ * @param {Object} seat - Seat object (from event or COE) with seat_id and/or code
+ * @param {Object} location - Location with seats array
+ * @returns {Object|null} Matching location seat or null
+ */
+function findLocationSeat(seat, location) {
+  if (!location?.seats || location.seats.length === 0) {
+    return null;
+  }
+  
+  // Primary match: by seat_id (stable reference that doesn't change when codes are updated)
+  // event.seats[].seat_id references location.seats[]._id
+  const seatId = seat.seat_id?.toString();
+  if (seatId) {
+    const matchById = location.seats.find(s => {
+      const locationSeatId = s._id?.toString();
+      return locationSeatId && locationSeatId === seatId;
+    });
+    if (matchById) {
+      return matchById;
+    }
+  }
+  
+  // Fallback: match by code (can change, less reliable)
+  const seatCode = seat.seat_code || seat.code;
+  if (seatCode) {
+    const matchByCode = location.seats.find(s => s.code === seatCode);
+    if (matchByCode) {
+      return matchByCode;
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Score a seat's quality based on qualityScore field and sentiment bonus
  * @param {Object} seat - Seat object (from event or location)
  * @param {Object} location - Location with seat sentiments
  * @returns {number} Quality score (higher = better)
  */
 function scoreSeatQuality(seat, location) {
-  // Find location seat by code (primary) since event seat IDs differ from location seat IDs
   const seatCode = seat.seat_code || seat.code;
   
   console.log('[SEAT_UPGRADE] scoreSeatQuality input:', {
     seatKeys: Object.keys(seat),
     seat_code: seat.seat_code,
     code: seat.code,
+    seat_id: seat.seat_id?.toString(),
     resolvedCode: seatCode,
     locationSeatsCount: location?.seats?.length,
     locationSeatCodes: location?.seats?.map(s => s.code)
   });
   
-  const locationSeat = location.seats.find(s => s.code === seatCode);
+  // Use helper function that prioritizes seat_id matching
+  const locationSeat = findLocationSeat(seat, location);
   
   // Convert to plain object if Mongoose document to ensure all fields are accessible
   const locationSeatPlain = locationSeat?.toObject ? locationSeat.toObject() : locationSeat;
@@ -86,22 +123,8 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
     });
     
     // Get current seat's quality score
-    // Match by code since event seat _id is different from location seat _id
-    const currentSeatLocation = location.seats.find(s => {
-      // Primary match: by code (most reliable)
-      const codeMatch = s.code === (currentSeat.seat_code || currentSeat.code);
-      if (codeMatch) return true;
-      
-      // Fallback: try to match event seat's seat_id reference to location seat _id
-      // (event.seats[].seat_id references location.seats[]._id)
-      const currentSeatId = currentSeat.seat_id?.toString();
-      const locationSeatId = s._id?.toString();
-      if (currentSeatId && locationSeatId) {
-        return locationSeatId === currentSeatId;
-      }
-      
-      return false;
-    });
+    // Use helper function that prioritizes seat_id matching (stable reference)
+    const currentSeatLocation = findLocationSeat(currentSeat, location);
     
     if (!currentSeatLocation) {
       console.log('[SEAT_UPGRADE] findBetterSeats: Current seat not found in location', {
@@ -160,20 +183,8 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
     // Score and filter better seats - include seats that are more expensive OR have higher quality
     const betterSeats = availableSeats
       .map(seat => {
-        // Match event seat to location seat by code (primary) or seat_id reference
-        const locationSeat = location.seats.find(s => {
-          // Primary match: by code
-          if (s.code === seat.code) return true;
-          
-          // Fallback: event seat's seat_id references location seat's _id
-          const eventSeatRef = seat.seat_id?.toString();
-          const locationSeatId = s._id?.toString();
-          if (eventSeatRef && locationSeatId) {
-            return locationSeatId === eventSeatRef;
-          }
-          
-          return false;
-        });
+        // Use helper function that prioritizes seat_id matching (stable reference)
+        const locationSeat = findLocationSeat(seat, location);
         
         if (!locationSeat) {
           console.log('[SEAT_UPGRADE] findBetterSeats: Location seat not found for event seat', {
@@ -313,28 +324,12 @@ function calculateUpgradeValue(currentSeat, upgradeSeat, location) {
     const upgradePrice = upgradeSeat.event_price || upgradeSeat.min_spend || 0;
     const priceDelta = upgradePrice - currentPrice;
     
-    // Get sentiments
-    const currentLocationSeat = location.seats.find(s => {
-      const currentSeatId = currentSeat.seat_id?.toString();
-      const locationSeatId = s._id?.toString();
-      
-      if (currentSeatId && locationSeatId) {
-        return locationSeatId === currentSeatId;
-      }
-      
-      return s.code === (currentSeat.seat_code || currentSeat.code);
-    });
+    // Get sentiments using helper function that prioritizes seat_id matching
+    const currentLocationSeat = findLocationSeat(currentSeat, location);
     
-    const upgradeLocationSeat = location.seats.find(s => {
-      const upgradeSeatId = upgradeSeat._id?.toString();
-      const locationSeatId = s._id?.toString();
-      
-      if (upgradeSeatId && locationSeatId) {
-        return locationSeatId === upgradeSeatId;
-      }
-      
-      return s.code === upgradeSeat.code;
-    });
+    // For upgrade seat, we need to match by seat_id (which should be set) or code
+    // Note: upgradeSeat might have _id (event seat ID) or seat_id (location seat reference)
+    const upgradeLocationSeat = findLocationSeat(upgradeSeat, location);
     
     const upgradeReasons = calculateUpgradeReasons(
       currentLocationSeat,
@@ -531,27 +526,9 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
                 event.location_id
               );
               
-              // Get location seat for sentiment
               // Get location seat for sentiment and media
-              // Event seat has seat_id that points to location seat _id
-              // Also try matching by code as fallback
-              const locationSeat = event.location_id.seats.find(s => {
-                // First try: match by seat_id (event seat's seat_id points to location seat _id)
-                if (seat.seat_id) {
-                  const seatIdStr = seat.seat_id?.toString();
-                  const locationSeatIdStr = s._id?.toString();
-                  if (seatIdStr && locationSeatIdStr && seatIdStr === locationSeatIdStr) {
-                    return true;
-                  }
-                }
-                
-                // Second try: match by code
-                if (seat.code && s.code && seat.code === s.code) {
-                  return true;
-                }
-                
-                return false;
-              });
+              // Use helper function that prioritizes seat_id matching (stable reference)
+              const locationSeat = findLocationSeat(seat, event.location_id);
               
               console.log('[SEAT_UPGRADE] Location seat lookup for alternative', {
                 seatCode: seat.code || seat.seat_code,
@@ -640,6 +617,7 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
 }
 
 module.exports = {
+  findLocationSeat, // Export helper for reuse in other services
   scoreSeatQuality,
   findBetterSeats,
   calculateUpgradeValue,

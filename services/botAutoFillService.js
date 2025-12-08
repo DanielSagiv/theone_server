@@ -8,6 +8,7 @@ const User = require('../models/User');
 const COE = require('../models/COE');
 const Event = require('../models/Event');
 const Location = require('../models/Location');
+const { findLocationSeat } = require('./seatUpgradeService');
 
 /**
  * Find available runner for COE assignment
@@ -280,13 +281,8 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     
     const beforeExclusion = availableSeats.length;
     availableSeats = availableSeats.filter(eventSeat => {
-      // Match event seat to location seat by code (primary) or seat_id
-      const locationSeat = location.seats.find(locSeat => {
-        if (locSeat.code === eventSeat.code) return true;
-        const eventSeatId = eventSeat.seat_id ? eventSeat.seat_id.toString() : null;
-        const locSeatId = locSeat._id ? locSeat._id.toString() : null;
-        return eventSeatId && locSeatId && locSeatId === eventSeatId;
-      });
+      // Use helper function that prioritizes seat_id matching (stable reference)
+      const locationSeat = findLocationSeat(eventSeat, location);
       
       if (!locationSeat || !locationSeat.sentiment || !Array.isArray(locationSeat.sentiment)) {
         return true; // No sentiment - allow through
