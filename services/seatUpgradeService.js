@@ -8,6 +8,7 @@
 
 const Event = require('../models/Event');
 const Location = require('../models/Location');
+const { generateSeatRecommendation } = require('./seatRecommendationService');
 
 /**
  * Find location seat by matching seat_id first (stable reference), then code as fallback
@@ -437,9 +438,10 @@ function calculateUpgradeReasons(currentLocationSeat, upgradeLocationSeat, curre
  * Generate upgrade offers for all seats in a COE
  * @param {Object} coe - COE object with selected_seats
  * @param {number} totalBudget - Total budget for budget summary
+ * @param {Object} userPreferences - User preferences from COE build (for AI recommendations)
  * @returns {Promise<Array>} Array of upgrade offers per seat
  */
-async function generateSeatUpgradeOffers(coe, totalBudget = null) {
+async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreferences = {}) {
   try {
     // Only generate offers for draft COEs
     if (coe.status !== 'draft') {
@@ -518,8 +520,8 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
           });
           
           if (betterSeats.length > 0) {
-            // Calculate upgrade value for each alternative
-            const alternatives = betterSeats.map(seat => {
+            // Calculate upgrade value and generate recommendations for each alternative
+            const alternatives = await Promise.all(betterSeats.map(async (seat) => {
               const upgradeValue = calculateUpgradeValue(
                 selectedSeat,
                 seat,
@@ -562,6 +564,31 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
               // Event seats inherit from location but media might not be populated
               const seatMedia = locationSeat?.media || seat.media || [];
               
+              // Generate AI recommendation for upgrade alternative if sentiments available
+              let aiRecommendation = null;
+              if (locationSeat?.sentiment && locationSeat.sentiment.length > 0) {
+                try {
+                  const locationId = event.location_id._id?.toString() || event.location_id.toString();
+                  aiRecommendation = await generateSeatRecommendation(
+                    {
+                      code: seatCode,
+                      category: locationSeat?.category || seat.category,
+                      capacity: seat.capacity,
+                      section: locationSeat?.section || seat.section,
+                      event_price: seat.event_price || seat.min_spend || 0,
+                      base_price: seat.min_spend || 0
+                    },
+                    locationSeat.sentiment,
+                    locationId,
+                    userPreferences,
+                    { timeout: 3000 } // Shorter timeout for upgrade offers
+                  );
+                } catch (error) {
+                  console.warn('[SEAT_UPGRADE] Error generating recommendation for upgrade alternative:', error.message);
+                  // Continue without recommendation
+                }
+              }
+              
               return {
                 seat_id: eventSeatId, // Use event seat _id as the primary identifier
                 seat_code: seatCode,
@@ -578,9 +605,10 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null) {
                 fits_budget: seat.fits_budget || false,
                 tag: seat.tag || 'Premium Upgrade',
                 status: 'pending',
-                offered_at: new Date()
+                offered_at: new Date(),
+                ai_recommendation: aiRecommendation // Include AI recommendation if generated
               };
-            });
+            }));
             
             offers.push({
               current_seat_id: selectedSeat.seat_id,

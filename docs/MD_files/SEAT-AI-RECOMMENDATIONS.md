@@ -96,10 +96,21 @@ async function generateSeatRecommendation(seatData, sentiments, options = {})
 
 #### OpenAI Prompt Template
 ```
-Generate a short, compelling recommendation (2-3 sentences, max 150 characters) 
-for this table/seat based on the following sentiments:
+Generate a short, precise recommendation (max 150 characters) for this table/seat that combines:
+1. The user's preferences and needs from their COE build request
+2. The table's sentiment data
+3. Why this table matches their specific requirements
 
-Sentiments:
+User Preferences/Needs:
+[Extract from COE build text and preferences:
+- Budget: [budget]
+- Party size: [party_size]
+- Location preferences: [location_preferences]
+- Seat/Table preferences: [seat_preferences]
+- Specific preferences: [specific_preferences]
+- Any other relevant user needs from the conversation]
+
+Table Sentiments:
 [For each sentiment, list:
 - Type A (Positive): [sentiment.text]
 - Type B (Consideration): [sentiment.text]]
@@ -109,17 +120,18 @@ Table Details:
 - Category: [seat.category]
 - Capacity: [seat.capacity]
 - Section: [seat.section] (if available)
+- Price: $[seat.event_price]
 
 The recommendation should:
-- Highlight positive aspects (Type A sentiments)
-- Mention any considerations (Type B sentiments) if relevant, but frame them neutrally
-- Be engaging and help the client understand why this table is a good choice
-- Use natural, conversational language
-- Be concise (max 150 characters)
-- Focus on the experience and atmosphere
+- Be SHORT and PRECISE (max 150 characters, ideally 100-120)
+- Connect the table's strengths (from sentiments) to the user's specific needs
+- Highlight why this table is perfect for their party size, preferences, and experience goals
+- Use natural, engaging language
+- Focus on the experience value, not just features
+- If user mentioned specific preferences (e.g., "close to DJ", "quiet area"), address those directly
 
 Example format:
-"This premium table offers [positive aspect from Type A]. [Additional benefit]. Perfect for [use case based on capacity/category]."
+"Perfect for your [party_size]-person group seeking [user preference]. [Key sentiment benefit] matches your [specific need]."
 ```
 
 #### Configuration

@@ -304,7 +304,10 @@ const coeSchema = new mongoose.Schema({
       type: String, 
       enum: ['selected', 'held', 'booked', 'released', 'expired', 'rejected'], 
       default: 'selected' 
-    }
+    },
+    ai_recommendation: { type: String, trim: true, maxlength: 200 },
+    recommendation_generated_at: { type: Date },
+    recommendation_version: { type: Number, default: 1 }
   }],
   // Seat upgrade offers (only for draft COEs)
   seat_upgrade_offers: [{
@@ -389,7 +392,8 @@ const coeSchema = new mongoose.Schema({
         type: String, 
         enum: ['pending', 'accepted', 'rejected', 'expired'],
         default: 'pending'
-      }
+      },
+      ai_recommendation: { type: String, trim: true, maxlength: 200 }
     }],
     generated_at: { 
       type: Date, 

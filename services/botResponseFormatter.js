@@ -281,7 +281,10 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
       status: seat.status,
       event_name: eventName, // Explicitly include event_name
       event_date: eventDate, // Explicitly include event_date
-      media: seatMedia // Add media from event seat
+      media: seatMedia, // Add media from event seat
+      ai_recommendation: seat.ai_recommendation, // Include AI recommendation
+      recommendation_generated_at: seat.recommendation_generated_at,
+      recommendation_version: seat.recommendation_version
     };
     
     console.log('[formatCOEResponse] Enhanced seat object:', {
@@ -387,7 +390,8 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
         current_seat_id: offer.current_seat_id?._id?.toString() || offer.current_seat_id?.toString() || offer.current_seat_id,
         alternatives: (offer.alternatives || []).map(alt => ({
           ...alt.toObject ? alt.toObject() : alt,
-          seat_id: alt.seat_id?._id?.toString() || alt.seat_id?.toString() || alt.seat_id
+          seat_id: alt.seat_id?._id?.toString() || alt.seat_id?.toString() || alt.seat_id,
+          ai_recommendation: alt.ai_recommendation // Include AI recommendation for upgrade alternatives
         }))
       }))
     },

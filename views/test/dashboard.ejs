@@ -2092,6 +2092,35 @@
             margin-top: 8px;
         }
 
+        /* Seat Recommendation */
+        .coe-seat-recommendation {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(59, 130, 246, 0.05);
+            border-left: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
+
+        .recommendation-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            margin-top: 2px;
+            color: #60a5fa;
+        }
+
+        .coe-seat-recommendation p {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-style: italic;
+            line-height: 1.4;
+            flex: 1;
+            margin: 0;
+        }
+
         .coe-seat-media-thumbnail {
             width: 50px;
             height: 50px;
@@ -7645,6 +7674,12 @@
                                                     <span style="font-weight: 600; color: #60a5fa;">$${totalCost}</span>
                                                 </div>
                                             </div>
+                                            ${seat.ai_recommendation ? `
+                                                <div class="coe-seat-recommendation">
+                                                    <svg class="recommendation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                                                    <p>${seat.ai_recommendation}</p>
+                                                </div>
+                                            ` : ''}
                                             ${seatMediaHtml}
                                         </div>
                                     </div>
@@ -7840,6 +7875,12 @@
                                                             <span style="font-weight: 600; color: #60a5fa;">$${((alt.event_price || alt.price || 0) + (eventGroup.seats[0]?.base_price || 0)).toLocaleString()}</span>
                                                         </div>
                                                     </div>
+                                                    ${alt.ai_recommendation ? `
+                                                        <div class="coe-seat-recommendation">
+                                                            <svg class="recommendation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                                                            <p>${alt.ai_recommendation}</p>
+                                                        </div>
+                                                    ` : ''}
                                                     ${altMediaHtml}
                                                     ${alt.upgrade_reasons && alt.upgrade_reasons.length > 0 ? `
                                                         <div class="upgrade-reasons" style="margin-top: 8px;">

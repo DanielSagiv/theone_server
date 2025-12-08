@@ -27,6 +27,7 @@ const {
   createCOEActions,
   formatTextResponse
 } = require('./botResponseFormatter');
+const { generateSeatRecommendations } = require('./seatRecommendationService');
 const {
   ErrorCodes,
   ErrorCategories,
@@ -993,6 +994,88 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       throw new Error('All selected seats are missing event_id. Cannot create COE.');
     }
 
+    // Phase 3: Generate AI recommendations for selected seats
+    if (validatedSeats.length > 0) {
+      try {
+        console.log('[BOT] Generating AI recommendations for selected seats...');
+        
+        // Collect recommendation data: need to fetch location and sentiments for each seat
+        const recommendationData = [];
+        const eventMap = new Map();
+        
+        // Build event map for quick lookup
+        for (const event of finalEvents) {
+          eventMap.set(event.event_id.toString(), event);
+        }
+        
+        // Collect seat data with location and sentiments
+        for (const seat of validatedSeats) {
+          const eventId = seat.event_id.toString();
+          const event = eventMap.get(eventId);
+          
+          if (event && event.location_id) {
+            // Find location seat to get sentiments
+            const location = event.location_id;
+            const locationSeat = location.seats?.find(s => {
+              // Match by seat_id (stable reference)
+              const seatIdStr = seat.seat_id?.toString();
+              const locationSeatId = s._id?.toString();
+              if (seatIdStr && locationSeatId && locationSeatId === seatIdStr) {
+                return true;
+              }
+              // Fallback: match by code
+              return s.code === seat.seat_code;
+            });
+            
+            if (locationSeat && locationSeat.sentiment && locationSeat.sentiment.length > 0) {
+              recommendationData.push({
+                seatData: {
+                  code: seat.seat_code,
+                  category: locationSeat.category || seat.category,
+                  capacity: seat.capacity,
+                  section: locationSeat.section || seat.section,
+                  event_price: seat.event_price || seat.base_price || 0,
+                  base_price: seat.base_price || 0
+                },
+                sentiments: locationSeat.sentiment,
+                locationId: location._id?.toString() || location.toString()
+              });
+            }
+          }
+        }
+        
+        // Generate recommendations in parallel
+        if (recommendationData.length > 0) {
+          const recommendations = await generateSeatRecommendations(
+            recommendationData,
+            conversationPreferences,
+            { timeout: 5000 }
+          );
+          
+          // Attach recommendations to validated seats
+          const recommendationMap = new Map(
+            recommendations.map(rec => [rec.seat_code, rec])
+          );
+          
+          validatedSeats.forEach(seat => {
+            const rec = recommendationMap.get(seat.seat_code);
+            if (rec) {
+              seat.ai_recommendation = rec.recommendation;
+              seat.recommendation_generated_at = rec.generated_at;
+              seat.recommendation_version = rec.version;
+            }
+          });
+          
+          console.log('[BOT] Generated', recommendations.length, 'seat recommendations');
+        } else {
+          console.log('[BOT] No sentiments found for seats, skipping recommendation generation');
+        }
+      } catch (error) {
+        console.error('[BOT] Error generating seat recommendations:', error);
+        // Don't fail COE creation if recommendations fail
+      }
+    }
+
     // Build base COE data
     const baseCoeData = {
       name: coeName,
@@ -1105,7 +1188,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       try {
         console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
         const totalBudget = conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null;
-        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE, totalBudget);
+        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE, totalBudget, conversationPreferences);
         
         console.log('[BOT] Generated upgrade offers:', upgradeOffers.length, 'offers');
         
