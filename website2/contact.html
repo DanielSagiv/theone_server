@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>THE1 - Contact Us</title>
+    <link rel="icon" type="image/png" href="/website2/assets/favicon.png">
+    <link rel="apple-touch-icon" href="/website2/assets/favicon.png">
     <link rel="stylesheet" href="/website2/assets/css/style.css">
 </head>
 <body>
@@ -14,19 +16,21 @@
             </div>
             <ul class="nav-menu">
                 <li><a href="/website2">Home</a></li>
-                <li><a href="/website2#offering">Our Offering</a></li>
+                <li><a href="/website2#vision">Vision</a></li>
                 <li><a href="/website2#experience">Experience</a></li>
-                <li><a href="/website2#benefits">Benefits</a></li>
+                <li><a href="/website2#membership">Membership</a></li>
                 <li><a href="/website2#join">Join</a></li>
                 <li><a href="/website2/contact" class="active">Contact</a></li>
             </ul>
         </div>
     </nav>
 
+    <!-- Parallax Background -->
+    <div class="parallax-background" id="parallaxBackground"></div>
+
     <main class="main-content contact-page">
         <div class="contact-content-box">
             <h1 class="contact-title">Contact</h1>
-            <p class="contact-subtitle">Get in touch with The One Private Club</p>
             <div class="contact-form-container">
                 <form class="contact-form">
                     <!-- Honeypot field for bot/spam protection: should remain empty -->
@@ -140,6 +144,39 @@
             submitBtn.textContent = originalText;
           }
         });
+      });
+
+      // Parallax scrolling effect
+      const parallaxBackground = document.getElementById('parallaxBackground');
+      let ticking = false;
+      let isMobile = window.innerWidth <= 768;
+
+      function updateParallax() {
+        if (isMobile || !parallaxBackground) {
+          return;
+        }
+
+        const scrolled = window.pageYOffset;
+        const rate = scrolled * 0.5;
+        
+        parallaxBackground.style.transform = `translate3d(0, ${rate}px, 0)`;
+        ticking = false;
+      }
+
+      function requestTick() {
+        if (!ticking) {
+          window.requestAnimationFrame(updateParallax);
+          ticking = true;
+        }
+      }
+
+      if (!isMobile) {
+        window.addEventListener('scroll', requestTick, { passive: true });
+        updateParallax();
+      }
+
+      window.addEventListener('resize', function() {
+        isMobile = window.innerWidth <= 768;
       });
     </script>
 </body>

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const { requireWebsitePasswordAuth } = require('../middleware/websitePasswordProtection');
-const { sendContactFormEmail } = require('../utils/emailService');
+const { sendContactFormEmail, sendNewsletterSubscriptionEmail } = require('../utils/emailService');
 
 /**
  * Basic in-memory rate limiter for website2 contact form (per IP)
@@ -224,14 +224,8 @@ router.post('/newsletter', requireWebsitePasswordAuth, async (req, res) => {
       });
     }
 
-    // Send newsletter subscription email
-    await sendContactFormEmail({
-      name: 'Newsletter Subscriber',
-      email: email.trim(),
-      phone: '',
-      subject: 'Newsletter Subscription',
-      message: `New newsletter subscription from: ${email.trim()}`
-    });
+    // Send newsletter subscription email (clearly identified as subscription)
+    await sendNewsletterSubscriptionEmail(email.trim());
 
     console.log('[WEBSITE2_NEWSLETTER] Newsletter subscription email sent successfully', {
       ip,

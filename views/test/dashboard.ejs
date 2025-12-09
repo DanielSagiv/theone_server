@@ -2105,11 +2105,11 @@
         }
 
         .recommendation-icon {
-            width: 16px;
-            height: 16px;
+            width: 24px;
+            height: 24px;
             flex-shrink: 0;
-            margin-top: 2px;
-            color: #60a5fa;
+            margin-top: 0;
+            object-fit: contain;
         }
 
         .coe-seat-recommendation p {
@@ -7523,14 +7523,16 @@
                         }
                         
                         console.log('[COE Card] Found seats:', seats.length);
-                        // Debug: Log media for first seat
+                        // Debug: Log media and recommendation for first seat
                         if (seats.length > 0) {
-                            console.log('[COE Card] First seat media check:', {
+                            console.log('[COE Card] First seat check:', {
                                 seat_code: seats[0].seat_code,
                                 hasMedia: !!(seats[0].media),
                                 mediaType: typeof seats[0].media,
                                 mediaLength: seats[0].media?.length || 0,
-                                media: seats[0].media
+                                hasAiRecommendation: !!(seats[0].ai_recommendation),
+                                aiRecommendation: seats[0].ai_recommendation,
+                                allSeatKeys: Object.keys(seats[0])
                             });
                         }
                         
@@ -7623,6 +7625,16 @@
 
                             // Generate seat items for carousel
                             const seatItems = eventGroup.seats.map((seat, seatIndex) => {
+                                // Debug: Log seat data including recommendation
+                                if (seatIndex === 0) {
+                                    console.log('[COE Card] Rendering seat:', {
+                                        seat_code: seat.seat_code,
+                                        hasAiRecommendation: !!(seat.ai_recommendation),
+                                        aiRecommendation: seat.ai_recommendation,
+                                        seatKeys: Object.keys(seat)
+                                    });
+                                }
+                                
                                 // Status badge with color
                                 const statusClass = `coe-seat-status-${seat.status || 'selected'}`;
                                 const statusLabel = (seat.status || 'selected').charAt(0).toUpperCase() + (seat.status || 'selected').slice(1);
@@ -7676,7 +7688,7 @@
                                             </div>
                                             ${seat.ai_recommendation ? `
                                                 <div class="coe-seat-recommendation">
-                                                    <svg class="recommendation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                                                    <img src="/images/amir.png" alt="Recommendation" class="recommendation-icon">
                                                     <p>${seat.ai_recommendation}</p>
                                                 </div>
                                             ` : ''}
@@ -7877,7 +7889,7 @@
                                                     </div>
                                                     ${alt.ai_recommendation ? `
                                                         <div class="coe-seat-recommendation">
-                                                            <svg class="recommendation-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+                                                            <img src="/images/amir.png" alt="Recommendation" class="recommendation-icon">
                                                             <p>${alt.ai_recommendation}</p>
                                                         </div>
                                                     ` : ''}

@@ -451,6 +451,97 @@ async function sendAdminNotificationEmail(adminEmail, subject, message) {
 }
 
 /**
+ * Send newsletter subscription email to CONTACT_EMAIL recipient
+ * @param {string} email - Subscriber email address
+ * @returns {Promise<Object|void>} Send result or void if CONTACT_EMAIL not configured
+ */
+async function sendNewsletterSubscriptionEmail(email) {
+  const recipient = process.env.CONTACT_EMAIL;
+
+  if (!recipient) {
+    console.warn('[EMAIL_NEWSLETTER] CONTACT_EMAIL is not configured, skipping newsletter subscription email send', {
+      timestamp: new Date().toISOString()
+    });
+    return;
+  }
+
+  const emailSubject = '[THE1 Website Newsletter Subscription] New Subscriber';
+
+  console.log('[EMAIL_NEWSLETTER] Preparing to send newsletter subscription email', {
+    to: recipient,
+    from: process.env.FROM_EMAIL || 'noreply@the1.vip',
+    subject: emailSubject,
+    subscriberEmail: email,
+    timestamp: new Date().toISOString()
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2933; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #d4af37; color: #1f2933; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
+        .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }
+        .subscription-badge { background: #d4af37; color: #1f2933; padding: 8px 16px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; font-size: 14px; }
+        .row { margin-bottom: 15px; padding: 10px; background: white; border-radius: 6px; }
+        .label { font-weight: bold; color: #4b5563; display: block; margin-bottom: 5px; }
+        .value { color: #111827; font-size: 16px; }
+        .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
+        .timestamp { color: #9ca3af; font-size: 12px; margin-top: 10px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📧 Newsletter Subscription</h1>
+        </div>
+        <div class="content">
+          <div class="subscription-badge">NEW SUBSCRIPTION</div>
+          <p style="margin-top: 20px; font-size: 16px; color: #111827;">A new subscriber has signed up for the newsletter:</p>
+          <div class="row">
+            <span class="label">Subscriber Email:</span>
+            <span class="value">${email}</span>
+          </div>
+          <div class="row">
+            <span class="label">Subscription Date:</span>
+            <span class="value">${new Date().toLocaleString()}</span>
+          </div>
+          <div class="row">
+            <span class="label">Source:</span>
+            <span class="value">THE1 Website (website2)</span>
+          </div>
+          <p class="timestamp">This is a newsletter subscription notification, not a contact form submission.</p>
+        </div>
+        <div class="footer">
+          THE1 Website Newsletter Subscription System
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const result = await sendEmail({
+    to: recipient,
+    subject: emailSubject,
+    html
+  });
+
+  console.log('[EMAIL_NEWSLETTER] Newsletter subscription email sent via SES', {
+    to: recipient,
+    subject: emailSubject,
+    subscriberEmail: email,
+    messageId: result && result.messageId,
+    timestamp: new Date().toISOString()
+  });
+
+  return result;
+}
+
+/**
  * Send website contact form submission email to CONTACT_EMAIL recipient
  * @param {Object} data - Contact form data
  * @param {string} data.name - Sender name
@@ -633,6 +724,7 @@ module.exports = {
   sendBookingConfirmationEmail,
   sendAdminNotificationEmail,
   sendContactFormEmail,
+  sendNewsletterSubscriptionEmail,
   
   // Utility functions (exported for testing)
   formatDate,
