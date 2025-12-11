@@ -529,6 +529,10 @@ section {
     z-index: 1;
 }
 
+.experience-title {
+    font-size: clamp(2.3rem, 5.75vw, 4rem);
+}
+
 .experience-narrative {
     font-size: clamp(1rem, 2vw, 1.2rem);
     color: #ffffff;
@@ -551,7 +555,7 @@ section {
 }
 
 .experience-heading {
-    font-size: clamp(1.3rem, 2.5vw, 1.6rem);
+    font-size: clamp(1.5rem, 2.9vw, 1.85rem);
     font-weight: 400;
     color: #d4af37;
     margin-bottom: 1rem;
@@ -559,7 +563,7 @@ section {
 }
 
 .experience-text {
-    font-size: clamp(0.95rem, 1.8vw, 1.05rem);
+    font-size: clamp(1.1rem, 2.1vw, 1.2rem);
     color: #ffffff;
     line-height: 1.8;
 }
@@ -928,7 +932,7 @@ section {
     padding-top: 2rem;
     border-top: 1px solid #1a2529;
     color: #888;
-        font-size: 0.9rem;
+    font-size: 0.9rem;
 }
 
 .footer-link {
