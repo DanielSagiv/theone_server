@@ -500,7 +500,7 @@ section {
 
 .feature-title::after {
     content: '';
-  position: absolute;
+    position: absolute;
     bottom: 0;
     left: 0;
     width: 60px;
@@ -555,7 +555,7 @@ section {
 }
 
 .experience-heading {
-    font-size: clamp(1.5rem, 2.9vw, 1.85rem);
+    font-size: clamp(1.8rem, 3.2vw, 2.2rem);
     font-weight: 400;
     color: #d4af37;
     margin-bottom: 1rem;
@@ -563,9 +563,97 @@ section {
 }
 
 .experience-text {
-    font-size: clamp(1.1rem, 2.1vw, 1.2rem);
+    font-size: clamp(1.25rem, 2.4vw, 1.35rem);
     color: #ffffff;
     line-height: 1.8;
+}
+
+/* Story Sections (after Experience) */
+.story-section {
+    background-color: rgba(10, 20, 25, 0.9);
+    padding: 6rem 0;
+    position: relative;
+    z-index: 1;
+}
+
+.story-section .container {
+    position: relative;
+    z-index: 2;
+}
+
+.story-title {
+    font-size: clamp(2rem, 4.8vw, 3.2rem);
+    font-weight: 300;
+    color: #ffffff;
+    margin-bottom: 1.5rem;
+}
+
+.story-body {
+    font-size: clamp(1.05rem, 2.1vw, 1.25rem);
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.9;
+    max-width: 900px;
+}
+
+.story-card {
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 3rem;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(212, 175, 55, 0.18);
+    border-radius: 14px;
+    padding: 2.5rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.story-card.reverse {
+    direction: rtl;
+}
+
+.story-card.reverse > * {
+    direction: ltr;
+}
+
+.story-media {
+    position: relative;
+    width: 100%;
+    height: 360px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #1e2a30, #0f181d);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d4af37;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px dashed rgba(212, 175, 55, 0.5);
+}
+
+.story-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.story-heading {
+    font-size: clamp(1.8rem, 3.8vw, 2.6rem);
+    color: #d4af37;
+    font-weight: 300;
+    letter-spacing: 0.02em;
+}
+
+.story-text {
+    font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+    color: rgba(255, 255, 255, 0.92);
+    line-height: 1.9;
 }
 
 /* Benefits Section */
@@ -997,6 +1085,24 @@ section {
         gap: 3rem;
     }
 
+    .story-card {
+        grid-template-columns: 1fr;
+        gap: 1.75rem;
+        padding: 1.5rem;
+    }
+
+    .story-card.reverse {
+        direction: ltr;
+    }
+
+    .story-media {
+        height: 260px;
+    }
+
+    .story-section {
+        padding: 4.5rem 0;
+    }
+
     .form-group {
         flex-direction: column;
     }
@@ -1051,6 +1157,14 @@ section {
     .feature-grid {
         gap: 2.5rem;
     }
+
+    .story-card {
+        padding: 1.25rem;
+    }
+
+    .story-media {
+        height: 220px;
+    }
 }
 
 /* Contact Page Styles */
@@ -1097,7 +1211,7 @@ section {
 
 .contact-form-group {
     display: flex;
-    flex-direction: column;
+        flex-direction: column;
     gap: 0.5rem;
 }
 
