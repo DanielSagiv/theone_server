@@ -5,7 +5,7 @@ const crypto = require('crypto');
  * @description Shared utilities for bot operations including correlation IDs, error taxonomy, and cost tracking
  */
 
-/**
+/**text
  * Generate a correlation ID for request tracing
  * @returns {string} Correlation ID
  */
