@@ -25,6 +25,8 @@ const {
  */
 router.get('/my', authenticateToken, async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    const Event = require('../models/Event');
     const userId = req.user.id;
     
     // Get COEs where user is admin, client, runner, or participant
@@ -40,6 +42,50 @@ router.get('/my', authenticateToken, async (req, res) => {
     .populate('client_id', 'name')
     .populate('events.event_id', 'name start_datetime end_datetime location')
     .sort({ created_at: -1 });
+
+    // Manual population fallback for events that weren't populated
+    // This ensures events replaced via updateOne are properly populated
+    for (const coe of coes) {
+      if (coe.events && Array.isArray(coe.events)) {
+        for (let i = 0; i < coe.events.length; i++) {
+          const eventItem = coe.events[i];
+          if (eventItem.event_id) {
+            // Check if event_id is not populated (it's an ObjectId or string, not an object with name)
+            const isPopulated = eventItem.event_id && 
+                               typeof eventItem.event_id === 'object' && 
+                               eventItem.event_id.name !== undefined;
+            
+            if (!isPopulated) {
+              // Extract the event ID (could be ObjectId, string, or object with _id)
+              let eventIdValue;
+              if (eventItem.event_id._id) {
+                eventIdValue = eventItem.event_id._id;
+              } else if (eventItem.event_id instanceof mongoose.Types.ObjectId) {
+                eventIdValue = eventItem.event_id;
+              } else if (typeof eventItem.event_id === 'string') {
+                eventIdValue = eventItem.event_id;
+              } else {
+                eventIdValue = eventItem.event_id;
+              }
+              
+              try {
+                const populatedEvent = await Event.findById(eventIdValue)
+                  .populate('location_id', 'name type media seats')
+                  .select('name description location_id start_datetime end_datetime base_price currency status media seats');
+                if (populatedEvent) {
+                  eventItem.event_id = populatedEvent;
+                  console.log('[GET /coes/my] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
+                } else {
+                  console.warn('[GET /coes/my] Event not found for manual population:', eventIdValue, 'in COE:', coe._id);
+                }
+              } catch (populateError) {
+                console.warn('[GET /coes/my] Failed to manually populate event:', populateError.message, 'for event_id:', eventIdValue, 'in COE:', coe._id);
+              }
+            }
+          }
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -213,8 +259,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    // Find COE where user has access (admin, client, runner, or participant)
-    const coe = await COE.findOne({
+    // Use getCOEById for consistent population (same as other endpoints)
+    // First verify user has access
+    const coeCheck = await COE.findOne({
       _id: id,
       $or: [
         { admin_id: userId },
@@ -222,11 +269,17 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
         { 'runner_assignment.runner_id': userId },
         { 'participants.user_id': userId }
       ]
-    })
-    .populate('admin_id', 'name email')
-    .populate('client_id', 'name email')
-    .populate('events.event_id', 'name start_datetime end_datetime location')
-    .populate('runner_assignment.runner_id', 'name email');
+    }).select('_id');
+    
+    if (!coeCheck) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found or access denied'
+      });
+    }
+    
+    // Use getCOEById for proper population
+    const coe = await coeService.getCOEById(id);
 
     if (!coe) {
       return res.status(404).json({
@@ -1131,6 +1184,199 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
     res.status(500).json({
       success: false,
       error: 'Failed to set COE as fully covered'
+    });
+  }
+});
+
+/**
+ * DELETE /v1/coes/:coeId/events
+ * Remove events from a draft COE
+ * @access Authenticated users (admin or COE owner)
+ */
+router.delete('/:coeId/events', authenticateToken, async (req, res) => {
+  try {
+    const { coeId } = req.params;
+    const { event_ids } = req.body;
+
+    if (!event_ids || !Array.isArray(event_ids) || event_ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'event_ids array is required and must not be empty'
+      });
+    }
+
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Check permissions: admin or COE owner
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = coe.client_id?.toString() === req.user.id || coe.admin_id?.toString() === req.user.id;
+    
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to modify this COE'
+      });
+    }
+
+    // Validate at least one event remains
+    const currentEventIds = new Set();
+    (coe.selected_seats || []).forEach(seat => {
+      const eventIdStr = seat.event_id?.toString() || seat.event_id;
+      if (eventIdStr) {
+        currentEventIds.add(eventIdStr);
+      }
+    });
+
+    const eventIdsToRemove = event_ids.map(id => id.toString());
+    const remainingEvents = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
+
+    if (remainingEvents.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot remove all events from COE. At least one event must remain.'
+      });
+    }
+
+    const updatedCoe = await coeService.removeEventsFromCOE(coeId, event_ids);
+
+    res.json({
+      success: true,
+      message: `Successfully removed ${event_ids.length} event(s) from COE`,
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('Error removing events from COE:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to remove events from COE'
+    });
+  }
+});
+
+/**
+ * PUT /v1/coes/:coeId/events/:oldEventId
+ * Replace an event in a draft COE
+ * @access Authenticated users (admin or COE owner)
+ */
+router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => {
+  try {
+    const { coeId, oldEventId } = req.params;
+    const { new_event_id, preserve_seats = false, seat_preferences = {} } = req.body;
+
+    if (!new_event_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'new_event_id is required'
+      });
+    }
+
+    // Use native MongoDB to load COE and bypass Mongoose validation entirely
+    // This is a workaround for events created before base_price/total_price were required
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+    const coesCollection = db.collection('coes');
+    const coeObjectId = mongoose.Types.ObjectId.isValid(coeId) 
+      ? new mongoose.Types.ObjectId(coeId) 
+      : coeId;
+    
+    const coe = await coesCollection.findOne({ _id: coeObjectId });
+    
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Check permissions: admin or COE owner
+    const isAdmin = req.user.role === 'admin';
+    const coeClientId = coe.client_id?.toString?.() || (typeof coe.client_id === 'object' ? coe.client_id?._id?.toString() : coe.client_id);
+    const coeAdminId = coe.admin_id?.toString?.() || (typeof coe.admin_id === 'object' ? coe.admin_id?._id?.toString() : coe.admin_id);
+    const isOwner = coeClientId === req.user.id || coeAdminId === req.user.id;
+    
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to modify this COE'
+      });
+    }
+
+    const updatedCoe = await coeService.replaceEventInCOE(
+      coeId,
+      oldEventId,
+      new_event_id,
+      { preserve_seats, seat_preferences, isAdmin }
+    );
+
+    res.json({
+      success: true,
+      message: 'Event replaced successfully',
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('Error replacing event in COE:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to replace event in COE'
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/:coeId/events/:eventId/alternatives
+ * Get alternative events for replacement
+ * @access Authenticated users (admin or COE owner)
+ */
+router.get('/:coeId/events/:eventId/alternatives', authenticateToken, async (req, res) => {
+  try {
+    const { coeId, eventId } = req.params;
+    const { city, date_range_start, date_range_end, limit = 10 } = req.query;
+
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Check permissions: admin or COE owner
+    const isAdmin = req.user.role === 'admin';
+    const isOwner = coe.client_id?.toString() === req.user.id || coe.admin_id?.toString() === req.user.id;
+    
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to view this COE'
+      });
+    }
+
+    const filters = {
+      city: city || undefined,
+      date_range_start: date_range_start ? new Date(date_range_start) : undefined,
+      date_range_end: date_range_end ? new Date(date_range_end) : undefined,
+      limit: parseInt(limit, 10),
+      isAdmin: isAdmin // Pass admin flag to service
+    };
+
+    const alternatives = await coeService.findAlternativeEvents(coeId, eventId, filters);
+
+    res.json({
+      success: true,
+      data: alternatives,
+      count: alternatives.length
+    });
+  } catch (error) {
+    console.error('Error finding alternative events:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to find alternative events'
     });
   }
 });

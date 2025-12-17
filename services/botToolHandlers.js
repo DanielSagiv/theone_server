@@ -34,7 +34,7 @@ const {
   createError,
   getErrorCategory
 } = require('../utils/botUtils');
-const { autoSelectEventsBySentiment } = require('./botSentimentService');
+const { autoSelectEventsBySentiment, normalizeEventDate } = require('./botSentimentService');
 const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity, calculateSeatCosts } = require('./botAutoFillService');
 const { getPreferences } = require('./botPreferenceService');
 const { parseAndNormalizeDate } = require('../utils/dateParser');
@@ -596,6 +596,55 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           conversationPreferences,
           5 // Max 5 events
         );
+        
+        // Safety check: Validate no date conflicts in final selection
+        if (selectedEvents.length > 0) {
+          const selectedDates = new Set();
+          const eventsWithConflicts = [];
+          
+          for (const eventItem of selectedEvents) {
+            const event = eventItem.event || eventItem;
+            const eventDate = normalizeEventDate(event);
+            
+            if (eventDate) {
+              if (selectedDates.has(eventDate)) {
+                eventsWithConflicts.push({
+                  event_id: eventItem.event_id || event._id || event.id,
+                  event_name: event.name || 'Unknown',
+                  date: eventDate
+                });
+              } else {
+                selectedDates.add(eventDate);
+              }
+            }
+          }
+          
+          if (eventsWithConflicts.length > 0) {
+            console.error('[BOT] CRITICAL: Date conflicts detected in selected events! This should not happen.', {
+              conflicts: eventsWithConflicts,
+              selectedEventsCount: selectedEvents.length
+            });
+            // Remove conflicting events (keep first occurrence of each date)
+            const uniqueEvents = [];
+            const seenDates = new Set();
+            
+            for (const eventItem of selectedEvents) {
+              const event = eventItem.event || eventItem;
+              const eventDate = normalizeEventDate(event);
+              
+              if (!eventDate || !seenDates.has(eventDate)) {
+                uniqueEvents.push(eventItem);
+                if (eventDate) {
+                  seenDates.add(eventDate);
+                }
+              }
+            }
+            
+            console.log('[BOT] Removed', selectedEvents.length - uniqueEvents.length, 'conflicting events');
+            selectedEvents.length = 0;
+            selectedEvents.push(...uniqueEvents);
+          }
+        }
         
         // Check if all events were excluded due to location preferences
         // This happens when availableEvents.length > 0 but selectedEvents.length === 0
@@ -1172,7 +1221,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     });
 
     // Get populated COE for response
-    const populatedCOE = await coeService.getCOEById(coe._id);
+    let populatedCOE = await coeService.getCOEById(coe._id);
     
     // Log pricing after population
     console.log('[BOT] Pricing in populatedCOE after getCOEById:', {
@@ -1188,7 +1237,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       try {
         console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
         const totalBudget = conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null;
-        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE, totalBudget, conversationPreferences);
+        // Pass isAdmin flag: admins see all seats, clients see only better seats
+        const isAdmin = user.role === 'admin';
+        const upgradeOffers = await generateSeatUpgradeOffers(populatedCOE, totalBudget, conversationPreferences, isAdmin);
         
         console.log('[BOT] Generated upgrade offers:', upgradeOffers.length, 'offers');
         
@@ -1218,7 +1269,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
                                 (conversationPreferences.budget_range ? { max: conversationPreferences.budget_range.max } : null);
     // Phase 2.5: Use 'coe_draft' type for draft COEs to enable enhanced display
     const responseType = populatedCOE.status === 'draft' ? 'coe_draft' : 'coe_created';
-    const structuredResponse = formatCOEResponse(
+    const structuredResponse = await formatCOEResponse(
       responseType,
       populatedCOE,
       populatedCOE.status === 'draft' 
@@ -1428,7 +1479,7 @@ async function handleUpdateCOE(params, user, correlationId) {
     const actions = createCOEActions(populatedCOE, user.role);
 
     // Format structured response
-    const structuredResponse = formatCOEResponse(
+    const structuredResponse = await formatCOEResponse(
       'coe_updated',
       populatedCOE,
       'COE updated successfully.',
@@ -1532,7 +1583,7 @@ async function handleGetMyCOEs(params, user, correlationId) {
     }));
 
     // Return structured response
-    const structuredResponse = formatCOEListResponse(
+    const structuredResponse = await formatCOEListResponse(
       formattedCOEs,
       `Found ${formattedCOEs.length} COE${formattedCOEs.length !== 1 ? 's' : ''}.`
     );
@@ -1607,7 +1658,7 @@ async function handleGetCOEDetails(params, user, correlationId) {
     const actions = createCOEActions(coe, user.role);
 
     // Format structured response
-    const structuredResponse = formatCOEResponse(
+    const structuredResponse = await formatCOEResponse(
       'coe_details',
       coe,
       `COE details for "${coe.name}".`,

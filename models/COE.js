@@ -13,9 +13,9 @@ const COEItemSchema = new mongoose.Schema({
   event_time: { type: String, required: true },
   
   // Pricing
-  base_price: { type: Number, min: 0, required: true },
+  base_price: { type: Number, min: 0, default: 0 }, // Changed from required to default 0 for backward compatibility
   quantity: { type: Number, min: 1, default: 1 },
-  total_price: { type: Number, min: 0, required: true },
+  total_price: { type: Number, min: 0, default: 0 }, // Changed from required to default 0 for backward compatibility
   
   // Runner Assignment (Event-Level)
   runner_assignment: {

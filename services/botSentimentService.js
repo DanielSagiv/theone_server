@@ -8,6 +8,62 @@ const Location = require('../models/Location');
 const Event = require('../models/Event');
 const OpenAI = require('openai');
 
+/**
+ * Normalize event date to calendar day for comparison
+ * @param {Object} event - Event with start_datetime
+ * @returns {string|null} YYYY-MM-DD format or null if no date
+ */
+/**
+ * Normalize event date to calendar day for comparison
+ * @param {Object} eventOrMatch - Event object or match object with event property
+ * @returns {string|null} YYYY-MM-DD format or null if no date
+ */
+function normalizeEventDate(eventOrMatch) {
+  if (!eventOrMatch) return null;
+  
+  // Handle different event structures:
+  // 1. Match object from matchEventsWithEmbeddings: { event_id, match_score, event: {...} }
+  // 2. Direct event object: { start_datetime, ... }
+  // 3. Event item from rankEventsBySentiment: { event: {...}, sentimentScore, ... }
+  const eventObj = eventOrMatch.event || eventOrMatch;
+  const startDatetime = eventObj.start_datetime;
+  
+  if (!startDatetime) return null;
+  
+  try {
+    const date = new Date(startDatetime);
+    if (isNaN(date.getTime())) return null;
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    console.warn('[SENTIMENT SERVICE] Error normalizing event date:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if event conflicts with selected events (same day)
+ * @param {Object} event - Event to check
+ * @param {Array} selectedEvents - Already selected events
+ * @returns {boolean} True if conflict exists
+ */
+function hasDateConflict(event, selectedEvents) {
+  if (!event || !selectedEvents || selectedEvents.length === 0) {
+    return false;
+  }
+  
+  const eventDate = normalizeEventDate(event);
+  if (!eventDate) return false;
+  
+  return selectedEvents.some(selected => {
+    const selectedDate = normalizeEventDate(selected);
+    return selectedDate && selectedDate === eventDate;
+  });
+}
+
 // Initialize OpenAI client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
@@ -597,10 +653,35 @@ async function autoSelectEventsBySentiment(events, preferences, maxEvents = 5) {
         });
       }
 
-      // Step 4: Generate match reasons for top events
-      const topEvents = filtered.slice(0, maxEvents);
+      // Step 4: Apply date conflict filtering - ensure one event per day
+      // Events are already sorted by sentiment score (descending) from matchEventsWithEmbeddings
+      const selectedEvents = [];
+      const selectedDates = new Set(); // Track selected dates for O(1) lookup
+      
+      for (const match of filtered) {
+        // Check date conflict
+        const eventDate = normalizeEventDate(match);
+        if (eventDate && selectedDates.has(eventDate)) {
+          // Skip - date conflict, already have an event on this day
+          console.log(`[SENTIMENT SERVICE] Skipping event ${match.event?.name || match.event_id} - date conflict (${eventDate})`);
+          continue;
+        }
+        
+        // Add to selection
+        selectedEvents.push(match);
+        if (eventDate) {
+          selectedDates.add(eventDate);
+        }
+        
+        // Stop if we've reached max events
+        if (selectedEvents.length >= maxEvents) {
+          break;
+        }
+      }
+
+      // Step 5: Generate match reasons for selected events
       const eventsWithReasons = await Promise.all(
-        topEvents.map(async (match) => {
+        selectedEvents.map(async (match) => {
           const reasons = await generateMatchReasons(
             match.event,
             structuredPrefs,
@@ -618,7 +699,7 @@ async function autoSelectEventsBySentiment(events, preferences, maxEvents = 5) {
         })
       );
 
-      console.log('[SENTIMENT SERVICE] Phase 2.3: Selected', eventsWithReasons.length, 'events with AI matching');
+      console.log('[SENTIMENT SERVICE] Phase 2.3: Selected', eventsWithReasons.length, 'events with AI matching (date conflicts filtered)');
       return eventsWithReasons;
     } catch (error) {
       console.error('[SENTIMENT SERVICE] Phase 2.3: OpenAI matching failed, falling back to basic matching:', error);
@@ -657,15 +738,40 @@ async function autoSelectEventsBySentiment(events, preferences, maxEvents = 5) {
     });
   }
   
-  // Select top N events
-  const selected = filtered.slice(0, maxEvents).map(item => ({
-    event_id: item.event._id || item.event.id,
-    event: item.event,
-    sentimentScore: item.sentimentScore,
-    sentimentHighlights: item.sentimentHighlights,
-    reason: `Matched ${userPreferences.length} preferences with sentiment score ${item.sentimentScore.toFixed(2)}`
-  }));
+  // Apply date conflict filtering - ensure one event per day
+  // Events are already sorted by sentiment score (descending) from rankEventsBySentiment
+  const selected = [];
+  const selectedDates = new Set(); // Track selected dates for O(1) lookup
   
+  for (const item of filtered) {
+    // Check date conflict
+    const eventDate = normalizeEventDate(item.event);
+    if (eventDate && selectedDates.has(eventDate)) {
+      // Skip - date conflict, already have an event on this day
+      console.log(`[SENTIMENT SERVICE] Skipping event ${item.event.name || item.event._id} - date conflict (${eventDate})`);
+      continue;
+    }
+    
+    // Add to selection
+    selected.push({
+      event_id: item.event._id || item.event.id,
+      event: item.event,
+      sentimentScore: item.sentimentScore,
+      sentimentHighlights: item.sentimentHighlights,
+      reason: `Matched ${userPreferences.length} preferences with sentiment score ${item.sentimentScore.toFixed(2)}`
+    });
+    
+    if (eventDate) {
+      selectedDates.add(eventDate);
+    }
+    
+    // Stop if we've reached max events
+    if (selected.length >= maxEvents) {
+      break;
+    }
+  }
+  
+  console.log('[SENTIMENT SERVICE] Selected', selected.length, 'events with basic matching (date conflicts filtered)');
   return selected;
 }
 
@@ -678,6 +784,9 @@ module.exports = {
   extractStructuredPreferences,
   matchEventsWithEmbeddings,
   generateMatchReasons,
-  cosineSimilarity
+  cosineSimilarity,
+  // Date conflict helpers
+  normalizeEventDate,
+  hasDateConflict
 };
 

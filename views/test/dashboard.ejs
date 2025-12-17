@@ -6706,24 +6706,41 @@
             }
             
             offers.forEach((offer, offerIndex) => {
-                // Filter alternatives to only show upgrades (more expensive than current)
+                // Check if user is admin - admins see all seats, clients only see upgrades
+                const isAdmin = currentUser && currentUser.role === 'admin';
+                
+                // Filter alternatives based on user role
                 const currentPrice = Number(offer.current_price) || 0;
                 const upgradeAlternatives = (offer.alternatives || []).filter(alt => {
                     const altPrice = Number(alt.event_price || alt.price || 0);
-                    // Only show more expensive options (strictly greater)
-                    const isUpgrade = altPrice > currentPrice;
-                    console.log('[UPGRADE FILTER]', {
-                        currentSeat: offer.current_seat_code,
-                        currentPrice: currentPrice,
-                        altSeat: alt.seat_code,
-                        altPrice: altPrice,
-                        isUpgrade: isUpgrade
-                    });
-                    return isUpgrade;
+                    
+                    // For admins: show all alternatives (no price filter)
+                    // For clients: only show more expensive options (strictly greater)
+                    if (isAdmin) {
+                        console.log('[UPGRADE FILTER] Admin - showing all alternatives:', {
+                            currentSeat: offer.current_seat_code,
+                            currentPrice: currentPrice,
+                            altSeat: alt.seat_code,
+                            altPrice: altPrice
+                        });
+                        return true; // Admin sees all seats
+                    } else {
+                        const isUpgrade = altPrice > currentPrice;
+                        console.log('[UPGRADE FILTER] Client - filtering by price:', {
+                            currentSeat: offer.current_seat_code,
+                            currentPrice: currentPrice,
+                            altSeat: alt.seat_code,
+                            altPrice: altPrice,
+                            isUpgrade: isUpgrade
+                        });
+                        return isUpgrade; // Client only sees more expensive seats
+                    }
                 });
                 
-                if (upgradeAlternatives.length === 0) {
-                    return; // Skip this offer if no actual upgrades
+                // For clients: skip if no upgrades found
+                // For admins: show even if empty (might have current seat marked)
+                if (!isAdmin && upgradeAlternatives.length === 0) {
+                    return; // Skip this offer if no actual upgrades (client only)
                 }
                 
                 // Generate upgrade seat items for carousel
@@ -6916,6 +6933,364 @@
             } catch (error) {
                 console.error('Error rejecting upgrade:', error);
             }
+        }
+
+        /**
+         * Handle removing an event from a draft COE
+         * @param {string} coeId - COE ID
+         * @param {string} eventId - Event ID to remove
+         */
+        // Make function globally accessible
+        window.handleRemoveEvent = async function handleRemoveEvent(coeId, eventId) {
+            try {
+                // Show confirmation modal
+                const confirmed = await showConfirmModal(
+                    'Remove Event',
+                    'Are you sure you want to remove this event? All associated seats will be removed.',
+                    'Remove',
+                    'Cancel'
+                );
+
+                if (!confirmed) {
+                    return;
+                }
+
+                showAlert('Removing event...', 'info');
+
+                const result = await makeApiRequest(`/coes/${coeId}/events`, 'DELETE', {
+                    event_ids: [eventId]
+                });
+
+                if (result.success) {
+                    showAlert('Event removed successfully! Refreshing...', 'success');
+                    // Refresh bot messages to show updated COE
+                    setTimeout(() => {
+                        loadBotHistory();
+                    }, 1000);
+                } else {
+                    showAlert(result.error || 'Failed to remove event', 'error');
+                }
+            } catch (error) {
+                console.error('Error removing event:', error);
+                showAlert('Failed to remove event: ' + (error.message || 'Unknown error'), 'error');
+            }
+        }
+
+        /**
+         * Handle replacing an event in a draft COE
+         * @param {string} coeId - COE ID
+         * @param {string} eventId - Event ID to replace
+         */
+        // Make function globally accessible
+        window.handleReplaceEvent = async function handleReplaceEvent(coeId, eventId) {
+            try {
+                console.log('[handleReplaceEvent] Starting replace event:', { coeId, eventId });
+                showAlert('Loading alternative events...', 'info');
+
+                // Fetch alternative events
+                console.log('[handleReplaceEvent] Fetching alternatives from:', `/coes/${coeId}/events/${eventId}/alternatives`);
+                const alternativesResult = await makeApiRequest(`/coes/${coeId}/events/${eventId}/alternatives`, 'GET');
+                
+                console.log('[handleReplaceEvent] Alternatives result:', {
+                    success: alternativesResult.success,
+                    hasData: !!alternativesResult.data,
+                    dataLength: alternativesResult.data?.length || 0,
+                    error: alternativesResult.error,
+                    fullResult: alternativesResult
+                });
+
+                if (!alternativesResult.success) {
+                    const errorMsg = alternativesResult.error || 'Failed to fetch alternative events';
+                    console.error('[handleReplaceEvent] Failed to fetch alternatives:', errorMsg);
+                    showAlert(errorMsg, 'error');
+                    return;
+                }
+
+                // Extract the actual events array from the response
+                // makeApiRequest returns { success, data: <api response> }
+                // API returns { success: true, data: alternatives }
+                // So we need alternativesResult.data.data
+                let eventsArray = alternativesResult.data;
+                
+                // If data is the API response object, extract the actual data
+                if (eventsArray && typeof eventsArray === 'object' && eventsArray.data) {
+                    eventsArray = eventsArray.data;
+                }
+                
+                // Ensure it's an array
+                if (!Array.isArray(eventsArray)) {
+                    console.error('[handleReplaceEvent] Data is not an array:', {
+                        originalData: alternativesResult.data,
+                        extractedData: eventsArray,
+                        dataType: typeof eventsArray,
+                        isArray: Array.isArray(eventsArray),
+                        keys: eventsArray ? Object.keys(eventsArray) : null
+                    });
+                    showAlert('Invalid response format from server. Expected an array of events.', 'error');
+                    return;
+                }
+
+                if (!eventsArray || eventsArray.length === 0) {
+                    console.warn('[handleReplaceEvent] No alternative events found');
+                    showAlert('No alternative events found for replacement', 'error');
+                    return;
+                }
+
+                console.log('[handleReplaceEvent] Showing event selection modal with', eventsArray.length, 'events');
+                // Show event selection modal
+                const selectedEvent = await showEventSelectionModal(
+                    'Replace Event',
+                    'Select an alternative event to replace the current one:',
+                    eventsArray
+                );
+
+                console.log('[handleReplaceEvent] Selected event:', selectedEvent);
+
+                if (!selectedEvent) {
+                    console.log('[handleReplaceEvent] No event selected, user cancelled');
+                    return;
+                }
+
+                showAlert('Replacing event...', 'info');
+
+                console.log('[handleReplaceEvent] Replacing event:', {
+                    coeId,
+                    oldEventId: eventId,
+                    newEventId: selectedEvent._id
+                });
+
+                // Replace the event (without preserving seats for now - user can select manually)
+                const result = await makeApiRequest(`/coes/${coeId}/events/${eventId}`, 'PUT', {
+                    new_event_id: selectedEvent._id,
+                    preserve_seats: false
+                });
+
+                console.log('[handleReplaceEvent] Replace result:', {
+                    success: result.success,
+                    error: result.error,
+                    data: result.data
+                });
+
+                if (result.success) {
+                    showAlert('Event replaced successfully! Refreshing...', 'success');
+                    // Refresh bot messages to show updated COE
+                    setTimeout(() => {
+                        loadBotHistory();
+                    }, 1000);
+                } else {
+                    const errorMsg = result.error || 'Failed to replace event';
+                    console.error('[handleReplaceEvent] Replace failed:', errorMsg);
+                    showAlert(errorMsg, 'error');
+                }
+            } catch (error) {
+                console.error('[handleReplaceEvent] Exception:', error);
+                showAlert('Failed to replace event: ' + (error.message || 'Unknown error'), 'error');
+            }
+        }
+
+        /**
+         * Show confirmation modal
+         * @param {string} title - Modal title
+         * @param {string} message - Confirmation message
+         * @param {string} confirmText - Confirm button text
+         * @param {string} cancelText - Cancel button text
+         * @returns {Promise<boolean>} True if confirmed, false if cancelled
+         */
+        function showConfirmModal(title, message, confirmText = 'Confirm', cancelText = 'Cancel') {
+            return new Promise((resolve) => {
+                const modal = document.createElement('div');
+                modal.className = 'coe-modal-overlay';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+                
+                modal.innerHTML = `
+                    <div class="coe-modal" style="background: #1e293b; border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #fff; margin: 0 0 1rem 0; font-size: 1.2rem;">${title}</h3>
+                        <p style="color: #cbd5f5; margin: 0 0 1.5rem 0; line-height: 1.6;">${message}</p>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                            <button class="coe-modal-cancel" style="background: rgba(100, 116, 139, 0.3); color: #cbd5f5; border: 1px solid rgba(100, 116, 139, 0.5); padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;">
+                                ${cancelText}
+                            </button>
+                            <button class="coe-modal-confirm" style="background: rgba(239, 68, 68, 0.3); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.5); padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;">
+                                ${confirmText}
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                const confirmBtn = modal.querySelector('.coe-modal-confirm');
+                const cancelBtn = modal.querySelector('.coe-modal-cancel');
+
+                confirmBtn.onclick = () => {
+                    document.body.removeChild(modal);
+                    resolve(true);
+                };
+
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(modal);
+                    resolve(false);
+                };
+
+                modal.onclick = (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                        resolve(false);
+                    }
+                };
+
+                document.body.appendChild(modal);
+            });
+        }
+
+        /**
+         * Show event selection modal
+         * @param {string} title - Modal title
+         * @param {string} message - Modal message
+         * @param {Array} events - Array of alternative events
+         * @returns {Promise<Object|null>} Selected event or null if cancelled
+         */
+        function showEventSelectionModal(title, message, events) {
+            return new Promise((resolve) => {
+                // Ensure events is an array
+                if (!Array.isArray(events)) {
+                    console.error('[showEventSelectionModal] Events is not an array:', {
+                        events,
+                        type: typeof events,
+                        isArray: Array.isArray(events)
+                    });
+                    alert('Error: Invalid events data format');
+                    resolve(null);
+                    return;
+                }
+                
+                console.log('[showEventSelectionModal] Creating modal with', events.length, 'events');
+                console.log('[showEventSelectionModal] Events data:', events);
+                
+                const modal = document.createElement('div');
+                modal.className = 'coe-modal-overlay';
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 2rem;';
+
+                const eventsHtml = events.map(event => {
+                    // Normalize event ID to string
+                    const eventId = event._id?.toString() || event._id || event.id || '';
+                    const eventDate = event.start_datetime 
+                        ? new Date(event.start_datetime).toLocaleDateString()
+                        : 'Date TBD';
+                    const locationName = event.location?.name || 'Location TBD';
+                    const priceRange = event.price_range 
+                        ? `$${event.price_range.min.toLocaleString()} - $${event.price_range.max.toLocaleString()}`
+                        : 'Price TBD';
+
+                    return `
+                        <div class="coe-alternative-event-card" 
+                             data-event-id="${eventId}"
+                             style="background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; cursor: pointer; transition: all 0.2s ease;">
+                            <h4 style="color: #d4af37; margin: 0 0 0.5rem 0; font-size: 1.1rem;">${event.name || 'Untitled Event'}</h4>
+                            <div style="color: #cbd5f5; font-size: 0.9rem; margin-bottom: 0.5rem;">
+                                <div><strong>Date:</strong> ${eventDate}</div>
+                                <div><strong>Location:</strong> ${locationName}</div>
+                                <div><strong>Price Range:</strong> ${priceRange}</div>
+                                <div><strong>Available Seats:</strong> ${event.available_seats_count || 0}</div>
+                            </div>
+                            <button class="coe-select-event-btn" 
+                                    data-event-id="${eventId}"
+                                    style="background: rgba(59, 130, 246, 0.3); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.5); padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem;">
+                                Select Event
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+
+                modal.innerHTML = `
+                    <div class="coe-modal" style="background: #1e293b; border-radius: 8px; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #fff; margin: 0 0 1rem 0; font-size: 1.2rem;">${title}</h3>
+                        <p style="color: #cbd5f5; margin: 0 0 1.5rem 0; line-height: 1.6;">${message}</p>
+                        <div class="coe-alternative-events-list">
+                            ${eventsHtml}
+                        </div>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+                            <button class="coe-modal-cancel" style="background: rgba(100, 116, 139, 0.3); color: #cbd5f5; border: 1px solid rgba(100, 116, 139, 0.5); padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                // Add hover effects
+                modal.querySelectorAll('.coe-alternative-event-card').forEach(card => {
+                    card.addEventListener('mouseenter', () => {
+                        card.style.background = 'rgba(30, 41, 59, 0.8)';
+                        card.style.borderColor = 'rgba(212, 175, 55, 0.5)';
+                    });
+                    card.addEventListener('mouseleave', () => {
+                        card.style.background = 'rgba(30, 41, 59, 0.6)';
+                        card.style.borderColor = 'rgba(255,255,255,0.1)';
+                    });
+                });
+
+                // Handle event selection
+                modal.querySelectorAll('.coe-select-event-btn').forEach(btn => {
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        const eventId = btn.dataset.eventId;
+                        console.log('[showEventSelectionModal] Button clicked, eventId:', eventId);
+                        console.log('[showEventSelectionModal] Available events:', events.map(ev => ({
+                            _id: ev._id,
+                            _idType: typeof ev._id,
+                            _idString: ev._id?.toString(),
+                            name: ev.name
+                        })));
+                        
+                        // Try multiple ways to match the event ID
+                        const selectedEvent = events.find(ev => {
+                            const evId = ev._id?.toString() || ev._id || ev.id;
+                            const matchId = eventId.toString();
+                            const matches = evId === matchId || String(evId) === String(matchId);
+                            if (matches) {
+                                console.log('[showEventSelectionModal] Found matching event:', ev);
+                            }
+                            return matches;
+                        });
+                        
+                        console.log('[showEventSelectionModal] Selected event:', selectedEvent);
+                        document.body.removeChild(modal);
+                        resolve(selectedEvent || null);
+                    };
+                });
+                
+                // Also allow clicking the card itself
+                modal.querySelectorAll('.coe-alternative-event-card').forEach(card => {
+                    card.onclick = (e) => {
+                        // Don't trigger if clicking the button
+                        if (e.target.classList.contains('coe-select-event-btn')) {
+                            return;
+                        }
+                        const eventId = card.dataset.eventId;
+                        console.log('[showEventSelectionModal] Card clicked, eventId:', eventId);
+                        const selectedEvent = events.find(ev => {
+                            const evId = ev._id?.toString() || ev._id || ev.id;
+                            return evId === eventId || String(evId) === String(eventId);
+                        });
+                        console.log('[showEventSelectionModal] Selected event from card:', selectedEvent);
+                        document.body.removeChild(modal);
+                        resolve(selectedEvent || null);
+                    };
+                });
+
+                const cancelBtn = modal.querySelector('.coe-modal-cancel');
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(modal);
+                    resolve(null);
+                };
+
+                modal.onclick = (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                        resolve(null);
+                    }
+                };
+
+                document.body.appendChild(modal);
+            });
         }
         
         /**
@@ -7448,6 +7823,24 @@
             const card = document.createElement('div');
             card.className = 'bot-structured-card bot-coe-card';
             
+            // Debug: Log COE data to help diagnose button visibility
+            console.log('[renderCOECard] ========== COE CARD RENDERING ==========');
+            console.log('[renderCOECard] COE data:', {
+                id: coeData.id || coeData._id,
+                status: coeData.status,
+                statusType: typeof coeData.status,
+                runner_assignment: coeData.runner_assignment,
+                hasRunnerAssignment: !!coeData.runner_assignment,
+                runnerAssignmentRunner: coeData.runner_assignment?.runner,
+                currentUser: currentUser ? {
+                    id: currentUser._id || currentUser.id,
+                    role: currentUser.role,
+                    email: currentUser.email
+                } : 'NOT SET',
+                allKeys: Object.keys(coeData)
+            });
+            console.log('[renderCOECard] ========================================');
+            
             const statusClass = `coe-status-${coeData.status || 'draft'}`;
             const dateRange = coeData.start_date && coeData.end_date
                 ? `${new Date(coeData.start_date).toLocaleDateString()} - ${new Date(coeData.end_date).toLocaleDateString()}`
@@ -7567,8 +7960,20 @@
                 const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
                     // Find matching event info (to get location media and name)
                     const matchingEvent = (coeData.events || []).find(e => {
-                        return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
-                    }) || (coeData.events || []).find(e => e.event_id === eventGroup.event_id);
+                        const eventId = e.event_id?.toString() || e.event_id;
+                        const groupEventId = eventGroup.event_id?.toString() || eventGroup.event_id;
+                        return eventId === groupEventId;
+                    });
+                    
+                    // Update event_name from matchingEvent if found (this ensures replaced events show correct name)
+                    if (matchingEvent && matchingEvent.event_id && matchingEvent.event_id.name) {
+                        eventGroup.event_name = matchingEvent.event_id.name;
+                    } else if (matchingEvent && matchingEvent.name) {
+                        eventGroup.event_name = matchingEvent.name;
+                    }
+                    
+                    // Check if same-day alternatives exist (from event data or default to false)
+                    const hasSameDayAlternatives = matchingEvent?.has_same_day_alternatives || false;
 
                     // Phase 2.5: Build sentiment match indicator
                     const sentimentMatch = matchingEvent?.sentiment_match;
@@ -7794,6 +8199,16 @@
                             
                             // Build upgrade option slides
                             let upgradeSlides = [];
+                            // Check if user is admin - admins see all seats, clients only see upgrades
+                            const isAdmin = currentUser && currentUser.role === 'admin';
+                            
+                            console.log('[UPGRADE_DEBUG] Building upgrade slides:', {
+                                upgradeOffersCount: upgradeOffers.length,
+                                isAdmin: isAdmin,
+                                eventId: eventId,
+                                allUpgradeOffersCount: coeData.seat_upgrade_offers?.length || 0
+                            });
+                            
                             if (upgradeOffers.length > 0) {
                                 upgradeOffers.forEach(offer => {
                                     const currentPrice = Number(offer.current_price) || 0;
@@ -7812,25 +8227,54 @@
                                     
                                     const upgradeAlternatives = (offer.alternatives || []).filter(alt => {
                                         const altPrice = Number(alt.event_price || alt.price || 0);
-                                        const isMoreExpensive = altPrice > currentPrice;
-                                        if (!isMoreExpensive) {
-                                            console.log('[UPGRADE_DEBUG] Alternative filtered out (not more expensive):', {
+                                        
+                                        // For admins: show all alternatives (no price filter)
+                                        // For clients: only show more expensive options
+                                        if (isAdmin) {
+                                            console.log('[UPGRADE_DEBUG] Admin - showing all alternatives:', {
                                                 seat_code: alt.seat_code,
                                                 altPrice: altPrice,
                                                 currentPrice: currentPrice
                                             });
+                                            return true; // Admin sees all seats
+                                        } else {
+                                            const isMoreExpensive = altPrice > currentPrice;
+                                            if (!isMoreExpensive) {
+                                                console.log('[UPGRADE_DEBUG] Alternative filtered out (not more expensive):', {
+                                                    seat_code: alt.seat_code,
+                                                    altPrice: altPrice,
+                                                    currentPrice: currentPrice
+                                                });
+                                            }
+                                            return isMoreExpensive; // Client only sees more expensive options
                                         }
-                                        return isMoreExpensive; // Only more expensive options
                                     });
                                     
                                     console.log('[UPGRADE_DEBUG] Alternatives after filter:', {
                                         count: upgradeAlternatives.length,
+                                        isAdmin: isAdmin,
                                         alternatives: upgradeAlternatives.map(alt => ({
                                             seat_code: alt.seat_code,
                                             event_price: alt.event_price,
                                             price: alt.price
                                         }))
                                     });
+                                    
+                                    // For admins: show offer even if no alternatives (might have current seat or all seats are cheaper)
+                                    // For clients: skip if no upgrades available
+                                    if (!isAdmin && upgradeAlternatives.length === 0) {
+                                        console.log('[UPGRADE_DEBUG] Skipping offer - no upgrades for client');
+                                        return; // Skip this offer for clients
+                                    }
+                                    
+                                    // For admins: log if no alternatives (shouldn't happen if backend is working correctly)
+                                    if (isAdmin && upgradeAlternatives.length === 0) {
+                                        console.warn('[UPGRADE_DEBUG] Admin offer has no alternatives - this might indicate a backend issue:', {
+                                            offer: offer,
+                                            alternatives_before_filter: (offer.alternatives || []).length,
+                                            current_seat_code: offer.current_seat_code
+                                        });
+                                    }
                                     
                                     upgradeAlternatives.forEach((alt, altIndex) => {
                                         // Upgrade alternative media thumbnails (same logic as selected seats)
@@ -7973,7 +8417,37 @@
                                             <span class="coe-seat-event-title">${eventGroup.event_name}</span>
                                             <span class="coe-seat-event-date">${eventDate}</span>
                                         </div>
-                                        <span class="expand-icon">▼</span>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            ${(() => {
+                                                const coeStatus = (coeData.status || '').toLowerCase();
+                                                const isDraft = coeStatus === 'draft';
+                                                console.log('[COE_EVENT_ACTIONS] Status check:', {
+                                                    coeId: coeData.id || coeData._id,
+                                                    status: coeData.status,
+                                                    coeStatus,
+                                                    isDraft,
+                                                    eventId: eventGroup.event_id,
+                                                    hasSameDayAlternatives: hasSameDayAlternatives
+                                                });
+                                                return isDraft ? `
+                                                    <button class="coe-event-action-btn" 
+                                                            onclick="event.stopPropagation(); handleRemoveEvent('${coeData.id || coeData._id}', '${eventGroup.event_id}');" 
+                                                            title="Remove Event"
+                                                            style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
+                                                        Remove
+                                                    </button>
+                                                    ${hasSameDayAlternatives ? `
+                                                        <button class="coe-event-action-btn" 
+                                                                onclick="event.stopPropagation(); console.log('Replace button clicked', {coeId: '${coeData.id || coeData._id}', eventId: '${eventGroup.event_id}'}); if (typeof handleReplaceEvent === 'function') { handleReplaceEvent('${coeData.id || coeData._id}', '${eventGroup.event_id}'); } else { console.error('handleReplaceEvent is not defined'); alert('Replace function not available. Please refresh the page.'); }" 
+                                                                title="Replace Event"
+                                                                style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.4); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
+                                                            Replace
+                                                        </button>
+                                                    ` : ''}
+                                                ` : '';
+                                            })()}
+                                            <span class="expand-icon">▼</span>
+                                        </div>
                                     </div>
                                     <div class="coe-seat-event-content">
                                         ${sentimentMatchHtml}
@@ -7987,6 +8461,26 @@
                         
                         // Runner details / assignment (COE-level)
                         const hasRunner = !!coeData.runner_assignment?.runner;
+                        
+                        // Debug logging for runner assignment visibility
+                        console.log('[COE_CARD] Runner assignment debug:', {
+                            coeId: coeData.id || coeData._id,
+                            coeStatus: coeData.status,
+                            coeStatusType: typeof coeData.status,
+                            hasRunnerAssignment: !!coeData.runner_assignment,
+                            runnerAssignment: coeData.runner_assignment,
+                            hasRunner: hasRunner,
+                            runner: coeData.runner_assignment?.runner,
+                            currentUser: currentUser ? {
+                                id: currentUser._id || currentUser.id,
+                                role: currentUser.role,
+                                email: currentUser.email
+                            } : null,
+                            isDraft: (coeData.status || '').toLowerCase() === 'draft',
+                            isAdmin: currentUser && currentUser.role === 'admin',
+                            willShowAssignButton: !hasRunner && (coeData.status || '').toLowerCase() === 'draft' && currentUser && currentUser.role === 'admin'
+                        });
+                        
                         const runnerHtml = hasRunner ? (() => {
                             const r = coeData.runner_assignment.runner;
                             const initials = getInitials(r.name || r.email);
@@ -8012,9 +8506,29 @@
                             // call-to-action to assign a runner via the COE editor.
                             const isDraft = (coeData.status || '').toLowerCase() === 'draft';
                             const isAdmin = currentUser && currentUser.role === 'admin';
-                            if (!isDraft || !isAdmin) return '';
+                            
+                            console.log('[COE_CARD] Checking runner assignment button conditions:', {
+                                isDraft: isDraft,
+                                isAdmin: isAdmin,
+                                coeId: coeData.id || coeData._id,
+                                willRender: isDraft && isAdmin && (coeData.id || coeData._id)
+                            });
+                            
+                            if (!isDraft || !isAdmin) {
+                                console.log('[COE_CARD] Runner assignment button NOT shown - conditions not met:', {
+                                    isDraft: isDraft,
+                                    isAdmin: isAdmin,
+                                    reason: !isDraft ? 'Not draft' : (!isAdmin ? 'Not admin' : 'Unknown')
+                                });
+                                return '';
+                            }
                             const coeId = coeData.id || coeData._id || '';
-                            if (!coeId) return '';
+                            if (!coeId) {
+                                console.log('[COE_CARD] Runner assignment button NOT shown - no COE ID');
+                                return '';
+                            }
+                            
+                            console.log('[COE_CARD] Rendering runner assignment button for COE:', coeId);
                             return `
                                 <div class="coe-runner-section">
                                     <div class="coe-runner-title">Runner Assignment</div>
@@ -9033,8 +9547,10 @@
                     const eventGroupsHtml = Object.values(seatsByEvent).map(eventGroup => {
                         // Build event-level runner details (display at bottom of event section if present)
                         const erMatch = (coe.events || []).find(e => {
-                            return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
-                        }) || (coe.events || []).find(e => e.event_id === eventGroup.event_id);
+                            const eventId = e.event_id?.toString() || e.event_id;
+                            const groupEventId = eventGroup.event_id?.toString() || eventGroup.event_id;
+                            return eventId === groupEventId;
+                        });
                         const evRunner = erMatch?.runner_assignment?.runner || null;
                         const evRunnerStatus = erMatch?.runner_assignment?.status || null;
                         const eventRunnerDetailsHtml = evRunner
@@ -9042,8 +9558,20 @@
                             : '';
                         // Find matching event (to get location media and name)
                         const matchingEvent = (coe.events || []).find(e => {
-                            return (e.event_id && e.event_id.toString ? e.event_id.toString() === eventGroup.event_id : e.event_id === eventGroup.event_id);
-                        }) || (coe.events || []).find(e => e.event_id === eventGroup.event_id);
+                            const eventId = e.event_id?.toString() || e.event_id;
+                            const groupEventId = eventGroup.event_id?.toString() || eventGroup.event_id;
+                            return eventId === groupEventId;
+                        });
+                        
+                        // Update event_name from matchingEvent if found (this ensures replaced events show correct name)
+                        if (matchingEvent && matchingEvent.event_id && matchingEvent.event_id.name) {
+                            eventGroup.event_name = matchingEvent.event_id.name;
+                        } else if (matchingEvent && matchingEvent.name) {
+                            eventGroup.event_name = matchingEvent.name;
+                        }
+                        
+                        // Check if same-day alternatives exist (from event data or default to false)
+                        const hasSameDayAlternatives = matchingEvent?.has_same_day_alternatives || false;
 
                         // Build location thumbnails (up to 3) and +X more
                         let locationThumbsHtml = '';
@@ -9166,7 +9694,36 @@
                                         <span class="coe-seat-event-title">${eventGroup.event_name}</span>
                                         <span class="coe-seat-event-date">${eventDate}</span>
                                     </div>
-                                    <span class="expand-icon">▼</span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        ${(() => {
+                                            const coeStatus = (coe.status || '').toLowerCase();
+                                            const isDraft = coeStatus === 'draft';
+                                            console.log('[COE_EVENT_ACTIONS] Status check:', {
+                                                coeId: coe.id || coe._id,
+                                                status: coe.status,
+                                                coeStatus,
+                                                isDraft,
+                                                eventId: eventGroup.event_id
+                                            });
+                                            return isDraft ? `
+                                                <button class="coe-event-action-btn" 
+                                                        onclick="event.stopPropagation(); handleRemoveEvent('${coe.id || coe._id}', '${eventGroup.event_id}');" 
+                                                        title="Remove Event"
+                                                        style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
+                                                    Remove
+                                                </button>
+                                                ${hasSameDayAlternatives ? `
+                                                    <button class="coe-event-action-btn" 
+                                                            onclick="event.stopPropagation(); console.log('Replace button clicked', {coeId: '${coe.id || coe._id}', eventId: '${eventGroup.event_id}'}); if (typeof handleReplaceEvent === 'function') { handleReplaceEvent('${coe.id || coe._id}', '${eventGroup.event_id}'); } else { console.error('handleReplaceEvent is not defined'); alert('Replace function not available. Please refresh the page.'); }" 
+                                                            title="Replace Event"
+                                                            style="background: rgba(59, 130, 246, 0.2); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.4); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
+                                                        Replace
+                                                    </button>
+                                                ` : ''}
+                                            ` : '';
+                                        })()}
+                                        <span class="expand-icon">▼</span>
+                                    </div>
                                 </div>
                                 <div class="coe-seat-event-content">
                                     ${locationThumbsHtml}
@@ -9531,6 +10088,9 @@
                     } else if (structuredData.type === 'coe_preferences_form') {
                         const preferencesForm = renderCOEPreferencesForm(structuredData);
                         contentEl.appendChild(preferencesForm);
+                    } else if (structuredData.type === 'coe_create_form') {
+                        const coeCreateForm = renderCOECreateForm(structuredData);
+                        contentEl.appendChild(coeCreateForm);
                     } else if (structuredData.type === 'error') {
                         const errorCard = renderErrorResponse(structuredData);
                         contentEl.appendChild(errorCard);
@@ -9561,9 +10121,6 @@
                             msgText.textContent = structuredData.message;
                             contentEl.insertBefore(msgText, clientList);
                         }
-                    } else if (structuredData.type === 'coe_create_form') {
-                        const coeCreateForm = renderCOECreateForm(structuredData);
-                        contentEl.appendChild(coeCreateForm);
                     } else if (structuredData.type === 'seat_upgrade_offers') {
                         const upgradeOffers = renderSeatUpgradeOffers(structuredData);
                         contentEl.appendChild(upgradeOffers);
@@ -9634,6 +10191,8 @@
                 showAlert('Failed to load bot conversation', 'error');
             } finally {
                 setBotLoading(false);
+                // Initialize quick actions based on user role after loading conversation
+                initializeQuickActions();
             }
         }
 
@@ -10460,6 +11019,56 @@
                 // Send "show me my next event" message to bot
                 promptInput.value = 'show me my next event';
                 sendBotPrompt();
+            } else if (action === 'show_me_clients') {
+                // Send "show me clients" message to bot (admin only)
+                promptInput.value = 'show me clients';
+                sendBotPrompt();
+            }
+        }
+
+        /**
+         * Initialize quick actions based on user role
+         * Admin: only "Show me clients"
+         * Client: default actions ("Create Experience", "Show My Next Event")
+         */
+        function initializeQuickActions() {
+            const quickActionsContainer = document.querySelector('.bot-quick-actions');
+            if (!quickActionsContainer) {
+                console.warn('[QUICK_ACTIONS] Quick actions container not found');
+                return;
+            }
+
+            // Check if user is admin
+            const userRoleText = document.getElementById('botUserRoleText');
+            const isAdmin = userRoleText && userRoleText.textContent && 
+                           userRoleText.textContent.toLowerCase().includes('admin');
+            
+            // Clear existing buttons (keep the icon)
+            const existingButtons = quickActionsContainer.querySelectorAll('.bot-quick-action-btn');
+            existingButtons.forEach(btn => btn.remove());
+
+            if (isAdmin) {
+                // Admin: only "Show me clients"
+                console.log('[QUICK_ACTIONS] User is admin, showing only "Show me clients"');
+                const showClientsBtn = document.createElement('button');
+                showClientsBtn.className = 'bot-quick-action-btn';
+                showClientsBtn.textContent = 'Show me clients';
+                showClientsBtn.onclick = () => handleQuickAction('show_me_clients');
+                quickActionsContainer.appendChild(showClientsBtn);
+            } else {
+                // Client: default actions
+                console.log('[QUICK_ACTIONS] User is client, showing default quick actions');
+                const createExpBtn = document.createElement('button');
+                createExpBtn.className = 'bot-quick-action-btn';
+                createExpBtn.textContent = 'Create Experience';
+                createExpBtn.onclick = () => handleQuickAction('create_experience');
+                quickActionsContainer.appendChild(createExpBtn);
+
+                const showNextEventBtn = document.createElement('button');
+                showNextEventBtn.className = 'bot-quick-action-btn';
+                showNextEventBtn.textContent = 'Show My Next Event';
+                showNextEventBtn.onclick = () => handleQuickAction('show_next_event');
+                quickActionsContainer.appendChild(showNextEventBtn);
             }
         }
 

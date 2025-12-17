@@ -106,9 +106,10 @@ function scoreSeatQuality(seat, location) {
  * @param {Object} location - Location with seat sentiments
  * @param {number} partySize - Party size requirement
  * @param {number} remainingBudget - Remaining budget (for fits_budget flag)
- * @returns {Promise<Array>} Array of better alternative seats (sorted by quality)
+ * @param {boolean} isAdmin - Whether user is admin (if true, show all seats, not just better ones)
+ * @returns {Promise<Array>} Array of alternative seats (better ones for clients, all for admins)
  */
-async function findBetterSeats(currentSeat, event, location, partySize = 2, remainingBudget = 0) {
+async function findBetterSeats(currentSeat, event, location, partySize = 2, remainingBudget = 0, isAdmin = false) {
   try {
     if (!event.seats || event.seats.length === 0) {
       console.log('[SEAT_UPGRADE] findBetterSeats: No event seats available');
@@ -127,49 +128,70 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
     // Use helper function that prioritizes seat_id matching (stable reference)
     const currentSeatLocation = findLocationSeat(currentSeat, location);
     
+    // For admins: use default values if current seat not found in location
+    // For clients: require current seat location for comparison
+    let currentScore = 0;
+    let currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
+    
     if (!currentSeatLocation) {
       console.log('[SEAT_UPGRADE] findBetterSeats: Current seat not found in location', {
         currentSeatCode: currentSeat.seat_code || currentSeat.code,
-        locationSeatCodes: location.seats.map(s => s.code)
+        currentSeatId: currentSeat.seat_id?.toString(),
+        locationSeatCodes: location.seats.map(s => s.code),
+        locationSeatIds: location.seats.map(s => s._id?.toString()),
+        isAdmin: isAdmin
       });
-      return []; // Can't compare if current seat not found in location
+      
+      // For clients: can't compare without current seat location, so return empty
+      if (!isAdmin) {
+        return []; // Can't compare if current seat not found in location (client only)
+      }
+      
+      // For admins: use default values and continue to show all available seats
+      console.log('[SEAT_UPGRADE] findBetterSeats: Admin mode - using default values for current seat comparison');
+      currentScore = 0; // Default score
+      currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
+    } else {
+      console.log('[SEAT_UPGRADE] findBetterSeats: Found current seat in location', {
+        code: currentSeatLocation.code,
+        category: currentSeatLocation.category,
+        priceTier: currentSeatLocation.priceTier,
+        hasSentiment: !!(currentSeatLocation.sentiment && currentSeatLocation.sentiment.length > 0)
+      });
+      
+      // Convert to plain object if Mongoose document
+      const currentSeatObj = currentSeat.toObject ? currentSeat.toObject() : currentSeat;
+      currentScore = scoreSeatQuality(
+        { ...currentSeatObj, seat_id: currentSeatObj.seat_id, code: currentSeatObj.seat_code || currentSeatObj.code },
+        location
+      );
+      
+      // Get current seat price for comparison
+      currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
     }
     
-    console.log('[SEAT_UPGRADE] findBetterSeats: Found current seat in location', {
-      code: currentSeatLocation.code,
-      category: currentSeatLocation.category,
-      priceTier: currentSeatLocation.priceTier,
-      hasSentiment: !!(currentSeatLocation.sentiment && currentSeatLocation.sentiment.length > 0)
-    });
-    
-    // Convert to plain object if Mongoose document
-    const currentSeatObj = currentSeat.toObject ? currentSeat.toObject() : currentSeat;
-    const currentScore = scoreSeatQuality(
-      { ...currentSeatObj, seat_id: currentSeatObj.seat_id, code: currentSeatObj.seat_code || currentSeatObj.code },
-      location
-    );
-    
-    // Get current seat price for comparison
-    const currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
-    
     // Find all available seats in the same event
+    // Universal restrictions: only available seats (NOT held or booked)
     const availableSeats = event.seats.filter(seat => {
-      // Must be available
+      // Universal restriction: Must be available (NOT held or booked)
       if (seat.status !== 'available') return false;
       
-      // Must meet capacity requirement
+      // Must meet capacity requirement (admin can override later if needed)
       if (seat.capacity < partySize) return false;
       
       // Exclude the current seat by code (primary identifier)
-      if (seat.code === (currentSeat.seat_code || currentSeat.code)) {
+      // For admin: we'll include it later marked as "current"
+      if (!isAdmin && seat.code === (currentSeat.seat_code || currentSeat.code)) {
         return false;
       }
       
-      // Also exclude by seat_id if it matches
-      const seatIdStr = seat._id?.toString();
-      const currentSeatIdStr = currentSeat.seat_id?.toString();
-      if (seatIdStr && currentSeatIdStr && seatIdStr === currentSeatIdStr) {
-        return false;
+      // Also exclude by seat_id if it matches (for clients)
+      if (!isAdmin) {
+        const seatIdStr = seat._id?.toString();
+        const currentSeatIdStr = currentSeat.seat_id?.toString();
+        if (seatIdStr && currentSeatIdStr && seatIdStr === currentSeatIdStr) {
+          return false;
+        }
       }
       
       return true;
@@ -181,8 +203,9 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
       availableSeatCodes: availableSeats.map(s => s.code)
     });
     
-    // Score and filter better seats - include seats that are more expensive OR have higher quality
-    const betterSeats = availableSeats
+    // For admins: show ALL seats (no quality/price filtering)
+    // For clients: only show "better" seats (higher quality OR more expensive)
+    const processedSeats = availableSeats
       .map(seat => {
         // Use helper function that prioritizes seat_id matching (stable reference)
         const locationSeat = findLocationSeat(seat, location);
@@ -205,10 +228,16 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
         // Get seat price
         const seatPrice = seat.event_price || seat.min_spend || 0;
         
-        // Consider it an upgrade if: (1) higher quality score OR (2) more expensive
+        // Check if this is the current seat
+        const isCurrentSeat = seat.code === (currentSeat.seat_code || currentSeat.code) ||
+          (seat._id?.toString() === currentSeat.seat_id?.toString());
+        
+        // For clients: only include if it's better (higher quality OR more expensive)
+        // For admins: include all seats (mark current seat)
         const isBetterQuality = seatScore > currentScore;
         const isMoreExpensive = seatPrice > currentPrice;
         const isUpgrade = isBetterQuality || isMoreExpensive;
+        const shouldInclude = isAdmin ? true : isUpgrade;
         
         console.log('[SEAT_UPGRADE] findBetterSeats: Scored seat', {
           code: seat.code,
@@ -219,7 +248,10 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
           currentPrice: currentPrice,
           isBetterQuality: isBetterQuality,
           isMoreExpensive: isMoreExpensive,
-          isUpgrade: isUpgrade
+          isUpgrade: isUpgrade,
+          isCurrentSeat: isCurrentSeat,
+          isAdmin: isAdmin,
+          shouldInclude: shouldInclude
         });
         
         return {
@@ -229,19 +261,35 @@ async function findBetterSeats(currentSeat, event, location, partySize = 2, rema
           price: seatPrice,
           isBetter: isUpgrade,
           isBetterQuality: isBetterQuality,
-          isMoreExpensive: isMoreExpensive
+          isMoreExpensive: isMoreExpensive,
+          isCurrentSeat: isCurrentSeat,
+          shouldInclude: shouldInclude
         };
       })
-      .filter(item => item && item.isBetter)
+      .filter(item => item && item.shouldInclude)
       .sort((a, b) => {
-        // Sort by: (1) more expensive first, then (2) higher quality
-        if (a.isMoreExpensive !== b.isMoreExpensive) {
-          return b.isMoreExpensive - a.isMoreExpensive; // More expensive first
+        // For admins: sort by price (ascending), then quality (descending)
+        // For clients: sort by more expensive first, then quality (descending)
+        if (isAdmin) {
+          if (a.price !== b.price) {
+            return a.price - b.price; // Cheaper first for admin
+          }
+          return b.score - a.score; // Then by quality (descending)
+        } else {
+          // Client: more expensive first, then quality
+          if (a.isMoreExpensive !== b.isMoreExpensive) {
+            return b.isMoreExpensive - a.isMoreExpensive;
+          }
+          return b.score - a.score;
         }
-        return b.score - a.score; // Then by quality
-      })
-      .slice(0, 5) // Top 5 alternatives (increased from 3)
-      .map(item => {
+      });
+    
+    // For clients: limit to top 5, for admins: show all (or reasonable limit)
+    const limitedSeats = isAdmin 
+      ? processedSeats.slice(0, 100) // Admin: show all (reasonable limit)
+      : processedSeats.slice(0, 5); // Client: top 5
+    
+    const betterSeats = limitedSeats.map(item => {
         // Preserve all seat properties and ensure code and _id are available
         const seat = item.seat;
         // Convert to plain object if Mongoose document
@@ -439,10 +487,19 @@ function calculateUpgradeReasons(currentLocationSeat, upgradeLocationSeat, curre
  * @param {Object} coe - COE object with selected_seats
  * @param {number} totalBudget - Total budget for budget summary
  * @param {Object} userPreferences - User preferences from COE build (for AI recommendations)
+ * @param {boolean} isAdmin - Whether user is admin (if true, show all seats, not just better ones)
  * @returns {Promise<Array>} Array of upgrade offers per seat
  */
-async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreferences = {}) {
+async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreferences = {}, isAdmin = false) {
   try {
+    // Log function parameters to debug
+    console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Called with', {
+      coeId: coe._id,
+      totalBudget,
+      isAdmin: isAdmin,
+      isAdminType: typeof isAdmin
+    });
+    
     // Only generate offers for draft COEs
     if (coe.status !== 'draft') {
       console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: COE not in draft status:', coe.status);
@@ -457,7 +514,8 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
     console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Starting', {
       coeId: coe._id,
       selectedSeatsCount: coe.selected_seats.length,
-      totalBudget
+      totalBudget,
+      isAdmin: isAdmin
     });
     
     const offers = [];
@@ -511,15 +569,19 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
             event,
             event.location_id,
             partySize,
-            remainingBudget
+            remainingBudget,
+            isAdmin
           );
           
-          console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Found better seats', {
+          console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: Found seats', {
             currentSeatCode: selectedSeat.seat_code,
-            betterSeatsCount: betterSeats.length
+            seatsCount: betterSeats.length,
+            isAdmin: isAdmin
           });
           
-          if (betterSeats.length > 0) {
+          // For admins: show all seats (even if empty, we might want to show current seat)
+          // For clients: only show if there are better seats
+          if (betterSeats.length > 0 || isAdmin) {
             // Calculate upgrade value and generate recommendations for each alternative
             const alternatives = await Promise.all(betterSeats.map(async (seat) => {
               const upgradeValue = calculateUpgradeValue(
@@ -589,6 +651,10 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
                 }
               }
               
+              // Check if this is the current seat (for admin view)
+              const isCurrentSeat = seatCode === selectedSeat.seat_code ||
+                (eventSeatId?.toString() === selectedSeat.seat_id?.toString());
+              
               return {
                 seat_id: eventSeatId, // Use event seat _id as the primary identifier
                 seat_code: seatCode,
@@ -603,10 +669,11 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
                 section: seat.section,
                 media: seatMedia, // Use location seat media (fallback to event seat media)
                 fits_budget: seat.fits_budget || false,
-                tag: seat.tag || 'Premium Upgrade',
+                tag: isCurrentSeat && isAdmin ? 'Currently Selected' : (seat.tag || 'Premium Upgrade'),
                 status: 'pending',
                 offered_at: new Date(),
-                ai_recommendation: aiRecommendation // Include AI recommendation if generated
+                ai_recommendation: aiRecommendation, // Include AI recommendation if generated
+                is_current_seat: isCurrentSeat && isAdmin // Mark current seat for admin view
               };
             }));
             

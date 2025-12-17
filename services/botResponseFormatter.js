@@ -70,7 +70,7 @@ function buildEventRunnerAssignment(event, coe) {
  * @param {Array} actions - Available actions for this COE
  * @returns {Object} Structured response
  */
-function formatCOEResponse(type, coe, message, actions = [], budget = null) {
+async function formatCOEResponse(type, coe, message, actions = [], budget = null) {
   // Enhance selected_seats with media and event info
   const enhancedSeats = (coe.selected_seats || []).map(seat => {
     // Normalize seat event_id for comparison
@@ -331,13 +331,36 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
         remaining: Math.max(0, (budget.max || budget.amount || budget) - (coe.subtotal || 0)),
         utilization_percentage: Math.round(((coe.subtotal || 0) / (budget.max || budget.amount || budget)) * 100)
       } : null,
-      events: (coe.events || []).map(event => {
+      events: await Promise.all((coe.events || []).map(async (event) => {
         const runner_assignment = buildEventRunnerAssignment(event, coe);
         // Prioritize populated event_id.start_datetime (actual event date from DB)
         // Fall back to event.event_date (stored in COE) if event_id not populated
         const eventDate = event.event_id?.start_datetime || event.event_date || null;
+        const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
+        
+        // Check if there are same-day alternatives (only for draft COEs)
+        let hasSameDayAlternatives = false;
+        if (coe.status === 'draft' && eventId && coe._id) {
+          try {
+            const { hasAlternativeEventsSameDay } = require('./coeService');
+            console.log('[BOT_RESPONSE_FORMATTER] Checking same-day alternatives for event:', {
+              coeId: coe._id.toString(),
+              eventId: eventId,
+              eventName: event.event_id?.name || 'Unknown'
+            });
+            hasSameDayAlternatives = await hasAlternativeEventsSameDay(coe._id.toString(), eventId);
+            console.log('[BOT_RESPONSE_FORMATTER] Same-day alternatives result:', {
+              eventId: eventId,
+              hasSameDayAlternatives: hasSameDayAlternatives
+            });
+          } catch (error) {
+            console.warn('[BOT_RESPONSE_FORMATTER] Error checking same-day alternatives:', error);
+            // Default to false on error
+          }
+        }
+        
         return {
-          event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+          event_id: eventId,
           event_name: event.event_id?.name || 'Unknown Event',
           event_date: eventDate,
           event_time: event.event_time,
@@ -354,9 +377,11 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
             reasons: event.sentiment_match.reasons || event.sentiment_match.highlights || [],
             highlights: event.sentiment_match.highlights || event.sentiment_match.reasons || []
           } : null,
+          // Flag indicating if same-day alternatives exist (for Replace button visibility)
+          has_same_day_alternatives: hasSameDayAlternatives,
           ...(runner_assignment ? { runner_assignment } : {})
         };
-      }),
+      })),
       selected_seats: enhancedSeats, // Use enhanced seats with media
       events_count: coe.events?.length || 0,
       seats_count: coe.selected_seats?.length || 0,
@@ -443,10 +468,10 @@ function formatEventListResponse(events, message) {
  * @param {string} message - Human-readable message
  * @returns {Object} Structured response
  */
-function formatCOEListResponse(coes, message) {
+async function formatCOEListResponse(coes, message) {
   return {
     type: 'coe_list',
-    coes: coes.map(coe => {
+    coes: await Promise.all(coes.map(async (coe) => {
       // Enhance selected_seats with media and event info (similar to formatCOEResponse)
       const enhancedSeats = (coe.selected_seats || []).map(seat => {
         // Normalize seat event_id for comparison
@@ -688,10 +713,34 @@ function formatCOEListResponse(coes, message) {
         total_price: coe.total_price || coe.total || 0,
         currency: coe.currency || 'USD',
         created_at: coe.created_at,
-        events: (coe.events || []).map(event => {
+        events: await Promise.all((coe.events || []).map(async (event) => {
           const runner_assignment = buildEventRunnerAssignment(event, coe);
+          const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
+          
+          // Check if there are same-day alternatives (only for draft COEs)
+          let hasSameDayAlternatives = false;
+          if (coe.status === 'draft' && eventId && (coe.id || coe._id)) {
+            try {
+              const { hasAlternativeEventsSameDay } = require('./coeService');
+              const coeId = coe.id || coe._id?.toString() || coe._id;
+              console.log('[formatCOEListResponse] Checking same-day alternatives for event:', {
+                coeId: coeId,
+                eventId: eventId,
+                eventName: event.event_id?.name || 'Unknown'
+              });
+              hasSameDayAlternatives = await hasAlternativeEventsSameDay(coeId, eventId);
+              console.log('[formatCOEListResponse] Same-day alternatives result:', {
+                eventId: eventId,
+                hasSameDayAlternatives: hasSameDayAlternatives
+              });
+            } catch (error) {
+              console.warn('[formatCOEListResponse] Error checking same-day alternatives:', error);
+              // Default to false on error
+            }
+          }
+          
           return {
-            event_id: event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id,
+            event_id: eventId,
             event_name: event.event_id?.name || 'Unknown Event',
             event_date: event.event_date,
             event_time: event.event_time,
@@ -702,9 +751,11 @@ function formatCOEListResponse(coes, message) {
               type: event.event_id.location_id.type,
               media: event.event_id.location_id.media || []
             } : null,
+            // Flag indicating if same-day alternatives exist (for Replace button visibility)
+            has_same_day_alternatives: hasSameDayAlternatives,
             ...(runner_assignment ? { runner_assignment } : {})
           };
-        }),
+        })),
         selected_seats: enhancedSeats, // Enhanced seats with media
         runner_assignment: coe.runner_assignment ? {
           type: coe.runner_assignment.type,
@@ -730,7 +781,7 @@ function formatCOEListResponse(coes, message) {
           currency: coe.currency || 'USD'
         }
       };
-    }),
+    })),
     count: coes.length,
     message: message
   };
