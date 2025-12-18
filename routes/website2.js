@@ -92,6 +92,19 @@ router.get('/privacy', requireWebsitePasswordAuth, (req, res) => {
 });
 
 /**
+ * GET /website2/refund
+ * Serve the refund policy page (password protected)
+ */
+router.get('/refund', requireWebsitePasswordAuth, (req, res) => {
+  try {
+    res.sendFile(path.join(__dirname, '../website2/refund.html'));
+  } catch (error) {
+    console.error('Error serving website2 refund page:', error);
+    res.status(500).send('Error loading page');
+  }
+});
+
+/**
  * POST /website2/contact
  * Handle contact form submission for website2
  */
