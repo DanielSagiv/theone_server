@@ -1,7 +1,7 @@
 # THE1 Platform - Mobile App Implementation Plan
 
 **Document Created:** December 17, 2025  
-**Last Updated:** December 17, 2025  
+**Last Updated:** December 19, 2025  
 **Purpose:** Actionable implementation plan for mobile app development
 
 ---
@@ -13,6 +13,7 @@
 | **Backend Readiness** | ~90% |
 | **Total Phases** | 5 |
 | **Estimated Timeline** | 6-8 weeks |
+| **Platforms** | Android + iOS (React Native) |
 | **Blocking Backend Tasks** | 2 (Password Reset, COE Accept/Reject) |
 
 ### Key Design Constraints
@@ -76,11 +77,27 @@ While the mobile app reflects the bot's existing functionality, we prioritize:
 
 **Principle:** Enhance the experience through design without adding features or changing core bot functionality. The app should feel premium and delightful while doing exactly what the bot does today.
 
+**6. React Native Cross-Platform Development**
+
+The mobile app will be built using **React Native** to support both Android and iOS platforms:
+- **Framework**: React Native (single codebase for both platforms)
+- **Platform Support**: Full feature parity on both Android and iOS
+- **Project Location**: Mobile project folder will be created under `server/` directory to be included in git repository
+- **Platform-Specific Considerations**:
+  - Push notifications: FCM for Android, APNs for iOS
+  - Secure storage: React Native Keychain (iOS Keychain, Android Keystore)
+  - Platform-specific UI: React Native components with platform-specific styling when needed
+  - Testing: Both platforms must be tested before release
+
 ---
 
 ## Bot Capabilities (Core Mobile Functionality)
 
-The mobile app is essentially a **mobile interface to the AI bot**. All core functionality flows through the bot or bot-adjacent APIs.
+The mobile app uses the **same backend APIs and services** as the web application. Users can interact with the platform through:
+- **Conversational bot API** (`POST /v1/bot/message`) for natural language interactions
+- **Direct REST API calls** for structured operations (COE management, payments, etc.)
+
+All functionality leverages the same backend logic, services, and data models.
 
 ### Bot Tools (AI Function Calling)
 
@@ -145,13 +162,14 @@ The bot understands and converts:
 
 ### Mobile Bot Integration Strategy
 
-The mobile app should:
+The mobile app supports two interaction modes:
 
-1. **Chat-First Interface**: Primary screen is a chat interface with the bot
-2. **Structured Responses**: Bot returns structured data (events, COEs, locations) that mobile renders as cards/lists
-3. **Action Buttons**: Bot responses include action buttons (e.g., "Create COE", "View Details", "Accept")
-4. **Deep Linking**: Bot responses can link to specific screens (COE detail, payment, etc.)
-5. **Context Preservation**: Bot maintains conversation context across sessions
+1. **Chat-First Interface**: Primary screen is a chat interface using the bot API (`POST /v1/bot/message`)
+2. **Direct API Access**: Users can also interact directly via REST APIs for structured operations
+3. **Structured Responses**: Bot returns structured data (events, COEs, locations) that mobile renders as cards/lists
+4. **Action Buttons**: Bot responses include action buttons (e.g., "Create COE", "View Details", "Accept")
+5. **Deep Linking**: Bot responses can link to specific screens (COE detail, payment, etc.)
+6. **Context Preservation**: Bot maintains conversation context across sessions
 
 ### Example Flows (Bot + Card Actions)
 
@@ -259,15 +277,33 @@ NOTE: Accept/Reject buttons and API endpoints need to be implemented.
 
 | # | Task | Owner | Effort | Priority |
 |---|------|-------|--------|----------|
-| 0.1 | Set up mobile project (React Native / Flutter / Native) | Mobile | 2-4 hrs | P0 |
+| 0.1 | Set up React Native project (Android + iOS) in `server/mobile/` | Mobile | 2-4 hrs | P0 |
 | 0.2 | Configure API base URL + environment switching | Mobile | 1 hr | P0 |
-| 0.3 | Implement secure token storage (Keychain/Keystore) | Mobile | 2-3 hrs | P0 |
+| 0.3 | Implement secure token storage (React Native Keychain) | Mobile | 2-3 hrs | P0 |
 | 0.4 | Create API client wrapper with auth headers | Mobile | 2-3 hrs | P0 |
 | 0.5 | Set up error handling for API responses | Mobile | 2 hrs | P0 |
 
+### Project Structure
+
+```
+server/
+├── mobile/              # React Native mobile app (new)
+│   ├── android/         # Android native code
+│   ├── ios/             # iOS native code
+│   ├── src/             # React Native source code
+│   └── package.json     # React Native dependencies
+├── routes/              # Backend API routes
+├── services/            # Backend services
+└── ...
+```
+
+**Note:** The mobile project is located under `server/` to be included in the git repository alongside the backend code.
+
 ### Acceptance Criteria
+- [ ] React Native project initialized in `server/mobile/`
+- [ ] Project builds and runs on both Android and iOS
 - [ ] Mobile app connects to backend API
-- [ ] JWT tokens stored securely
+- [ ] JWT tokens stored securely using React Native Keychain
 - [ ] All API calls include `Authorization: Bearer <token>` header
 - [ ] Error responses handled gracefully
 
@@ -533,9 +569,9 @@ draft → approved → sent → accepted → completed
 
 ## Phase 4: Bot Chat Interface & Subscriptions (Week 4-5)
 
-**Goal:** Implement the core chat interface - the primary way users interact with THE1.
+**Goal:** Implement the core chat interface - a primary way users interact with THE1.
 
-> **Note:** The bot is the heart of the mobile app. Most user actions flow through or are initiated by the bot.
+> **Note:** The bot chat interface is a key feature of the mobile app, allowing natural language interactions. Users can also interact directly via REST APIs for structured operations.
 
 ### Backend Tasks (All Ready - No Work Needed)
 
@@ -675,10 +711,10 @@ The bot returns structured responses. Mobile must render each type:
 
 | # | Task | Screens | Effort | Priority |
 |---|------|---------|--------|----------|
-| 5.9 | Request notification permission | - | 2 hrs | P1 |
-| 5.10 | Register push token on login | - | 2 hrs | P1 |
+| 5.9 | Request notification permission (React Native) | - | 2 hrs | P1 |
+| 5.10 | Register push token on login (FCM for Android, APNs for iOS) | - | 2 hrs | P1 |
 | 5.11 | Remove token on logout | - | 1 hr | P2 |
-| 5.12 | Handle push notification tap | - | 2-3 hrs | P1 |
+| 5.12 | Handle push notification tap (deep linking) | - | 2-3 hrs | P1 |
 | 5.13 | In-app notification badge | - | 2 hrs | P2 |
 | 5.14 | Notifications list screen | Notifications | 4-6 hrs | P2 |
 
@@ -840,7 +876,7 @@ All admin endpoints already exist. See report for full list.
 
 ## Timeline Summary
 
-> **Recommendation:** Consider starting Phase 4 (Bot) earlier or in parallel with Phase 2, since the bot is the primary user interface.
+> **Recommendation:** Consider starting Phase 4 (Bot) earlier or in parallel with Phase 2, since the bot chat is a key user interface feature.
 
 | Week | Phase | Focus | Backend Work |
 |------|-------|-------|--------------|
@@ -891,13 +927,13 @@ Phase 6 (Admin - Optional)
 
 ### Why Phase 4 (Bot) Should Be Early
 
-The bot is the **primary interface** for:
-- Creating COEs (AI optimization)
+The bot chat interface is a **key feature** for:
+- Creating COEs (AI optimization via natural language)
 - Discovering events (date-based queries)
-- Managing COEs (update, delete)
+- Managing COEs (update, delete via conversation)
 - Viewing alternatives and upgrades
 
-Without the bot, users can only view existing COEs (Phase 2) but can't create new ones optimally.
+The bot provides an intuitive conversational interface, while direct REST APIs are also available for structured operations.
 
 ---
 
@@ -909,7 +945,7 @@ Without the bot, users can only view existing COEs (Phase 2) but can't create ne
 - [ ] User can view/edit profile
 - [ ] Session persists across app restarts
 
-### Bot Chat (Primary Interface)
+### Bot Chat Interface
 - [ ] User can chat with AI bot
 - [ ] Bot can query events by date/location
 - [ ] Bot can create COE with AI optimization
