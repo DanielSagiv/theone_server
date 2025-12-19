@@ -370,3 +370,4 @@ These restrictions apply to **ALL users** regardless of role:
 - City and date range restrictions apply to both admin and client - admins just see ALL options within those constraints
 - Consider adding admin preference/setting to toggle between "full access" and "filtered view" (future enhancement)
 
+

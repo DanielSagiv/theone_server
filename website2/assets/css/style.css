@@ -246,6 +246,36 @@ section {
     line-height: 1.5;
 }
 
+/* Parallax Divider */
+.parallax-divider {
+    height: 200px;
+    background-image: url('/website2/assets/main.png');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
+    z-index: 0;
+}
+
+.parallax-divider::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 20, 25, 0.5);
+    z-index: 1;
+}
+
+@media (max-width: 768px) {
+    .parallax-divider {
+        height: 120px;
+        background-attachment: scroll;
+    }
+}
+
 .experience-section {
     position: relative;
     padding: 5rem 0 4rem;
