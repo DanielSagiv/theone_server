@@ -111,7 +111,44 @@ async function generateAssistantReply(messages, user, correlationId, allowForceT
     });
 
     // Format messages for OpenAI (include tool_calls and tool_call_id when present)
-    const formattedMessages = recentMessages.map(msg => {
+    // IMPORTANT: OpenAI requires that tool messages must immediately follow an assistant message with tool_calls
+    // We need to validate and fix the message sequence to ensure this requirement is met
+    const formattedMessages = [];
+    for (let i = 0; i < recentMessages.length; i++) {
+      const msg = recentMessages[i];
+      
+      // Skip orphaned tool messages (tool messages that don't IMMEDIATELY follow an assistant message with tool_calls)
+      // OpenAI requires tool messages to immediately follow the assistant message (only system messages can be in between)
+      if (msg.role === 'tool') {
+        // Look backwards through the messages to find the IMMEDIATELY preceding assistant message
+        // (skipping only system messages, which are allowed between assistant and tool)
+        let foundImmediatePrecedingAssistantWithToolCalls = false;
+        for (let j = i - 1; j >= 0; j--) {
+          const prevMsg = recentMessages[j];
+          // Skip system messages when looking backwards (they're allowed between assistant and tool)
+          if (prevMsg.role === 'system') {
+            continue;
+          }
+          // Check if this is an assistant message with tool_calls
+          // If it is, and we only skipped system messages, this tool message is valid
+          if (prevMsg.role === 'assistant' && prevMsg.tool_calls && prevMsg.tool_calls.length > 0) {
+            foundImmediatePrecedingAssistantWithToolCalls = true;
+            break;
+          }
+          // If we hit ANY non-system message that's not an assistant with tool_calls, 
+          // this tool message is orphaned (doesn't immediately follow the assistant)
+          if (prevMsg.role === 'user' || prevMsg.role === 'tool' || 
+              (prevMsg.role === 'assistant' && (!prevMsg.tool_calls || prevMsg.tool_calls.length === 0))) {
+            break; // Stop looking, this tool message is orphaned
+          }
+        }
+        
+        if (!foundImmediatePrecedingAssistantWithToolCalls) {
+          console.warn('[BOT] Skipping orphaned tool message at index', i, 'tool_call_id:', msg.tool_call_id || msg.id, 'name:', msg.name);
+          continue; // Skip this orphaned tool message
+        }
+      }
+      
       const formatted = {
         role: msg.role,
         content: msg.content || null
@@ -135,8 +172,8 @@ async function generateAssistantReply(messages, user, correlationId, allowForceT
         formatted.name = msg.name;
       }
       
-      return formatted;
-    });
+      formattedMessages.push(formatted);
+    }
 
     // Log what we're sending to OpenAI
     console.log('[BOT] Sending to OpenAI:', {

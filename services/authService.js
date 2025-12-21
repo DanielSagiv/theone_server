@@ -263,11 +263,107 @@ const validateSession = async (token) => {
   }
 };
 
+/**
+ * Request password reset - generates token and sends email
+ * @param {string} email - User email
+ * @returns {Promise<Object>} Success message (always returns success for security)
+ */
+const requestPasswordReset = async (email) => {
+  try {
+    const emailLower = email.toLowerCase();
+    const user = await User.findOne({ email: emailLower });
+
+    // Always return success message (security - don't reveal if email exists)
+    if (!user) {
+      return {
+        message: 'If email exists, reset link sent'
+      };
+    }
+
+    // Generate secure reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Store token in user record
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = resetExpires;
+    await user.save();
+
+    // Send reset email (async, non-blocking)
+    emailService.sendPasswordResetEmail(user, resetToken)
+      .then(() => {
+        console.log('Password reset email sent:', {
+          email: user.email,
+          timestamp: new Date().toISOString()
+        });
+      })
+      .catch(err => {
+        console.error('Password reset email error:', {
+          email: user.email,
+          error: err.message,
+          timestamp: new Date().toISOString()
+        });
+        // Don't throw - we already returned success
+      });
+
+    return {
+      message: 'If email exists, reset link sent'
+    };
+  } catch (error) {
+    console.error('Password reset request error:', error);
+    // Still return success for security
+    return {
+      message: 'If email exists, reset link sent'
+    };
+  }
+};
+
+/**
+ * Reset password with token
+ * @param {string} token - Reset token
+ * @param {string} password - New password
+ * @returns {Promise<Object>} Success message
+ */
+const resetPassword = async (token, password) => {
+  try {
+    // Find user with valid token
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      throw new Error('Invalid or expired reset token');
+    }
+
+    // Update password
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    // Invalidate all existing sessions for security
+    await Session.updateMany(
+      { userId: user._id, isActive: true },
+      { $set: { isActive: false } }
+    );
+
+    return {
+      message: 'Password reset successful'
+    };
+  } catch (error) {
+    console.error('Password reset error:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   generateToken,
   createSession,
   registerUser,
   authenticateUser,
   logoutUser,
-  validateSession
+  validateSession,
+  requestPasswordReset,
+  resetPassword
 };

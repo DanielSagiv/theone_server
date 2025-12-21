@@ -40,7 +40,14 @@ router.get('/my', authenticateToken, async (req, res) => {
     })
     .populate('admin_id', 'name email')
     .populate('client_id', 'name')
-    .populate('events.event_id', 'name start_datetime end_datetime location')
+    .populate({
+      path: 'events.event_id',
+      select: 'name description start_datetime end_datetime location_id media',
+      populate: {
+        path: 'location_id',
+        select: 'name type media'
+      }
+    })
     .sort({ created_at: -1 });
 
     // Manual population fallback for events that weren't populated
@@ -70,8 +77,8 @@ router.get('/my', authenticateToken, async (req, res) => {
               
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media seats')
-                  .select('name description location_id start_datetime end_datetime base_price currency status media seats');
+                  .populate('location_id', 'name type media')
+                  .select('name description location_id start_datetime end_datetime media');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
                   console.log('[GET /coes/my] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
@@ -278,8 +285,37 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       });
     }
     
-    // Use getCOEById for proper population
-    const coe = await coeService.getCOEById(id);
+    // Fetch COE with lean() to get plain object and avoid Mongoose serialization issues
+    let coe;
+    try {
+      // Use lean() directly to avoid Mongoose document serialization issues
+      coe = await COE.findById(id)
+        .lean()
+        .populate('client_id', 'firstName lastName email phone')
+        .populate('admin_id', 'firstName lastName email')
+        .populate('created_by', 'firstName lastName email')
+        .populate('participants.user_id', 'firstName lastName email phone')
+        .populate('runner_assignment.runner_id', 'firstName lastName email phone avatarUrl')
+        .populate({
+          path: 'events.event_id',
+          select: 'name description location_id start_datetime end_datetime base_price currency status media seats',
+          populate: [
+            {
+              path: 'location_id',
+              select: 'name type media seats'
+            }
+          ]
+        })
+        .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
+    } catch (getError) {
+      console.error('[GET /coes/my/:id] Error fetching COE:', getError);
+      console.error('[GET /coes/my/:id] Error stack:', getError.stack);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch COE',
+        details: process.env.NODE_ENV === 'development' ? getError.message : undefined
+      });
+    }
 
     if (!coe) {
       return res.status(404).json({
@@ -288,15 +324,203 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // Manual population fallback for events (if needed)
+    if (coe.events && Array.isArray(coe.events)) {
+      const Event = require('../models/Event');
+      for (let i = 0; i < coe.events.length; i++) {
+        const eventItem = coe.events[i];
+        if (eventItem.event_id && typeof eventItem.event_id === 'string') {
+          try {
+            const populatedEvent = await Event.findById(eventItem.event_id)
+              .lean()
+              .populate('location_id', 'name type media seats')
+              .select('name description location_id start_datetime end_datetime base_price currency status media seats');
+            if (populatedEvent) {
+              coe.events[i].event_id = populatedEvent;
+            }
+          } catch (populateError) {
+            console.warn('[GET /coes/my/:id] Failed to populate event:', populateError.message);
+          }
+        }
+      }
+    }
+
+    // Enhance selected_seats with media from event/location seats (dashboard logic)
+    if (coe.selected_seats && Array.isArray(coe.selected_seats) && coe.events && Array.isArray(coe.events)) {
+      console.log('[GET /coes/my/:id] Enhancing selected_seats with media. Seats count:', coe.selected_seats.length, 'Events count:', coe.events.length);
+      
+      coe.selected_seats = coe.selected_seats.map(selectedSeat => {
+        // Find the event this seat belongs to
+        const eventItem = coe.events.find(e => {
+          const eventId = e.event_id?._id?.toString() || e.event_id?.toString() || e.event_id;
+          const seatEventId = selectedSeat.event_id?.toString() || selectedSeat.event_id;
+          return eventId === seatEventId;
+        });
+
+        if (eventItem && eventItem.event_id) {
+          const event = eventItem.event_id;
+          const selectedSeatId = selectedSeat.seat_id?.toString() || selectedSeat.seat_id; // This is the location seat ID
+          
+          console.log('[GET /coes/my/:id] Processing seat:', {
+            seat_code: selectedSeat.seat_code,
+            selected_seat_id: selectedSeatId, // Location seat ID
+            event_name: event.name,
+            event_seats_count: event.seats?.length || 0,
+            location_seats_count: event.location_id?.seats?.length || 0,
+          });
+          
+          // First try event seats - match by _id (event seat ID), same as dashboard
+          if (event.seats && Array.isArray(event.seats)) {
+            const eventSeat = event.seats.find(s => {
+              // Match: selectedSeat.seat_id === event.seats[]._id (event seat ID) - same as dashboard
+              const eventSeatId = s._id?.toString() || s._id;
+              return eventSeatId === selectedSeatId || s.code === selectedSeat.seat_code;
+            });
+            
+            if (eventSeat) {
+              console.log('[GET /coes/my/:id] Found event seat:', {
+                event_seat_id: eventSeat._id?.toString(),
+                event_seat_seat_id: eventSeat.seat_id?.toString(), // Location seat reference (for fallback)
+                seat_code: eventSeat.code,
+                hasMedia: !!(eventSeat.media && eventSeat.media.length > 0),
+                mediaCount: eventSeat.media?.length || 0,
+                imageCount: eventSeat.media?.filter(m => m && m.type === 'image').length || 0,
+              });
+              
+              if (eventSeat.media && Array.isArray(eventSeat.media) && eventSeat.media.length > 0) {
+                console.log('[GET /coes/my/:id] ✅ Added media from event seat');
+                return { ...selectedSeat, media: eventSeat.media };
+              }
+              
+              // If event seat has no media, use its seat_id to find location seat
+              const locationSeatRefId = eventSeat.seat_id?.toString() || eventSeat.seat_id;
+              if (locationSeatRefId && event.location_id && event.location_id.seats && Array.isArray(event.location_id.seats)) {
+                const locationSeat = event.location_id.seats.find(s => {
+                  const locationSeatId = s._id?.toString() || s._id;
+                  return locationSeatId === locationSeatRefId;
+                });
+                
+                if (locationSeat) {
+                  console.log('[GET /coes/my/:id] Found location seat via event seat.seat_id:', {
+                    location_seat_id: locationSeat._id?.toString(),
+                    seat_code: locationSeat.code,
+                    hasMedia: !!(locationSeat.media && locationSeat.media.length > 0),
+                    mediaCount: locationSeat.media?.length || 0,
+                    imageCount: locationSeat.media?.filter(m => m && m.type === 'image').length || 0,
+                  });
+                  
+                  if (locationSeat.media && Array.isArray(locationSeat.media) && locationSeat.media.length > 0) {
+                    // Check if location seat has images
+                    const imageMedia = locationSeat.media.filter(m => m && m.type === 'image');
+                    if (imageMedia.length > 0) {
+                      console.log('[GET /coes/my/:id] ✅ Added images from location seat');
+                      return { ...selectedSeat, media: imageMedia };
+                    } else {
+                      // Location seat only has videos, fallback to location media
+                      if (event.location_id && event.location_id.media && Array.isArray(event.location_id.media)) {
+                        const locationImageMedia = event.location_id.media.filter(m => m && m.type === 'image');
+                        if (locationImageMedia.length > 0) {
+                          console.log('[GET /coes/my/:id] ✅ Added images from location media (fallback)');
+                          return { ...selectedSeat, media: locationImageMedia };
+                        }
+                      }
+                      // If no images anywhere, use all media from location seat
+                      console.log('[GET /coes/my/:id] ⚠️ Only videos found, using location seat media');
+                      return { ...selectedSeat, media: locationSeat.media };
+                    }
+                  } else {
+                    // Location seat has no media, try location media
+                    if (event.location_id && event.location_id.media && Array.isArray(event.location_id.media)) {
+                      const locationImageMedia = event.location_id.media.filter(m => m && m.type === 'image');
+                      if (locationImageMedia.length > 0) {
+                        console.log('[GET /coes/my/:id] ✅ Added images from location media (location seat has no media)');
+                        return { ...selectedSeat, media: locationImageMedia };
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Fallback: Direct match with location seats using selectedSeat.seat_id
+            if (event.location_id && event.location_id.seats && Array.isArray(event.location_id.seats)) {
+              const locationSeat = event.location_id.seats.find(s => {
+                const locationSeatId = s._id?.toString() || s._id;
+                return locationSeatId === selectedSeatId || s.code === selectedSeat.seat_code;
+              });
+              
+              if (locationSeat) {
+                console.log('[GET /coes/my/:id] Found location seat (direct match):', {
+                  location_seat_id: locationSeat._id?.toString(),
+                  seat_code: locationSeat.code,
+                  hasMedia: !!(locationSeat.media && locationSeat.media.length > 0),
+                  mediaCount: locationSeat.media?.length || 0,
+                  imageCount: locationSeat.media?.filter(m => m && m.type === 'image').length || 0,
+                });
+                
+                if (locationSeat.media && Array.isArray(locationSeat.media) && locationSeat.media.length > 0) {
+                  const imageMedia = locationSeat.media.filter(m => m && m.type === 'image');
+                  if (imageMedia.length > 0) {
+                    console.log('[GET /coes/my/:id] ✅ Added images from location seat (direct)');
+                    return { ...selectedSeat, media: imageMedia };
+                  } else {
+                    // Location seat only has videos, fallback to location media
+                    if (event.location_id && event.location_id.media && Array.isArray(event.location_id.media)) {
+                      const locationImageMedia = event.location_id.media.filter(m => m && m.type === 'image');
+                      if (locationImageMedia.length > 0) {
+                        console.log('[GET /coes/my/:id] ✅ Added images from location media (direct fallback)');
+                        return { ...selectedSeat, media: locationImageMedia };
+                      }
+                    }
+                  }
+                } else {
+                  // Location seat has no media, try location media
+                  if (event.location_id && event.location_id.media && Array.isArray(event.location_id.media)) {
+                    const locationImageMedia = event.location_id.media.filter(m => m && m.type === 'image');
+                    if (locationImageMedia.length > 0) {
+                      console.log('[GET /coes/my/:id] ✅ Added images from location media (direct, no seat media)');
+                      return { ...selectedSeat, media: locationImageMedia };
+                    }
+                  }
+                }
+              } else {
+                // No location seat found, try location media directly
+                if (event.location_id && event.location_id.media && Array.isArray(event.location_id.media)) {
+                  const locationImageMedia = event.location_id.media.filter(m => m && m.type === 'image');
+                  if (locationImageMedia.length > 0) {
+                    console.log('[GET /coes/my/:id] ✅ Added images from location media (no matching seat)');
+                    return { ...selectedSeat, media: locationImageMedia };
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          console.log('[GET /coes/my/:id] ❌ No matching event found for seat:', {
+            seat_code: selectedSeat.seat_code,
+            seat_event_id: selectedSeat.event_id,
+          });
+        }
+        
+        return selectedSeat;
+      });
+      
+      // Log final result
+      const seatsWithMedia = coe.selected_seats.filter(s => s.media && s.media.length > 0);
+      console.log('[GET /coes/my/:id] Enhancement complete. Seats with media:', seatsWithMedia.length, 'out of', coe.selected_seats.length);
+    }
+
     res.json({
       success: true,
       data: coe
     });
   } catch (error) {
-    console.error('Error fetching user COE:', error);
+    console.error('[GET /coes/my/:id] Unexpected error:', error);
+    console.error('[GET /coes/my/:id] Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch COE'
+      error: 'Failed to fetch COE',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

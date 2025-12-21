@@ -362,6 +362,7 @@ async function formatCOEResponse(type, coe, message, actions = [], budget = null
         return {
           event_id: eventId,
           event_name: event.event_id?.name || 'Unknown Event',
+          description: event.event_id?.description || null,
           event_date: eventDate,
           event_time: event.event_time,
           media: event.event_id?.media || [],
@@ -742,6 +743,7 @@ async function formatCOEListResponse(coes, message) {
           return {
             event_id: eventId,
             event_name: event.event_id?.name || 'Unknown Event',
+            description: event.event_id?.description || null,
             event_date: event.event_date,
             event_time: event.event_time,
             media: event.event_id?.media || [],
@@ -813,17 +815,6 @@ function createCOEActions(coe, userRole) {
       action: 'edit_coe',
       coe_id: coeId,
       type: 'button'
-    });
-  }
-
-  // Delete - available for draft/approved COEs
-  if (userRole === 'admin' || (userRole === 'client' && ['draft', 'approved'].includes(status))) {
-    actions.push({
-      label: 'Delete',
-      action: 'delete_coe',
-      coe_id: coeId,
-      type: 'button',
-      confirm: true
     });
   }
 

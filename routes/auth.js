@@ -177,7 +177,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
 
 /**
  * POST /v1/auth/renew-password
- * Request password renewal
+ * Request password renewal (legacy endpoint - kept for backward compatibility)
  */
 router.post('/renew-password', async (req, res) => {
   try {
@@ -193,11 +193,11 @@ router.post('/renew-password', async (req, res) => {
       });
     }
 
-    // TODO: Implement password reset email logic
-    // For now, just return success
+    const result = await authService.requestPasswordReset(value.email);
+
     res.json({
       success: true,
-      message: 'Password reset email sent (not implemented yet)'
+      message: result.message
     });
 
   } catch (error) {
@@ -217,10 +217,51 @@ router.post('/renew-password', async (req, res) => {
 });
 
 /**
- * PUT /v1/auth/reset-password
+ * POST /v1/auth/forgot-password
+ * Request password reset (new endpoint per MD spec)
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    // Validate input
+    const { error, value } = renewPasswordSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const result = await authService.requestPasswordReset(value.email);
+
+    res.json({
+      success: true,
+      message: result.message
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'FORGOT_PASSWORD_FAILED',
+        message: 'Password reset request failed'
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/auth/reset-password
  * Reset password with token
  */
-router.put('/reset-password', async (req, res) => {
+router.post('/reset-password', async (req, res) => {
   try {
     // Validate input
     const { error, value } = resetPasswordSchema.validate(req.body);
@@ -234,11 +275,11 @@ router.put('/reset-password', async (req, res) => {
       });
     }
 
-    // TODO: Implement password reset logic
-    // For now, just return success
+    const result = await authService.resetPassword(value.token, value.password);
+
     res.json({
       success: true,
-      message: 'Password reset successful (not implemented yet)'
+      message: result.message
     });
 
   } catch (error) {
@@ -247,11 +288,11 @@ router.put('/reset-password', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    res.status(500).json({
+    res.status(400).json({
       success: false,
       error: {
         code: 'RESET_PASSWORD_FAILED',
-        message: 'Password reset failed'
+        message: error.message || 'Password reset failed'
       }
     });
   }

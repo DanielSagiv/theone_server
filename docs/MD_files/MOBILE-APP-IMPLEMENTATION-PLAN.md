@@ -1,7 +1,7 @@
 # THE1 Platform - Mobile App Implementation Plan
 
 **Document Created:** December 17, 2025  
-**Last Updated:** December 19, 2025  
+**Last Updated:** December 20, 2025  
 **Purpose:** Actionable implementation plan for mobile app development
 
 ---
@@ -13,7 +13,7 @@
 | **Backend Readiness** | ~90% |
 | **Total Phases** | 5 |
 | **Estimated Timeline** | 6-8 weeks |
-| **Platforms** | Android + iOS (React Native) |
+| **Platforms** | iOS (first), then Android (Expo) |
 | **Blocking Backend Tasks** | 2 (Password Reset, COE Accept/Reject) |
 
 ### Key Design Constraints
@@ -77,17 +77,44 @@ While the mobile app reflects the bot's existing functionality, we prioritize:
 
 **Principle:** Enhance the experience through design without adding features or changing core bot functionality. The app should feel premium and delightful while doing exactly what the bot does today.
 
-**6. React Native Cross-Platform Development**
+**6. Expo Development Framework**
 
-The mobile app will be built using **React Native** to support both Android and iOS platforms:
-- **Framework**: React Native (single codebase for both platforms)
-- **Platform Support**: Full feature parity on both Android and iOS
-- **Project Location**: Mobile project folder will be created under `server/` directory to be included in git repository
+The mobile app will be built using **Expo** (React Native framework) for faster development and easier deployment:
+- **Framework**: Expo (React Native with managed workflow)
+- **Development Tool**: Expo Go for rapid testing and iteration
+- **Deployment**: Expo Application Services (EAS) for building and deploying
+- **Platform Priority**: iOS first, then Android (sequential development)
+- **Project Location**: Mobile project will be created as a **separate repository** parallel to the server:
+  ```
+  THEONE/
+  ├── server/          # Backend (separate git repo)
+  └── mobile/          # Mobile app (separate git repo)
+  ```
+- **Package Management**: Always use latest stable versions of all packages, libraries, and dependencies (as of December 20, 2025)
 - **Platform-Specific Considerations**:
-  - Push notifications: FCM for Android, APNs for iOS
-  - Secure storage: React Native Keychain (iOS Keychain, Android Keystore)
+  - Push notifications: Expo Notifications (FCM for Android, APNs for iOS)
+  - Secure storage: Expo SecureStore (iOS Keychain, Android Keystore)
+  - **iOS Glass Style**: iOS will use the new glass appearance style (glassmorphism) for cards, overlays, and UI elements
+  - **Android Style**: Android will use simpler dark backgrounds with subtle transparency (no glass effect)
   - Platform-specific UI: React Native components with platform-specific styling when needed
-  - Testing: Both platforms must be tested before release
+  - Testing: iOS tested first, then Android (sequential approach)
+
+**7. iOS Glass Style Implementation**
+
+The iOS platform will utilize **glassmorphism** (glass appearance) to create a modern, premium aesthetic:
+
+- **Glass Cards**: All card components (COE cards, event cards, profile cards) will use semi-transparent backgrounds with blur effects on iOS
+- **Glass Overlays**: Modals, sheets, and overlays will use glass styling with appropriate blur and transparency
+- **Implementation**:
+  - Use Expo-compatible blur library (e.g., `expo-blur` or `@react-native-community/blur` if compatible with Expo)
+  - Base styles defined in `src/theme/iosGlassStyles.js` with `iosGlassCard` and `iosGlassOverlay` styles
+  - Semi-transparent dark backgrounds (`rgba(10, 20, 25, 0.65-0.75)`) with gold accent borders
+  - BlurView wrapper for iOS components to achieve the glass effect
+  - Ensure library is latest stable version and Expo-compatible (as of December 20, 2025)
+- **Android Fallback**: Android will use solid dark backgrounds (`rgba(10, 20, 25, 0.9)`) with the same gold accents but without blur effects
+- **Platform Detection**: Use `Platform.OS === 'ios'` to conditionally apply glass styles
+
+**Note**: The glass style enhances the premium luxury feel on iOS while maintaining the same dark theme and color palette across both platforms.
 
 ---
 
@@ -277,35 +304,42 @@ NOTE: Accept/Reject buttons and API endpoints need to be implemented.
 
 | # | Task | Owner | Effort | Priority |
 |---|------|-------|--------|----------|
-| 0.1 | Set up React Native project (Android + iOS) in `server/mobile/` | Mobile | 2-4 hrs | P0 |
-| 0.2 | Configure API base URL + environment switching | Mobile | 1 hr | P0 |
-| 0.3 | Implement secure token storage (React Native Keychain) | Mobile | 2-3 hrs | P0 |
-| 0.4 | Create API client wrapper with auth headers | Mobile | 2-3 hrs | P0 |
-| 0.5 | Set up error handling for API responses | Mobile | 2 hrs | P0 |
+| 0.1 | Set up Expo project (iOS first) parallel to `server/` directory | Mobile | 2-4 hrs | P0 |
+| 0.2 | Configure Expo Go for development and testing | Mobile | 1 hr | P0 |
+| 0.3 | Configure API base URL + environment switching | Mobile | 1 hr | P0 |
+| 0.4 | Implement secure token storage (Expo SecureStore) | Mobile | 2-3 hrs | P0 |
+| 0.5 | Create API client wrapper with auth headers | Mobile | 2-3 hrs | P0 |
+| 0.6 | Set up error handling for API responses | Mobile | 2 hrs | P0 |
+| 0.7 | Configure EAS Build for iOS deployment | Mobile | 1-2 hrs | P1 |
 
 ### Project Structure
 
 ```
-server/
-├── mobile/              # React Native mobile app (new)
-│   ├── android/         # Android native code
-│   ├── ios/             # iOS native code
-│   ├── src/             # React Native source code
-│   └── package.json     # React Native dependencies
-├── routes/              # Backend API routes
-├── services/            # Backend services
-└── ...
+THEONE/
+├── server/              # Backend (separate git repository)
+│   ├── routes/          # Backend API routes
+│   ├── services/        # Backend services
+│   └── ...
+└── mobile/              # Mobile app (separate git repository)
+    ├── app/             # Expo app directory (App Router)
+    ├── src/             # Source code
+    ├── assets/          # Images, fonts, etc.
+    ├── app.json         # Expo configuration
+    └── package.json     # Dependencies (latest stable as of Dec 20, 2025)
 ```
 
-**Note:** The mobile project is located under `server/` to be included in the git repository alongside the backend code.
+**Note:** The mobile project is a **separate repository** parallel to the server, allowing independent version control, deployment, and team workflows.
 
 ### Acceptance Criteria
-- [ ] React Native project initialized in `server/mobile/`
-- [ ] Project builds and runs on both Android and iOS
+- [ ] Expo project initialized parallel to `server/` directory (separate git repo)
+- [ ] Project runs in Expo Go on iOS simulator/device
+- [ ] Expo Go setup configured for rapid development iteration
 - [ ] Mobile app connects to backend API
-- [ ] JWT tokens stored securely using React Native Keychain
+- [ ] JWT tokens stored securely using Expo SecureStore
 - [ ] All API calls include `Authorization: Bearer <token>` header
 - [ ] Error responses handled gracefully
+- [ ] All packages are latest stable versions (as of December 20, 2025)
+- [ ] EAS Build configured for iOS deployment (optional for Phase 0)
 
 ---
 
@@ -488,6 +522,29 @@ server/
 | `expired` | Orange | *(Read only)* |
 | `completed` | Green | *(Read only)* |
 | `cancelled` | Red | *(Read only)* |
+
+#### Status Badge Design Specifications
+
+Status badges use solid background colors with white text, borders, and uppercase styling for clear visual distinction:
+
+| Status | Background Color | Text Color | Border Color | Notes |
+|--------|------------------|------------|--------------|-------|
+| `draft` | `#2C3E50` (Dark gray) | `#ECF0F1` (Light gray) | `#34495E` | Admin only |
+| `approved` | `#27AE60` (Bright green) | `#FFFFFF` (White) | `#229954` | Admin only |
+| `sent` | `#3498DB` (Blue) | `#FFFFFF` (White) | `#2980B9` | Accept / Reject |
+| `accepted` | `#006F57` (Green) | `#FFFFFF` (White) | `#014036` | Make Payment |
+| `rejected` | `#E74C3C` (Red) | `#FFFFFF` (White) | `#C0392B` | Read only |
+| `expired` | `#F39C12` (Orange) | `#FFFFFF` (White) | `#E67E22` | Read only |
+| `completed` | `#006F57` (Green) | `#FFFFFF` (White) | `#014036` | Read only |
+| `cancelled` | `#E74C3C` (Red) | `#FFFFFF` (White) | `#C0392B` | Read only |
+
+**Badge Styling:**
+- Padding: `10px horizontal, 5px vertical`
+- Border radius: `12px`
+- Border width: `1px`
+- Minimum width: `60px`
+- Font: `11px, weight 700, uppercase, letter-spacing 0.5px`
+- Alignment: Centered text with flex layout
 
 ### COE Status Transitions (Reference)
 
@@ -711,8 +768,8 @@ The bot returns structured responses. Mobile must render each type:
 
 | # | Task | Screens | Effort | Priority |
 |---|------|---------|--------|----------|
-| 5.9 | Request notification permission (React Native) | - | 2 hrs | P1 |
-| 5.10 | Register push token on login (FCM for Android, APNs for iOS) | - | 2 hrs | P1 |
+| 5.9 | Request notification permission (Expo Notifications) | - | 2 hrs | P1 |
+| 5.10 | Register push token on login (Expo Notifications - FCM for Android, APNs for iOS) | - | 2 hrs | P1 |
 | 5.11 | Remove token on logout | - | 1 hr | P2 |
 | 5.12 | Handle push notification tap (deep linking) | - | 2-3 hrs | P1 |
 | 5.13 | In-app notification badge | - | 2 hrs | P2 |
@@ -889,7 +946,8 @@ All admin endpoints already exist. See report for full list.
 | 8 | 6 | Admin (Optional) | None |
 
 **Total Backend Effort:** ~20-24 hours  
-**Mobile Development:** Can start immediately
+**Mobile Development:** Can start immediately  
+**Development Approach:** iOS first, then Android (sequential)
 
 ### Recommended Parallel Tracks
 
