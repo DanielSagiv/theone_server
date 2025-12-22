@@ -94,4 +94,94 @@ router.get('/sessions', (req, res) => {
   });
 });
 
+/**
+ * GET /test/email-test
+ * Test email service by sending a test email
+ * Query params: ?email=your@email.com (optional, defaults to CONTACT_EMAIL)
+ */
+router.get('/email-test', async (req, res) => {
+  try {
+    const emailService = require('../utils/emailService');
+    const testEmail = req.query.email || process.env.CONTACT_EMAIL;
+    
+    if (!testEmail) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'No email provided. Add ?email=your@email.com or set CONTACT_EMAIL in .env',
+          code: 'MISSING_EMAIL'
+        }
+      });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(testEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Invalid email format',
+          code: 'INVALID_EMAIL'
+        }
+      });
+    }
+
+    // Check AWS configuration
+    const configStatus = {
+      hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+      hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+      hasRegion: !!process.env.AWS_REGION,
+      fromEmail: process.env.FROM_EMAIL || 'noreply@the1.vip'
+    };
+
+    // Test basic email send
+    const result = await emailService.sendEmail({
+      to: testEmail,
+      subject: 'Test Email - The1 Platform',
+      html: '<h1>Test Email</h1><p>If you receive this, email service is working!</p><p>Timestamp: ' + new Date().toISOString() + '</p>'
+    });
+
+    res.json({
+      success: true,
+      message: 'Test email sent successfully',
+      data: {
+        messageId: result.messageId,
+        to: testEmail,
+        from: configStatus.fromEmail,
+        timestamp: new Date().toISOString()
+      },
+      config: configStatus
+    });
+  } catch (error) {
+    console.error('[EMAIL_TEST_ERROR]', {
+      error: {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        requestId: error.requestId,
+        retryable: error.retryable
+      },
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        message: error.message || 'Failed to send test email',
+        code: error.code || 'EMAIL_SEND_FAILED',
+        statusCode: error.statusCode,
+        requestId: error.requestId,
+        retryable: error.retryable,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
+      config: {
+        hasAccessKey: !!process.env.AWS_ACCESS_KEY_ID,
+        hasSecretKey: !!process.env.AWS_SECRET_ACCESS_KEY,
+        hasRegion: !!process.env.AWS_REGION,
+        fromEmail: process.env.FROM_EMAIL || 'noreply@the1.vip'
+      }
+    });
+  }
+});
+
 module.exports = router;

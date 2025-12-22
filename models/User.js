@@ -82,6 +82,10 @@ const userSchema = new mongoose.Schema({
   resetPasswordToken: {
     type: String
   },
+  resetPasswordCode: {
+    type: String,
+    index: true
+  },
   resetPasswordExpires: {
     type: Date
   },
@@ -120,6 +124,10 @@ const userSchema = new mongoose.Schema({
     index: true
   },
   emailVerificationToken: {
+    type: String,
+    index: true
+  },
+  emailVerificationCode: {
     type: String,
     index: true
   },
@@ -223,6 +231,7 @@ userSchema.methods.getProfile = function() {
   const userObject = this.toObject();
   delete userObject.password;
   delete userObject.resetPasswordToken;
+  delete userObject.resetPasswordCode;
   delete userObject.resetPasswordExpires;
   return userObject;
 };

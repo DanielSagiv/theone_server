@@ -275,7 +275,7 @@ router.post('/reset-password', async (req, res) => {
       });
     }
 
-    const result = await authService.resetPassword(value.token, value.password);
+    const result = await authService.resetPassword(value.code, value.password);
 
     res.json({
       success: true,
@@ -316,11 +316,11 @@ router.post('/verify-email', async (req, res) => {
       });
     }
 
-    const { token } = value;
+    const { code } = value;
 
-    // Find user with valid token
+    // Find user with valid code
     const user = await User.findOne({
-      emailVerificationToken: token,
+      emailVerificationCode: code,
       emailVerificationExpires: { $gt: Date.now() }
     });
 
@@ -328,8 +328,8 @@ router.post('/verify-email', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: {
-          code: 'INVALID_TOKEN',
-          message: 'Invalid or expired verification token'
+          code: 'INVALID_CODE',
+          message: 'Invalid or expired verification code'
         }
       });
     }
@@ -348,7 +348,7 @@ router.post('/verify-email', async (req, res) => {
     // Mark email as verified
     user.emailVerified = true;
     user.emailVerifiedAt = new Date();
-    user.emailVerificationToken = undefined;
+    user.emailVerificationCode = undefined;
     user.emailVerificationExpires = undefined;
     
     // Auto-approve user after email verification
@@ -450,15 +450,15 @@ router.post('/resend-verification', async (req, res) => {
       }
     }
 
-    // Generate new token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    user.emailVerificationToken = verificationToken;
-    user.emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Generate new 6-digit code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationCode = verificationCode;
+    user.emailVerificationExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
     user.emailVerificationSentAt = new Date();
     await user.save();
 
     // Send email
-    await emailService.sendVerificationEmail(user, verificationToken);
+    await emailService.sendVerificationEmail(user, verificationCode);
 
     // Log resend event
     console.log('Verification email resent:', {

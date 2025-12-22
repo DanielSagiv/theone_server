@@ -427,7 +427,15 @@ const renewPasswordSchema = Joi.object({
  * Password reset validation schema
  */
 const resetPasswordSchema = Joi.object({
-  token: Joi.string().required(),
+  code: Joi.string()
+    .length(6)
+    .pattern(/^[0-9]+$/)
+    .required()
+    .messages({
+      'string.length': 'Reset code must be 6 digits',
+      'string.pattern.base': 'Reset code must contain only numbers',
+      'any.required': 'Reset code is required'
+    }),
   password: Joi.string().min(6).required()
 });
 
@@ -478,14 +486,14 @@ const updateUserTierSchema = Joi.object({
 
 // Verify email schema
 const verifyEmailSchema = Joi.object({
-  token: Joi.string()
-    .length(64)
-    .hex()
+  code: Joi.string()
+    .length(6)
+    .pattern(/^[0-9]+$/)
     .required()
     .messages({
-      'string.length': 'Invalid verification token',
-      'string.hex': 'Invalid verification token format',
-      'any.required': 'Verification token is required'
+      'string.length': 'Verification code must be 6 digits',
+      'string.pattern.base': 'Verification code must contain only numbers',
+      'any.required': 'Verification code is required'
     })
 });
 

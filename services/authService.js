@@ -71,15 +71,15 @@ const registerUser = async (userData) => {
       throw new Error('User with this email already exists');
     }
 
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // Generate 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     // Create new user with verification fields
     const user = new User({
       ...userData,
       emailVerified: false,
-      emailVerificationToken: verificationToken,
+      emailVerificationCode: verificationCode,
       emailVerificationExpires: verificationExpires,
       emailVerificationSentAt: new Date(),
       entity_status: 'pendingApproval'
@@ -87,7 +87,7 @@ const registerUser = async (userData) => {
     await user.save();
 
     // Send verification email (async, non-blocking)
-    emailService.sendVerificationEmail(user, verificationToken)
+    emailService.sendVerificationEmail(user, verificationCode)
       .then(() => {
         console.log('Verification email sent:', { 
           email: user.email, 
@@ -280,17 +280,17 @@ const requestPasswordReset = async (email) => {
       };
     }
 
-    // Generate secure reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    // Generate 6-digit reset code
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
-    // Store token in user record
-    user.resetPasswordToken = resetToken;
+    // Store code in user record
+    user.resetPasswordCode = resetCode;
     user.resetPasswordExpires = resetExpires;
     await user.save();
 
     // Send reset email (async, non-blocking)
-    emailService.sendPasswordResetEmail(user, resetToken)
+    emailService.sendPasswordResetEmail(user, resetCode)
       .then(() => {
         console.log('Password reset email sent:', {
           email: user.email,
@@ -319,26 +319,26 @@ const requestPasswordReset = async (email) => {
 };
 
 /**
- * Reset password with token
- * @param {string} token - Reset token
+ * Reset password with code
+ * @param {string} code - Reset code (6-digit)
  * @param {string} password - New password
  * @returns {Promise<Object>} Success message
  */
-const resetPassword = async (token, password) => {
+const resetPassword = async (code, password) => {
   try {
-    // Find user with valid token
+    // Find user with valid code
     const user = await User.findOne({
-      resetPasswordToken: token,
+      resetPasswordCode: code,
       resetPasswordExpires: { $gt: Date.now() }
     });
 
     if (!user) {
-      throw new Error('Invalid or expired reset token');
+      throw new Error('Invalid or expired reset code');
     }
 
     // Update password
     user.password = password;
-    user.resetPasswordToken = undefined;
+    user.resetPasswordCode = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
 

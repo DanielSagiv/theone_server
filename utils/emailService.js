@@ -51,18 +51,26 @@ async function sendEmail({ to, subject, html, text }) {
     };
 
     const result = await ses.sendEmail(params).promise();
-    console.log('Email sent successfully:', { 
+    console.log('[EMAIL_SUCCESS]', { 
       to, 
       subject, 
       messageId: result.MessageId,
+      from: params.Source,
       timestamp: new Date().toISOString()
     });
     return { messageId: result.MessageId };
   } catch (error) {
-    console.error('Email send error:', { 
+    console.error('[EMAIL_ERROR]', { 
       to, 
       subject, 
-      error: error.message,
+      from: process.env.FROM_EMAIL || 'noreply@the1.vip',
+      error: {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        requestId: error.requestId,
+        retryable: error.retryable
+      },
       timestamp: new Date().toISOString()
     });
     throw error;
@@ -77,12 +85,10 @@ async function sendEmail({ to, subject, html, text }) {
 /**
  * Send email verification email
  * @param {Object} user - User object with email, firstName
- * @param {string} token - Verification token (32-byte hex string)
+ * @param {string} code - Verification code (6-digit numeric string)
  * @returns {Promise<Object>} Send result
  */
-async function sendVerificationEmail(user, token) {
-  const verificationUrl = `${process.env.FRONTEND_URL}/test/verify-email?token=${token}`;
-  
+async function sendVerificationEmail(user, code) {
   const html = `
     <!DOCTYPE html>
     <html>
@@ -94,9 +100,7 @@ async function sendVerificationEmail(user, token) {
         .header h1 { margin: 0; font-size: 28px; }
         .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
         .content h2 { color: #2c3e50; margin-top: 0; }
-        .button { display: inline-block; background: #667eea; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }
-        .button:hover { background: #5568d3; }
-        .link-text { color: #666; font-size: 14px; word-break: break-all; }
+        .code-box { background: #f0f0f0; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; }
         .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
         .warning { color: #999; font-size: 12px; font-style: italic; margin-top: 20px; }
       </style>
@@ -108,12 +112,10 @@ async function sendVerificationEmail(user, token) {
         </div>
         <div class="content">
           <h2>Welcome, ${user.firstName}!</h2>
-          <p>Thank you for signing up for The1 Platform. Please verify your email address to activate your account and start enjoying exclusive event experiences.</p>
-          <p style="text-align: center;">
-            <a href="${verificationUrl}" class="button">Verify Email Address</a>
-          </p>
-          <p class="link-text">Or copy and paste this link into your browser:<br><a href="${verificationUrl}">${verificationUrl}</a></p>
-          <p class="warning">This link expires in 24 hours.</p>
+          <p>Thank you for signing up for The1 Platform. Please verify your email address using the code below:</p>
+          <div class="code-box">${code}</div>
+          <p>Enter this code in the mobile app to activate your account.</p>
+          <p class="warning">This code expires in 30 minutes.</p>
           <p class="warning">If you didn't create an account, please ignore this email.</p>
         </div>
         <div class="footer">
@@ -134,12 +136,10 @@ async function sendVerificationEmail(user, token) {
 /**
  * Send password reset email
  * @param {Object} user - User object
- * @param {string} token - Reset token
+ * @param {string} code - Reset code (6-digit numeric string)
  * @returns {Promise<Object>} Send result
  */
-async function sendPasswordResetEmail(user, token) {
-  const resetUrl = `${process.env.FRONTEND_URL}/test/reset-password?token=${token}`;
-  
+async function sendPasswordResetEmail(user, code) {
   const html = `
     <!DOCTYPE html>
     <html>
@@ -151,9 +151,7 @@ async function sendPasswordResetEmail(user, token) {
         .header h1 { margin: 0; font-size: 28px; }
         .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
         .content h2 { color: #2c3e50; margin-top: 0; }
-        .button { display: inline-block; background: #e74c3c; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }
-        .button:hover { background: #c0392b; }
-        .link-text { color: #666; font-size: 14px; word-break: break-all; }
+        .code-box { background: #f0f0f0; border: 2px solid #e74c3c; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #e74c3c; }
         .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
         .warning { color: #e74c3c; font-size: 12px; font-weight: bold; margin-top: 20px; }
         .info { color: #999; font-size: 12px; font-style: italic; margin-top: 10px; }
@@ -167,12 +165,10 @@ async function sendPasswordResetEmail(user, token) {
         <div class="content">
           <h2>Password Reset Request</h2>
           <p>Hi ${user.firstName},</p>
-          <p>We received a request to reset your password. Click the button below to create a new password:</p>
-          <p style="text-align: center;">
-            <a href="${resetUrl}" class="button">Reset Password</a>
-          </p>
-          <p class="link-text">Or copy and paste this link into your browser:<br><a href="${resetUrl}">${resetUrl}</a></p>
-          <p class="warning">This link expires in 1 hour.</p>
+          <p>We received a request to reset your password. Use the code below to create a new password:</p>
+          <div class="code-box">${code}</div>
+          <p>Enter this code in the mobile app to reset your password.</p>
+          <p class="warning">This code expires in 30 minutes.</p>
           <p class="info">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
         </div>
         <div class="footer">
