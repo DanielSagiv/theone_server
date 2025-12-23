@@ -494,6 +494,14 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       // Continue with provided preferences
     }
 
+    // Prioritize city from form submission (preferences.city) over conversation preferences
+    // This needs to be available for both event filtering and diagnostics
+    // Check multiple possible locations for city: preferences.city, preferences.location_preferences[0], conversationPreferences.city
+    const cityToUse = preferences.city || 
+                      (preferences.location_preferences && preferences.location_preferences[0]) ||
+                      conversationPreferences.city ||
+                      (conversationPreferences.location_preferences && conversationPreferences.location_preferences[0]);
+
     // If events not provided, use sentiment-based auto-selection
     let finalEvents = events;
     if (!finalEvents || finalEvents.length === 0) {
@@ -524,7 +532,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       };
       
       // If city is specified, first find locations in that city, then filter events by those location IDs
-      if (conversationPreferences.city) {
+      if (cityToUse) {
         // Create city matching map for common abbreviations
         const cityMap = {
           'las vegas': ['lv', 'las vegas', 'vegas'],
@@ -534,7 +542,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           'chicago': ['chicago', 'chi']
         };
         
-        const searchCity = conversationPreferences.city.toLowerCase().trim();
+        const searchCity = cityToUse.toLowerCase().trim();
         const cityVariations = cityMap[searchCity] || [searchCity];
         
         // Build regex pattern that matches any variation
@@ -547,7 +555,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         
         const locationIds = cityLocations.map(loc => loc._id);
         console.log('[BOT] City filter applied:', {
-          searchCity: conversationPreferences.city,
+          searchCity: cityToUse,
+          cityFromForm: preferences.city || 'none',
+          cityFromConversation: conversationPreferences.city || 'none',
           cityVariations: cityVariations,
           locationsFound: locationIds.length,
           locationNames: cityLocations.map(loc => ({ name: loc.name, city: loc.address?.city })),
@@ -567,7 +577,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         coe_date_range: { from: startDate, to: endDate },
         overlap_logic: 'Event starts before COE ends AND Event ends after COE starts',
         exclude_past: true,
-        city_filter: conversationPreferences.city || 'none',
+        city_filter: cityToUse || 'none',
+        city_from_form: preferences.city || 'none',
+        city_from_conversation: conversationPreferences.city || 'none',
         hasLocationFilter: !!eventFilter.location_id,
         filter: JSON.stringify(eventFilter, null, 2)
       });
@@ -787,7 +799,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           event_name: null,
           primary_reason: 'NO_EVENTS_IN_DATE_RANGE',
           details: {
-            searched_city: conversationPreferences.city || null,
+            searched_city: cityToUse || conversationPreferences.city || null,
             searched_dates: {
               start: diagnosticStartDate,
               end: diagnosticEndDate
@@ -1009,22 +1021,34 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             }
           }
           
+          // Ensure preferences object has the correct city (from form submission)
+          const errorPreferences = {
+            ...conversationPreferences,
+            city: cityToUse || conversationPreferences.city,
+            location_preferences: cityToUse ? [cityToUse] : (conversationPreferences.location_preferences || [])
+          };
           throw {
             type: 'NO_SEATS_AVAILABLE',
             message: 'We couldn\'t find any available seats/tables matching your preferences.',
             searchAttempts: alternativeResult.searchAttempts,
-            preferences: conversationPreferences,
+            preferences: errorPreferences,
             event_diagnostics: allEventDiagnostics
           };
         }
       } else {
         // No alternative events found - return error with diagnostics
         console.log('[BOT] No alternative events found with available seats');
+        // Ensure preferences object has the correct city (from form submission)
+        const errorPreferences = {
+          ...conversationPreferences,
+          city: cityToUse || conversationPreferences.city,
+          location_preferences: cityToUse ? [cityToUse] : (conversationPreferences.location_preferences || [])
+        };
         throw {
           type: 'NO_SEATS_AVAILABLE',
           message: 'We couldn\'t find any available seats/tables matching your preferences.',
           searchAttempts: alternativeResult.searchAttempts || [],
-          preferences: conversationPreferences,
+          preferences: errorPreferences,
           event_diagnostics: eventDiagnostics
         };
       }
@@ -1997,6 +2021,59 @@ async function handleGetUserProfile(params, user, correlationId) {
 }
 
 /**
+ * Build client search filter
+ * Shared helper function for building search filters
+ * @param {string} search - Search query string
+ * @returns {Object} MongoDB filter object
+ */
+function buildClientSearchFilter(search) {
+  const filter = { role: 'client' };
+  
+  if (search && search.trim()) {
+    const searchRegex = { $regex: search.trim(), $options: 'i' };
+    filter.$or = [
+      { firstName: searchRegex },
+      { lastName: searchRegex },
+      { email: searchRegex },
+      { phone: searchRegex },
+      { $expr: { 
+        $regexMatch: { 
+          input: { $concat: ['$firstName', ' ', '$lastName'] }, 
+          regex: search.trim(), 
+          options: 'i' 
+        } 
+      }}
+    ];
+  }
+  
+  return filter;
+}
+
+/**
+ * Format client data for response
+ * Shared helper function for formatting client objects
+ * @param {Object} client - MongoDB user document
+ * @returns {Object} Formatted client object
+ */
+function formatClientForResponse(client) {
+  return {
+    id: client._id.toString(),
+    _id: client._id.toString(),
+    name: client.firstName && client.lastName 
+      ? `${client.firstName} ${client.lastName}`
+      : client.firstName || client.email || 'Unknown',
+    firstName: client.firstName || null,
+    lastName: client.lastName || null,
+    email: client.email || null,
+    phone: client.phone || null,
+    avatarUrl: client.avatarUrl || null,
+    role: client.role || 'client',
+    entity_status: client.entity_status || null,
+    createdAt: client.createdAt || null
+  };
+}
+
+/**
  * Handler 9: Get Clients List
  * @param {Object} params - Tool parameters
  * @param {Object} user - Current user object
@@ -2028,25 +2105,8 @@ async function handleGetClients(params, user, correlationId) {
       currentUserRole: user.role
     });
 
-    // Build filter - only clients
-    const filter = { role: 'client' };
-
-    // Add search filter if provided
-    if (search && search.trim()) {
-      const searchRegex = { $regex: search.trim(), $options: 'i' };
-      filter.$or = [
-        { firstName: searchRegex },
-        { lastName: searchRegex },
-        { email: searchRegex },
-        { $expr: { 
-          $regexMatch: { 
-            input: { $concat: ['$firstName', ' ', '$lastName'] }, 
-            regex: search.trim(), 
-            options: 'i' 
-          } 
-        }}
-      ];
-    }
+    // Build filter using shared helper
+    const filter = buildClientSearchFilter(search);
 
     // Calculate pagination
     const skip = (page - 1) * limit;
@@ -2054,7 +2114,7 @@ async function handleGetClients(params, user, correlationId) {
 
     // Query clients
     const clients = await User.find(filter)
-      .select('firstName lastName email avatarUrl role entity_status createdAt')
+      .select('firstName lastName email phone avatarUrl role entity_status createdAt')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(validLimit);
@@ -2070,20 +2130,8 @@ async function handleGetClients(params, user, correlationId) {
       totalPages
     });
 
-    // Format clients
-    const formattedClients = clients.map(client => ({
-      id: client._id.toString(),
-      name: client.firstName && client.lastName 
-        ? `${client.firstName} ${client.lastName}`
-        : client.firstName || client.email || 'Unknown',
-      firstName: client.firstName || null,
-      lastName: client.lastName || null,
-      email: client.email || null,
-      avatarUrl: client.avatarUrl || null,
-      role: client.role || 'client',
-      entity_status: client.entity_status || null,
-      createdAt: client.createdAt || null
-    }));
+    // Format clients using shared helper
+    const formattedClients = clients.map(formatClientForResponse);
 
     // Return structured response
     const structuredResponse = formatClientListResponse(
@@ -2155,6 +2203,8 @@ module.exports = {
   handleGetLocations,
   handleGetUserProfile,
   handleGetClients,
-  handleOpenCreateCOEForClient
+  handleOpenCreateCOEForClient,
+  buildClientSearchFilter,
+  formatClientForResponse
 };
 

@@ -495,10 +495,21 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   }
 
   // Rule 2: Build my experience - Show preferences form
-  // BUT: Skip this rule if it's a form submission (has structured format)
+  // BUT: Skip this rule if:
+  // 1. It's a form submission (has structured format)
+  // 2. It's a request to open the create form for a specific client (admin flow)
   const isFormSubmission = prompt.includes('City:') && prompt.includes('Start date:') && prompt.includes('Budget:');
+  const normalizedLower = prompt.toLowerCase();
+  const isOpenCreateFormRequest = normalizedLower.includes('open the create experience form') || 
+                                  normalizedLower.includes('open the create coe form') ||
+                                  normalizedLower.includes('open_create_coe_for_client') ||
+                                  (normalizedLower.includes('open') && normalizedLower.includes('create') && normalizedLower.includes('form') && normalizedLower.includes('client'));
   
-  if (!isFormSubmission) {
+  if (isOpenCreateFormRequest) {
+    console.log('[BOT] Skipping Rule 2 - this is a request to open create form for client');
+  }
+  
+  if (!isFormSubmission && !isOpenCreateFormRequest) {
     // Expanded patterns for flexible language matching
     const buildExperiencePatterns = [
       'build my experience',
@@ -738,6 +749,55 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     // Phase 2.4: Auto-trigger COE creation if this is a form submission
     // This must run even if preferences didn't change, so users can rebuild drafts
     if (isFormSubmission && extractionResult && extractionResult.valid) {
+      // CRITICAL: Check for admin without client_id BEFORE preparing tool params
+      if (user.role === 'admin' && !extractionResult?.raw?.client_id) {
+        console.warn('[BOT] Phase 2.4: Admin attempting COE creation without client_id - intercepting BEFORE tool preparation');
+        console.log('[BOT] Phase 2.4: Extraction result:', JSON.stringify(extractionResult, null, 2));
+        
+        // Store preferences for later use after client is selected
+        try {
+          await updateConversationPreferences(userId, extractedPreferences, 'preference_collected');
+        } catch (err) {
+          console.error('[BOT] Error storing preferences:', err);
+        }
+        
+        // Return a response asking admin to select a client
+        const responseMessage = {
+          role: 'assistant',
+          content: 'I need to know which client this experience is for. Please select a client from the list below, or type "show me clients" to see all available clients.',
+          structured_data: {
+            type: 'text',
+            message: 'I need to know which client this experience is for. Please select a client from the list below, or type "show me clients" to see all available clients.'
+          },
+          timestamp: new Date().toISOString()
+        };
+        
+        // Add assistant response (user message was already added earlier)
+        conversation.messages.push(responseMessage);
+        await conversation.save();
+        
+        // Trigger get_clients tool automatically to show client list
+        try {
+          const clientsResult = await executeTool('get_clients', {}, user, correlationId);
+          if (clientsResult.success && clientsResult.data) {
+            const clientsResponse = {
+              role: 'assistant',
+              content: 'Here are the available clients:',
+              structured_data: clientsResult.data,
+              timestamp: new Date().toISOString()
+            };
+            conversation.messages.push(clientsResponse);
+            await conversation.save();
+          }
+        } catch (err) {
+          console.error('[BOT] Error fetching clients list:', err);
+        }
+        
+        // Return updated conversation - THIS MUST EXIT THE FUNCTION
+        console.log('[BOT] Phase 2.4: Returning early - admin needs to select client first');
+        return conversation.messages;
+      }
+      
       try {
         console.log('[BOT] Phase 2.4: Auto-triggering COE creation from form submission...');
         
@@ -746,6 +806,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           start_date: extractionResult.raw.start_date,
           end_date: extractionResult.raw.end_date,
           preferences: {
+            city: extractionResult.raw.city || null, // Add city directly for handleCreateCOEDraft
             budget_range: {
               max: extractionResult.raw.budget?.amount || 0
             },
@@ -765,16 +826,71 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         // Add client_id if user is admin (required for admin)
         if (user.role === 'admin') {
           // Extract client_id from form submission (admin COE creation flow)
-          if (extractionResult.raw.client_id) {
-            toolParams.client_id = extractionResult.raw.client_id;
+          const clientId = extractionResult?.raw?.client_id;
+          console.log('[BOT] Phase 2.4: Checking client_id for admin:', { 
+            hasExtractionResult: !!extractionResult,
+            hasRaw: !!extractionResult?.raw,
+            clientId: clientId,
+            clientIdType: typeof clientId
+          });
+          
+          if (clientId && clientId.trim && clientId.trim().length > 0) {
+            toolParams.client_id = clientId.trim();
             console.log('[BOT] Phase 2.4: Extracted client_id from form submission:', toolParams.client_id);
           } else {
-            console.warn('[BOT] Phase 2.4: Admin COE creation but client_id not found in form submission');
-            // Don't fail here - let the tool handler validate and return proper error
+            console.warn('[BOT] Phase 2.4: Admin COE creation but client_id not found in form submission - BLOCKING tool execution');
+            // For admin users, if client_id is missing, don't call the tool
+            // Instead, ask them to select a client first
+            console.log('[BOT] Phase 2.4: Admin attempting to create COE without client_id - prompting for client selection and RETURNING EARLY');
+            
+            // Store preferences for later use after client is selected
+            await updateConversationPreferences(userId, extractedPreferences, 'preference_collected');
+            
+            // Return a response asking admin to select a client
+            const responseMessage = {
+              role: 'assistant',
+              content: 'I need to know which client this experience is for. Please select a client from the list below, or type "show me clients" to see all available clients.',
+              structured_data: {
+                type: 'text',
+                message: 'I need to know which client this experience is for. Please select a client from the list below, or type "show me clients" to see all available clients.'
+              },
+              timestamp: new Date().toISOString()
+            };
+            
+            // Add assistant response (user message was already added earlier)
+            conversation.messages.push(responseMessage);
+            await conversation.save();
+            
+            // Trigger get_clients tool automatically to show client list
+            try {
+              const clientsResult = await executeTool('get_clients', {}, user, correlationId);
+              if (clientsResult.success && clientsResult.data) {
+                const clientsResponse = {
+                  role: 'assistant',
+                  content: 'Here are the available clients:',
+                  structured_data: clientsResult.data,
+                  timestamp: new Date().toISOString()
+                };
+                conversation.messages.push(clientsResponse);
+                await conversation.save();
+              }
+            } catch (err) {
+              console.error('[BOT] Error fetching clients list:', err);
+            }
+            
+            // Return updated conversation - THIS MUST EXIT THE FUNCTION
+            console.log('[BOT] Phase 2.4: Returning early from form submission path to prevent COE creation');
+            return conversation.messages;
           }
         } else if (user.role === 'client') {
           // Client creates COE for themselves
           toolParams.client_id = user._id.toString();
+        }
+        
+        // ADDITIONAL SAFETY CHECK: Don't proceed if admin and no client_id
+        if (user.role === 'admin' && !toolParams.client_id) {
+          console.error('[BOT] Phase 2.4: SAFETY CHECK FAILED - Admin has no client_id but we reached tool execution. This should not happen!');
+          throw new Error('Admin must provide client_id when creating a COE. This error should have been caught earlier.');
         }
         
         console.log('[BOT] Phase 2.4: Calling create_coe_draft tool with params:', {
@@ -983,6 +1099,66 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         paramsPreview: JSON.stringify(toolParams).substring(0, 200),
         correlationId: correlationId
       });
+
+      // CRITICAL FIX: Check if admin is trying to create COE without client_id
+      if (toolName === 'create_coe_draft' && user.role === 'admin' && !toolParams.client_id) {
+        console.warn('[BOT] Admin attempting to create COE via OpenAI tool call without client_id - intercepting');
+        
+        // Store any preferences that might be in the tool params
+        if (toolParams.preferences || toolParams.start_date || toolParams.end_date) {
+          const preferencesToStore = {
+            ...(toolParams.preferences || {}),
+            ...(toolParams.start_date ? { start_date: toolParams.start_date } : {}),
+            ...(toolParams.end_date ? { end_date: toolParams.end_date } : {})
+          };
+          if (Object.keys(preferencesToStore).length > 0) {
+            await updateConversationPreferences(userId, preferencesToStore, 'preference_collected');
+          }
+        }
+        
+        // Return error result that will trigger client list display
+        toolResults.push({
+          tool_call_id: toolCall.id,
+          role: 'tool',
+          name: toolName,
+          content: JSON.stringify({
+            success: false,
+            error: createError(
+              ErrorCodes.MISSING_REQUIRED_FIELD,
+              'Admin must select a client before creating an experience. Please select a client from the list below, or type "show me clients" to see all available clients.',
+              ErrorCategories.VALIDATION,
+              false,
+              { client_id: 'Required for admin users' }
+            ),
+            // Include structured response to trigger client list
+            data: {
+              type: 'text',
+              message: 'Admin must select a client before creating an experience. Please select a client from the list below, or type "show me clients" to see all available clients.',
+              shouldShowClients: true
+            }
+          })
+        });
+        
+        // Trigger get_clients tool automatically
+        try {
+          const clientsResult = await executeTool('get_clients', {}, user, correlationId);
+          if (clientsResult.success && clientsResult.data) {
+            toolResults.push({
+              tool_call_id: 'auto-clients-' + Date.now(),
+              role: 'tool',
+              name: 'get_clients',
+              content: JSON.stringify({
+                success: true,
+                data: clientsResult.data
+              })
+            });
+          }
+        } catch (err) {
+          console.error('[BOT] Error fetching clients list:', err);
+        }
+        
+        continue; // Skip executing create_coe_draft tool
+      }
 
       const toolResult = await executeTool(toolName, toolParams, user, correlationId);
       

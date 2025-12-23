@@ -208,6 +208,66 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /v1/users/search
+ * Search clients by name, email, or phone (admin only)
+ */
+router.get('/search', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { q: search, page = 1, limit = 20 } = req.query;
+    
+    // Build filter using shared helper from botToolHandlers
+    const { buildClientSearchFilter, formatClientForResponse } = require('../services/botToolHandlers');
+    const filter = buildClientSearchFilter(search);
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const validLimit = Math.min(Math.max(1, parseInt(limit)), 100); // Clamp between 1 and 100
+
+    // Query clients
+    const clients = await User.find(filter)
+      .select('firstName lastName email phone avatarUrl role entity_status createdAt')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(validLimit);
+
+    // Get total count for pagination
+    const total = await User.countDocuments(filter);
+    const totalPages = Math.ceil(total / validLimit);
+
+    // Format clients using shared helper
+    const formattedClients = clients.map(formatClientForResponse);
+
+    res.json({
+      success: true,
+      data: formattedClients,
+      pagination: {
+        page: parseInt(page),
+        limit: validLimit,
+        total,
+        totalPages
+      },
+      message: search 
+        ? `Found ${total} client${total !== 1 ? 's' : ''} matching "${search}".`
+        : `Found ${total} client${total !== 1 ? 's' : ''}.`
+    });
+
+  } catch (error) {
+    console.error('Search clients error:', {
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'CLIENT_SEARCH_FAILED',
+        message: 'Failed to search clients'
+      }
+    });
+  }
+});
+
+/**
  * GET /v1/users/:id/profile
  * Get user profile by ID (admin only)
  */

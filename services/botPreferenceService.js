@@ -248,8 +248,8 @@ function extractPreferencesFromFormSubmission(message) {
   // Pattern matching for structured format
   // Support both newline-delimited and space-delimited fields (admin flow)
   const patterns = {
-    client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+Start date:|\n|$)/i,
-    city: /City:\s*(.+?)(?:\s+(Start date:)|\n|$)/i,
+    client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+City:|\s+Start date:|\n|$)/i,
+    city: /City:\s*([^\n]+?)(?:\s+Start date:|\n|$)/i,
     start_date: /Start date:\s*([^\n]+?)(?:\s+End date:|\n|$)/i,
     end_date: /End date:\s*([^\n]+?)(?:\s+Budget:|\n|$)/i,
     budget: /Budget:\s*\$?(\d+(?:\.\d+)?)\s*(USD)?/i,

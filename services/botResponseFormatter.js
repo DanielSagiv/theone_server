@@ -1016,7 +1016,10 @@ function formatNoSeatsAvailableResponse(errorData) {
   // Extract dates from multiple possible locations in preferences
   const startDate = preferences.dates?.startDate || preferences.start_date || preferences.startDate;
   const endDate = preferences.dates?.endDate || preferences.end_date || preferences.endDate;
-  const city = preferences.city;
+  // Extract city from multiple possible locations (preferences.city, location_preferences array, etc.)
+  const city = preferences.city || 
+               (preferences.location_preferences && preferences.location_preferences[0]) ||
+               null;
   const budget = preferences.budget?.max || preferences.budget_range?.max;
   const partySize = preferences.party_size;
   
