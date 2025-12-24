@@ -1798,10 +1798,10 @@ async function findAlternativeEvents(coeId, eventId, filters = {}) {
       total_available: { $gt: 0 }
     };
 
-    // Add city filter - ALWAYS apply city restriction (universal restriction)
-    // For admins: still respect city, but show ALL events in that city (no optimization)
-    // For clients: city filter + optimization
-    const targetCity = city || currentEvent.location_id?.address?.city;
+    // Add city filter
+    // For admins: only apply city filter if explicitly provided (don't default to current event's city)
+    // For clients: default to current event's city if not provided (backward compatibility)
+    const targetCity = city || (!isAdmin ? currentEvent.location_id?.address?.city : null);
     if (targetCity) {
       query['location_id.address.city'] = new RegExp(targetCity, 'i');
       console.log('[COE_SERVICE] City filter applied:', targetCity, 'isAdmin:', isAdmin);

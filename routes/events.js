@@ -59,6 +59,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
     if (coe_start_date && coe_end_date) {
       const coeStartDate = new Date(coe_start_date);
       const coeEndDate = new Date(coe_end_date);
+      const now = new Date();
       
       // Events that overlap with COE date range:
       // Event starts before COE ends AND Event ends after COE starts
@@ -71,8 +72,14 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
             { end_datetime: null }                    // Event end date is null
           ]
         },
-        // Exclude past events when selecting for COE
-        { end_datetime: { $gte: new Date() } }
+        // Exclude past events when selecting for COE (allow events without end_datetime)
+        {
+          $or: [
+            { end_datetime: { $gte: now } },  // Event hasn't ended yet
+            { end_datetime: { $exists: false } },  // Or has no end date
+            { end_datetime: null }  // Or end date is null
+          ]
+        }
       ];
     }
     

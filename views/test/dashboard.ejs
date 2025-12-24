@@ -4902,7 +4902,7 @@
                             </div>
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshCOEs()">Refresh</button>
-                                <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateCOE()">Create COE</button>
+                                <button id="createCOEButton" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="console.log('Button onclick fired'); if (typeof window.openCreateCOE === 'function') { window.openCreateCOE(); } else { console.error('window.openCreateCOE not found!'); alert('Function not found. Please refresh the page.'); }">Create COE</button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -6141,6 +6141,24 @@
         window.onload = function() {
             checkExistingSession();
             setupNavigation();
+            
+            // Ensure openCreateCOE button works (backup event listener)
+            setTimeout(() => {
+                const createCOEButton = document.querySelector('button[onclick*="openCreateCOE"]');
+                if (createCOEButton) {
+                    console.log('[INIT] Found Create COE button, adding event listener backup');
+                    createCOEButton.addEventListener('click', function(e) {
+                        console.log('[INIT] Create COE button clicked via event listener');
+                        if (typeof window.openCreateCOE === 'function') {
+                            window.openCreateCOE();
+                        } else {
+                            console.error('[INIT] window.openCreateCOE is not a function!', typeof window.openCreateCOE);
+                        }
+                    });
+                } else {
+                    console.warn('[INIT] Create COE button not found');
+                }
+            }, 500);
         };
 
         /**
@@ -6982,14 +7000,20 @@
          * @param {string} eventId - Event ID to replace
          */
         // Make function globally accessible
-        window.handleReplaceEvent = async function handleReplaceEvent(coeId, eventId) {
+        window.handleReplaceEvent = async function handleReplaceEvent(coeId, eventId, cityFilter = null) {
             try {
-                console.log('[handleReplaceEvent] Starting replace event:', { coeId, eventId });
+                console.log('[handleReplaceEvent] Starting replace event:', { coeId, eventId, cityFilter });
                 showAlert('Loading alternative events...', 'info');
 
+                // Build API URL with optional city filter
+                let apiUrl = `/coes/${coeId}/events/${eventId}/alternatives`;
+                if (cityFilter) {
+                    apiUrl += `?city=${encodeURIComponent(cityFilter)}`;
+                }
+                
                 // Fetch alternative events
-                console.log('[handleReplaceEvent] Fetching alternatives from:', `/coes/${coeId}/events/${eventId}/alternatives`);
-                const alternativesResult = await makeApiRequest(`/coes/${coeId}/events/${eventId}/alternatives`, 'GET');
+                console.log('[handleReplaceEvent] Fetching alternatives from:', apiUrl);
+                const alternativesResult = await makeApiRequest(apiUrl, 'GET');
                 
                 console.log('[handleReplaceEvent] Alternatives result:', {
                     success: alternativesResult.success,
@@ -7037,11 +7061,28 @@
                 }
 
                 console.log('[handleReplaceEvent] Showing event selection modal with', eventsArray.length, 'events');
-                // Show event selection modal
+                
+                // If no events found and we have a city filter, retry without city filter
+                if (eventsArray.length === 0 && cityFilter) {
+                    console.log('[handleReplaceEvent] No events found with city filter, retrying without city filter');
+                    const retryResult = await makeApiRequest(`/coes/${coeId}/events/${eventId}/alternatives`, 'GET');
+                    if (retryResult.success && retryResult.data) {
+                        let retryEvents = retryResult.data.data || retryResult.data;
+                        if (Array.isArray(retryEvents) && retryEvents.length > 0) {
+                            eventsArray = retryEvents;
+                            console.log('[handleReplaceEvent] Found', eventsArray.length, 'events without city filter');
+                        }
+                    }
+                }
+                
+                // Show event selection modal with city filter option
                 const selectedEvent = await showEventSelectionModal(
                     'Replace Event',
                     'Select an alternative event to replace the current one:',
-                    eventsArray
+                    eventsArray,
+                    coeId,
+                    eventId,
+                    cityFilter
                 );
 
                 console.log('[handleReplaceEvent] Selected event:', selectedEvent);
@@ -7146,9 +7187,12 @@
          * @param {string} title - Modal title
          * @param {string} message - Modal message
          * @param {Array} events - Array of alternative events
+         * @param {string} coeId - COE ID for reloading with city filter
+         * @param {string} eventId - Event ID for reloading with city filter
+         * @param {string} currentCityFilter - Current city filter (if any)
          * @returns {Promise<Object|null>} Selected event or null if cancelled
          */
-        function showEventSelectionModal(title, message, events) {
+        function showEventSelectionModal(title, message, events, coeId = null, eventId = null, currentCityFilter = null) {
             return new Promise((resolve) => {
                 // Ensure events is an array
                 if (!Array.isArray(events)) {
@@ -7168,6 +7212,24 @@
                 const modal = document.createElement('div');
                 modal.className = 'coe-modal-overlay';
                 modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; overflow-y: auto; padding: 2rem;';
+
+                // City filter dropdown (only if coeId and eventId are provided for reloading)
+                let cityFilterHtml = '';
+                if (coeId && eventId) {
+                    cityFilterHtml = `
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="display: block; color: #cbd5f5; margin-bottom: 0.5rem; font-size: 0.9rem;">Filter by City (optional):</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <select id="alternativeEventsCityFilter" style="flex: 1; padding: 0.5rem; background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #cbd5f5;">
+                                    <option value="">Any City</option>
+                                </select>
+                                <button id="applyCityFilterBtn" style="padding: 0.5rem 1rem; background: rgba(59, 130, 246, 0.3); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.5); border-radius: 4px; cursor: pointer;">
+                                    Apply Filter
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
 
                 const eventsHtml = events.map(event => {
                     // Normalize event ID to string
@@ -7204,6 +7266,7 @@
                     <div class="coe-modal" style="background: #1e293b; border-radius: 8px; padding: 2rem; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);">
                         <h3 style="color: #fff; margin: 0 0 1rem 0; font-size: 1.2rem;">${title}</h3>
                         <p style="color: #cbd5f5; margin: 0 0 1.5rem 0; line-height: 1.6;">${message}</p>
+                        ${cityFilterHtml || ''}
                         <div class="coe-alternative-events-list">
                             ${eventsHtml}
                         </div>
@@ -7290,6 +7353,33 @@
                 };
 
                 document.body.appendChild(modal);
+
+                // Load cities into filter dropdown if available
+                const citySelect = modal.querySelector('#alternativeEventsCityFilter');
+                if (citySelect && coeId && eventId) {
+                    loadCitiesIntoSelect(citySelect).then(() => {
+                        if (currentCityFilter) {
+                            citySelect.value = currentCityFilter;
+                        }
+                    });
+                }
+
+                // Handle city filter change
+                const applyCityFilterBtn = modal.querySelector('#applyCityFilterBtn');
+                if (applyCityFilterBtn && coeId && eventId) {
+                    applyCityFilterBtn.onclick = async () => {
+                        const selectedCity = citySelect.value;
+                        console.log('[showEventSelectionModal] City filter changed to:', selectedCity);
+                        
+                        // Close current modal
+                        document.body.removeChild(modal);
+                        
+                        // Reload alternatives with city filter
+                        if (typeof handleReplaceEvent === 'function') {
+                            await handleReplaceEvent(coeId, eventId, selectedCity || null);
+                        }
+                    };
+                }
             });
         }
         
@@ -7481,6 +7571,77 @@
             triggerClientSearch(searchTerm.trim());
         }
         
+        /**
+         * Open COE creation flow (for admin: show clients first)
+         */
+        window.openCreateCOE = function openCreateCOE() {
+            console.log('[COE CREATE] ===== BUTTON CLICKED =====');
+            console.log('[COE CREATE] Button clicked - Opening COE creation flow');
+            console.log('[COE CREATE] Current user:', currentUser?.role);
+            console.log('[COE CREATE] botLoading state:', botLoading);
+            
+            // Check if bot is currently loading
+            if (botLoading) {
+                console.warn('[COE CREATE] Bot is currently loading, please wait...');
+                showAlert('Bot is processing a request. Please wait...', 'warning');
+                return;
+            }
+            
+            // Switch to bot section
+            try {
+                switchSection('bot');
+                console.log('[COE CREATE] Switched to bot section');
+            } catch (error) {
+                console.error('[COE CREATE] Error switching to bot section:', error);
+                showAlert('Error switching to bot section: ' + error.message, 'error');
+                return;
+            }
+            
+            // Wait a moment for the bot section to render and for any existing bot messages to load
+            setTimeout(() => {
+                // For admin users, show client list first so they can select a client
+                const promptInput = document.getElementById('botPromptInput');
+                console.log('[COE CREATE] Looking for botPromptInput:', promptInput ? 'found' : 'NOT FOUND');
+                
+                if (!promptInput) {
+                    console.error('[COE CREATE] botPromptInput not found after waiting');
+                    showAlert('Bot input not found. Please refresh the page.', 'error');
+                    return;
+                }
+                
+                // Set the prompt value
+                if (currentUser && currentUser.role === 'admin') {
+                    // Send message to bot to show clients
+                    promptInput.value = 'show me clients';
+                    console.log('[COE CREATE] Set prompt to "show me clients"');
+                } else {
+                    // For clients, directly show the preferences form
+                    promptInput.value = 'build my experience';
+                    console.log('[COE CREATE] Set prompt to "build my experience"');
+                }
+                
+                // Scroll to bottom of bot feed to show the message
+                const botFeed = document.getElementById('botResponseFeed');
+                if (botFeed) {
+                    botFeed.scrollTop = botFeed.scrollHeight;
+                }
+                
+                // Trigger send
+                console.log('[COE CREATE] Calling sendBotPrompt() with prompt:', promptInput.value);
+                sendBotPrompt();
+            }, 200);
+        };
+
+        /**
+         * Close COE modal (used for editing COEs)
+         */
+        function closeCreateCOE() {
+            const modal = document.getElementById('createCOEModal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
         /**
          * Trigger client search by sending message to bot
          * @param {string} searchTerm - Search term
@@ -8927,6 +9088,21 @@
                             >
                         </div>
                     </div>
+                    <div class="coe-preferences-field">
+                        <label for="coe_create_city">City <span class="required">*</span></label>
+                        <select 
+                            id="coe_create_city" 
+                            name="city" 
+                            required
+                            class="coe-preferences-input"
+                        >
+                            <option value="">Select a city (choose dates first)</option>
+                        </select>
+                        <div id="coe_create_city_loading" style="display: none; color: #94a3b8; font-size: 0.85rem; margin-top: 4px;">
+                            Loading cities...
+                        </div>
+                        <div id="coe_create_city_error" style="display: none; color: #ef4444; font-size: 0.85rem; margin-top: 4px;"></div>
+                    </div>
                     <div class="coe-preferences-field-group">
                         <div class="coe-preferences-field">
                             <label for="coe_create_budget">Budget</label>
@@ -8971,20 +9147,209 @@
                 </form>
             `;
 
+            // Set up date change listeners to load cities based on date range
+            const startDateInput = container.querySelector('#coe_create_start_date');
+            const endDateInput = container.querySelector('#coe_create_end_date');
+            const citySelect = container.querySelector('#coe_create_city');
+            const cityLoading = container.querySelector('#coe_create_city_loading');
+            const cityError = container.querySelector('#coe_create_city_error');
+
+            const loadCitiesForDateRange = async () => {
+                const startDate = startDateInput?.value;
+                const endDate = endDateInput?.value;
+
+                // Clear city selection and error when dates change
+                if (citySelect) {
+                    citySelect.value = '';
+                    citySelect.innerHTML = '<option value="">Select a city (choose dates first)</option>';
+                }
+                if (cityError) {
+                    cityError.style.display = 'none';
+                    cityError.textContent = '';
+                }
+
+                // Only load cities if both dates are selected
+                if (!startDate || !endDate) {
+                    return;
+                }
+
+                // Validate date range
+                if (new Date(startDate) > new Date(endDate)) {
+                    if (cityError) {
+                        cityError.textContent = 'End date must be on or after start date';
+                        cityError.style.display = 'block';
+                    }
+                    return;
+                }
+
+                // Show loading state
+                if (cityLoading) cityLoading.style.display = 'block';
+                if (cityError) cityError.style.display = 'none';
+
+                try {
+                    // Fetch events for the date range to get cities with available events
+                    // Use same pagination pattern as loadEventsForCOE to get all events
+                    const params = new URLSearchParams();
+                    if (startDate && endDate) {
+                        params.set('coe_start_date', startDate);
+                        params.set('coe_end_date', endDate);
+                    }
+                    params.set('status', 'active');
+
+                    // Fetch all pages (like loadEventsForCOE does)
+                    let page = 1;
+                    const limit = 100;
+                    let pages = 1;
+                    const combined = [];
+
+                    do {
+                        params.set('page', String(page));
+                        params.set('limit', String(limit));
+                        const apiUrl = `/events?${params.toString()}`;
+                        console.log('[COE CREATE FORM] Fetching events from:', apiUrl);
+                        const result = await makeApiRequest(apiUrl);
+                        
+                        console.log('[COE CREATE FORM] API request result (page ' + page + '):', {
+                            success: result.success,
+                            status: result.status,
+                            hasData: !!result.data,
+                            dataType: typeof result.data,
+                            isArray: Array.isArray(result.data),
+                            dataKeys: result.data ? Object.keys(result.data) : null,
+                            rawData: result.data,
+                            pagination: result.pagination || result.data?.pagination
+                        });
+                        
+                        if (!result.success || !result.data) {
+                            console.warn('[COE CREATE FORM] Request failed or no data for page', page, result);
+                            break;
+                        }
+                        
+                        // Use the same pattern as loadEventsForCOE (line 16692)
+                        const batch = Array.isArray(result.data) ? result.data : (result.data.data || []);
+                        console.log('[COE CREATE FORM] Batch size:', batch.length, 'Combined so far:', combined.length);
+                        if (batch.length > 0) {
+                            console.log('[COE CREATE FORM] First event in batch:', {
+                                name: batch[0].name,
+                                start: batch[0].start_datetime,
+                                location: batch[0].location_id
+                            });
+                        }
+                        combined.push(...batch);
+                        
+                        const pagination = result.pagination || result.data?.pagination || {};
+                        pages = parseInt(pagination.pages || '1');
+                        page += 1;
+                    } while (page <= pages);
+
+                    const eventsArray = combined;
+                    
+                    console.log('[COE CREATE FORM] Final loaded events:', {
+                        totalEvents: eventsArray.length,
+                        firstEventSample: eventsArray[0] ? {
+                            name: eventsArray[0].name,
+                            hasLocation: !!eventsArray[0].location_id,
+                            locationIdType: typeof eventsArray[0].location_id,
+                            locationIdKeys: eventsArray[0].location_id ? Object.keys(eventsArray[0].location_id) : null,
+                            address: eventsArray[0].location_id?.address,
+                            city: eventsArray[0].location_id?.address?.city
+                        } : 'No events'
+                    });
+
+                    if (cityLoading) cityLoading.style.display = 'none';
+
+                    if (eventsArray.length > 0) {
+                        // Extract unique cities from events
+                        const citiesSet = new Set();
+                        eventsArray.forEach(event => {
+                            const city = event.location_id?.address?.city;
+                            if (city && typeof city === 'string') {
+                                citiesSet.add(city);
+                            }
+                        });
+
+                        const cities = Array.from(citiesSet).sort();
+                        
+                        console.log('[COE CREATE FORM] Extracted cities:', cities);
+
+                        // Populate city dropdown
+                        if (citySelect) {
+                            citySelect.innerHTML = '<option value="">Select a city</option>';
+                            if (cities.length > 0) {
+                                cities.forEach(city => {
+                                    const option = document.createElement('option');
+                                    option.value = city;
+                                    option.textContent = city;
+                                    citySelect.appendChild(option);
+                                });
+                            } else {
+                                const option = document.createElement('option');
+                                option.value = '';
+                                option.textContent = 'No cities with events in this date range';
+                                option.disabled = true;
+                                citySelect.appendChild(option);
+                                if (cityError) {
+                                    cityError.textContent = 'No events found for the selected date range. Please choose different dates.';
+                                    cityError.style.display = 'block';
+                                }
+                            }
+                        }
+                    } else {
+                        // No events found
+                        console.warn('[COE CREATE FORM] No events found for date range:', { startDate, endDate });
+                        if (citySelect) {
+                            citySelect.innerHTML = '<option value="">No cities with events in this date range</option>';
+                            const option = citySelect.querySelector('option');
+                            if (option) option.disabled = true;
+                        }
+                        if (cityError) {
+                            cityError.textContent = 'No events found for the selected date range. Please choose different dates.';
+                            cityError.style.display = 'block';
+                        }
+                    }
+                } catch (error) {
+                    console.error('[COE CREATE FORM] Error loading cities:', error);
+                    if (cityLoading) cityLoading.style.display = 'none';
+                    if (cityError) {
+                        cityError.textContent = 'Error loading cities: ' + (error.message || 'Please try again.');
+                        cityError.style.display = 'block';
+                    }
+                }
+            };
+
+            // Add change listeners to date inputs
+            if (startDateInput) {
+                startDateInput.addEventListener('change', loadCitiesForDateRange);
+            }
+            if (endDateInput) {
+                endDateInput.addEventListener('change', loadCitiesForDateRange);
+            }
+
+            // If dates are already set (from defaults), load cities immediately
+            if (startDateInput && endDateInput && startDateInput.value && endDateInput.value) {
+                loadCitiesForDateRange();
+            }
+
             return container;
         }
 
         /**
          * Handle submit of Create COE form (admin for client)
          */
-        function handleSubmitCOECreateForm(event, clientId) {
+        async function handleSubmitCOECreateForm(event, clientId) {
+            console.log('[COE CREATE FORM] ===== FORM SUBMIT CLICKED =====');
+            console.log('[COE CREATE FORM] Client ID:', clientId);
+            
             event.preventDefault();
             const form = event.target;
             const startDate = form.querySelector('#coe_create_start_date')?.value;
             const endDate = form.querySelector('#coe_create_end_date')?.value;
+            const cityVal = form.querySelector('#coe_create_city')?.value;
             const budgetVal = form.querySelector('#coe_create_budget')?.value;
             const partySizeVal = form.querySelector('#coe_create_party_size')?.value;
             const notes = form.querySelector('#coe_create_notes')?.value || '';
+            
+            console.log('[COE CREATE FORM] Form values:', { startDate, endDate, cityVal, budgetVal, partySizeVal, notes });
 
             if (!startDate || !endDate) {
                 showAlert('Start date and End date are required.', 'error');
@@ -8996,10 +9361,51 @@
                 return;
             }
 
+            if (!cityVal || !cityVal.trim()) {
+                showAlert('City is required. Please select a city with available events for the selected date range.', 'error');
+                return;
+            }
+
+            // Validate that events exist for the selected city and date range
+            try {
+                const params = new URLSearchParams({
+                    coe_start_date: startDate,
+                    coe_end_date: endDate,
+                    status: 'active',
+                    limit: '100'
+                });
+
+                const result = await makeApiRequest(`/events?${params.toString()}`);
+                
+                // Handle API response structure: result.data.data or result.data
+                const eventsArray = Array.isArray(result.data) ? result.data : (result.data?.data || []);
+                
+                if (result.success && eventsArray.length > 0) {
+                    // Check if any event has the selected city
+                    const hasCityEvent = eventsArray.some(event => {
+                        const eventCity = event.location_id?.address?.city;
+                        return eventCity && eventCity.toLowerCase() === cityVal.toLowerCase();
+                    });
+
+                    if (!hasCityEvent) {
+                        showAlert(`No events found in ${cityVal} for the selected date range. Please choose a different city or date range.`, 'error');
+                        return;
+                    }
+                } else {
+                    showAlert('Unable to validate events. Please try again.', 'error');
+                    return;
+                }
+            } catch (error) {
+                console.error('[COE CREATE FORM] Error validating events:', error);
+                showAlert('Error validating events. Please try again.', 'error');
+                return;
+            }
+
             const parts = [];
             parts.push(`Client ID: ${clientId}`);
             parts.push(`Start date: ${startDate}`);
             parts.push(`End date: ${endDate}`);
+            parts.push(`City: ${cityVal}`);
             if (budgetVal) parts.push(`Budget: $${budgetVal} USD`);
             if (partySizeVal) parts.push(`Number of people: ${partySizeVal}`);
             if (notes) parts.push(`Notes: ${notes}`);
@@ -9011,7 +9417,8 @@
             }
 
             // Structured prompt so bot can call create_coe_draft with explicit client_id
-            const prompt = `Create a COE draft using the following data:\n${parts.join('\n')}`;
+            // Use the same format as mobile app for consistency
+            const prompt = `Build my experience with the following preferences:\n${parts.join('\n')}`;
             console.log('[COE CREATE FORM] Sending prompt:', prompt);
             promptInput.value = prompt;
             sendBotPrompt();
@@ -15818,41 +16225,10 @@
         }
 
         /**
-         * Open create COE modal
+         * NOTE: openCreateCOE() for CREATE now uses bot interface (see line ~7559)
+         * This modal-based version was removed to align with mobile bot-based flow.
+         * Modal is still used for EDITING COEs (see editCOE() function).
          */
-        async function openCreateCOE() {
-            try {
-                // Set create mode
-                window.coeEditMode = false;
-                window.currentEditingCOEId = null;
-                
-                // Load clients and runners for selection
-                await populateCOEFilters();
-                
-                // Load events for selection
-                await loadEventsForCOE();
-                
-                // Reset form
-                resetCreateCOEForm();
-                
-                // Update modal title
-                document.querySelector('#createCOEModal .modal-header h2').textContent = 'Create COE';
-                document.getElementById('coec_create_btn').textContent = 'Create COE';
-                
-                // Show modal
-                document.getElementById('createCOEModal').style.display = 'flex';
-                
-                // Start with step 1
-                coecCurrentStep = 1;
-                updateCOECStepDisplay();
-                
-                // Add real-time validation listeners
-                addCOECValidationListeners();
-            } catch (error) {
-                console.error('Error opening create COE modal:', error);
-                showAlert('Error opening create COE modal: ' + error.message, 'error');
-            }
-        }
 
         /**
          * Edit COE
