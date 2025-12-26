@@ -96,30 +96,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE
       // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
       // This prevents incorrect cost breakdown calculation on client side
-      if (coe.selected_seats && Array.isArray(coe.selected_seats) && coe.events && Array.isArray(coe.events)) {
-        // Extract valid event IDs from events array (source of truth)
-        const validEventIds = new Set();
-        coe.events.forEach(event => {
-          const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
-          if (eventId) {
-            validEventIds.add(eventId);
-          }
-        });
-
-        const originalSeatCount = coe.selected_seats.length;
-        coe.selected_seats = coe.selected_seats.filter(seat => {
-          const seatEventId = seat.event_id?.toString() || seat.event_id;
-          return validEventIds.has(seatEventId);
-        });
-
-        if (originalSeatCount !== coe.selected_seats.length) {
-          console.log('[GET /coes/my] Filtered selected_seats for COE:', coe._id, {
-            originalCount: originalSeatCount,
-            filteredCount: coe.selected_seats.length,
-            removed: originalSeatCount - coe.selected_seats.length
-          });
-        }
-      }
+      coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
     }
 
     res.json({
@@ -585,41 +562,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
-    if (coe.selected_seats && Array.isArray(coe.selected_seats) && coe.events && Array.isArray(coe.events)) {
-      // Extract valid event IDs from events array (source of truth)
-      const validEventIds = new Set();
-      coe.events.forEach(event => {
-        const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
-        if (eventId) {
-          validEventIds.add(eventId);
-        }
-      });
-
-      const originalSeatCount = coe.selected_seats.length;
-      coe.selected_seats = coe.selected_seats.filter(seat => {
-        const seatEventId = seat.event_id?.toString() || seat.event_id;
-        const isValid = validEventIds.has(seatEventId);
-        
-        if (!isValid) {
-          console.warn('[GET /coes/my/:id] Filtering out seat from replaced event:', {
-            seat_code: seat.seat_code,
-            seatEventId,
-            validEventIds: Array.from(validEventIds)
-          });
-        }
-        
-        return isValid;
-      });
-
-      if (originalSeatCount !== coe.selected_seats.length) {
-        console.log('[GET /coes/my/:id] Filtered selected_seats based on events array:', {
-          originalCount: originalSeatCount,
-          filteredCount: coe.selected_seats.length,
-          removed: originalSeatCount - coe.selected_seats.length,
-          note: 'Removed seats from events not currently in COE (replaced events)'
-        });
-      }
-    }
+    coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
 
     res.json({
       success: true,

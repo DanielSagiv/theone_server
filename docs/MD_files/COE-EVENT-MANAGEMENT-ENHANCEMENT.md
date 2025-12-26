@@ -205,9 +205,13 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
   - **Date**: Formatted date and time (13px, muted color)
   - **Description**: Event description if available (14px, up to 3 lines)
   - **Price Range**: Min-max price if available (16px, gold color)
-- "Replace with This Event" button below each card
+  - **"Replace with This Event" button**: Rendered inside the card (as children prop of EventCard component)
 - Pull-to-refresh support
 - Empty state: "No alternative events found"
+- **Screen Refresh Behavior**: After event replacement, screens automatically refresh when they regain focus:
+  - COE detail screen (`coe-detail.js`) uses `useFocusEffect` to reload COE data when screen comes into focus
+  - Bot conversation screen (`bot.js`) uses `useFocusEffect` to reload conversation and fetch fresh COE data for all COE cards in the conversation
+  - This ensures users see updated COE data immediately after event replacement without manual refresh
 
 **Dashboard Implementation:**
 - List/grid of alternative events

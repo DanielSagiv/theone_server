@@ -215,10 +215,13 @@ Bot: [Uses create_coe_draft tool with AI optimization]
 3. User taps [Replace] on an event
 4. App calls: GET /v1/coes/:coeId/events/:eventId/alternatives
 5. → Returns list of alternative event cards
-6. → Each card has: [Replace with This] button
+6. → Each card has: [Replace with This] button (rendered inside EventCard component)
 7. User taps [Replace with This]
 8. App calls: PUT /v1/coes/:coeId/events/:oldEventId
 9. → COE updated with new event
+10. App navigates back to COE detail screen
+11. → COE detail screen automatically refreshes on focus (useFocusEffect)
+12. → Bot conversation screen automatically refreshes on focus and fetches fresh COE data for COE cards
 ```
 
 **3. Client Views Seat/Table Upgrades (Carousel/Slides - NOT button):**

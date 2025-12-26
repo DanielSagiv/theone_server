@@ -748,8 +748,11 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     
     // Phase 2.4: Auto-trigger COE creation if this is a form submission
     // This must run even if preferences didn't change, so users can rebuild drafts
-    if (isFormSubmission && extractionResult && extractionResult.valid) {
+    // CRITICAL FIX: Check for admin without client_id even when extractionResult.valid is false
+    // The client_id extraction can succeed even if other fields have validation errors
+    if (isFormSubmission && extractionResult) {
       // CRITICAL: Check for admin without client_id BEFORE preparing tool params
+      // This check must happen even if extractionResult.valid is false
       if (user.role === 'admin' && !extractionResult?.raw?.client_id) {
         console.warn('[BOT] Phase 2.4: Admin attempting COE creation without client_id - intercepting BEFORE tool preparation');
         console.log('[BOT] Phase 2.4: Extraction result:', JSON.stringify(extractionResult, null, 2));
@@ -798,6 +801,9 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         return conversation.messages;
       }
       
+      // Proceed with COE creation (client_id check passed above for admin)
+      // Note: Even if extractionResult.valid is false, we can proceed if client_id is present for admin
+      // Date validation will happen in handleCreateCOEDraft
       try {
         console.log('[BOT] Phase 2.4: Auto-triggering COE creation from form submission...');
         

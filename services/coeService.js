@@ -58,6 +58,71 @@ async function validateSelectedSeats(selectedSeats) {
 }
 
 /**
+ * Filter selected_seats to only include seats matching events currently in the COE
+ * This ensures seats from replaced events (if not fully cleaned from DB) are not returned
+ * @param {Object} coe - COE object with events and selected_seats arrays
+ * @param {string} logPrefix - Optional prefix for log messages (e.g., '[GET /coes/my]')
+ * @returns {Object} COE object with filtered selected_seats array
+ */
+function filterSelectedSeatsByEvents(coe, logPrefix = '') {
+  if (!coe.selected_seats || !Array.isArray(coe.selected_seats) || 
+      !coe.events || !Array.isArray(coe.events)) {
+    return coe;
+  }
+
+  // Extract valid event IDs from events array (source of truth)
+  // Handle both populated (with _id) and non-populated event objects
+  const validEventIds = new Set();
+  coe.events.forEach(event => {
+    const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
+    if (eventId) {
+      validEventIds.add(eventId);
+    }
+  });
+
+  const originalSeatCount = coe.selected_seats.length;
+  coe.selected_seats = coe.selected_seats.filter(seat => {
+    const seatEventId = seat.event_id?.toString() || seat.event_id;
+    const isValid = validEventIds.has(seatEventId);
+    
+    // Log warning only for detailed endpoint (includes seat details)
+    if (!isValid && logPrefix.includes('/:id')) {
+      console.warn(`${logPrefix} Filtering out seat from replaced event:`, {
+        seat_code: seat.seat_code,
+        seatEventId,
+        validEventIds: Array.from(validEventIds)
+      });
+    }
+    
+    return isValid;
+  });
+
+  if (originalSeatCount !== coe.selected_seats.length) {
+    const logMessage = logPrefix.includes('/:id') 
+      ? `${logPrefix} Filtered selected_seats based on events array:`
+      : `${logPrefix} Filtered selected_seats for COE:`;
+    
+    const logData = logPrefix.includes('/:id')
+      ? {
+          originalCount: originalSeatCount,
+          filteredCount: coe.selected_seats.length,
+          removed: originalSeatCount - coe.selected_seats.length,
+          note: 'Removed seats from events not currently in COE (replaced events)'
+        }
+      : {
+          coeId: coe._id,
+          originalCount: originalSeatCount,
+          filteredCount: coe.selected_seats.length,
+          removed: originalSeatCount - coe.selected_seats.length
+        };
+    
+    console.log(logMessage, logData);
+  }
+
+  return coe;
+}
+
+/**
  * Update selected seats status to 'held' when COE is created/approved
  * @param {Array} selectedSeats - Array of seat data
  * @param {string} coeId - COE ID for booking reference
@@ -2737,6 +2802,11 @@ async function hasAlternativeEventsSameDay(coeId, eventId) {
 }
 
 module.exports = {
+  validateSelectedSeats,
+  filterSelectedSeatsByEvents,
+  updateSelectedSeatsStatus,
+  updateSeatStatusesToBooked,
+  releaseSelectedSeats,
   createCOE,
   getCOEById,
   getCOEs,
@@ -2750,10 +2820,6 @@ module.exports = {
   getCOEsByClient,
   getCOEsByRunner,
   getCOEStatistics,
-  validateSelectedSeats,
-  updateSelectedSeatsStatus,
-  updateSeatStatusesToBooked,
-  releaseSelectedSeats,
   acceptSeatUpgrade,
   removeEventsFromCOE,
   replaceEventInCOE,

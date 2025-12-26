@@ -148,6 +148,7 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
 
   - The preferences extraction / `create_coe_draft` pipeline will:
     - Detect the structured format.
+    - **Important**: For admin users, `client_id` validation happens regardless of other form field validation results. If `client_id` is missing, the system prompts the admin to select a client. If `client_id` is present, COE creation proceeds (letting `handleCreateCOEDraft` handle further validation).
     - Use `client_id` from the message (we may add a small enhancement to prefer explicit `Client ID:` when admin).
     - Return a `coe_draft` structured response (already implemented).
 
