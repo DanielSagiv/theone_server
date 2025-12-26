@@ -71,8 +71,8 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
 ```json
 {
   "new_event_id": "new_event_id",
-  "preserve_seats": false,  // Optional: try to match seats from old event
-  "seat_preferences": {      // Optional: if preserve_seats is false
+  "preserve_seats": false,  // Optional: try to match seats from old event by seat code
+  "seat_preferences": {      // Optional: if preserve_seats is false, use these preferences for seat selection
     "capacity": 4,
     "budget": 5000,
     "preferences": {}
@@ -80,14 +80,31 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
 }
 ```
 
+**Note**: If neither `preserve_seats` nor `seat_preferences` are provided (e.g., mobile app flow), the system will automatically use COE preferences (if available) to select seats using `selectSeatsByBudgetAndCapacity`. This ensures seamless seat selection when replacing events.
+
 **Functionality:**
 - Validate COE exists and is in 'draft' status
 - Validate old event exists in COE
 - Validate new event exists and is available
 - Remove old event and associated seats/upgrades
-- If `preserve_seats: true`, attempt to find matching seats in new event
-- If `preserve_seats: false` and `seat_preferences` provided, select new seats using existing seat selection logic
-- If no preferences, remove seats (user can select manually later)
+- Seat selection logic (in order of priority):
+  1. If `preserve_seats: true`, attempt to find matching seats in new event by seat code
+  2. If `preserve_seats: false` and `seat_preferences` provided, select new seats using existing seat selection logic (`selectSeatsByBudgetAndCapacity`)
+  3. **Fallback**: If neither `preserve_seats` nor `seat_preferences` provided (e.g., mobile app flow), automatically select seats using COE preferences:
+     - Calculate budget being released from old event seats (sum of `event_price` from old seats)
+     - If COE has stored preferences with original budget:
+       - Calculate available budget: `Original budget - Current subtotal + Old event budget`
+       - This ensures the new event can use the budget that was freed from the old event
+     - If no original budget stored, use the old event budget as minimum available budget
+     - Extract `party_size` from COE preferences (defaults to 2 if not available)
+     - Use `selectSeatsByBudgetAndCapacity` with calculated available budget to auto-select seats
+     - This ensures seamless experience when replacing events from mobile app and proper budget allocation
+  4. **Critical Fallback**: If all seat selection methods above fail to find seats (e.g., budget constraints prevent selection, all seats filtered out, etc.), select any available seat(s) from the event:
+     - This ensures events always get seats if any are available in inventory, regardless of budget constraints
+     - Selects the first available seat(s) that meet capacity requirements (party_size)
+     - Uses COE preferences for party_size, or defaults to 2 if not available
+     - Only applies if there are actually available seats in the event (status === 'available')
+     - Prevents events from being added to COE without seats due to budget calculation issues or filtering problems
 - Recalculate COE totals
 - Return updated COE
 
@@ -166,22 +183,64 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
 **Components:**
 - Modal with alternative events list
 - Event cards showing:
-  - Event name and date
-  - Location/venue
+  - **Event image** (from event media or venue/location media)
+  - **Event name** (title)
+  - **Description** (event description if available)
+  - **Date and time** (formatted start_datetime)
+  - **Venue/club name** (location name)
   - Available seats count
-  - Price range
-- "Select Event" button on each alternative
+  - Price range (min - max)
+- "Replace with This Event" button on each alternative
 - Option to "Select seats automatically" or "Select manually later"
 - Loading state during replacement
 - Success/error feedback
 
 #### 2.4 Alternative Events Display
-**Components:**
+**Mobile Implementation:**
+- List of alternative events with enhanced cards (`EventCard` component)
+- Each card displays:
+  - **Image**: Event or venue image (16:9 aspect ratio, full width)
+  - **Title**: Event name (bold, 20px font)
+  - **Venue Name**: Location/venue name (14px, secondary color)
+  - **Date**: Formatted date and time (13px, muted color)
+  - **Description**: Event description if available (14px, up to 3 lines)
+  - **Price Range**: Min-max price if available (16px, gold color)
+- "Replace with This Event" button below each card
+- Pull-to-refresh support
+- Empty state: "No alternative events found"
+
+**Dashboard Implementation:**
 - List/grid of alternative events
 - Filter options (date range, city, venue type)
 - Sort options (date, price, availability)
 - "View Details" for each event
 - "Select as Replacement" button
+
+#### 2.5 API Response Enhancement
+**Backend Changes:**
+- `findAlternativeEvents` now includes in response:
+  - `description`: Event description field
+  - `media`: Array of event media (images/videos)
+  - `location`: Full location object with `name`, `address`, and `media`
+- Response structure:
+  ```javascript
+  {
+    _id: string,
+    name: string,
+    description: string | null,
+    start_datetime: Date,
+    end_datetime: Date,
+    location: {
+      name: string,
+      address: object,
+      media: array
+    },
+    media: array,
+    available_seats_count: number,
+    total_available: number,
+    price_range: { min: number, max: number }
+  }
+  ```
 
 ### Phase 3: Service Layer Implementation
 
@@ -221,15 +280,38 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
 1. Fetch COE and validate it's a draft
 2. Validate old event exists in COE
 3. Fetch new event and validate availability
-4. Remove old event and associated seats/upgrades
-5. If `preserve_seats: true`:
-   - Attempt to find matching seats in new event (by code, category, or similar)
-   - If matches found, add them to `selected_seats`
-6. If `preserve_seats: false` and `seat_preferences` provided:
-   - Use existing seat selection logic (`selectSeatsByBudgetAndCapacity`)
-   - Add selected seats to COE
-7. Recalculate totals
-8. Save and return updated COE
+4. Remove old event from `coe.events` array and associated seats/upgrades:
+   - Release old event's seats back to inventory (update seat status from 'held' to 'available')
+   - Remove old event's seats from `coe.selected_seats` using MongoDB `$pull`
+   - Remove old event's upgrade offers from `coe.seat_upgrade_offers` using MongoDB `$pull`
+   - Replace old event with new event in `coe.events` array using MongoDB `$set` with positional operator
+   - **CRITICAL**: Verify old event is actually removed from `coe.events` array after replacement
+   - If old event still present after `$set` operation, explicitly remove it using MongoDB `$pull` to ensure it's no longer in the array
+   - This ensures replaced events will appear in alternative events lists (not excluded)
+5. Seat selection (priority order):
+   - **If `preserve_seats: true`**:
+     - Attempt to find matching seats in new event by seat code
+     - If matches found (same seat code and available), add them to `selected_seats`
+   - **Else if `seat_preferences` provided**:
+     - Use existing seat selection logic (`selectSeatsByBudgetAndCapacity`) with provided preferences
+     - Add selected seats to COE
+   - **Else (fallback for mobile/app flows)**:
+     - Load COE preferences (for bot-created COEs that have preferences stored)
+     - Extract `party_size` and `budget` from COE preferences
+     - Use `selectSeatsByBudgetAndCapacity` with COE preferences to auto-select seats
+     - This ensures seats are automatically selected when replacing events from mobile app without explicit preferences
+   - **Critical Fallback**: If all seat selection methods fail (no seats found):
+     - Select any available seat(s) from the event that meet capacity requirements
+     - Uses COE preferences for party_size, or defaults to 2
+     - Ensures events always get seats if any are available, preventing events from being added without seats
+6. Recalculate totals (subtract old event seats, add new event seats)
+7. Regenerate seat upgrade offers (if COE is in draft status)
+8. Verify replacement was successful:
+   - Verify new event is in `coe.events` array
+   - Verify old event is NOT in `coe.events` array (critical for alternative events to work correctly)
+   - If old event still present after replacement, explicitly remove it using MongoDB `$pull`
+   - Log verification results for debugging
+9. Save and return updated COE
 
 **`findAlternativeEvents(coeId, eventId, filters)`**
 ```javascript
@@ -244,15 +326,24 @@ Enhance the COE (Curated One Experience) build flow to allow users to remove eve
 
 **Logic:**
 1. Fetch current event details
-2. Build query based on filters:
+2. Build exclusion set:
+   - Get all event IDs currently in COE (from `coe.events` array)
+   - Get all event IDs currently in COE (from `coe.selected_seats`)
+   - Add current event ID (the event we're finding alternatives for)
+   - Use consistent ID normalization (convert ObjectIds to strings) for reliable comparison across different data structures
+   - **Important**: Only events currently in the COE are excluded. Previously replaced events (which have been removed from the COE via `replaceEventInCOE`) will be available as alternatives.
+   - **Implementation Note**: The `replaceEventInCOE` function explicitly verifies and removes old events from `coe.events` array using MongoDB `$pull` if they're still present after the `$set` replacement operation. This ensures replaced events are completely removed and will appear in alternative events lists.
+3. Build query based on filters:
    - City (from filter or current event)
    - Date range (from filter or current event date ±7 days)
    - Available seats > 0
-   - Not already in COE
-3. Return events with:
+   - Exclude events in exclusion set (current event + events currently in COE)
+   - Only active events
+4. Return events with:
    - Basic info (name, date, location)
    - Available seats count
    - Price range
+   - Description and media (for enhanced display)
    - Similarity score (optional)
 
 #### 3.2 Integration with Existing Services

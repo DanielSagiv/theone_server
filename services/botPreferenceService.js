@@ -248,7 +248,7 @@ function extractPreferencesFromFormSubmission(message) {
   // Pattern matching for structured format
   // Support both newline-delimited and space-delimited fields (admin flow)
   const patterns = {
-    client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+City:|\s+Start date:|\n|$)/i,
+    client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+City:|\s+Start date:|\s|\n|$)/i,
     city: /City:\s*([^\n]+?)(?:\s+Start date:|\n|$)/i,
     start_date: /Start date:\s*([^\n]+?)(?:\s+End date:|\n|$)/i,
     end_date: /End date:\s*([^\n]+?)(?:\s+Budget:|\n|$)/i,
@@ -259,10 +259,18 @@ function extractPreferencesFromFormSubmission(message) {
   };
 
   // Extract client_id (for admin COE creation flow)
-  const clientIdMatch = message.match(patterns.client_id);
+  // Try multiple patterns to handle different formats (newline or space delimited)
+  let clientIdMatch = message.match(patterns.client_id);
+  if (!clientIdMatch || !clientIdMatch[1]) {
+    // Fallback: Try a more permissive pattern that matches client ID followed by newline or space
+    const fallbackPattern = /Client ID:\s*([a-fA-F0-9]{24})/i;
+    clientIdMatch = message.match(fallbackPattern);
+  }
   if (clientIdMatch && clientIdMatch[1]) {
     preferences.client_id = clientIdMatch[1].trim();
     console.log('[PREFERENCE SERVICE] Extracted client_id:', preferences.client_id);
+  } else {
+    console.warn('[PREFERENCE SERVICE] Failed to extract client_id from message:', message.substring(0, 200));
   }
 
   // Extract city (optional for admin flow)

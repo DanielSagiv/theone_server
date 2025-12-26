@@ -47,28 +47,41 @@ These restrictions apply to **ALL users** regardless of role:
    - Only show events within the **selected date range** (from COE preferences or ±7 days from current event)
    - This applies to both admin and client
 
-### For Clients
-- **No changes** - Clients continue to see:
+### For Clients (Creating COE for Themselves)
+- **System automatically selects best-fit events and seats** using:
+  - Sentiment-based event scoring and matching (see `bot-coe-creation-stage2.md`)
+  - Quality-based seat scoring
+  - Budget optimization (see `smart-seat-selection-budget-optimization.md`)
+  - Preference matching
+- **Client does NOT manually select** - System auto-fills the COE with optimized selections
+- **Alternative events** (when replacing):
   - Filtered alternative events (same city, within date range, optimized selection)
+  - Limited to top results (typically 10)
+- **Upgrade options** (when viewing seat upgrades):
   - Optimized upgrade options (only "better" seats, top 5)
+  - Filtered by quality/price improvements
 
-### For Admins (Building or Editing Draft COEs)
+### For Admins (Creating COE for Clients)
+- **Admin manually selects** events and seats from all available options
+- **No auto-selection** - Admin has full control over what to include
 
 #### Initial COE Build (Bot Flow)
-- **Event Selection**: Show **ALL available events** that:
+**Event Selection**: Admin manually chooses from **ALL available events** that:
   - Are in the selected city (from user preferences)
   - Are within the selected date range (from user preferences)
   - Have `status === 'active'`
   - Have available seats (`total_available > 0`)
   - Are NOT fully booked
-  - **No optimization** - Show all matching events, not just "best" ones
-  - **No limit** - Show all matching events (or reasonable pagination limit like 50-100)
+  - **No optimization/sentiment scoring** - Show all matching events, not just "best" ones
+  - **No auto-selection** - Admin manually selects events
+  - **No limit** - Show all matching events (limit: 100 for performance)
 
-- **Seat/Table Selection**: Show **ALL available seats/tables** for selected events that:
+**Seat/Table Selection**: Admin manually chooses from **ALL available seats/tables** for selected events that:
   - Are available (`status === 'available'`) - **NOT held or booked**
   - Meet capacity requirement (≥ party size) - **OR** allow admin to override capacity check
   - **No quality/price filtering** - Show all seats, not just "better" ones
-  - **No optimization** - Show all matching seats, not just "best" ones
+  - **No auto-selection** - Admin manually selects seats
+  - **No optimization** - Show all matching seats (limit: 100 for performance)
 
 #### Event Replacement (Editing Existing COE)
 - **Alternative Events**: Show **ALL available events** that:
@@ -127,10 +140,13 @@ These restrictions apply to **ALL users** regardless of role:
   - Remove quality/price filtering (don't check if seat is "better")
   - Return ALL available seats that meet universal restrictions
   - Sort by: price (ascending), then quality score (descending)
-  - Include current seat in results (marked as "current")
-  - Remove limit (or increase to 50-100)
+  - Include current seat in results (marked with `is_current_seat: true` flag and "Currently Selected" tag)
+  - Current seat inclusion mechanism: For admins, current seat is NOT excluded from initial filter, then marked with `isCurrentSeat` flag during processing
+  - **Admin fallback behavior**: If current seat is not found in location data, use default values (score = 0, price from seat) and continue to show all seats (clients would return empty array in this case)
+  - Limit: 100 seats (for performance)
 - **When `isAdmin === false`** (or not provided):
   - Keep current behavior (only "better" seats, top 5)
+  - If current seat not found in location data, return empty array (can't compare without baseline)
 
 #### 1.3 Update `generateSeatUpgradeOffers` Function
 **File**: `services/seatUpgradeService.js`
@@ -157,23 +173,34 @@ These restrictions apply to **ALL users** regardless of role:
 **File**: `services/botToolHandlers.js` or `services/botSentimentService.js`
 
 **Changes**:
-- When admin is building COE via bot:
+- **For clients**: System uses auto-selection with sentiment-based matching (see `bot-coe-creation-stage2.md`)
+  - `autoSelectEventsBySentiment` function is called
+  - Events are ranked by sentiment score and automatically selected
+  - No manual selection needed
+- **For admins**: Admin manually selects events from all available options
   - Still respect city and date range from preferences
   - Still respect universal restrictions (not held, not fully booked)
-  - **But**: Don't apply optimization/sentiment scoring
+  - **But**: Don't apply optimization/sentiment scoring (`autoSelectEventsBySentiment` is NOT used)
   - Show ALL events in city/date range (not just "best" ones)
   - Pass `isAdmin: true` flag to event selection functions
+  - Admin chooses which events to include in COE
 
 #### 1.5 Update Bot Seat Selection Logic
 **File**: `services/botAutoFillService.js`
 
 **Changes**:
-- When admin is building COE via bot:
+- **For clients**: System uses auto-selection with budget optimization (see `smart-seat-selection-budget-optimization.md`)
+  - `selectSeatsByBudgetAndCapacity` function is called
+  - Seats are scored by quality + sentiment and automatically selected
+  - Budget is maximized while prioritizing quality
+  - No manual selection needed
+- **For admins**: Admin manually selects seats from all available options
   - Still respect universal restrictions (only available seats, not held)
   - Still respect capacity requirement (or allow override)
-  - **But**: Don't apply optimization/quality filtering
+  - **But**: Don't apply optimization/quality filtering (`selectSeatsByBudgetAndCapacity` is NOT used for auto-selection)
   - Show ALL available seats (not just "best" ones)
   - Pass `isAdmin: true` flag to seat selection functions
+  - Admin chooses which seats to include in COE
 
 #### 1.6 Update `replaceEventInCOE` Function
 **File**: `services/coeService.js`
@@ -242,7 +269,14 @@ These restrictions apply to **ALL users** regardless of role:
   - Only events with available seats (not fully booked)
   - Only events in selected city
   - Only events within date range
-- Response format remains the same (array of events)
+- **Response structure** (enhanced):
+  - Each event includes:
+    - Standard event fields (`_id`, `name`, `start_datetime`, `end_datetime`, `location`)
+    - `available_seats_count`: Count of seats with `status === 'available'`
+    - `total_available`: Total available capacity from event field
+    - `price_range`: Object with `min` and `max` prices from available seats
+  - Additional filtering: Events are filtered to ensure `available_seats_count > 0 && total_available > 0`
+- Response format: Array of event objects with enhanced fields
 
 #### 3.2 Seat Upgrades Endpoint (if exists)
 **Route**: `GET /v1/coes/:id/seat-upgrades`
@@ -368,7 +402,59 @@ These restrictions apply to **ALL users** regardless of role:
 - Admin full access is automatic based on `req.user.role === 'admin'` - no additional permission checks needed
 - **Universal restrictions are non-negotiable** - even admins cannot see/select held seats or fully booked events
 - City and date range restrictions apply to both admin and client - admins just see ALL options within those constraints
+- **Key distinction**: 
+  - **Clients**: System automatically selects best-fit events/seats using optimization algorithms (see `bot-coe-creation-stage2.md` and `smart-seat-selection-budget-optimization.md`)
+  - **Admins**: Admin manually selects from all available options (no auto-selection)
 - Consider adding admin preference/setting to toggle between "full access" and "filtered view" (future enhancement)
+
+## Implementation Details
+
+### Current Seat Inclusion for Admins
+
+When admins view seat upgrade options, the current seat is included in the results:
+
+1. **Initial Filtering**: For admins, the current seat is NOT excluded from the initial available seats filter (unlike clients where it's excluded)
+2. **Marking**: During processing, the current seat is identified via `isCurrentSeat` flag (matches by seat code or seat_id)
+3. **Response**: In the final response, current seat is:
+   - Tagged as "Currently Selected" (replaces default tag)
+   - Flagged with `is_current_seat: true`
+   - Included in the list so admin can see what's currently selected
+
+### Admin Fallback Behavior
+
+When the current seat cannot be found in location data:
+
+- **For Clients**: Function returns empty array (can't compare without baseline quality/price data)
+- **For Admins**: Function continues with default values:
+  - `currentScore = 0` (default quality score)
+  - `currentPrice` = price from seat object (`event_price`, `base_price`, or `min_spend`)
+  - All available seats are still shown (since admins see all seats, no comparison needed)
+
+This allows admins to still see upgrade options even if there's a data inconsistency where the seat exists in COE but not in location's seat list.
+
+### Alternative Events Response Structure
+
+The `findAlternativeEvents` function returns events with enhanced fields:
+
+- `available_seats_count`: Count of seats with `status === 'available'` (calculated from event.seats array)
+- `total_available`: Total available capacity from event field
+- `price_range`: Object with:
+  - `min`: Minimum price from available seats
+  - `max`: Maximum price from available seats
+- Additional filtering ensures both `available_seats_count > 0` AND `total_available > 0`
+
+### Admin Limits
+
+- **Event alternatives**: Limit of 100 events (for performance)
+- **Seat upgrades**: Limit of 100 seats per event (for performance)
+- Clients continue to use smaller limits (10 events, 5 seats) for optimized experience
+
+## Related Documentation
+
+- **Client COE Creation Flow**: See `architecture/bot-coe-creation-stage2.md` for client auto-selection implementation
+- **Smart Seat Selection**: See `implementation-summaries/smart-seat-selection-budget-optimization.md` for client seat optimization logic
+- **Admin COE Creation**: See `implementation-summaries/BOT-ADMIN-CREATE-COE-FROM-CLIENT-LIST.md` for admin COE creation flow
+- **Seat Upgrade Offers**: See `implementation-summaries/seat-upgrade-offers-feature.md` for upgrade offer generation
 
 
 

@@ -1061,6 +1061,29 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       throw new Error('Can only replace events in draft COEs');
     }
 
+    // Normalize event IDs early for logging
+    const oldEventIdStr = oldEventId.toString();
+    const newEventIdStr = newEventId.toString();
+
+    console.log('[COE_SERVICE] ===== REPLACE EVENT START =====');
+    console.log('[COE_SERVICE] Replace event params:', {
+      coeId,
+      oldEventId: oldEventIdStr,
+      newEventId: newEventIdStr,
+      preserve_seats,
+      has_seat_preferences: !!(seat_preferences && Object.keys(seat_preferences).length > 0),
+      isAdmin
+    });
+    console.log('[COE_SERVICE] COE initial state:', {
+      status: coe.status,
+      eventsCount: coe.events?.length || 0,
+      eventIds: (coe.events || []).map(e => e.event_id?.toString() || e.event_id),
+      seatsCount: coe.selected_seats?.length || 0,
+      seatEventIds: [...new Set((coe.selected_seats || []).map(s => s.event_id?.toString() || s.event_id))],
+      currentSubtotal: coe.subtotal || 0,
+      currentTotal: coe.total || 0
+    });
+
     // Ensure all existing events have required fields to avoid validation errors
     // Load the COE and fix any events missing required fields
     const coeDoc = await coesCollection.findOne({ _id: coeObjectId });
@@ -1094,9 +1117,6 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
     
     // Reload COE after ensuring required fields (use lean to avoid validation)
     coe = await COE.findById(coeId).lean();
-
-    const oldEventIdStr = oldEventId.toString();
-    const newEventIdStr = newEventId.toString();
 
     // Helper function to normalize event ID for comparison
     const normalizeEventIdForComparison = (id) => {
@@ -1215,7 +1235,77 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       return seatEventId === oldEventIdStr;
     });
     
-    // Remove old seats and upgrade offers for the old event
+    // Calculate budget being released from old event seats
+    // This budget will be available for seat selection in the new event
+    const oldEventBudget = oldSeatsBeforeRemoval.reduce((sum, seat) => {
+      return sum + (seat.event_price || seat.base_price || 0);
+    }, 0);
+    
+    console.log('[COE_SERVICE] ===== OLD EVENT SEATS ANALYSIS =====');
+    console.log('[COE_SERVICE] Old event seats being removed:', {
+      oldEventId: oldEventIdStr,
+      oldSeatsCount: oldSeatsBeforeRemoval.length,
+      oldSeats: oldSeatsBeforeRemoval.map(s => ({
+        seat_code: s.seat_code,
+        event_price: s.event_price || 0,
+        base_price: s.base_price || 0,
+        price_used: s.event_price || s.base_price || 0
+      })),
+      oldEventBudget
+    });
+    
+    // Release old seats back to inventory before removing them
+    if (oldSeatsBeforeRemoval.length > 0) {
+      try {
+        // Use the same bulkWrite pattern as updateSelectedSeatsStatus, but to release seats
+        const releaseOps = oldSeatsBeforeRemoval.map(seatData => ({
+          updateOne: {
+            filter: { '_id': seatData.event_id, 'seats._id': seatData.seat_id },
+            update: {
+              $set: {
+                'seats.$.status': 'available',
+                'seats.$.booking_reference': undefined,
+                'seats.$.booked_at': undefined,
+                'seats.$.booked_by': undefined
+              }
+            }
+          }
+        }));
+
+        if (releaseOps.length > 0) {
+          await Event.bulkWrite(releaseOps);
+          console.log('[COE_SERVICE] Released', oldSeatsBeforeRemoval.length, 'seats from old event back to inventory');
+        }
+      } catch (releaseError) {
+        // Log but don't fail - seats are still removed from COE
+        console.error('[COE_SERVICE] Error releasing old seats:', releaseError);
+      }
+    }
+    
+    // Remove old seats and upgrade offers for the old event from database
+    // Use MongoDB $pull to actually remove them from the database
+    try {
+      // Convert oldEventIdStr to ObjectId for MongoDB query
+      const oldEventObjectIdForPull = mongoose.Types.ObjectId.isValid(oldEventIdStr)
+        ? new mongoose.Types.ObjectId(oldEventIdStr)
+        : oldEventIdStr;
+      
+      await coesCollection.updateOne(
+        { _id: coeObjectId },
+        {
+          $pull: {
+            selected_seats: { event_id: oldEventObjectIdForPull },
+            seat_upgrade_offers: { event_id: oldEventObjectIdForPull }
+          }
+        }
+      );
+      console.log('[COE_SERVICE] Removed old seats and upgrade offers from database for event:', oldEventIdStr);
+    } catch (pullError) {
+      console.error('[COE_SERVICE] Error removing old seats/offers from database:', pullError);
+      // Continue - seats removal is not critical if it fails
+    }
+    
+    // Also update in-memory object for consistency (used in calculations later)
     coe.selected_seats = (coe.selected_seats || []).filter(seat => {
       const seatEventId = seat.event_id?.toString() || seat.event_id;
       return seatEventId !== oldEventIdStr;
@@ -1302,6 +1392,24 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       has_id: !!newEventEntryForDB._id
     });
     
+    console.log('[COE_SERVICE] ===== REPLACING EVENT IN EVENTS ARRAY =====');
+    console.log('[COE_SERVICE] Replacement details:', {
+      oldEventIndex,
+      oldEventId: oldEventIdStr,
+      newEventId: newEventIdStr,
+      newEventEntryForDB: {
+        event_id: newEventEntryForDB.event_id?.toString() || newEventEntryForDB.event_id,
+        sequence: newEventEntryForDB.sequence,
+        base_price: newEventEntryForDB.base_price,
+        total_price: newEventEntryForDB.total_price
+      },
+      oldEventObjectId: oldEventObjectId.toString(),
+      eventsArrayBeforeReplace: (coe.events || []).map(e => ({
+        event_id: e.event_id?.toString() || e.event_id,
+        sequence: e.sequence
+      }))
+    });
+    
     if (oldEventIndex >= 0) {
       // Use Mongoose update with runValidators: false to bypass validation but keep reference handling
       // This ensures Mongoose recognizes event_id as a reference for population
@@ -1320,7 +1428,9 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         );
         console.log('[COE_SERVICE] Used Mongoose $set with positional operator to replace event:', {
           matched: updateResult.matchedCount,
-          modified: updateResult.modifiedCount
+          modified: updateResult.modifiedCount,
+          oldEventId: oldEventIdStr,
+          newEventId: newEventIdStr
         });
         
         if (updateResult.matchedCount === 0) {
@@ -1382,66 +1492,131 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
     // Verify the replacement was saved and event_id format
     // First check using native MongoDB to see raw data
     const verifyCoeRaw = await coesCollection.findOne({ _id: coeObjectId });
+    console.log('[COE_SERVICE] ===== VERIFICATION AFTER EVENT REPLACEMENT =====');
     if (verifyCoeRaw && verifyCoeRaw.events) {
+      // Verify OLD event is NOT in the array (this is critical for alternatives to work)
+      const oldEventStillPresent = verifyCoeRaw.events.find(e => {
+        const eId = e.event_id?.toString() || e.event_id;
+        return eId === oldEventIdStr;
+      });
+      
+      // Verify NEW event IS in the array
       const replacedEventRaw = verifyCoeRaw.events.find(e => {
         const eId = e.event_id?.toString() || e.event_id;
         return eId === finalEventObjectId.toString();
       });
+      
       console.log('[COE_SERVICE] Raw DB check after replacement:', {
-        found: !!replacedEventRaw,
+        oldEventId: oldEventIdStr,
+        newEventId: newEventIdStr,
+        oldEventRemoved: !oldEventStillPresent,
+        oldEventStillPresent: !!oldEventStillPresent,
+        newEventFound: !!replacedEventRaw,
+        allEventIdsInArray: verifyCoeRaw.events.map(e => e.event_id?.toString() || e.event_id),
+        eventsCount: verifyCoeRaw.events.length,
         eventIdType: replacedEventRaw ? typeof replacedEventRaw.event_id : 'N/A',
         eventIdConstructor: replacedEventRaw ? replacedEventRaw.event_id?.constructor?.name : 'N/A',
-        eventIdValue: replacedEventRaw ? replacedEventRaw.event_id?.toString() : 'N/A'
+        eventIdValue: replacedEventRaw ? replacedEventRaw.event_id?.toString() : 'N/A',
+        eventsArray: verifyCoeRaw.events.map(e => ({
+          event_id: e.event_id?.toString() || e.event_id,
+          sequence: e.sequence,
+          base_price: e.base_price,
+          total_price: e.total_price
+        }))
       });
+      
+      // CRITICAL: If old event is still in the array, explicitly remove it
+      // This ensures event A will be available as an alternative after replacement
+      if (oldEventStillPresent) {
+        console.warn('[COE_SERVICE] ⚠️ Old event still present after $set replacement! Removing it explicitly...');
+        const oldEventObjectIdForPull = mongoose.Types.ObjectId.isValid(oldEventIdStr)
+          ? new mongoose.Types.ObjectId(oldEventIdStr)
+          : oldEventIdStr;
+        
+        const pullResult = await coesCollection.updateOne(
+          { _id: coeObjectId },
+          {
+            $pull: {
+              events: { event_id: oldEventObjectIdForPull }
+            }
+          }
+        );
+        console.log('[COE_SERVICE] ===== EXPLICIT OLD EVENT REMOVAL =====');
+        console.log('[COE_SERVICE] Explicitly removed old event from events array:', {
+          matched: pullResult.matchedCount,
+          modified: pullResult.modifiedCount,
+          oldEventId: oldEventIdStr,
+          oldEventIdType: typeof oldEventIdStr,
+          eventsArrayBeforePull: verifyCoeRaw.events.map(e => e.event_id?.toString() || e.event_id)
+        });
+        
+        // Verify it's actually gone
+        const verifyAfterPull = await coesCollection.findOne({ _id: coeObjectId });
+        const stillPresent = verifyAfterPull?.events?.find(e => {
+          const eId = e.event_id?.toString() || e.event_id;
+          return eId === oldEventIdStr;
+        });
+        console.log('[COE_SERVICE] Verification after explicit $pull:', {
+          oldEventStillPresent: !!stillPresent,
+          eventsArrayAfterPull: verifyAfterPull?.events?.map(e => e.event_id?.toString() || e.event_id) || []
+        });
+      }
     }
     
-    // Now check using Mongoose
-    const verifyCoe = await COE.findById(coeId);
-    const hasNewEventAfterSave = verifyCoe.events?.some(event => {
+    // Now check using Mongoose - reload fresh to verify
+    const verifyCoe = await coesCollection.findOne({ _id: coeObjectId });
+    const hasNewEventAfterSave = verifyCoe?.events?.some(event => {
       const eventId = normalizeEventIdForComparison(event.event_id);
       return eventId === normalizedNewEventId;
     });
-    const hasOldEventAfterSave = verifyCoe.events?.some(event => {
+    const hasOldEventAfterSave = verifyCoe?.events?.some(event => {
       const eventId = normalizeEventIdForComparison(event.event_id);
       return eventId === normalizedOldEventId;
     });
-    console.log('[COE_SERVICE] Verification after save:', {
+    console.log('[COE_SERVICE] Verification after replacement (raw DB):', {
       hasNewEvent: hasNewEventAfterSave,
       hasOldEvent: hasOldEventAfterSave,
-      eventsCount: verifyCoe.events?.length || 0,
-      eventIds: verifyCoe.events?.map(e => e.event_id?.toString() || e.event_id) || []
+      eventsCount: verifyCoe?.events?.length || 0,
+      eventIds: verifyCoe?.events?.map(e => e.event_id?.toString() || e.event_id) || []
     });
 
     // If the replacement didn't work, use direct MongoDB update
     if (!hasNewEventAfterSave || hasOldEventAfterSave) {
       console.log('[COE_SERVICE] Mongoose save() did not persist the replacement, using direct MongoDB update');
       
-      // First, remove the old event if it still exists
+      // First, remove the old event if it still exists (CRITICAL: use native MongoDB for reliability)
       if (hasOldEventAfterSave) {
-        // Use mongoose.Types.ObjectId for proper comparison (mongoose already declared at top)
-        const oldEventObjectId = mongoose.Types.ObjectId.isValid(oldEventId) 
-          ? new mongoose.Types.ObjectId(oldEventId) 
-          : oldEventId;
+        const oldEventObjectIdForPull = mongoose.Types.ObjectId.isValid(oldEventIdStr)
+          ? new mongoose.Types.ObjectId(oldEventIdStr)
+          : oldEventIdStr;
         
-        await COE.findByIdAndUpdate(coeId, {
-          $pull: {
-            events: {
-              event_id: oldEventObjectId
+        const pullResult = await coesCollection.updateOne(
+          { _id: coeObjectId },
+          {
+            $pull: {
+              events: { event_id: oldEventObjectIdForPull }
             }
           }
-        });
-        console.log('[COE_SERVICE] Removed old event using MongoDB $pull:', {
-          oldEventId: oldEventId.toString(),
-          oldEventObjectId: oldEventObjectId.toString()
+        );
+        console.log('[COE_SERVICE] Removed old event using native MongoDB $pull:', {
+          oldEventId: oldEventIdStr,
+          matched: pullResult.matchedCount,
+          modified: pullResult.modifiedCount
         });
       }
       
-      // Then add the new event
+      // Then add the new event if it's not there (use native MongoDB for reliability)
       if (!hasNewEventAfterSave) {
-        await COE.findByIdAndUpdate(coeId, {
-          $push: { events: newEventEntry }
+        const pushResult = await coesCollection.updateOne(
+          { _id: coeObjectId },
+          {
+            $push: { events: newEventEntryForDB }
+          }
+        );
+        console.log('[COE_SERVICE] Added new event using native MongoDB $push:', {
+          matched: pushResult.matchedCount,
+          modified: pushResult.modifiedCount
         });
-        console.log('[COE_SERVICE] Added new event using MongoDB $push');
       }
       
       // Verify again after MongoDB update
@@ -1518,10 +1693,240 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
           status: 'selected'
         }));
       }
+    } else {
+      // Fallback: Try to use COE preferences if available (for bot-created COEs)
+      // This allows auto-selection when mobile app doesn't send preferences
+      try {
+        // CRITICAL: Reload COE from database AFTER removing old seats to get current state
+        // This ensures we calculate the budget based on the actual current subtotal
+        const coeForBudgetCalc = await coesCollection.findOne({ _id: coeObjectId });
+        
+        if (!coeForBudgetCalc) {
+          throw new Error('COE not found for budget calculation');
+        }
+        
+        // Calculate current subtotal from actual seats in database (excluding old event seats)
+        const currentSeatsForBudget = (coeForBudgetCalc.selected_seats || []).filter(seat => {
+          const seatEventId = seat.event_id?.toString() || seat.event_id;
+          return seatEventId !== oldEventIdStr; // Exclude old event seats
+        });
+        const currentSubtotalFromSeats = currentSeatsForBudget.reduce((sum, s) => {
+          return sum + (s.event_price || s.base_price || 0);
+        }, 0);
+        
+        console.log('[COE_SERVICE] ===== BUDGET CALCULATION DETAILED =====');
+        console.log('[COE_SERVICE] Budget calc - DB state after removing old seats:', {
+          totalSeatsInDB: coeForBudgetCalc.selected_seats?.length || 0,
+          seatsAfterFilteringOld: currentSeatsForBudget.length,
+          seatsByEvent: currentSeatsForBudget.reduce((acc, s) => {
+            const eid = s.event_id?.toString() || s.event_id;
+            if (!acc[eid]) acc[eid] = { count: 0, total: 0 };
+            acc[eid].count++;
+            acc[eid].total += (s.event_price || s.base_price || 0);
+            return acc;
+          }, {}),
+          currentSubtotalFromSeats,
+          storedSubtotal: coeForBudgetCalc.subtotal || 0,
+          oldEventBudget
+        });
+        
+        let preferencesToUse = null;
+        let availableBudget = null;
+        
+        // Try to get preferences from the COE (if stored)
+        const coeWithPrefs = coeForBudgetCalc.preferences ? {
+          preferences: coeForBudgetCalc.preferences
+        } : await COE.findById(coeId).select('preferences').lean();
+        
+        if (coeWithPrefs && coeWithPrefs.preferences) {
+          // Extract party_size and original budget from COE preferences
+          const partySize = coeWithPrefs.preferences.party_size || 2;
+          const originalBudget = coeWithPrefs.preferences.budget?.max || 
+                                 coeWithPrefs.preferences.budget_range?.max || 
+                                 null;
+          
+          // Calculate available budget for new event
+          // Available = Original budget - Current subtotal (calculated from seats) + Old event budget
+          // This ensures we use the actual current subtotal, not a stale stored value
+          if (originalBudget !== null && oldEventBudget !== undefined) {
+            availableBudget = originalBudget - currentSubtotalFromSeats + oldEventBudget;
+            console.log('[COE_SERVICE] Budget calculation formula:', {
+              formula: 'availableBudget = originalBudget - currentSubtotalFromSeats + oldEventBudget',
+              originalBudget,
+              currentSubtotalFromSeats,
+              oldEventBudget,
+              calculation: `${originalBudget} - ${currentSubtotalFromSeats} + ${oldEventBudget}`,
+              availableBudget,
+              storedSubtotal: coeForBudgetCalc.subtotal || 0,
+              difference: (coeForBudgetCalc.subtotal || 0) - currentSubtotalFromSeats
+            });
+          } else if (oldEventBudget > 0) {
+            // If no original budget, use at least the old event budget (minimum)
+            availableBudget = oldEventBudget;
+            console.log('[COE_SERVICE] No original budget found, using old event budget:', availableBudget);
+          }
+          
+          // Build preferences object for seat selection
+          preferencesToUse = {
+            party_size: partySize,
+            budget: availableBudget ? { max: availableBudget } : null,
+            ...coeWithPrefs.preferences
+          };
+          
+          console.log('[COE_SERVICE] Using COE preferences for seat selection:', {
+            partySize,
+            availableBudget,
+            originalBudget: originalBudget || 'not set',
+            hasPreferences: !!coeWithPrefs.preferences
+          });
+        } else {
+          // Default fallback: use old event budget if available, otherwise no limit
+          availableBudget = oldEventBudget > 0 ? oldEventBudget : null;
+          
+          preferencesToUse = {
+            party_size: 2,
+            budget: availableBudget ? { max: availableBudget } : null
+          };
+          
+          console.log('[COE_SERVICE] No COE preferences found, using defaults with released budget:', {
+            partySize: 2,
+            availableBudget
+          });
+        }
+        
+        if (preferencesToUse) {
+          // Use existing seat selection logic
+          const seatResult = await selectSeatsByBudgetAndCapacity(
+            newEvent,
+            preferencesToUse,
+            preferencesToUse.budget?.max || null
+          );
+
+          // Handle both old format (array) and new format (object with seats/diagnostics)
+          const autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
+          
+          if (autoSeats.length > 0) {
+            newSeats = autoSeats.map(seat => ({
+              event_id: newEventId,
+              seat_id: seat.seat_id || seat._id,
+              seat_code: seat.seat_code || seat.code,
+              capacity: seat.capacity,
+              base_price: seat.base_price,
+              event_price: seat.event_price || seat.base_price,
+              available_from: seat.available_from || newEvent.start_datetime || new Date(),
+              available_until: seat.available_until || newEvent.end_datetime || null,
+              status: seat.status || 'selected'
+            }));
+            
+            console.log('[COE_SERVICE] Auto-selected seats:', {
+              seatsCount: newSeats.length,
+              partySize: preferencesToUse.party_size,
+              budget: preferencesToUse.budget?.max,
+              usedCOEPreferences: !!(coeWithPrefs && coeWithPrefs.preferences)
+            });
+          } else {
+            console.warn('[COE_SERVICE] No seats found by selectSeatsByBudgetAndCapacity:', {
+              eventId: newEventId,
+              eventName: newEvent.name,
+              totalSeatsInEvent: newEvent.seats?.length || 0,
+              availableSeatsCount: newEvent.seats?.filter(s => s.status === 'available')?.length || 0,
+              preferences: preferencesToUse,
+              diagnostics: seatResult.diagnostics || null
+            });
+          }
+        }
+      } catch (prefError) {
+        // Don't fail event replacement if preference lookup fails
+        console.error('[COE_SERVICE] Error in seat selection fallback:', prefError);
+      }
     }
 
-    // Add new seats to COE using native MongoDB
+    // CRITICAL FALLBACK: If no seats were selected by any method above, select any available seat
+    // This ensures events always get seats if any are available in inventory, regardless of budget constraints
+    if (newSeats.length === 0 && newEvent.seats && Array.isArray(newEvent.seats)) {
+      const availableSeats = newEvent.seats.filter(s => s.status === 'available');
+      
+      if (availableSeats.length > 0) {
+        // Get party size from COE preferences or default to 2
+        let partySize = 2;
+        try {
+          const coeWithPrefs = await COE.findById(coeId).select('preferences').lean();
+          if (coeWithPrefs?.preferences?.party_size) {
+            partySize = coeWithPrefs.preferences.party_size;
+          }
+        } catch (prefError) {
+          // Use default if preferences can't be loaded
+        }
+        
+        // Select the first available seat(s) that meets capacity requirements
+        let seatsSelected = 0;
+        let totalCapacity = 0;
+        
+        for (const seat of availableSeats) {
+          if (totalCapacity >= partySize) break;
+          
+          const seatCapacity = seat.capacity || 1;
+          newSeats.push({
+            event_id: newEventId,
+            seat_id: seat._id,
+            seat_code: seat.code,
+            capacity: seatCapacity,
+            base_price: seat.base_price || 0,
+            event_price: seat.event_price || seat.base_price || 0,
+            available_from: newEvent.start_datetime || new Date(),
+            available_until: newEvent.end_datetime || null,
+            status: 'selected'
+          });
+          
+          seatsSelected++;
+          totalCapacity += seatCapacity;
+        }
+        
+        console.log('[COE_SERVICE] ✅ FALLBACK: Selected available seats without budget constraints:', {
+          eventId: newEventId,
+          eventName: newEvent.name,
+          seatsSelected,
+          totalCapacity,
+          partySize,
+          note: 'Used fallback selection because budget-based selection returned no seats'
+        });
+      } else {
+        console.warn('[COE_SERVICE] ⚠️ No available seats found for fallback selection:', {
+          eventId: newEventId,
+          eventName: newEvent.name,
+          totalSeatsInEvent: newEvent.seats?.length || 0,
+          note: 'Event will be added to COE without seats'
+        });
+      }
+    }
+
+    // CRITICAL FIX: Remove any existing seats for the new event BEFORE adding new ones
+    // This prevents accumulation of costs when replacing events (e.g., A->B->A scenario)
+    // If event A was previously in COE and we're replacing back to A, old A seats must be removed first
     if (newSeats.length > 0) {
+      const newEventObjectIdForPull = mongoose.Types.ObjectId.isValid(newEventIdStr)
+        ? new mongoose.Types.ObjectId(newEventIdStr)
+        : newEventIdStr;
+      
+      // Remove any existing seats for the new event to prevent accumulation
+      const removeNewEventSeatsResult = await coesCollection.updateOne(
+        { _id: coeObjectId },
+        {
+          $pull: {
+            selected_seats: { event_id: newEventObjectIdForPull }
+          }
+        }
+      );
+      
+      if (removeNewEventSeatsResult.modifiedCount > 0) {
+        console.log('[COE_SERVICE] Removed existing seats for new event before adding new seats:', {
+          newEventId: newEventIdStr,
+          removedCount: removeNewEventSeatsResult.modifiedCount,
+          note: 'This prevents cost accumulation when replacing back to a previously used event'
+        });
+      }
+      
+      // Now add new seats
       await coesCollection.updateOne(
         { _id: coeObjectId },
         {
@@ -1531,18 +1936,220 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         }
       );
       console.log('[COE_SERVICE] Added new seats using native MongoDB');
+      console.log('[COE_SERVICE] New seats added:', {
+        count: newSeats.length,
+        seats: newSeats.map(s => ({
+          event_id: s.event_id?.toString() || s.event_id,
+          seat_code: s.seat_code,
+          event_price: s.event_price || 0,
+          base_price: s.base_price || 0,
+          price_used: s.event_price || s.base_price || 0
+        })),
+        totalPrice: newSeats.reduce((sum, s) => sum + (s.event_price || s.base_price || 0), 0)
+      });
+      
+      // Hold new seats using existing updateSelectedSeatsStatus function
+      try {
+        await updateSelectedSeatsStatus(newSeats, coeId, 'held');
+        console.log('[COE_SERVICE] Held', newSeats.length, 'new seats for replaced event');
+      } catch (holdError) {
+        console.error('[COE_SERVICE] Error holding new seats:', holdError);
+        // Don't fail the replacement, but log the error
+      }
     }
 
-    // Recalculate totals using native MongoDB
-    // Filter out seats from the old event (they should already be removed, but double-check)
-    // oldEventIdStr is already declared at the top of the function
-    const currentSeats = (coeAfterUpdate.selected_seats || []).filter(seat => {
-      const seatEventId = seat.event_id?.toString() || seat.event_id;
-      return seatEventId !== oldEventIdStr;
+    // CRITICAL: Reload COE from database after all MongoDB operations (especially after multiple replacements)
+    // This ensures we have the latest state with all seats properly removed/added
+    let coeForCostCalculation = await coesCollection.findOne({ _id: coeObjectId });
+    
+    if (!coeForCostCalculation) {
+      throw new Error('COE not found after seat updates');
+    }
+
+    // CRITICAL FIX: Calculate costs based on seats that match events currently in the COE's events array
+    // This ensures correct calculation after multiple replacements
+    // Use events array as source of truth, not just filtering out the current old event
+    
+    // Extract valid event IDs from the events array (source of truth)
+    const validEventIds = new Set();
+    (coeForCostCalculation.events || []).forEach(event => {
+      const eventIdStr = normalizeEventIdForComparison(event.event_id);
+      if (eventIdStr) {
+        validEventIds.add(eventIdStr);
+      }
     });
-    const allSeats = [...currentSeats, ...newSeats];
-    const newSubtotal = allSeats.reduce((sum, s) => sum + (s.event_price || 0), 0);
-    const newTotal = newSubtotal + (coeAfterUpdate.taxes || 0) + (coeAfterUpdate.fees || 0);
+
+    console.log('[COE_SERVICE] ===== FINAL COST CALCULATION =====');
+    console.log('[COE_SERVICE] Valid event IDs from events array:', {
+      validEventIds: Array.from(validEventIds),
+      eventsCount: coeForCostCalculation.events?.length || 0,
+      allEventIds: (coeForCostCalculation.events || []).map(e => ({
+        event_id: e.event_id?.toString() || e.event_id,
+        sequence: e.sequence
+      })),
+      totalSeatsInDBBeforeCleanup: coeForCostCalculation.selected_seats?.length || 0,
+      allSeatEventIdsBeforeCleanup: [...new Set((coeForCostCalculation.selected_seats || []).map(s => normalizeEventIdForComparison(s.event_id)))]
+    });
+
+    // CRITICAL CLEANUP: Remove ALL orphaned seats from database BEFORE calculating costs
+    // Orphaned seats = seats whose event_id does NOT exist in the COE's events array
+    // This MUST happen before cost calculation to prevent accumulation
+    // Use the most direct approach: filter seats array in memory, then replace the entire array
+    const seatsBeforeCleanup = coeForCostCalculation.selected_seats || [];
+    const validSeats = seatsBeforeCleanup.filter(seat => {
+      const seatEventId = normalizeEventIdForComparison(seat.event_id);
+      const isValid = validEventIds.has(seatEventId);
+      if (!isValid) {
+        console.warn('[COE_SERVICE] Found orphaned seat (event not in COE):', {
+          seat_code: seat.seat_code,
+          seatEventId,
+          validEventIds: Array.from(validEventIds),
+          price: seat.event_price || seat.base_price || 0
+        });
+      }
+      return isValid;
+    });
+
+    if (validSeats.length !== seatsBeforeCleanup.length) {
+      const seatsRemoved = seatsBeforeCleanup.length - validSeats.length;
+      console.log('[COE_SERVICE] 🧹 CLEANUP: Removing orphaned seats BEFORE cost calculation:', {
+        totalSeatsBefore: seatsBeforeCleanup.length,
+        validSeatsAfter: validSeats.length,
+        seatsToRemove: seatsRemoved,
+        orphanedSeats: seatsBeforeCleanup.filter(s => {
+          const eid = normalizeEventIdForComparison(s.event_id);
+          return !validEventIds.has(eid);
+        }).map(s => ({
+          event_id: s.event_id?.toString() || s.event_id,
+          seat_code: s.seat_code,
+          price: s.event_price || s.base_price || 0
+        }))
+      });
+
+      // CRITICAL: Replace the entire selected_seats array with only valid seats
+      // This is the most reliable way to ensure orphaned seats are removed regardless of ID format issues
+      const replaceResult = await coesCollection.updateOne(
+        { _id: coeObjectId },
+        {
+          $set: {
+            selected_seats: validSeats
+          }
+        }
+      );
+
+      console.log('[COE_SERVICE] ✅ Cleanup result (direct array replacement):', {
+        matched: replaceResult.matchedCount,
+        modified: replaceResult.modifiedCount,
+        seatsBefore: seatsBeforeCleanup.length,
+        seatsAfter: validSeats.length,
+        removed: seatsRemoved
+      });
+
+      // CRITICAL: Reload COE after cleanup to get absolutely clean state for cost calculation
+      coeForCostCalculation = await coesCollection.findOne({ _id: coeObjectId });
+      if (!coeForCostCalculation) {
+        throw new Error('COE not found after cleanup');
+      }
+      console.log('[COE_SERVICE] ✅ Reloaded COE after cleanup:', {
+        seatsBeforeCleanup: seatsBeforeCleanup.length,
+        seatsAfterCleanup: coeForCostCalculation.selected_seats?.length || 0,
+        removed: seatsBeforeCleanup.length - (coeForCostCalculation.selected_seats?.length || 0),
+        expectedRemoved: seatsRemoved
+      });
+    } else {
+      console.log('[COE_SERVICE] ✅ No orphaned seats found - all seats match current events');
+    }
+    
+    // Now calculate costs from the clean seat data
+    // Filter seats to only include those matching events currently in the COE
+    // This is a safety check - seats should already be clean from cleanup above
+    const allSeats = (coeForCostCalculation.selected_seats || []).filter(seat => {
+      const seatEventId = normalizeEventIdForComparison(seat.event_id);
+      const isValid = validEventIds.has(seatEventId);
+      
+      if (!isValid) {
+        console.warn('[COE_SERVICE] ⚠️ WARNING: Found invalid seat after cleanup (this should not happen):', {
+          seat_code: seat.seat_code,
+          seatEventId,
+          seat_price: seat.event_price || seat.base_price || 0,
+          validEventIds: Array.from(validEventIds)
+        });
+      }
+      
+      return isValid;
+    });
+    
+    console.log('[COE_SERVICE] Cost calc - DB state after all operations:', {
+      totalSeatsInDB: coeForCostCalculation.selected_seats?.length || 0,
+      allSeatsInDB: (coeForCostCalculation.selected_seats || []).map(s => ({
+        event_id: s.event_id?.toString() || s.event_id,
+        seat_code: s.seat_code,
+        event_price: s.event_price || 0,
+        base_price: s.base_price || 0,
+        price_used: s.event_price || s.base_price || 0
+      })),
+      seatsAfterFilteringByEventsArray: allSeats.length,
+      seatsByEvent: allSeats.reduce((acc, s) => {
+        const eid = s.event_id?.toString() || s.event_id;
+        if (!acc[eid]) acc[eid] = { count: 0, total: 0, seats: [] };
+        acc[eid].count++;
+        const price = s.event_price || s.base_price || 0;
+        acc[eid].total += price;
+        acc[eid].seats.push({ seat_code: s.seat_code, price });
+        return acc;
+      }, {}),
+      newSeatsAdded: newSeats.length,
+      oldEventId: oldEventIdStr,
+      oldEventBudget,
+      note: 'Cost calculation based on events array. Seats from replaced events (not in events array) are excluded.'
+    });
+    
+    // CRITICAL: Calculate subtotal ONLY from filtered seats (seats matching current events)
+    // This ensures we never accumulate costs from replaced events
+    const newSubtotal = allSeats.reduce((sum, s) => {
+      const price = s.event_price || s.base_price || 0;
+      console.log('[COE_SERVICE] Adding to subtotal:', {
+        seat_code: s.seat_code,
+        event_id: s.event_id?.toString() || s.event_id,
+        price,
+        runningSum: sum + price
+      });
+      return sum + price;
+    }, 0);
+    const newTotal = newSubtotal + (coeForCostCalculation.taxes || 0) + (coeForCostCalculation.fees || 0);
+    
+    console.log('[COE_SERVICE] ===== FINAL COST CALCULATION SUMMARY =====');
+    console.log('[COE_SERVICE] Final totals:', {
+      newSubtotal,
+      newTotal,
+      previousSubtotal: coeForCostCalculation.subtotal || 0,
+      previousTotal: coeForCostCalculation.total || 0,
+      taxes: coeForCostCalculation.taxes || 0,
+      fees: coeForCostCalculation.fees || 0,
+      calculationBreakdown: {
+        allSeatsCount: allSeats.length,
+        allSeatsDetails: allSeats.map(s => ({
+          event_id: s.event_id?.toString() || s.event_id,
+          seat_code: s.seat_code,
+          price: s.event_price || s.base_price || 0
+        })),
+        seatPrices: allSeats.map(s => s.event_price || s.base_price || 0),
+        calculatedSubtotal: newSubtotal,
+        note: 'CRITICAL: This calculation ONLY includes seats from events currently in the COE events array. Seats from replaced events are excluded.'
+      }
+    });
+    
+    // Verification: Ensure we're not including any seats from replaced events
+    const allSeatEventIds = [...new Set(allSeats.map(s => normalizeEventIdForComparison(s.event_id)))];
+    const invalidSeatEventIds = allSeatEventIds.filter(eid => !validEventIds.has(eid));
+    if (invalidSeatEventIds.length > 0) {
+      console.error('[COE_SERVICE] ⚠️ ERROR: Found seats from invalid events in calculation!', {
+        invalidEventIds: invalidSeatEventIds,
+        validEventIds: Array.from(validEventIds)
+      });
+    } else {
+      console.log('[COE_SERVICE] ✅ Verification passed: All seats in calculation match valid events');
+    }
     
     // Also recalculate the event's base_price and total_price based on selected seats for this event
     const eventSeatsTotal = allSeats
@@ -1550,7 +2157,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         const seatEventId = seat.event_id?.toString() || seat.event_id;
         return seatEventId === newEventId.toString();
       })
-      .reduce((sum, s) => sum + (s.event_price || 0), 0);
+      .reduce((sum, s) => sum + (s.event_price || s.base_price || 0), 0);
     
     // Update the event's pricing in the events array
     await coesCollection.updateOne(
@@ -1567,7 +2174,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
     );
     
     // Update COE totals
-    await coesCollection.updateOne(
+    const updateResult = await coesCollection.updateOne(
       { _id: coeObjectId },
       {
         $set: {
@@ -1576,12 +2183,33 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         }
       }
     );
+    
     console.log('[COE_SERVICE] Updated totals and event pricing using native MongoDB:', {
+      updateResult: {
+        matched: updateResult.matchedCount,
+        modified: updateResult.modifiedCount
+      },
       newSubtotal,
       newTotal,
       eventSeatsTotal,
       seatsCount: allSeats.length
     });
+
+    // Verify the update was successful
+    const verifyTotals = await coesCollection.findOne({ _id: coeObjectId });
+    if (verifyTotals) {
+      console.log('[COE_SERVICE] Verification of saved totals:', {
+        savedSubtotal: verifyTotals.subtotal || 0,
+        savedTotal: verifyTotals.total || 0,
+        expectedSubtotal: newSubtotal,
+        expectedTotal: newTotal,
+        match: verifyTotals.subtotal === newSubtotal && verifyTotals.total === newTotal
+      });
+      
+      if (verifyTotals.subtotal !== newSubtotal || verifyTotals.total !== newTotal) {
+        console.error('[COE_SERVICE] ⚠️ WARNING: Saved totals do not match calculated totals!');
+      }
+    }
 
     // Update event coe_count (decrement old, increment new)
     await Event.findByIdAndUpdate(oldEventId, {
@@ -1591,7 +2219,30 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       $inc: { coe_count: 1 }
     });
 
+    console.log(`[COE_SERVICE] ===== REPLACE EVENT COMPLETED =====`);
     console.log(`[COE_SERVICE] Replaced event ${oldEventId} with ${newEventId} in COE ${coeId}. Added ${newSeats.length} seats.`);
+    
+    // Final verification - reload COE to show final state
+    const finalCoeCheck = await coesCollection.findOne({ _id: coeObjectId });
+    console.log('[COE_SERVICE] ===== FINAL COE STATE VERIFICATION =====');
+    console.log('[COE_SERVICE] Final COE state after replacement:', {
+      eventsCount: finalCoeCheck?.events?.length || 0,
+      eventIds: (finalCoeCheck?.events || []).map(e => e.event_id?.toString() || e.event_id),
+      seatsCount: finalCoeCheck?.selected_seats?.length || 0,
+      seatEventIds: [...new Set((finalCoeCheck?.selected_seats || []).map(s => s.event_id?.toString() || s.event_id))],
+      subtotal: finalCoeCheck?.subtotal || 0,
+      total: finalCoeCheck?.total || 0,
+      oldEventId: oldEventIdStr,
+      newEventId: newEventIdStr,
+      oldEventInEvents: (finalCoeCheck?.events || []).some(e => {
+        const eid = e.event_id?.toString() || e.event_id;
+        return eid === oldEventIdStr;
+      }),
+      newEventInEvents: (finalCoeCheck?.events || []).some(e => {
+        const eid = e.event_id?.toString() || e.event_id;
+        return eid === newEventIdStr;
+      })
+    });
     
     // Verify the event was stored correctly by checking the database directly
     const verifyCoeDoc = await coesCollection.findOne({ _id: coeObjectId });
@@ -1764,36 +2415,79 @@ async function findAlternativeEvents(coeId, eventId, filters = {}) {
     });
 
     // Get COE to exclude events already in COE
-    const coe = await COE.findById(coeId);
+    // CRITICAL: Use native MongoDB to get absolute latest data and ensure replaced events are not excluded
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+    const coesCollection = db.collection('coes');
+    const coeObjectId = mongoose.Types.ObjectId.isValid(coeId) 
+      ? new mongoose.Types.ObjectId(coeId) 
+      : coeId;
+    
+    const coe = await coesCollection.findOne({ _id: coeObjectId });
     if (!coe) {
       throw new Error('COE not found');
     }
 
+    // Helper function to normalize event ID for consistent comparison
+    // Matches the normalization used in replaceEventInCOE
+    const normalizeEventId = (id) => {
+      if (!id) return null;
+      // Handle ObjectId, string, or object with _id
+      if (id.toString && typeof id.toString === 'function') {
+        return id.toString();
+      }
+      if (id._id && id._id.toString) {
+        return id._id.toString();
+      }
+      return String(id);
+    };
+
     const existingEventIds = new Set();
     
-    // Exclude events from selected_seats
-    (coe.selected_seats || []).forEach(seat => {
-      const eventIdStr = seat.event_id?.toString() || seat.event_id;
-      if (eventIdStr) {
-        existingEventIds.add(eventIdStr);
-      }
-    });
-    
-    // Also exclude events from coe.events array
+    // CRITICAL FIX: Only exclude events that are in the events array (source of truth)
+    // Do NOT exclude events based on selected_seats alone, as old seats may not be fully cleaned up
+    // This ensures previously replaced events become available again
+    // Using native MongoDB ensures we get the absolute latest state from the database
     (coe.events || []).forEach(event => {
-      const eventIdStr = event.event_id?.toString() || event.event_id;
+      const eventIdStr = normalizeEventId(event.event_id);
       if (eventIdStr) {
         existingEventIds.add(eventIdStr);
       }
     });
 
-    console.log('[COE_SERVICE] Existing event IDs in COE (from selected_seats and events):', Array.from(existingEventIds));
+    // Normalize current event ID and add to exclusion set (we're replacing this event)
+    const normalizedCurrentEventId = normalizeEventId(eventId);
+    if (normalizedCurrentEventId) {
+      existingEventIds.add(normalizedCurrentEventId);
+    }
+
+    console.log('[COE_SERVICE] ===== FIND ALTERNATIVE EVENTS - EXCLUSION LOGIC =====');
+    console.log('[COE_SERVICE] COE state when finding alternatives:', {
+      coeId,
+      currentEventId: normalizedCurrentEventId,
+      eventsInEventsArray: (coe.events || []).map(e => ({
+        event_id: e.event_id?.toString() || e.event_id,
+        event_id_type: typeof e.event_id,
+        event_id_constructor: e.event_id?.constructor?.name
+      })),
+      // Log selected_seats for debugging, but note we're NOT using it for exclusions
+      eventsInSeats: [...new Set((coe.selected_seats || []).map(s => ({
+        event_id: s.event_id?.toString() || s.event_id,
+        event_id_type: typeof s.event_id,
+        seat_code: s.seat_code
+      })))],
+      existingEventIds: Array.from(existingEventIds),
+      totalExcluded: existingEventIds.size,
+      note: 'EXCLUSION BASED ON EVENTS ARRAY ONLY. Previously replaced events (not in events array) will be available as alternatives, even if old seats still exist in selected_seats.',
+      rawEventsArray: coe.events?.length || 0,
+      rawSeatsArray: coe.selected_seats?.length || 0
+    });
 
     // Build query
     // Universal restrictions: active status, not fully booked, exclude current event and events already in COE
     const query = {
       status: 'active',
-      _id: { $ne: eventId, $nin: Array.from(existingEventIds) },
+      _id: { $nin: Array.from(existingEventIds) },
       // Universal restriction: exclude fully booked events
       total_available: { $gt: 0 }
     };
@@ -1862,15 +2556,23 @@ async function findAlternativeEvents(coeId, eventId, filters = {}) {
       .limit(limit);
     
     console.log('[COE_SERVICE] findAlternativeEvents - Admin mode:', isAdmin, 'Limit:', limit);
+    console.log('[COE_SERVICE] Final exclusion list:', {
+      excludedEventIds: Array.from(existingEventIds),
+      currentEventId: normalizedCurrentEventId,
+      eventsInArray: (coe.events || []).map(e => e.event_id?.toString() || e.event_id),
+      seatsEventIds: [...new Set((coe.selected_seats || []).map(s => s.event_id?.toString() || s.event_id))],
+      note: 'Events in this list will be EXCLUDED from alternatives. Exclusion based on events array only. Previously replaced events (not in events array) should NOT be in this list and will be available as alternatives.'
+    });
 
     console.log('[COE_SERVICE] Raw alternatives found:', alternatives.length);
-    console.log('[COE_SERVICE] Alternative events:', alternatives.map(e => ({
-      _id: e._id,
+    console.log('[COE_SERVICE] Alternative events (before filtering):', alternatives.map(e => ({
+      _id: e._id?.toString() || e._id,
       name: e.name,
       start_datetime: e.start_datetime,
       end_datetime: e.end_datetime,
       location_city: e.location_id?.address?.city,
-      available_seats: (e.seats || []).filter(s => s.status === 'available').length
+      available_seats: (e.seats || []).filter(s => s.status === 'available').length,
+      isExcluded: existingEventIds.has(e._id?.toString() || e._id)
     })));
 
     // Format results and filter to only include events with available seats
@@ -1886,9 +2588,11 @@ async function findAlternativeEvents(coeId, eventId, filters = {}) {
         return {
           _id: event._id,
           name: event.name,
+          description: event.description || null,
           start_datetime: event.start_datetime,
           end_datetime: event.end_datetime,
           location: event.location_id,
+          media: event.media || [],
           available_seats_count: availableSeatsCount,
           total_available: totalAvailable,
           price_range: {

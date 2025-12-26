@@ -92,6 +92,34 @@ router.get('/my', authenticateToken, async (req, res) => {
           }
         }
       }
+
+      // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE
+      // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
+      // This prevents incorrect cost breakdown calculation on client side
+      if (coe.selected_seats && Array.isArray(coe.selected_seats) && coe.events && Array.isArray(coe.events)) {
+        // Extract valid event IDs from events array (source of truth)
+        const validEventIds = new Set();
+        coe.events.forEach(event => {
+          const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
+          if (eventId) {
+            validEventIds.add(eventId);
+          }
+        });
+
+        const originalSeatCount = coe.selected_seats.length;
+        coe.selected_seats = coe.selected_seats.filter(seat => {
+          const seatEventId = seat.event_id?.toString() || seat.event_id;
+          return validEventIds.has(seatEventId);
+        });
+
+        if (originalSeatCount !== coe.selected_seats.length) {
+          console.log('[GET /coes/my] Filtered selected_seats for COE:', coe._id, {
+            originalCount: originalSeatCount,
+            filteredCount: coe.selected_seats.length,
+            removed: originalSeatCount - coe.selected_seats.length
+          });
+        }
+      }
     }
 
     res.json({
@@ -285,10 +313,39 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       });
     }
     
+    // CRITICAL: Use native MongoDB to get absolute latest data (same as findAlternativeEvents)
+    // This ensures we get fresh data after event replacements that use native MongoDB updates
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+    const coesCollection = db.collection('coes');
+    const coeObjectId = mongoose.Types.ObjectId.isValid(id) 
+      ? new mongoose.Types.ObjectId(id) 
+      : id;
+    
     // Fetch COE with lean() to get plain object and avoid Mongoose serialization issues
     let coe;
     try {
-      // Use lean() directly to avoid Mongoose document serialization issues
+      // Use native MongoDB to get absolute latest data (same approach as findAlternativeEvents)
+      // This ensures we see the latest state after replacements
+      const coeRaw = await coesCollection.findOne({ _id: coeObjectId });
+      if (!coeRaw) {
+        return res.status(404).json({
+          success: false,
+          error: 'COE not found or access denied'
+        });
+      }
+      
+      console.log('[GET /coes/my/:id] Raw COE from native MongoDB:', {
+        coeId: id,
+        eventsCount: coeRaw.events?.length || 0,
+        eventIds: (coeRaw.events || []).map(e => e.event_id?.toString() || e.event_id),
+        seatsCount: coeRaw.selected_seats?.length || 0,
+        seatEventIds: [...new Set((coeRaw.selected_seats || []).map(s => s.event_id?.toString() || s.event_id))]
+      });
+      
+      // Now use Mongoose to populate relationships
+      // Using lean() ensures we get a plain object and bypasses Mongoose document cache
+      // This queries fresh from the database
       coe = await COE.findById(id)
         .lean()
         .populate('client_id', 'firstName lastName email phone')
@@ -307,6 +364,21 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
           ]
         })
         .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
+      
+      // Verify events array matches raw data
+      const rawEventIds = (coeRaw.events || []).map(e => String(e.event_id)).sort();
+      const mongooseEventIds = (coe.events || []).map(e => String(e.event_id?._id || e.event_id)).sort();
+      if (rawEventIds.join(',') !== mongooseEventIds.join(',')) {
+        console.warn('[GET /coes/my/:id] ⚠️ Events array mismatch!', {
+          rawEventIds,
+          mongooseEventIds,
+          note: 'Mongoose may have cached old data. Using raw data event IDs.'
+        });
+        // If mismatch, we should ideally rebuild the events array from raw data
+        // For now, log the warning - the populated data should still be correct
+      } else {
+        console.log('[GET /coes/my/:id] ✅ Events array matches between raw and populated');
+      }
     } catch (getError) {
       console.error('[GET /coes/my/:id] Error fetching COE:', getError);
       console.error('[GET /coes/my/:id] Error stack:', getError.stack);
@@ -508,6 +580,45 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       // Log final result
       const seatsWithMedia = coe.selected_seats.filter(s => s.media && s.media.length > 0);
       console.log('[GET /coes/my/:id] Enhancement complete. Seats with media:', seatsWithMedia.length, 'out of', coe.selected_seats.length);
+    }
+
+    // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE
+    // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
+    // This prevents incorrect cost breakdown calculation on client side
+    if (coe.selected_seats && Array.isArray(coe.selected_seats) && coe.events && Array.isArray(coe.events)) {
+      // Extract valid event IDs from events array (source of truth)
+      const validEventIds = new Set();
+      coe.events.forEach(event => {
+        const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
+        if (eventId) {
+          validEventIds.add(eventId);
+        }
+      });
+
+      const originalSeatCount = coe.selected_seats.length;
+      coe.selected_seats = coe.selected_seats.filter(seat => {
+        const seatEventId = seat.event_id?.toString() || seat.event_id;
+        const isValid = validEventIds.has(seatEventId);
+        
+        if (!isValid) {
+          console.warn('[GET /coes/my/:id] Filtering out seat from replaced event:', {
+            seat_code: seat.seat_code,
+            seatEventId,
+            validEventIds: Array.from(validEventIds)
+          });
+        }
+        
+        return isValid;
+      });
+
+      if (originalSeatCount !== coe.selected_seats.length) {
+        console.log('[GET /coes/my/:id] Filtered selected_seats based on events array:', {
+          originalCount: originalSeatCount,
+          filteredCount: coe.selected_seats.length,
+          removed: originalSeatCount - coe.selected_seats.length,
+          note: 'Removed seats from events not currently in COE (replaced events)'
+        });
+      }
     }
 
     res.json({

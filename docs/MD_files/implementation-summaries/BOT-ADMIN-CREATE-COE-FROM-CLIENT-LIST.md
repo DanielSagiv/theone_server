@@ -85,7 +85,9 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
 
 ## 4. Backend Changes
 
-### 4.1 New Bot Tool Handler: `open_create_coe_from_client`
+### 4.1 New Bot Tool Handler: `open_create_coe_for_client`
+
+**Note**: Tool name is `open_create_coe_for_client` (not `open_create_coe_from_client`)
 
 - **Location:** `services/botToolHandlers.js`
 - **Purpose:** Produce the **Create COE form** structured response for a specific client.
@@ -103,9 +105,9 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
 ### 4.2 Bot Tools Wiring
 
 - **File:** `services/botTools.js`
-  - Register new tool key, e.g.:
-    - `'open_create_coe_from_client': { name: 'open_create_coe_from_client', ... }`
-  - Wire to `handleOpenCreateCOEFromClient` in `botToolHandlers`.
+  - Register new tool key:
+    - `'open_create_coe_for_client': { name: 'open_create_coe_for_client', ... }`
+  - Wire to `handleOpenCreateCOEForClient` in `botToolHandlers`.
 
 ### 4.3 Response Formatter
 
@@ -127,7 +129,7 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
 }
 ```
 
-- Ensure `sendBotMessage` preserves `structured_data` when `open_create_coe_from_client` is used (it already does for other types via `structuredDataFromTools`).
+- Ensure `sendBotMessage` preserves `structured_data` when `open_create_coe_for_client` is used (it already does for other types via `structuredDataFromTools`).
 
 ### 4.4 Creating the COE from the Form
 
@@ -167,8 +169,8 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
   - On click:
     - Either:
       - Call `sendBotPrompt()` with a system‑formatted prompt, including client id, e.g.  
-        `"Open COE creation form for client <client_id>"`.
-      - Or better: call a helper `callBotToolFromUI('open_create_coe_from_client', { client_id })` which posts to `/v1/bot/message` with the right tool call format.
+        `"Open the create COE form for client with id <client_id>. Use the open_create_coe_for_client tool with this client_id."`.
+      - Or better: call a helper `callBotToolFromUI('open_create_coe_for_client', { client_id })` which posts to `/v1/bot/message` with the right tool call format.
 
 ### 5.2 Render Create COE Form Card
 
@@ -221,9 +223,9 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 ## 6. Validation, Permissions, and Error Handling
 
 - **Permissions**
-  - `open_create_coe_from_client`:
+  - `open_create_coe_for_client`:
     - Only for `user.role === 'admin'`.
-    - If non‑admin calls it, return `type: 'error'` with a clear message (“Only admins can create COEs for clients.”).
+    - If non‑admin calls it, return `type: 'error'` with a clear message ("Only admins can create COEs for clients.").
   - COE creation itself remains governed by existing `createCOEDraft` checks.
 
 - **Validation**
@@ -235,7 +237,7 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
     - Re‑validate dates and client id in the tool handler / `handleCreateCOEDraft`.
 
 - **Errors**
-  - If `open_create_coe_from_client` fails (client not found, permission error), return `type: 'error'` structured response and render via existing `renderErrorResponse`.
+  - If `open_create_coe_for_client` fails (client not found, permission error), return `type: 'error'` structured response and render via existing `renderErrorResponse`.
   - If COE creation fails (`create_coe_draft` error), the bot already returns an error structured response which is rendered in the bot panel.
 
 ---
@@ -269,7 +271,7 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 2. Ask the bot: `show me clients`.
 3. Verify:
    - No **Create COE** buttons are rendered.
-4. Attempt to trigger `open_create_coe_from_client` (if possible).
+4. Attempt to trigger `open_create_coe_for_client` (if possible).
 5. Verify:
    - Bot returns `type: 'error'` structured response with permission message.
 
@@ -288,5 +290,10 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 - We **do not** change the existing **multi‑step preferences collection** flow for clients.
 - We **reuse existing COE creation logic** (`create_coe_draft` + `formatCOEResponse`) to avoid duplication.
 - Runner assignment remains a **dashboard responsibility** (COE edit modal), not part of the bot form itself.
+
+## Related Documentation
+
+- **Admin Full Access**: See `ADMIN-FULL-ACCESS-COE-EDITING.md` for details on admin vs client selection behavior
+- **Client Auto-Selection**: See `architecture/bot-coe-creation-stage2.md` for client auto-selection implementation
 
 
