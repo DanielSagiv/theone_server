@@ -6,8 +6,9 @@ Enable an **admin** using the bot to quickly create a COE for a specific client 
 
 - When the admin prompts: `show me clients`
   - The bot returns the existing **client list card**.
-  - Each client row will also have a new **“Create COE”** button.
-- Clicking **“Create COE”** opens a **Create COE card** inside the bot panel:
+  - Each client row will also have a new **"Create Experience"** button (admin only).
+  - Each client row will also have a new **"View experiences"** button (admin only) that navigates to a dedicated screen showing all COEs for that client.
+- Clicking **"Create Experience"** opens a **Create COE card** inside the bot panel:
   - Pre‑selects the chosen client.
   - Lets the admin fill out basic COE details (dates, budget, party size, notes).
   - On submit, calls the existing COE creation flow to create a **draft COE** for that client.
@@ -56,8 +57,9 @@ function formatCOEResponse(type, coe, message, actions = [], budget = null) {
 1. **Admin types:** `show me clients`
 2. Bot returns `client_list` structured response.
 3. `renderClientList` renders each client row with:
-   - Existing **View** button.
-   - New **Create COE** button (admin only).
+   - Existing **View Profile** button.
+   - New **Create Experience** button (admin only).
+   - New **View experiences** button (admin only) - navigates to client's COEs screen.
 4. When admin clicks **Create COE**:
    - Frontend sends a new bot prompt, e.g.  
      `Create a COE draft for client <client_id>: open create-coe-from-client form`
@@ -249,8 +251,8 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 
 1. Log in as **admin**.
 2. Open bot tab, send: `show me clients`.
-3. Verify each row shows **View** and **Create COE** buttons.
-4. Click **Create COE** for a client.
+3. Verify each row shows **View Profile**, **Create Experience**, and **View experiences** buttons.
+4. Click **Create Experience** for a client.
 5. Verify:
    - A **Create COE form card** appears with that client’s name/email.
 6. Fill dates and submit.
@@ -271,7 +273,7 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 1. Log in as **client**.
 2. Ask the bot: `show me clients`.
 3. Verify:
-   - No **Create COE** buttons are rendered.
+   - No **Create Experience** or **View experiences** buttons are rendered (admin-only features).
 4. Attempt to trigger `open_create_coe_for_client` (if possible).
 5. Verify:
    - Bot returns `type: 'error'` structured response with permission message.
@@ -296,5 +298,34 @@ if (structuredData.type === 'coe_created' || structuredData.type === 'coe_update
 
 - **Admin Full Access**: See `ADMIN-FULL-ACCESS-COE-EDITING.md` for details on admin vs client selection behavior
 - **Client Auto-Selection**: See `architecture/bot-coe-creation-stage2.md` for client auto-selection implementation
+
+## Recent Updates
+
+### View Experiences Button (Mobile App)
+
+**Added**: "View experiences" button on client cards (both in client list and search results)
+
+**Implementation**:
+- Added `onViewExperiences` prop to `ClientCard` component
+- Added `view_experiences` action handler in `BotResponseRenderer` and `ClientSearchModal`
+- Created `/client-coes` screen that displays all COEs for a specific client
+- Button appears only for admin users
+- Navigates to dedicated screen showing client's COEs with full event details (name, dates, images)
+
+**API Changes**:
+- Updated `GET /v1/coes/client/:clientId` endpoint to properly populate event data:
+  - Events are populated with name, description, dates, location_id, and media
+  - Location data is populated with name, type, and media
+  - Manual population fallback ensures events replaced via native MongoDB operations are properly populated
+  - Selected seats are filtered to match events currently in the COE (prevents showing seats from replaced events)
+
+**Files Modified**:
+- `mobile/src/components/ClientCard.js` - Added `onViewExperiences` prop and button
+- `mobile/src/components/BotResponseRenderer.js` - Added `view_experiences` action handler
+- `mobile/src/components/ClientSearchModal.js` - Added `onViewExperiences` prop and handler
+- `mobile/app/(tabs)/bot.js` - Added navigation handler for `view_experiences` action
+- `mobile/app/client-coes.js` - New screen for displaying client's COEs
+- `mobile/app/_layout.js` - Registered new route
+- `server/routes/coes.js` - Updated `/v1/coes/client/:clientId` endpoint with proper event population
 
 

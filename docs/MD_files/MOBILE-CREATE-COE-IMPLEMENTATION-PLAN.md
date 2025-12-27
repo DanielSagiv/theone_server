@@ -38,23 +38,26 @@ This document outlines the implementation plan for the Create COE (Curated One E
    ↓
 4. Mobile renders list of ClientCard components
    ↓
-5. Admin clicks "Create COE" button on a client card
+5. Admin can:
+   - Click "Create Experience" button on a client card
+   - Click "View experiences" button to see all COEs for that client
+   - Click "View Profile" button to view client profile
    ↓
-6. Mobile sends bot message: "Open the create COE form for client with id {clientId}..."
+6a. If "Create Experience" clicked:
+    - Mobile sends bot message: "Open the create COE form for client with id {clientId}..."
+    - Bot responds with `coe_create_form` structured data
+    - Mobile renders COECreateForm component
+    - Admin fills form (Dates, Budget, Party Size, Notes)
+    - Admin submits form
+    - Form data sent to bot as message
+    - Bot creates COE draft for that client and responds with COE card
+    - Admin can view created COE
    ↓
-7. Bot responds with `coe_create_form` structured data
-   ↓
-8. Mobile renders COECreateForm component
-   ↓
-9. Admin fills form (Dates, Budget, Party Size, Notes)
-   ↓
-10. Admin submits form
-   ↓
-11. Form data sent to bot as message
-   ↓
-12. Bot creates COE draft for that client and responds with COE card
-   ↓
-13. Admin can view created COE
+6b. If "View experiences" clicked:
+    - Mobile navigates to `/client-coes` screen with clientId and clientName
+    - Screen fetches all COEs for that client using `GET /v1/coes/client/:clientId`
+    - Displays COEs with full event details (name, dates, images)
+    - Admin can navigate to individual COE detail screens
 ```
 
 ---

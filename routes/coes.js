@@ -206,7 +206,77 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
       });
     }
 
-    const coes = await coeService.getCOEsByClient(clientId);
+    const mongoose = require('mongoose');
+    const Event = require('../models/Event');
+    
+    // Get COEs with proper population (same pattern as /coes/my)
+    const coes = await COE.find({ 
+      $or: [
+        { client_id: clientId },
+        { 'participants.user_id': clientId }
+      ]
+    })
+    .lean()
+    .populate('client_id', 'firstName lastName email')
+    .populate('admin_id', 'firstName lastName email')
+    .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
+    .populate({
+      path: 'events.event_id',
+      select: 'name description start_datetime end_datetime location_id media',
+      populate: {
+        path: 'location_id',
+        select: 'name type media'
+      }
+    })
+    .sort({ created_at: -1 });
+
+    // Manual population fallback for events that weren't populated
+    // This ensures events replaced via updateOne are properly populated (same as /coes/my)
+    for (const coe of coes) {
+      if (coe.events && Array.isArray(coe.events)) {
+        for (let i = 0; i < coe.events.length; i++) {
+          const eventItem = coe.events[i];
+          if (eventItem.event_id) {
+            // Check if event_id is not populated (it's an ObjectId or string, not an object with name)
+            const isPopulated = eventItem.event_id && 
+                               typeof eventItem.event_id === 'object' && 
+                               eventItem.event_id.name !== undefined;
+            
+            if (!isPopulated) {
+              // Extract the event ID (could be ObjectId, string, or object with _id)
+              let eventIdValue;
+              if (eventItem.event_id._id) {
+                eventIdValue = eventItem.event_id._id;
+              } else if (eventItem.event_id instanceof mongoose.Types.ObjectId) {
+                eventIdValue = eventItem.event_id;
+              } else if (typeof eventItem.event_id === 'string') {
+                eventIdValue = eventItem.event_id;
+              } else {
+                eventIdValue = eventItem.event_id;
+              }
+              
+              try {
+                const populatedEvent = await Event.findById(eventIdValue)
+                  .populate('location_id', 'name type media')
+                  .select('name description location_id start_datetime end_datetime media');
+                if (populatedEvent) {
+                  eventItem.event_id = populatedEvent;
+                  console.log('[GET /coes/client/:clientId] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
+                } else {
+                  console.warn('[GET /coes/client/:clientId] Event not found for manual population:', eventIdValue, 'in COE:', coe._id);
+                }
+              } catch (populateError) {
+                console.warn('[GET /coes/client/:clientId] Failed to manually populate event:', populateError.message, 'for event_id:', eventIdValue, 'in COE:', coe._id);
+              }
+            }
+          }
+        }
+      }
+
+      // Filter selected_seats to only include seats matching events currently in the COE
+      // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
+      coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/client/:clientId]');
+    }
 
     res.json({
       success: true,
