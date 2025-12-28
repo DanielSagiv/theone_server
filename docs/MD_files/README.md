@@ -15,6 +15,7 @@ Architecture and planning documents:
 Core system documentation:
 - `COE-STATUS-FLOW.md` - Complete COE status workflow and transitions
 - `FEATURE-FLAGS.md` - Feature flags documentation
+- `PAYMENT-HISTORY-AND-INVOICES-FEATURE.md` - Payment history and invoice generation feature plan
 
 ### `/gxn-integration/`
 GXN API integration documentation:
@@ -71,6 +72,7 @@ To Be Determined - Planning documents:
 
 ### Systems
 - [Payment System](./payment/PAYMENT-SYSTEM-COMPLETE.md)
+- [Payment History & Invoices](./PAYMENT-HISTORY-AND-INVOICES-FEATURE.md) - Payment history and invoice generation feature
 - [Email Service](./email/email-service-specification.md)
 - [Feature Flags](./FEATURE-FLAGS.md) - Feature flag controls
 
@@ -81,5 +83,5 @@ To Be Determined - Planning documents:
 
 ---
 
-**Last Updated**: 2025-11-12
+**Last Updated**: 2025-12-28
 
