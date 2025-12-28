@@ -382,6 +382,17 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       preferences = {}
     } = params;
 
+    // Check feature flag for client COE creation
+    const { isClientCOECreationEnabled } = require('../utils/featureFlags');
+    if (user.role === 'client' && !isClientCOECreationEnabled()) {
+      throw createError(
+        ErrorCodes.PERMISSION_DENIED,
+        'Client COE creation is currently disabled. Please contact an admin to create an experience for you.',
+        ErrorCategories.PERMISSION,
+        false
+      );
+    }
+
     // Check idempotency cache if key provided
     if (idempotency_key) {
       const cachedResult = await IdempotencyCache.getCachedResult(
@@ -1455,6 +1466,17 @@ async function handleUpdateCOE(params, user, correlationId) {
         ErrorCodes.SERVICE_UNAVAILABLE,
         'COE not found.',
         ErrorCategories.SERVICE,
+        false
+      );
+    }
+
+    // Check feature flag for client COE editing
+    const { isClientCOEEditingEnabled } = require('../utils/featureFlags');
+    if (user.role === 'client' && !isClientCOEEditingEnabled()) {
+      throw createError(
+        ErrorCodes.PERMISSION_DENIED,
+        'Client COE editing is currently disabled. Please contact an admin for assistance.',
+        ErrorCategories.PERMISSION,
         false
       );
     }

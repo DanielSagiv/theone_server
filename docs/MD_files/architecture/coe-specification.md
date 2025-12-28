@@ -345,6 +345,8 @@ COE: "Las Vegas VIP Weekend"
 - **Communication**: Chat with admin
 - **Sharing**: Invite additional participants
 - **Upgrades**: Review and accept upgrade offers
+- **COE Creation**: Can create COEs (when `ENABLE_CLIENT_COE_CREATION=true` feature flag is enabled)
+- **COE Editing**: Can edit COEs (when `ENABLE_CLIENT_COE_EDITING=true` feature flag is enabled) - See `FEATURE-FLAGS.md`
 
 ## Integration Points
 

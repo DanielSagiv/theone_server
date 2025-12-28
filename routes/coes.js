@@ -1103,6 +1103,15 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
       });
     }
 
+    // Check feature flag for client COE editing (seat replacement is an edit operation)
+    const { isClientCOEEditingEnabled } = require('../utils/featureFlags');
+    if (req.user.role === 'client' && !isClientCOEEditingEnabled()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Client COE editing is currently disabled. Please contact an admin for assistance.'
+      });
+    }
+
     const coe = await coeService.acceptSeatUpgrade(id, current_seat_id, alternative_seat_id, event_id);
 
     res.json({
@@ -1639,6 +1648,15 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
       return res.status(404).json({
         success: false,
         error: 'COE not found'
+      });
+    }
+
+    // Check feature flag for client COE editing
+    const { isClientCOEEditingEnabled } = require('../utils/featureFlags');
+    if (req.user.role === 'client' && !isClientCOEEditingEnabled()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Client COE editing is currently disabled. Please contact an admin for assistance.'
       });
     }
 

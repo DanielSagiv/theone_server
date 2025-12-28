@@ -100,6 +100,7 @@ const gxnRoutes = require('./routes/gxn');
 const botRoutes = require('./routes/bot');
 const websiteRoutes = require('./routes/website');
 const website2Routes = require('./routes/website2');
+const featuresRoutes = require('./routes/features');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -111,6 +112,7 @@ app.use('/v1/payments', paymentRoutes);
 app.use('/v1/subscriptions', subscriptionRoutes);
 app.use('/v1/gxn', gxnRoutes);
 app.use('/v1/bot', botRoutes);
+app.use('/v1/features', featuresRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/website', websiteRoutes);
 app.use('/website2', website2Routes);

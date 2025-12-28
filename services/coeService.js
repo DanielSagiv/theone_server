@@ -738,9 +738,9 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     // Validate status transition
     const validTransitions = {
       'draft': ['approved', 'cancelled'],
-      'approved': ['sent', 'cancelled'],
-      'sent': ['accepted', 'rejected', 'expired'],
-      'accepted': ['completed', 'cancelled'],
+      'approved': ['pending_pay', 'rejected', 'expired', 'cancelled'],
+      'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
+      'paid': ['completed', 'cancelled'],
       'rejected': ['draft'],
       'expired': ['draft'],
       'completed': [],
@@ -754,8 +754,8 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     await coe.updateStatus(status, updatedBy);
     
     // Handle seat status changes based on COE status
-    if (status === 'accepted') {
-      // When COE is accepted, seats become 'booked'
+    if (status === 'paid') {
+      // When COE is paid, seats become 'booked'
       await updateSeatStatusesToBooked(coeId);
       // Update selected_seats status in COE
       const coe = await COE.findById(coeId);

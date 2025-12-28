@@ -78,8 +78,8 @@ All tools are registered in `services/botTools.js` with metadata for OpenAI func
 - `created_method`: `'automated'`
 
 **Permissions**:
-- **Client**: Can create COEs for themselves only
-- **Admin**: Can create COEs for any client
+- **Client**: Can create COEs for themselves only - *Requires `ENABLE_CLIENT_COE_CREATION=true` feature flag*
+- **Admin**: Can create COEs for any client (always enabled)
 
 **Implementation**: 
 - Calls `coeService.createCOE()` with auto-filled data
@@ -208,8 +208,8 @@ All tools are registered in `services/botTools.js` with metadata for OpenAI func
 **Returns**: Updated COE object
 
 **Permissions**:
-- **Client**: Can edit own COEs only (status must be `draft` or `approved`)
-- **Admin**: Can edit any COE
+- **Client**: Can edit own COEs only (status must be `draft` or `approved`) - *Requires `ENABLE_CLIENT_COE_EDITING=true` feature flag*
+- **Admin**: Can edit any COE (always enabled)
 
 **Implementation**: 
 - Calls `coeService.updateCOE()`
@@ -742,11 +742,15 @@ The bot maintains context in the conversation:
 | Tool | Admin | Client | Runner |
 |------|-------|--------|--------|
 | `get_events_by_date` | ✅ | ✅ | ✅ |
-| `create_coe_draft` | ✅ (any client) | ✅ (self only) | ❌ |
-| `update_coe` | ✅ (any) | ✅ (own, draft/approved only) | ❌ |
+| `create_coe_draft` | ✅ (any client) | ✅ (self only)** | ❌ |
+| `update_coe` | ✅ (any) | ✅ (own, draft/approved only)*** | ❌ |
 | `get_my_coes` | ✅ | ✅ | ✅ |
 | `get_coe_details` | ✅ (any) | ✅ (own + assigned) | ✅ (assigned) |
 | `delete_coe` | ✅ (any) | ✅ (own, draft/approved only) | ❌ |
+
+\*\* *Client creation requires `ENABLE_CLIENT_COE_CREATION=true` feature flag*  
+\*\*\* *Client editing requires `ENABLE_CLIENT_COE_EDITING=true` feature flag*  
+*See `FEATURE-FLAGS.md` for details.*
 
 ---
 

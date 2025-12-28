@@ -3,6 +3,12 @@
 ## Overview
 This document outlines the implementation plan for the Create COE (Curated One Experience) feature on the mobile app. The feature allows both **client** and **admin** users to create COEs through an intuitive, mobile-optimized interface integrated with the bot chat system.
 
+**Note**: Client COE creation and editing can be controlled independently via feature flags:
+- `ENABLE_CLIENT_COE_CREATION` - Controls client ability to create COEs
+- `ENABLE_CLIENT_COE_EDITING` - Controls client ability to edit COEs
+
+When disabled, clients cannot create or edit COEs (admin-only). See `FEATURE-FLAGS.md` for details.
+
 ---
 
 ## User Flows
@@ -632,4 +638,13 @@ mobile/
 - Test on various screen sizes (iPhone SE to iPhone Pro Max)
 - Consider landscape orientation support
 - Optimize for one-handed use where possible
+
+---
+
+## Related Documentation
+
+- **COE Specification**: See `architecture/coe-specification.md`
+- **Bot Architecture**: See `architecture/bot-architecture-plan.md`
+- **Mobile App Plan**: See `MOBILE-APP-IMPLEMENTATION-PLAN.md`
+- **Feature Flags**: See `FEATURE-FLAGS.md` - Client COE creation/editing can be disabled via feature flag
 

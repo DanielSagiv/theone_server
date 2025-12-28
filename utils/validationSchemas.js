@@ -368,7 +368,7 @@ const addEventToCOESchema = Joi.object({
 
 // Update COE status validation schema
 const updateCOEStatusSchema = Joi.object({
-  status: Joi.string().valid('draft', 'approved', 'sent', 'accepted', 'rejected', 'expired', 'completed', 'cancelled').required()
+  status: Joi.string().valid('draft', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
 });
 
 // Assign runner to COE validation schema

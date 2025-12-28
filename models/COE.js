@@ -69,7 +69,7 @@ const coeSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['draft', 'approved', 'sent', 'accepted', 'rejected', 'expired', 'completed', 'cancelled'],
+    enum: ['draft', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled'],
     default: 'draft',
     index: true
   },
@@ -284,8 +284,10 @@ const coeSchema = new mongoose.Schema({
   // Timeline
   request_date: { type: Date, default: Date.now },
   approved_date: { type: Date },
-  sent_date: { type: Date },
-  accepted_date: { type: Date },
+  pending_pay_date: { type: Date },
+  paid_date: { type: Date },
+  accepted_date: { type: Date }, // Keep for backward compatibility
+  sent_date: { type: Date }, // Keep for backward compatibility (old flow)
   start_date: { type: Date, required: true },
   end_date: { type: Date, required: true },
   
@@ -548,10 +550,19 @@ coeSchema.methods.updateStatus = function(newStatus, updatedBy) {
     case 'approved':
       this.approved_date = new Date();
       break;
+    case 'pending_pay':
+      this.pending_pay_date = new Date();
+      break;
+    case 'paid':
+      this.paid_date = new Date();
+      this.accepted_date = new Date(); // Backward compatibility
+      break;
     case 'sent':
+      // Keep for backward compatibility (old flow)
       this.sent_date = new Date();
       break;
     case 'accepted':
+      // Keep for backward compatibility (old flow)
       this.accepted_date = new Date();
       break;
   }

@@ -8,6 +8,8 @@
  * - Handler functions are implemented in botToolHandlers.js
  */
 
+const { isClientCOECreationEnabled, isClientCOEEditingEnabled } = require('../utils/featureFlags');
+
 const toolRegistry = {
   /**
    * Tool 1: Get Events by Date Range
@@ -156,7 +158,7 @@ const toolRegistry = {
       required: ['start_date', 'end_date']
     },
     schema_version: '1.0.0',
-    permissions: ['admin', 'client'],
+    permissions: isClientCOECreationEnabled() ? ['admin', 'client'] : ['admin'],
     handler: 'handleCreateCOEDraft'
   },
 
@@ -248,7 +250,7 @@ const toolRegistry = {
       required: ['coe_id', 'updates']
     },
     schema_version: '1.0.0',
-    permissions: ['admin', 'client'],
+    permissions: isClientCOEEditingEnabled() ? ['admin', 'client'] : ['admin'],
     handler: 'handleUpdateCOE'
   },
 

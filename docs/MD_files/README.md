@@ -11,6 +11,11 @@ Architecture and planning documents:
 - `mvp.md` - Minimum Viable Product specification
 - `restful-api-spec.md` - RESTful API specification
 
+### Root Level
+Core system documentation:
+- `COE-STATUS-FLOW.md` - Complete COE status workflow and transitions
+- `FEATURE-FLAGS.md` - Feature flags documentation
+
 ### `/gxn-integration/`
 GXN API integration documentation:
 - `gxn_api_doc.md` - GXN API functions and endpoints
@@ -56,6 +61,7 @@ To Be Determined - Planning documents:
 ### Architecture
 - [Bot Architecture Plan](./architecture/bot-architecture-plan.md)
 - [COE Specification](./architecture/coe-specification.md)
+- [COE Status Flow](./COE-STATUS-FLOW.md) - Status workflow and transitions
 - [General System Concerns](./TBD/general_concerns.md)
 - [Bot Future Enhancements](./TBD/bot-future-enhancements.md)
 
@@ -66,6 +72,7 @@ To Be Determined - Planning documents:
 ### Systems
 - [Payment System](./payment/PAYMENT-SYSTEM-COMPLETE.md)
 - [Email Service](./email/email-service-specification.md)
+- [Feature Flags](./FEATURE-FLAGS.md) - Feature flag controls
 
 ### Implementation History
 - [Phase 1 Summary](./implementation-summaries/PHASE1-IMPLEMENTATION-SUMMARY.md)

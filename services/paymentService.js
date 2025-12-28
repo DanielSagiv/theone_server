@@ -108,9 +108,17 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       throw new Error('Unauthorized: You can only pay for your own COEs');
     }
     
-    // Check COE status
-    if (!['sent', 'approved', 'deposit_paid'].includes(coe.status)) {
+    // Check COE status (allow approved or pending_pay)
+    if (!['approved', 'pending_pay'].includes(coe.status)) {
       throw new Error(`Cannot pay for COE in status: ${coe.status}`);
+    }
+    
+    // Update status to pending_pay if currently approved
+    if (coe.status === 'approved') {
+      const coeService = require('./coeService');
+      await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
+      // Reload coe after status update
+      coe = await COE.findById(coeId).populate('client_id');
     }
     
     // Calculate amount based on payment type
@@ -430,6 +438,10 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     coe.total_paid = totalPaid;
     
     // Determine payment status
+    const coeService = require('./coeService');
+    let shouldUpdateStatus = false;
+    let statusToUpdate = null;
+    
     if (totalPaid === 0) {
       coe.payment_status = 'unpaid';
     } else if (completedPayment.payment_type === 'deposit') {
@@ -441,31 +453,53 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       // Check if also fully paid (can happen with full_payment)
       if (totalPaid >= coe.total) {
         coe.payment_status = 'paid';
-        coe.status = 'accepted'; // Auto-accept on full payment
+        // Update status to 'paid' if currently in 'pending_pay' status
+        if (coe.status === 'pending_pay') {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
       }
     } else if (completedPayment.payment_type === 'final_payment') {
       if (totalPaid >= coe.total) {
         coe.payment_status = 'paid';
-        coe.status = 'accepted'; // Auto-accept on full payment
         coe.final_paid_at = new Date();
         coe.final_payment_id = completedPayment._id;
+        // Update status to 'paid' if currently in 'pending_pay' status
+        if (coe.status === 'pending_pay') {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
       } else {
         coe.payment_status = 'unpaid';
       }
     } else if (completedPayment.payment_type === 'full_payment') {
       coe.payment_status = 'paid';
-      coe.status = 'accepted'; // Auto-accept on full payment
       coe.deposit_paid = completedPayment.amount;
       coe.deposit_paid_at = new Date();
       coe.deposit_payment_id = completedPayment._id;
+      // Update status to 'paid' if currently in 'pending_pay' status
+      if (coe.status === 'pending_pay') {
+        shouldUpdateStatus = true;
+        statusToUpdate = 'paid';
+      }
     } else if (totalPaid >= coe.total) {
       coe.payment_status = 'paid';
-      coe.status = 'accepted'; // Auto-accept on full payment
+      // Update status to 'paid' if currently in 'pending_pay' status
+      if (coe.status === 'pending_pay') {
+        shouldUpdateStatus = true;
+        statusToUpdate = 'paid';
+      }
     } else {
       coe.payment_status = 'unpaid';
     }
     
+    // Save payment status first
     await coe.save();
+    
+    // Update COE status if needed (use coeService to ensure proper side effects: seat booking, date fields)
+    if (shouldUpdateStatus && statusToUpdate) {
+      await coeService.updateCOEStatus(coeId, statusToUpdate, null);
+    }
     
     console.log('COE payment status updated:', {
       coe_id: coeId,
