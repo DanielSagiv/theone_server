@@ -738,7 +738,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     // Validate status transition
     const validTransitions = {
       'draft': ['approved', 'cancelled'],
-      'approved': ['pending_pay', 'rejected', 'expired', 'cancelled'],
+      'approved': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
       'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
       'paid': ['completed', 'cancelled'],
       'rejected': ['draft'],

@@ -134,10 +134,12 @@ paid → cancelled (with refund)
 
 ### Invalid Transition Tests
 **Test Cases:**
-1. ❌ `draft` → `paid` → Error (must go through `approved` and `pending_pay`)
-2. ❌ `approved` → `completed` → Error (must go through `pending_pay` and `paid`)
+1. ❌ `draft` → `paid` → Error (must go through `approved`)
+2. ❌ `approved` → `completed` → Error (must go through `paid`)
 3. ❌ `completed` → `draft` → Error (terminal state)
 4. ❌ `cancelled` → `approved` → Error (terminal state)
+
+**Note:** `approved` → `paid` is now a valid transition to support direct payment completion (see Version 2.2 changelog in COE-STATUS-FLOW.md)
 
 ---
 

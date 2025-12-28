@@ -36,7 +36,7 @@ status: {
 ```javascript
 const validTransitions = {
   'draft': ['approved', 'cancelled'],
-  'approved': ['pending_pay', 'rejected', 'expired', 'cancelled'],
+  'approved': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
   'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
   'paid': ['completed', 'cancelled'],
   'rejected': ['draft'],           // Can restart if rejected
@@ -45,6 +45,8 @@ const validTransitions = {
   'cancelled': []                  // Terminal state
 };
 ```
+
+**Note:** The `approved` → `paid` transition is allowed to support direct payment completion. While the typical flow goes through `pending_pay`, payment can complete directly from `approved` status in certain scenarios (e.g., when payment processing completes before the status transition to `pending_pay` occurs, or when using direct payment methods).
 
 ---
 
@@ -761,6 +763,13 @@ PUT /v1/coes/:id/status
 ### Payment Status Updates
 Payment status is automatically updated by the payment service when payments are processed. See `services/paymentService.js` → `updateCOEPaymentStatus()`.
 
+**Payment Completion Status Transitions:**
+- When payment completes, the COE status transitions from `approved` or `pending_pay` to `paid`
+- The payment service automatically handles both scenarios:
+  - `pending_pay` → `paid` (standard flow when payment intent was created)
+  - `approved` → `paid` (direct payment completion, e.g., when payment completes before status transition)
+- Both transitions are supported in the `validTransitions` matrix to ensure reliable payment processing
+
 ---
 
 ## Automatic Status Transitions (Future Implementation)
@@ -1307,6 +1316,12 @@ Notifications should be triggered from:
 ---
 
 ## Changelog
+
+### Version 2.2 (December 2025)
+- **Updated:** `validTransitions` - Added `approved` → `paid` transition to support direct payment completion
+- **Updated:** Payment Status Updates section - Clarified that payment completion can transition from both `approved` and `pending_pay` to `paid`
+- **Added:** Mobile App Improvements - Automatic refresh of COE list when screen comes into focus after payment completion
+- **Added:** Mobile App Actions - Approve and Cancel buttons added to COE detail screen for status management
 
 ### Version 2.1 (January 2025)
 - **Added:** Status Change Permissions Matrix - detailed matrix of who can change from what status to what status

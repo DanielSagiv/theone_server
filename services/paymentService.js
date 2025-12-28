@@ -453,8 +453,8 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       // Check if also fully paid (can happen with full_payment)
       if (totalPaid >= coe.total) {
         coe.payment_status = 'paid';
-        // Update status to 'paid' if currently in 'pending_pay' status
-        if (coe.status === 'pending_pay') {
+        // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
+        if (coe.status === 'approved' || coe.status === 'pending_pay') {
           shouldUpdateStatus = true;
           statusToUpdate = 'paid';
         }
@@ -464,8 +464,8 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
         coe.payment_status = 'paid';
         coe.final_paid_at = new Date();
         coe.final_payment_id = completedPayment._id;
-        // Update status to 'paid' if currently in 'pending_pay' status
-        if (coe.status === 'pending_pay') {
+        // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
+        if (coe.status === 'approved' || coe.status === 'pending_pay') {
           shouldUpdateStatus = true;
           statusToUpdate = 'paid';
         }
@@ -477,15 +477,15 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       coe.deposit_paid = completedPayment.amount;
       coe.deposit_paid_at = new Date();
       coe.deposit_payment_id = completedPayment._id;
-      // Update status to 'paid' if currently in 'pending_pay' status
-      if (coe.status === 'pending_pay') {
+      // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
+      if (coe.status === 'approved' || coe.status === 'pending_pay') {
         shouldUpdateStatus = true;
         statusToUpdate = 'paid';
       }
     } else if (totalPaid >= coe.total) {
       coe.payment_status = 'paid';
-      // Update status to 'paid' if currently in 'pending_pay' status
-      if (coe.status === 'pending_pay') {
+      // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
+      if (coe.status === 'approved' || coe.status === 'pending_pay') {
         shouldUpdateStatus = true;
         statusToUpdate = 'paid';
       }
