@@ -203,12 +203,163 @@ router.get('/saved-cards', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /v1/payments/my
+ * Get user's payment history with filters and pagination
+ * NOTE: This route must come before /:paymentId to avoid route conflicts
+ */
+router.get('/my', authenticateToken, async (req, res) => {
+  try {
+    const filters = {
+      status: req.query.status,
+      payment_type: req.query.payment_type,
+      coe_id: req.query.coe_id,
+      start_date: req.query.start_date,
+      end_date: req.query.end_date
+    };
+    
+    const pagination = {
+      page: req.query.page,
+      limit: req.query.limit
+    };
+    
+    const result = await paymentService.getUserPaymentHistory(
+      req.user._id,
+      filters,
+      pagination
+    );
+    
+    res.json({
+      success: true,
+      data: result
+    });
+    
+  } catch (error) {
+    console.error('Get user payment history error:', {
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'GET_PAYMENT_HISTORY_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/payments/:paymentId/invoice.pdf
+ * Download invoice as PDF
+ * NOTE: This route must come before /:paymentId to avoid route conflicts
+ */
+router.get('/:paymentId/invoice.pdf', authenticateToken, async (req, res) => {
+  try {
+    const invoiceService = require('../services/invoiceService');
+    
+    // Get invoice data
+    const invoiceData = await paymentService.getInvoiceData(
+      req.params.paymentId,
+      req.user._id
+    );
+    
+    // Generate PDF
+    const pdfBuffer = await invoiceService.generateInvoicePDF(invoiceData);
+    
+    // Set headers
+    const filename = `invoice-${invoiceData.invoice_number}.pdf`;
+    const isDownload = req.query.download === 'true';
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`
+    );
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error('Generate invoice PDF error:', {
+      payment_id: req.params.paymentId,
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    
+    const statusCode = error.message.includes('Unauthorized') ? 403 : 
+                      error.message.includes('not found') ? 404 : 500;
+    
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'GENERATE_INVOICE_PDF_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/payments/:paymentId/invoice
+ * Get invoice data (JSON)
+ * NOTE: This route must come before /:paymentId to avoid route conflicts
+ */
+router.get('/:paymentId/invoice', authenticateToken, async (req, res) => {
+  try {
+    const invoiceData = await paymentService.getInvoiceData(
+      req.params.paymentId,
+      req.user._id
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        invoice: invoiceData
+      }
+    });
+    
+  } catch (error) {
+    console.error('Get invoice data error:', {
+      payment_id: req.params.paymentId,
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    
+    const statusCode = error.message.includes('Unauthorized') ? 403 : 
+                      error.message.includes('not found') ? 404 : 500;
+    
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'GET_INVOICE_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
  * GET /v1/payments/:paymentId
  * Get payment details
  */
 router.get('/:paymentId', authenticateToken, async (req, res) => {
   try {
     const payment = await paymentService.getPaymentById(req.params.paymentId);
+    
+    // Verify user owns the payment
+    if (payment.user_id._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'You can only access your own payments'
+        }
+      });
+    }
     
     res.json({
       success: true,

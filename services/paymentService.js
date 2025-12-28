@@ -560,6 +560,196 @@ async function getPaymentById(paymentId) {
 }
 
 /**
+ * Get user payment history with filters and pagination
+ * @param {string} userId - User ID
+ * @param {Object} filters - Filter options { status, payment_type, coe_id, start_date, end_date }
+ * @param {Object} pagination - Pagination options { page, limit }
+ * @returns {Promise<Object>} Payments with pagination and summary
+ */
+async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
+  try {
+    const {
+      status,
+      payment_type,
+      coe_id,
+      start_date,
+      end_date
+    } = filters;
+    
+    const page = parseInt(pagination.page) || 1;
+    const limit = Math.min(parseInt(pagination.limit) || 20, 100); // Max 100 per page
+    const skip = (page - 1) * limit;
+    
+    // Build query
+    const query = { user_id: userId };
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (payment_type) {
+      query.payment_type = payment_type;
+    }
+    
+    if (coe_id) {
+      query.coe_id = coe_id;
+    }
+    
+    if (start_date || end_date) {
+      query.created_at = {};
+      if (start_date) {
+        query.created_at.$gte = new Date(start_date);
+      }
+      if (end_date) {
+        query.created_at.$lte = new Date(end_date);
+      }
+    }
+    
+    // Get total count for pagination
+    const total = await Payment.countDocuments(query);
+    
+    // Get payments with pagination
+    const payments = await Payment.find(query)
+      .populate('coe_id', 'name')
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    // Calculate summary statistics
+    const allUserPayments = await Payment.find({ user_id: userId }).lean();
+    const totalAmount = allUserPayments
+      .filter(p => p.status === 'completed')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalRefunded = allUserPayments
+      .filter(p => p.status === 'refunded')
+      .reduce((sum, p) => sum + (p.refund_amount || 0), 0);
+    const netAmount = totalAmount - totalRefunded;
+    
+    // Format payments with COE name
+    const formattedPayments = payments.map(payment => ({
+      ...payment,
+      coe_name: payment.coe_id?.name || null,
+      coe_id: payment.coe_id?._id || payment.coe_id || null
+    }));
+    
+    return {
+      payments: formattedPayments,
+      pagination: {
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      },
+      summary: {
+        total_payments: total,
+        total_amount: totalAmount,
+        total_refunded: totalRefunded,
+        net_amount: netAmount
+      }
+    };
+  } catch (error) {
+    console.error('Error getting user payment history:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get invoice data for a payment
+ * @param {string} paymentId - Payment ID
+ * @param {string} userId - User ID (for authorization)
+ * @returns {Promise<Object>} Invoice data
+ */
+async function getInvoiceData(paymentId, userId) {
+  try {
+    // Get payment with populated data
+    const payment = await Payment.findById(paymentId)
+      .populate('user_id', 'firstName lastName email phone')
+      .populate({
+        path: 'coe_id',
+        select: 'name description total subtotal tax currency events selected_seats',
+        populate: {
+          path: 'events.event_id',
+          select: 'name description start_datetime end_datetime base_price'
+        }
+      });
+    
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+    
+    // Verify user owns the payment
+    if (payment.user_id._id.toString() !== userId.toString()) {
+      throw new Error('Unauthorized: You can only access your own invoices');
+    }
+    
+    // Generate invoice number (using payment ID first 8 chars)
+    const invoiceNumber = `INV-${payment._id.toString().substring(0, 8).toUpperCase()}`;
+    
+    // Format invoice data
+    const invoice = {
+      invoice_number: invoiceNumber,
+      invoice_date: payment.created_at,
+      payment_date: payment.completed_at || payment.created_at,
+      status: payment.status === 'completed' ? 'paid' : payment.status,
+      
+      // Bill To
+      bill_to: {
+        name: `${payment.user_id.firstName} ${payment.user_id.lastName}`,
+        email: payment.user_id.email,
+        phone: payment.user_id.phone || null
+      },
+      
+      // COE Details
+      coe: payment.coe_id ? {
+        _id: payment.coe_id._id,
+        name: payment.coe_id.name,
+        description: payment.coe_id.description || '',
+        events: (payment.coe_id.events || []).map(event => ({
+          event_name: event.event_id?.name || 'Event',
+          event_date: event.event_date || event.event_id?.start_datetime,
+          base_price: event.base_price || event.event_id?.base_price || 0
+        }))
+      } : null,
+      
+      // Payment Details
+      payment: {
+        _id: payment._id,
+        amount: payment.amount,
+        currency: payment.currency || 'USD',
+        payment_type: payment.payment_type,
+        payment_method: {
+          brand: payment.card_brand || 'N/A',
+          last_four: payment.card_last_four || 'N/A'
+        },
+        transaction_id: payment.gp_transaction_id || 'N/A',
+        completed_at: payment.completed_at
+      },
+      
+      // Pricing Breakdown (from COE if available, otherwise from payment)
+      pricing: {
+        subtotal: payment.coe_id?.subtotal || payment.amount,
+        taxes: payment.coe_id?.tax || 0,
+        fees: 0,
+        total: payment.amount
+      },
+      
+      // Refund Information
+      refund: {
+        refund_amount: payment.refund_amount || 0,
+        refunded_at: payment.refunded_at || null,
+        refund_reason: payment.refund_reason || null
+      }
+    };
+    
+    return invoice;
+  } catch (error) {
+    console.error('Error getting invoice data:', error);
+    throw error;
+  }
+}
+
+/**
  * Verify webhook signature
  * @param {Object} payload - Webhook payload
  * @param {string} signature - Signature header
@@ -937,6 +1127,8 @@ module.exports = {
   updateCOEPaymentStatus,
   getPaymentHistory,
   getPaymentById,
+  getUserPaymentHistory,
+  getInvoiceData,
   verifyWebhookSignature,
   // Phase 2: Card Tokenization
   tokenizeAndSaveCard,
