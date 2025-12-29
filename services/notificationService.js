@@ -294,7 +294,7 @@ async function sendPushNotification(userId, notification) {
       
       if (expoClient) {
         try {
-          // Prepare Expo messages
+          // Prepare Expo messages with THE1 branding
           const expoMessages = expoTokens.map(({ token }) => ({
             to: token,
             sound: 'default',
@@ -309,7 +309,20 @@ async function sendPushNotification(userId, notification) {
               ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
             },
             badge: 1,
-            priority: 'high'
+            priority: 'high',
+            // Android-specific styling (THE1 branding)
+            android: {
+              channelId: 'default',
+              color: '#D4AF37', // THE1 gold color
+              priority: 'high',
+              sound: 'default',
+              vibrate: [0, 250, 250, 250],
+            },
+            // iOS-specific styling
+            ios: {
+              sound: 'default',
+              badge: 1,
+            }
           }));
           
           // Send via Expo API (chunks messages automatically)

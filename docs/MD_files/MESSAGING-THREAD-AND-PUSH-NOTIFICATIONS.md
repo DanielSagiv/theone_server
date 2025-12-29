@@ -1,9 +1,9 @@
 # Messaging Thread & Push Notifications Feature
 ## The1 Platform - Combined Implementation Plan
 
-**Status**: 📋 Planning  
-**Version**: 1.0  
-**Last Updated**: December 2025  
+**Status**: ✅ Implemented  
+**Version**: 2.0  
+**Last Updated**: January 2025  
 **Priority**: P1 (High, but not blocking MVP)
 
 ---
@@ -40,26 +40,26 @@ This document outlines the implementation plan for **Messaging Thread** and **Pu
 
 ## Current State Analysis
 
-### Existing Implementation
+### Implementation Status
 
 #### Backend
-- ❌ **No Messaging System** - No COE-scoped messaging endpoints
-- ❌ **No Push Notifications** - No notification infrastructure
+- ✅ **Messaging System** - COE-scoped messaging endpoints implemented
+- ✅ **Push Notifications** - Full notification infrastructure with Expo and Firebase
 - ✅ **Bot Conversation** - User-scoped chat (not COE-scoped)
 - ✅ **Email Service** - AWS SES integration exists (`utils/emailService.js`)
 
 #### Mobile App
-- ❌ **No Messaging Screens** - No COE messaging UI
-- ❌ **No Push Notifications** - No notification handling
+- ✅ **Messaging Screens** - COE messaging UI with optimistic updates
+- ✅ **Push Notifications** - Full notification handling with deep linking
 - ✅ **Bot Chat Screen** - General bot conversation exists
-- ✅ **Expo Setup** - Expo ~54.0.0 configured
+- ✅ **Expo Setup** - Expo ~54.0.0 configured with expo-notifications
 
 ### MVP Specification Requirements
 
 | Feature | MVP Status | Current Status | Priority |
 |---------|------------|----------------|----------|
-| Messaging Thread | Required (P1) | ❌ Not implemented | P1 |
-| Push Notifications | Required (P1) | ❌ Not implemented | P1 |
+| Messaging Thread | Required (P1) | ✅ Implemented | P1 |
+| Push Notifications | Required (P1) | ✅ Implemented | P1 |
 
 ---
 
@@ -71,10 +71,13 @@ This document outlines the implementation plan for **Messaging Thread** and **Pu
 - `expo-notifications` - Push notification handling
 - Expo manages FCM (Android) and APNs (iOS) automatically
 - No Firebase SDK needed on mobile
+- Robust token registration with retry logic and periodic verification
 
 **Backend (Node.js):**
-- `firebase-admin` - Send notifications via FCM
+- `firebase-admin` - Send notifications via FCM for native tokens
+- `expo-server-sdk` - Send notifications via Expo API for Expo tokens
 - FCM handles Android directly and forwards to APNs for iOS
+- Expo API handles Expo push tokens (works for both Android and iOS)
 - MongoDB for notification and message storage
 
 ### Architecture Diagram
@@ -109,19 +112,24 @@ This document outlines the implementation plan for **Messaging Thread** and **Pu
 │           │                             │                   │
 │           └─────────────┬───────────────┘                   │
 │                         │                                    │
-│                  firebase-admin                              │
-│                         │                                    │
-│  Sends via FCM (Android + iOS)                             │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          │ FCM/APNs
-                          │
-┌─────────────────────────▼───────────────────────────────────┐
-│              Firebase Cloud Messaging (FCM)                 │
-│                                                              │
-│  Android: Direct delivery                                   │
-│  iOS: Forwards to APNs                                      │
-└─────────────────────────────────────────────────────────────┘
+│         ┌────────────────┴────────────────┐                 │
+│         │                                  │                 │
+│  expo-server-sdk                  firebase-admin            │
+│         │                                  │                 │
+│  Expo API (Expo tokens)          FCM (Native tokens)       │
+└─────────┼──────────────────────────────────┼─────────────────┘
+          │                                  │
+          │                                  │ FCM/APNs
+          │                                  │
+┌─────────▼──────────┐          ┌───────────▼───────────────┐
+│   Expo Push        │          │  Firebase Cloud           │
+│   Notification     │          │  Messaging (FCM)          │
+│   Service          │          │                           │
+│                    │          │  Android: Direct delivery  │
+│  Handles Expo      │          │  iOS: Forwards to APNs     │
+│  tokens (both      │          │                           │
+│  Android & iOS)    │          │                           │
+└────────────────────┘          └───────────────────────────┘
 ```
 
 ---
@@ -437,29 +445,32 @@ Real-time push notifications for COE status changes and new messages. Notificati
 - ✅ Works in Expo Go for development
 - ✅ Simple API for permissions and token management
 
-**Why Firebase Admin SDK (backend)?**
-- ✅ Official Firebase SDK for server-side
-- ✅ Handles FCM for Android
-- ✅ Can forward to APNs for iOS
+**Why Firebase Admin SDK + Expo Server SDK (backend)?**
+- ✅ Official Firebase SDK for server-side (native FCM tokens)
+- ✅ Expo Server SDK for Expo push tokens (works for both Android and iOS)
+- ✅ Handles FCM for Android native tokens
+- ✅ Can forward to APNs for iOS native tokens
+- ✅ Expo API handles Expo tokens automatically
 - ✅ Reliable delivery
 - ✅ Good documentation
 
 ### Requirements
 
-1. **Notification Types**
-   - COE status changes (approved, paid, completed, etc.)
-   - New messages in COE threads
-   - Payment received
-   - Runner assignment
-   - COE expiration
+1. **Notification Types** (All Implemented)
+   - ✅ COE status changes: `coe_approved`, `coe_paid`, `coe_completed`, `coe_cancelled`, `coe_rejected`, `coe_expired`
+   - ✅ New messages in COE threads: `coe_message`
+   - ✅ Payment notifications: `payment_received`, `payment_failed`
+   - ✅ Runner assignment: `runner_assigned`, `runner_updated`
 
-2. **Features**
-   - Push token registration
-   - Notification delivery
-   - Deep linking to relevant screens
-   - Notification history
-   - Read/unread status
-   - Notification preferences (optional - Phase 2)
+2. **Features** (All Implemented)
+   - ✅ Push token registration with robust retry logic
+   - ✅ Periodic token verification (every 5 minutes)
+   - ✅ Notification delivery via Expo API and Firebase Admin
+   - ✅ Deep linking to relevant screens
+   - ✅ Notification history screen
+   - ✅ Read/unread status
+   - ✅ Auto-refresh message threads on notification receipt
+   - ⏳ Notification preferences (optional - Phase 2)
 
 ### Data Model
 
@@ -1041,13 +1052,15 @@ function generateNotificationContent(type, data) {
 ### Backend (.env)
 
 ```bash
-# Firebase Configuration
+# Firebase Configuration (for native FCM tokens)
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
 
 # Optional: Firebase Database URL (if using Realtime Database)
 FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
+
+# Note: Expo push tokens are handled via Expo Server SDK, no additional config needed
 ```
 
 ### Mobile (app.json)
@@ -1059,15 +1072,24 @@ FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
       [
         "expo-notifications",
         {
-          "icon": "./assets/notification-icon.png",
-          "color": "#FFD700",
-          "sounds": ["./assets/notification-sound.wav"]
+          "icon": "./assets/icon.png",
+          "color": "#ffffff",
+          "sounds": []
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-expo-project-id"
+      }
+    }
   }
 }
 ```
+
+**Note**: 
+- `projectId` is required for `expo-notifications` to work. It can be set via `npx eas init` or manually in `app.json`.
+- Custom notification icons and colors only work in development/production builds, not in Expo Go.
 
 ---
 
@@ -1077,13 +1099,14 @@ FIREBASE_DATABASE_URL=https://your-project.firebaseio.com
 
 ```json
 {
-  "firebase-admin": "^12.0.0"
+  "firebase-admin": "^13.0.0",
+  "expo-server-sdk": "^3.15.0"
 }
 ```
 
 **Installation**:
 ```bash
-npm install firebase-admin
+npm install firebase-admin expo-server-sdk
 ```
 
 ### Mobile
@@ -1317,7 +1340,137 @@ Linking.addEventListener('url', (event) => {
 
 ---
 
+## Implementation Details
+
+### Backend Implementation
+
+#### Notification Service (`services/notificationService.js`)
+- ✅ Firebase Admin SDK initialization
+- ✅ Expo Server SDK initialization
+- ✅ Dual token handling (Expo tokens via Expo API, native FCM tokens via Firebase)
+- ✅ Notification content generation for all types
+- ✅ Deep link generation
+- ✅ Notification document creation and storage
+- ✅ Push notification sending with error handling
+
+#### Messaging Service (`services/messagingService.js`)
+- ✅ COE access verification
+- ✅ Message retrieval with pagination
+- ✅ Message sending with participant notifications
+- ✅ Read status tracking
+- ✅ Unread count calculation
+- ✅ Sender information population (firstName, lastName, avatarUrl)
+
+#### Notification Triggers
+
+**COE Service (`services/coeService.js`):**
+- ✅ `coe_approved` - When COE status changes to approved
+- ✅ `coe_paid` - When COE status changes to paid
+- ✅ `coe_completed` - When COE status changes to completed
+- ✅ `coe_cancelled` - When COE status changes to cancelled
+- ✅ `coe_rejected` - When COE status changes to rejected
+- ✅ `coe_expired` - When COE status changes to expired
+- ✅ `runner_assigned` - When runner is assigned to COE
+
+**Payment Service (`services/paymentService.js`):**
+- ✅ `payment_received` - When payment is successfully completed (notifies client and admin)
+- ✅ `payment_failed` - When payment fails
+
+**Messaging Service (`services/messagingService.js`):**
+- ✅ `coe_message` - When new message is sent (notifies all participants except sender)
+
+### Mobile Implementation
+
+#### Push Notification Setup (`src/utils/notificationUtils.js`)
+- ✅ Permission request handling
+- ✅ Push token retrieval with Expo projectId validation
+- ✅ Token registration with backend (retry logic with exponential backoff)
+- ✅ Token removal on logout
+- ✅ Deep link parsing
+- ✅ Notification handler configuration
+
+#### Robust Token Registration (`src/navigation/AuthContext.js`)
+- ✅ Automatic setup on login/authentication
+- ✅ Retry logic with exponential backoff (3 attempts)
+- ✅ Periodic verification every 5 minutes
+- ✅ Token re-registration if needed
+- ✅ Cleanup on logout
+
+#### Messaging Screen (`app/coe-messages.js`)
+- ✅ Message list with FlatList
+- ✅ Optimistic UI updates (messages appear immediately)
+- ✅ Typing indicator while sending
+- ✅ Auto-scroll to bottom
+- ✅ Pull-to-refresh
+- ✅ Sender avatars (shown only on first message in consecutive group)
+- ✅ Role-based sender name display:
+  - Admin: "{Full Name} - Concierge"
+  - Runner: "{Full Name} - Runner"
+  - Client: "{Full Name}"
+- ✅ Timestamp alignment (left for recipients, right for user)
+- ✅ Keyboard handling (KeyboardAvoidingView with proper offsets)
+- ✅ Notification listener for auto-refresh
+- ✅ Error handling and display
+
+#### Notification Handling (`app/_layout.js`)
+- ✅ Notification received listener
+- ✅ Notification response listener (tap handling)
+- ✅ Deep link routing:
+  - `coe-detail` → COE detail screen
+  - `coe-messages` → Message thread screen (uses `router.replace()` to prevent stacking)
+  - `payment-detail` → Payment detail screen
+  - `payment` → Payment screen
+  - `coes` → COE list
+  - `notifications` → Notification center
+- ✅ Android notification channel configuration
+
+#### Notification Center (`app/notifications.js`)
+- ✅ Notification list display
+- ✅ Mark as read functionality
+- ✅ Mark all as read
+- ✅ Unread count display
+
+### Bug Fixes
+
+1. **COE Creation Bug** - Fixed form disappearing after COE creation by merging messages instead of replacing
+2. **Notification ID Extraction** - Fixed passing full user objects instead of IDs to notification service
+3. **Expo Token Handling** - Added `expo-server-sdk` to handle Expo push tokens separately from native FCM tokens
+4. **Message Thread Auto-Refresh** - Added notification listener in `coe-messages.js` to auto-refresh when new messages arrive
+5. **Navigation Stacking** - Changed `router.push()` to `router.replace()` for message screen to prevent multiple screens
+6. **Keyboard Hiding Input** - Fixed keyboard covering input fields on:
+   - Message thread screen
+   - Bot screen
+   - Login screen
+   Fixed by adjusting `KeyboardAvoidingView` behavior and removing absolute positioning
+7. **Optimistic Message Display** - Fixed message appearing on wrong side with "Unknown" sender:
+   - Fixed `isUser` check to handle optimistic messages
+   - Fixed message structure to match server response
+   - Fixed timestamp rendering with error handling
+8. **Push Token Registration** - Made registration robust with:
+   - Retry logic (exponential backoff)
+   - Periodic verification (every 5 minutes)
+   - Automatic re-registration on token refresh
+   - Proper cleanup on logout
+
+### Known Limitations
+
+1. **Custom Notification Branding** - Custom icons and colors only work in development/production builds, not in Expo Go
+2. **Notification Preferences** - User-configurable notification settings not yet implemented (Phase 2)
+
 ## Changelog
+
+### Version 2.0 (January 2025)
+- ✅ Full implementation of Messaging Thread feature
+- ✅ Full implementation of Push Notifications feature
+- ✅ Dual token handling (Expo + Firebase)
+- ✅ Robust push token registration with retry logic
+- ✅ Optimistic UI updates for messaging
+- ✅ Auto-refresh message threads on notifications
+- ✅ Keyboard handling fixes across all screens
+- ✅ Sender avatars and role-based name display
+- ✅ Multiple bug fixes and improvements
+- ✅ Notification center screen implemented
+- ✅ All notification triggers integrated
 
 ### Version 1.0 (December 2025)
 - Initial feature specification
@@ -1329,7 +1482,7 @@ Linking.addEventListener('url', (event) => {
 
 ---
 
-**Document Status**: Ready for Implementation  
-**Estimated Total Time**: 4-5 weeks  
+**Document Status**: ✅ Implemented  
+**Implementation Date**: January 2025  
 **Priority**: P1 (High, but not blocking MVP)
 
