@@ -751,6 +751,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       throw new Error(`Invalid status transition from ${coe.status} to ${status}`);
     }
 
+    const oldStatus = coe.status;
     await coe.updateStatus(status, updatedBy);
     
     // Handle seat status changes based on COE status
@@ -768,6 +769,178 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     } else if (['cancelled', 'rejected', 'expired'].includes(status)) {
       // When COE is cancelled/rejected/expired, seats are released
       await releaseSelectedSeats(coeId);
+    }
+    
+    // Send notifications for status changes
+    try {
+      const notificationService = require('./notificationService');
+      const updatedCoe = await getCOEById(coeId);
+      const User = require('../models/User');
+      
+      // Get user info for notifications
+      // CRITICAL: Extract user IDs properly - handle both populated and non-populated cases
+      const clientId = updatedCoe.client_id?._id 
+        ? updatedCoe.client_id._id.toString() 
+        : (updatedCoe.client_id?.toString ? updatedCoe.client_id.toString() : String(updatedCoe.client_id));
+      const adminId = updatedCoe.admin_id?._id 
+        ? updatedCoe.admin_id._id.toString() 
+        : (updatedCoe.admin_id?.toString ? updatedCoe.admin_id.toString() : String(updatedCoe.admin_id));
+      
+      const client = await User.findById(clientId).select('firstName lastName');
+      const admin = await User.findById(adminId).select('firstName lastName');
+      
+      // Determine notification recipients and types
+      const notifications = [];
+      
+      switch (status) {
+        case 'approved':
+          // Notify client
+          notifications.push({
+            userId: clientId,
+            type: 'coe_approved',
+            data: {
+              coe_id: coeId,
+              coe: { name: updatedCoe.name },
+              is_admin: false
+            }
+          });
+          break;
+          
+        case 'accepted':
+          // Notify admin
+          notifications.push({
+            userId: adminId,
+            type: 'coe_accepted',
+            data: {
+              coe_id: coeId,
+              coe: { name: updatedCoe.name },
+              sender_name: client ? `${client.firstName} ${client.lastName}`.trim() : 'Client',
+              is_admin: true
+            }
+          });
+          break;
+          
+        case 'rejected':
+          // Notify admin
+          notifications.push({
+            userId: adminId,
+            type: 'coe_rejected',
+            data: {
+              coe_id: coeId,
+              coe: { name: updatedCoe.name },
+              sender_name: client ? `${client.firstName} ${client.lastName}`.trim() : 'Client',
+              is_admin: true
+            }
+          });
+          break;
+          
+        case 'paid':
+          // Notify both client and admin
+          notifications.push(
+            {
+              userId: clientId,
+              type: 'coe_paid',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: false
+              }
+            },
+            {
+              userId: adminId,
+              type: 'coe_paid',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: true
+              }
+            }
+          );
+          break;
+          
+        case 'completed':
+          // Notify both client and admin
+          notifications.push(
+            {
+              userId: clientId,
+              type: 'coe_completed',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: false
+              }
+            },
+            {
+              userId: adminId,
+              type: 'coe_completed',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: true
+              }
+            }
+          );
+          break;
+          
+        case 'cancelled':
+          // Notify both client and admin
+          notifications.push(
+            {
+              userId: clientId,
+              type: 'coe_cancelled',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: false
+              }
+            },
+            {
+              userId: adminId,
+              type: 'coe_cancelled',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: true
+              }
+            }
+          );
+          break;
+          
+        case 'expired':
+          // Notify both client and admin
+          notifications.push(
+            {
+              userId: clientId,
+              type: 'coe_expired',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: false
+              }
+            },
+            {
+              userId: adminId,
+              type: 'coe_expired',
+              data: {
+                coe_id: coeId,
+                coe: { name: updatedCoe.name },
+                is_admin: true
+              }
+            }
+          );
+          break;
+      }
+      
+      // Send notifications asynchronously (don't block status update)
+      Promise.all(
+        notifications.map(notif => 
+          notificationService.createAndSendNotification(notif.userId, notif.type, notif.data)
+            .catch(err => console.error(`[COEService] Failed to send notification to ${notif.userId}:`, err))
+        )
+      );
+    } catch (error) {
+      // Log but don't fail the status update if notifications fail
+      console.error('[COEService] Error sending notifications:', error);
     }
     
     return await getCOEById(coeId);
@@ -809,6 +982,25 @@ async function assignRunnerToCOE(coeId, runnerData, assignedBy) {
     };
 
     await coe.save();
+    
+    // Send notification to runner
+    try {
+      const notificationService = require('./notificationService');
+      const updatedCoe = await getCOEById(coeId);
+      
+      await notificationService.createAndSendNotification(
+        runnerData.runner_id.toString(),
+        'runner_assigned',
+        {
+          coe_id: coeId,
+          coe: { name: updatedCoe.name }
+        }
+      );
+    } catch (error) {
+      // Log but don't fail the assignment if notification fails
+      console.error('[COEService] Error sending runner assignment notification:', error);
+    }
+    
     return await getCOEById(coeId);
   } catch (error) {
     console.error('Error assigning runner to COE:', error);

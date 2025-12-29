@@ -630,4 +630,137 @@ router.put('/:id/tier', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+/**
+ * POST /v1/users/push-token
+ * Register device push token for notifications
+ */
+router.post('/push-token', authenticateToken, async (req, res) => {
+  try {
+    const { token, platform } = req.body;
+
+    if (!token || !platform) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Token and platform are required'
+        }
+      });
+    }
+
+    if (!['ios', 'android'].includes(platform)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Platform must be "ios" or "android"'
+        }
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Check if token already exists
+    const existingTokenIndex = user.push_tokens.findIndex(t => t.token === token);
+
+    if (existingTokenIndex >= 0) {
+      // Update existing token
+      user.push_tokens[existingTokenIndex].last_used_at = new Date();
+      user.push_tokens[existingTokenIndex].platform = platform;
+    } else {
+      // Add new token
+      user.push_tokens.push({
+        token,
+        platform,
+        registered_at: new Date(),
+        last_used_at: new Date()
+      });
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Push token registered successfully'
+    });
+  } catch (error) {
+    console.error('Register push token error:', {
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'REGISTER_TOKEN_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /v1/users/push-token
+ * Remove push token (e.g., on logout)
+ */
+router.delete('/push-token', authenticateToken, async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Token is required'
+        }
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
+    }
+
+    // Remove token
+    user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Push token removed successfully'
+    });
+  } catch (error) {
+    console.error('Remove push token error:', {
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'REMOVE_TOKEN_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
 module.exports = router;

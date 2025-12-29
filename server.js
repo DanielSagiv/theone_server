@@ -77,6 +77,11 @@ mongoose.connect(process.env.DB_URI)
     // Start automated billing cron jobs (Phase 3: Recurring Billing)
     const cronJobs = require('./utils/cronJobs');
     cronJobs.startAllCronJobs();
+    
+    // Initialize Firebase Admin for push notifications
+    const notificationService = require('./services/notificationService');
+    notificationService.initializeFirebase();
+    notificationService.initializeExpo();
   })
   .catch((err) => {
     dbStatus = 'connection failed';
@@ -101,6 +106,8 @@ const botRoutes = require('./routes/bot');
 const websiteRoutes = require('./routes/website');
 const website2Routes = require('./routes/website2');
 const featuresRoutes = require('./routes/features');
+const notificationRoutes = require('./routes/notifications');
+const messagingRoutes = require('./routes/messaging');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -113,6 +120,8 @@ app.use('/v1/subscriptions', subscriptionRoutes);
 app.use('/v1/gxn', gxnRoutes);
 app.use('/v1/bot', botRoutes);
 app.use('/v1/features', featuresRoutes);
+app.use('/v1/notifications', notificationRoutes);
+app.use('/v1/messaging', messagingRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/website', websiteRoutes);
 app.use('/website2', website2Routes);

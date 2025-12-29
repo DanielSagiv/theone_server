@@ -187,7 +187,26 @@ const userSchema = new mongoose.Schema({
   active_subscription_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription'
-  }
+  },
+  
+  // Push Notification Tokens
+  push_tokens: [{
+    token: {
+      type: String,
+      required: true
+    },
+    platform: {
+      type: String,
+      enum: ['ios', 'android'],
+      required: true
+    },
+    device_id: String,
+    registered_at: {
+      type: Date,
+      default: Date.now
+    },
+    last_used_at: Date
+  }]
 }, {
   timestamps: true
 });

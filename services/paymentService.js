@@ -381,6 +381,28 @@ async function processPaymentWebhook(webhookData) {
         payment.failed_at = new Date();
         payment.failure_code = webhookData.error_code;
         payment.failure_message = webhookData.error_message;
+        
+        // Send payment failure notification
+        try {
+          const notificationService = require('./notificationService');
+          const COE = require('../models/COE');
+          const coe = await COE.findById(payment.coe_id);
+          
+          if (coe && payment.user_id) {
+            await notificationService.createAndSendNotification(
+              payment.user_id.toString(),
+              'payment_failed',
+              {
+                coe_id: payment.coe_id,
+                payment_id: payment._id,
+                coe: { name: coe.name }
+              }
+            );
+          }
+        } catch (error) {
+          // Log but don't fail webhook processing if notification fails
+          console.error('[PaymentService] Error sending payment failure notification:', error);
+        }
         break;
         
       case 'REFUND_COMPLETED':
@@ -499,6 +521,44 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     // Update COE status if needed (use coeService to ensure proper side effects: seat booking, date fields)
     if (shouldUpdateStatus && statusToUpdate) {
       await coeService.updateCOEStatus(coeId, statusToUpdate, null);
+    }
+    
+    // Send payment notification
+    try {
+      const notificationService = require('./notificationService');
+      const User = require('../models/User');
+      
+      // Notify user who made the payment
+      if (completedPayment.user_id) {
+        await notificationService.createAndSendNotification(
+          completedPayment.user_id.toString(),
+          'payment_received',
+          {
+            coe_id: coeId,
+            payment_id: completedPayment._id,
+            amount: completedPayment.amount,
+            coe: { name: coe.name }
+          }
+        );
+      }
+      
+      // Also notify admin
+      if (coe.admin_id && coe.admin_id.toString() !== completedPayment.user_id?.toString()) {
+        await notificationService.createAndSendNotification(
+          coe.admin_id.toString(),
+          'payment_received',
+          {
+            coe_id: coeId,
+            payment_id: completedPayment._id,
+            amount: completedPayment.amount,
+            coe: { name: coe.name },
+            is_admin: true
+          }
+        );
+      }
+    } catch (error) {
+      // Log but don't fail payment update if notification fails
+      console.error('[PaymentService] Error sending payment notification:', error);
     }
     
     console.log('COE payment status updated:', {
