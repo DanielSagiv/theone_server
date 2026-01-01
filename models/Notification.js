@@ -56,6 +56,10 @@ const notificationSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Payment'
     },
+    sender_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
     action: String,
     action_url: String
   },
@@ -76,8 +80,8 @@ const notificationSchema = new mongoose.Schema({
 
 // Indexes for efficient queries
 notificationSchema.index({ user_id: 1, read: 1 });
-notificationSchema.index({ user_id: 1, created_at: -1 });
-notificationSchema.index({ type: 1, created_at: -1 });
+notificationSchema.index({ user_id: 1, createdAt: -1 }); // Use createdAt (camelCase) from timestamps
+notificationSchema.index({ type: 1, createdAt: -1 }); // Use createdAt (camelCase) from timestamps
 
 module.exports = mongoose.model('Notification', notificationSchema);
 

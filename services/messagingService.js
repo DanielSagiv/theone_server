@@ -19,29 +19,49 @@ async function verifyCOEAccess(coeId, userId) {
     const coe = await COE.findById(coeId);
     
     if (!coe) {
+      console.warn('[MessagingService] COE not found for access verification:', { coeId, userId });
       return false;
     }
 
+    const userIdStr = userId.toString();
+    const coeIdStr = coeId.toString();
+
     // Check if user is COE client
-    if (coe.client_id.toString() === userId.toString()) {
-      return true;
+    if (coe.client_id) {
+      const clientIdStr = coe.client_id.toString ? coe.client_id.toString() : String(coe.client_id);
+      if (clientIdStr === userIdStr) {
+        return true;
+      }
     }
 
     // Check if user is COE admin
-    if (coe.admin_id.toString() === userId.toString()) {
-      return true;
+    if (coe.admin_id) {
+      const adminIdStr = coe.admin_id.toString ? coe.admin_id.toString() : String(coe.admin_id);
+      if (adminIdStr === userIdStr) {
+        return true;
+      }
     }
 
     // Check if user is assigned runner (COE-level)
-    if (coe.runner_assignment?.runner_id?.toString() === userId.toString()) {
-      return true;
+    if (coe.runner_assignment?.runner_id) {
+      const runnerIdStr = coe.runner_assignment.runner_id.toString ? 
+        coe.runner_assignment.runner_id.toString() : 
+        String(coe.runner_assignment.runner_id);
+      if (runnerIdStr === userIdStr) {
+        return true;
+      }
     }
 
     // Check if user is assigned runner (event-level)
     if (coe.events && Array.isArray(coe.events)) {
       for (const event of coe.events) {
-        if (event.runner_assignment?.runner_id?.toString() === userId.toString()) {
-          return true;
+        if (event.runner_assignment?.runner_id) {
+          const eventRunnerIdStr = event.runner_assignment.runner_id.toString ? 
+            event.runner_assignment.runner_id.toString() : 
+            String(event.runner_assignment.runner_id);
+          if (eventRunnerIdStr === userIdStr) {
+            return true;
+          }
         }
       }
     }
@@ -49,11 +69,26 @@ async function verifyCOEAccess(coeId, userId) {
     // Check if user is participant
     if (coe.participants && Array.isArray(coe.participants)) {
       for (const participant of coe.participants) {
-        if (participant.user_id?.toString() === userId.toString()) {
-          return true;
+        if (participant.user_id) {
+          const participantIdStr = participant.user_id.toString ? 
+            participant.user_id.toString() : 
+            String(participant.user_id);
+          if (participantIdStr === userIdStr) {
+            return true;
+          }
         }
       }
     }
+
+    // Log access denial for debugging (but don't spam)
+    console.warn('[MessagingService] Access denied to COE messages:', {
+      coe_id: coeIdStr,
+      user_id: userIdStr,
+      coe_client_id: coe.client_id?.toString(),
+      coe_admin_id: coe.admin_id?.toString(),
+      has_runner: !!coe.runner_assignment?.runner_id,
+      participants_count: coe.participants?.length || 0
+    });
 
     return false;
   } catch (error) {
@@ -254,6 +289,7 @@ async function sendCOEMessage(coeId, userId, content) {
         await notificationService.createAndSendNotification(participantId, 'coe_message', {
           coe_id: coeId,
           message_id: message._id,
+          sender_id: message.sender_id, // Add sender_id for avatar display
           coe: { name: coe.name },
           sender_name: message.sender_name,
           message_preview: messagePreview

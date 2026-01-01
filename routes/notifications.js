@@ -155,6 +155,110 @@ router.get('/unread-count', authenticateToken, async (req, res) => {
   }
 });
 
+/**
+ * PUT /v1/notifications/:notificationId/unread
+ * Mark notification as unread
+ */
+router.put('/:notificationId/unread', authenticateToken, async (req, res) => {
+  try {
+    const notification = await notificationService.markAsUnread(
+      req.params.notificationId,
+      req.user._id
+    );
+
+    res.json({
+      success: true,
+      data: {
+        notification
+      }
+    });
+  } catch (error) {
+    console.error('Mark notification unread error:', {
+      notification_id: req.params.notificationId,
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'MARK_UNREAD_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /v1/notifications/:notificationId
+ * Delete notification
+ */
+router.delete('/:notificationId', authenticateToken, async (req, res) => {
+  try {
+    await notificationService.deleteNotification(
+      req.params.notificationId,
+      req.user._id
+    );
+
+    res.json({
+      success: true,
+      message: 'Notification deleted'
+    });
+  } catch (error) {
+    console.error('Delete notification error:', {
+      notification_id: req.params.notificationId,
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    const statusCode = error.message.includes('not found') ? 404 : 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'DELETE_NOTIFICATION_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * DELETE /v1/notifications/read-all
+ * Delete all read notifications
+ */
+router.delete('/read-all', authenticateToken, async (req, res) => {
+  try {
+    const result = await notificationService.deleteAllRead(req.user._id);
+
+    res.json({
+      success: true,
+      message: 'All read notifications deleted',
+      data: {
+        deleted_count: result.deletedCount
+      }
+    });
+  } catch (error) {
+    console.error('Delete all read notifications error:', {
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'DELETE_ALL_READ_FAILED',
+        message: error.message
+      }
+    });
+  }
+});
+
 module.exports = router;
 
 

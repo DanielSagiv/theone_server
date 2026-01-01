@@ -201,6 +201,7 @@ async function createNotification(userId, type, data) {
         coe_id: data.coe_id,
         message_id: data.message_id,
         payment_id: data.payment_id,
+        sender_id: data.sender_id, // Store sender_id for avatar display
         action: type,
         action_url: actionUrl
       },
@@ -474,17 +475,25 @@ async function getUserNotifications(userId, filters = {}, pagination = {}) {
       query.read = read === 'true' || read === true;
     }
     if (type) {
-      query.type = type;
+      // Support comma-separated types (e.g., "coe_approved,coe_paid,coe_completed")
+      if (type.includes(',')) {
+        const types = type.split(',').map(t => t.trim()).filter(t => t);
+        query.type = { $in: types };
+      } else {
+        query.type = type;
+      }
     }
 
     // Get notifications
+    // Use createdAt (camelCase) since timestamps: true creates createdAt, not created_at
     const notifications = await Notification.find(query)
-      .sort({ created_at: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .populate('data.coe_id', 'name')
       .populate('data.message_id', 'content')
-      .populate('data.payment_id', 'amount currency');
+      .populate('data.payment_id', 'amount currency')
+      .populate('data.sender_id', 'firstName lastName avatarUrl');
 
     // Get total count
     const total = await Notification.countDocuments(query);
@@ -583,6 +592,81 @@ async function getUnreadCount(userId) {
   }
 }
 
+/**
+ * Mark notification as unread
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Updated notification
+ */
+async function markAsUnread(notificationId, userId) {
+  try {
+    const notification = await Notification.findOne({
+      _id: notificationId,
+      user_id: userId
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    if (notification.read) {
+      notification.read = false;
+      notification.read_at = null;
+      await notification.save();
+    }
+
+    return notification;
+  } catch (error) {
+    console.error('[NotificationService] Error marking notification as unread:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete notification
+ * @param {string} notificationId - Notification ID
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Deleted notification
+ */
+async function deleteNotification(notificationId, userId) {
+  try {
+    const notification = await Notification.findOneAndDelete({
+      _id: notificationId,
+      user_id: userId
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found');
+    }
+
+    return notification;
+  } catch (error) {
+    console.error('[NotificationService] Error deleting notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete all read notifications for user
+ * @param {string} userId - User ID
+ * @returns {Promise<Object>} Delete result
+ */
+async function deleteAllRead(userId) {
+  try {
+    const result = await Notification.deleteMany({
+      user_id: userId,
+      read: true
+    });
+
+    return {
+      deletedCount: result.deletedCount
+    };
+  } catch (error) {
+    console.error('[NotificationService] Error deleting all read notifications:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   initializeFirebase,
   initializeExpo,
@@ -591,8 +675,11 @@ module.exports = {
   createAndSendNotification,
   getUserNotifications,
   markAsRead,
+  markAsUnread,
   markAllAsRead,
   getUnreadCount,
+  deleteNotification,
+  deleteAllRead,
   generateNotificationContent,
   generateDeepLink
 };
