@@ -81,3 +81,5 @@ notificationSchema.index({ type: 1, created_at: -1 });
 
 module.exports = mongoose.model('Notification', notificationSchema);
 
+
+

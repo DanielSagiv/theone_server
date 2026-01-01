@@ -2,7 +2,7 @@
 ## The1 Platform - Enhanced Notification Center Implementation Plan
 
 **Status**: 📋 Planning  
-**Version**: 1.0  
+**Version**: 1.1  
 **Last Updated**: January 2025  
 **Priority**: P1 (High - UX Enhancement)  
 **Related Documentation**: [Messaging Thread & Push Notifications](./MESSAGING-THREAD-AND-PUSH-NOTIFICATIONS.md)
@@ -30,7 +30,7 @@ This document outlines the implementation plan for enhancing the Notification Ce
 - ✅ Backend API endpoints (`server/routes/notifications.js`)
 
 **What Needs Enhancement:**
-- 📋 Visual design and organization (date grouping, icons)
+- 📋 Visual design and organization (date grouping, icons, avatars)
 - 📋 Filtering and search capabilities
 - 📋 Navigation integration (badge on tabs/header)
 - 📋 Additional actions (delete, batch operations)
@@ -247,8 +247,185 @@ This document outlines the implementation plan for enhancing the Notification Ce
 
 **Dependencies**:
 - `@expo/vector-icons` (already installed with Expo)
+- `expo-asset` (for app icon - already available with Expo)
 
-#### 1.3 Enhanced Read/Unread Visual Design
+#### 1.3 User Avatar Display
+
+**Description**: Show user avatar image when notification is from a user, or app icon when from system.
+
+**Implementation**:
+
+**Backend Changes** (`server/services/messagingService.js`):
+- Update notification creation to include `sender_id`:
+  ```javascript
+  await notificationService.createAndSendNotification(participantId, 'coe_message', {
+    coe_id: coeId,
+    message_id: message._id,
+    sender_id: message.sender_id, // Add sender_id
+    sender_name: message.sender_name,
+    message_preview: messagePreview
+  });
+  ```
+
+**Backend Changes** (`server/services/notificationService.js`):
+- Update `createNotification` to store `sender_id` in notification data:
+  ```javascript
+  const notification = new Notification({
+    user_id: userId,
+    type,
+    title: content.title,
+    body: content.body,
+    data: {
+      coe_id: data.coe_id,
+      message_id: data.message_id,
+      payment_id: data.payment_id,
+      sender_id: data.sender_id, // Add sender_id for user notifications
+      action: type,
+      action_url: actionUrl
+    },
+    read: false,
+    sent: false
+  });
+  ```
+
+**Backend Changes** (`server/routes/notifications.js`):
+- Update GET endpoint to populate sender information:
+  ```javascript
+  const notifications = await Notification.find(query)
+    .sort({ created_at: -1 })
+    .skip(skip)
+    .limit(limit)
+    .populate('data.coe_id', 'name')
+    .populate('data.message_id', 'content')
+    .populate('data.payment_id', 'amount currency')
+    .populate('data.sender_id', 'firstName lastName avatarUrl'); // Populate sender
+  ```
+
+**Mobile** (`mobile/app/notifications.js`):
+- Add avatar rendering logic:
+  ```javascript
+  import { Image } from 'react-native';
+  import { Asset } from 'expo-asset';
+  
+  const getNotificationAvatar = (notification) => {
+    // If notification has sender_id, it's from a user - show user avatar
+    if (notification.data?.sender_id) {
+      const sender = notification.data.sender_id;
+      if (sender.avatarUrl) {
+        return { uri: sender.avatarUrl, type: 'user' };
+      } else {
+        // Show initials if no avatar
+        const firstName = sender.firstName || '';
+        const lastName = sender.lastName || '';
+        const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'U';
+        return { initials, type: 'user' };
+      }
+    }
+    
+    // System notification - show app icon
+    return { 
+      source: require('../../assets/icon.png'), 
+      type: 'system' 
+    };
+  };
+  
+  const renderAvatar = (notification) => {
+    const avatar = getNotificationAvatar(notification);
+    
+    if (avatar.type === 'user' && avatar.uri) {
+      return (
+        <Image 
+          source={{ uri: avatar.uri }} 
+          style={styles.avatar}
+          defaultSource={require('../../assets/icon.png')}
+        />
+      );
+    } else if (avatar.type === 'user' && avatar.initials) {
+      return (
+        <View style={[styles.avatar, styles.avatarInitials]}>
+          <Text style={styles.avatarText}>{avatar.initials}</Text>
+        </View>
+      );
+    } else {
+      // System notification
+      return (
+        <Image 
+          source={avatar.source} 
+          style={styles.avatar}
+        />
+      );
+    }
+  };
+  ```
+
+- Update notification item render:
+  ```javascript
+  const renderNotification = ({item}) => {
+    const isUnread = !item.read;
+    const iconName = getNotificationIcon(item.type);
+    const iconColor = getNotificationIconColor(item.type);
+    
+    return (
+      <TouchableOpacity
+        style={[styles.notificationItem, isUnread && styles.unreadItem]}
+        onPress={() => handleNotificationPress(item)}>
+        {/* Avatar */}
+        <View style={styles.avatarContainer}>
+          {renderAvatar(item)}
+        </View>
+        
+        {/* Icon */}
+        <View style={styles.iconContainer}>
+          <Ionicons name={iconName} size={24} color={iconColor} />
+        </View>
+        
+        <View style={styles.notificationContent}>
+          {/* ... existing content ... */}
+        </View>
+        {isUnread && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+    );
+  };
+  ```
+
+- Add avatar styles:
+  ```javascript
+  const styles = StyleSheet.create({
+    avatarContainer: {
+      marginRight: 12,
+    },
+    avatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.cardBackground,
+    },
+    avatarInitials: {
+      backgroundColor: colors.gold,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarText: {
+      color: colors.black,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    // ... existing styles ...
+  });
+  ```
+
+**Files to Modify**:
+- `server/services/messagingService.js` - Add sender_id to notification data
+- `server/services/notificationService.js` - Store sender_id in notification data
+- `server/routes/notifications.js` - Populate sender information
+- `mobile/app/notifications.js` - Add avatar rendering
+
+**Note**: 
+- User notifications (e.g., `coe_message`) will show sender avatar or initials
+- System notifications (e.g., `coe_approved`, `payment_received`) will show app icon
+- App icon path: `/Users/sagivdaniel/Documents/THEONE/mobile/assets/icon.png`
+
+#### 1.4 Enhanced Read/Unread Visual Design
 
 **Description**: Improve visual distinction between read and unread notifications.
 
@@ -386,8 +563,23 @@ This document outlines the implementation plan for enhancing the Notification Ce
 **Files to Modify**:
 - `mobile/app/notifications.js` - Add filter tabs and logic
 
-**Backend** (if needed):
-- `server/routes/notifications.js` - May need to handle comma-separated type filter
+**Backend** (Required):
+- `server/routes/notifications.js` - Handle comma-separated type filter
+- `server/services/notificationService.js` - Update `getUserNotifications` to support multiple types
+
+**Backend Implementation**:
+```javascript
+// In notificationService.js - getUserNotifications function
+if (type) {
+  // Support comma-separated types (e.g., "coe_approved,coe_paid,coe_completed")
+  if (type.includes(',')) {
+    const types = type.split(',').map(t => t.trim()).filter(t => t);
+    query.type = { $in: types };
+  } else {
+    query.type = type;
+  }
+}
+```
 
 #### 2.2 Search Functionality
 
@@ -1231,7 +1423,8 @@ This document outlines the implementation plan for enhancing the Notification Ce
 1. ✅ **Navigation Badge** - Quick win, high impact
 2. ✅ **Date Grouping** - Better organization
 3. ✅ **Notification Type Icons** - Better visual hierarchy
-4. ✅ **Enhanced Read/Unread Design** - Better UX
+4. ✅ **User Avatar Display** - Show user avatars for user notifications, app icon for system
+5. ✅ **Enhanced Read/Unread Design** - Better UX
 
 ### Should Have
 5. **Filter Tabs** - Better navigation
@@ -1255,9 +1448,14 @@ This document outlines the implementation plan for enhancing the Notification Ce
 3. `DELETE /v1/notifications/read-all` - Delete all read notifications
 
 **Service Functions to Add**:
-- `markAsUnread(notificationId, userId)`
-- `deleteNotification(notificationId, userId)`
-- `deleteAllRead(userId)`
+- `markAsUnread(notificationId, userId)` - Mark notification as unread
+- `deleteNotification(notificationId, userId)` - Delete single notification
+- `deleteAllRead(userId)` - Delete all read notifications
+
+**Backend Enhancements Needed**:
+- Update `getUserNotifications` to support comma-separated type filters (for filter tabs)
+- Update notification creation to include `sender_id` for user notifications
+- Populate sender information in GET notifications endpoint
 
 **Files to Modify**:
 - `server/routes/notifications.js` - Add new endpoints
@@ -1269,15 +1467,24 @@ This document outlines the implementation plan for enhancing the Notification Ce
 - `mobile/src/components/NotificationBadge.js` - Badge component
 - `mobile/src/components/FloatingNotificationButton.js` (optional) - FAB component
 
+**Backend Model Updates**:
+- `server/models/Notification.js` - No schema change needed (sender_id stored in data object)
+- `server/services/messagingService.js` - Include sender_id when creating message notifications
+- `server/services/notificationService.js` - Store sender_id in notification data
+
 **Dependencies**:
 - `react-native-gesture-handler` - For swipe actions (may already be installed)
 - `@expo/vector-icons` - For icons (already installed)
 
 **Files to Modify**:
 - `mobile/app/notifications.js` - Main enhancements
+  - **Note**: Ensure `useRef` is imported from 'react' (currently used but may be missing import)
 - `mobile/app/(tabs)/_layout.js` - Add badge to tab bar
 - `mobile/app/(tabs)/index.js` - Add header button
 - `mobile/app/(tabs)/profile.js` - Add header button
+- `server/services/messagingService.js` - Add sender_id to notification data
+- `server/services/notificationService.js` - Store sender_id, support comma-separated types
+- `server/routes/notifications.js` - Populate sender, handle comma-separated types
 
 ---
 
@@ -1306,6 +1513,9 @@ This document outlines the implementation plan for enhancing the Notification Ce
 1. **Visual Enhancements**
    - ✅ Date grouping displays correctly
    - ✅ Icons show for each notification type
+   - ✅ User avatars display for message notifications
+   - ✅ App icon displays for system notifications
+   - ✅ User initials display when avatar not available
    - ✅ Read/unread visual distinction works
 
 2. **Filtering**
@@ -1371,14 +1581,14 @@ mobile/
 
 ## Estimated Timeline
 
-- **Phase 1** (Visual Enhancements): 8-12 hours (1-2 days)
+- **Phase 1** (Visual Enhancements): 10-14 hours (1.5-2 days) - *Increased due to avatar feature*
 - **Phase 2** (Filtering): 6-8 hours (1 day)
 - **Phase 3** (Navigation Integration): 4-6 hours (0.5-1 day)
 - **Phase 4** (Enhanced Actions): 8-10 hours (1-2 days)
 - **Phase 5** (Enhanced Object Access): 10-12 hours (1-2 days)
 - **Phase 6** (Real-time Updates): 4-6 hours (0.5-1 day)
 
-**Total**: ~40-54 hours (5-7 days)
+**Total**: ~42-56 hours (5.5-7.5 days)
 
 **Recommended Approach**: Implement Phase 1 and Phase 3 first (MVP enhancements), then proceed with other phases based on priority.
 
@@ -1394,6 +1604,14 @@ mobile/
 
 ## Changelog
 
+### Version 1.1 (January 2025)
+- Added user avatar display feature (user notifications show avatar, system notifications show app icon)
+- Added backend requirements for sender_id tracking
+- Added comma-separated type filter support for backend
+- Added missing useRef import note
+- Updated timeline estimates
+- Enhanced testing plan with avatar tests
+
 ### Version 1.0 (January 2025)
 - Initial enhancement plan
 - Detailed implementation steps for all phases
@@ -1405,4 +1623,6 @@ mobile/
 
 **Document Status**: Ready for Implementation  
 **Next Steps**: Start with Phase 1 (Visual Enhancements) and Phase 3 (Navigation Integration) for quick wins
+
+
 
