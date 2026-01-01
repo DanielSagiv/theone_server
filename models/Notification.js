@@ -83,6 +83,17 @@ notificationSchema.index({ user_id: 1, read: 1 });
 notificationSchema.index({ user_id: 1, createdAt: -1 }); // Use createdAt (camelCase) from timestamps
 notificationSchema.index({ type: 1, createdAt: -1 }); // Use createdAt (camelCase) from timestamps
 
+// Unique index to prevent duplicate notifications for the same message
+// Sparse: only applies when message_id exists (allows other notification types)
+notificationSchema.index(
+  { user_id: 1, type: 1, 'data.message_id': 1 },
+  { 
+    unique: true, 
+    sparse: true,
+    name: 'unique_message_notification'
+  }
+);
+
 module.exports = mongoose.model('Notification', notificationSchema);
 
 

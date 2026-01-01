@@ -284,21 +284,74 @@ async function sendCOEMessage(coeId, userId, content) {
     // Create notifications for all participants
     const messagePreview = content.length > 50 ? content.substring(0, 50) + '...' : content;
     
+    // Use userId (ObjectId) instead of populated object for sender_id
+    const senderId = userId.toString();
+    const messageId = message._id.toString();
+    
+    // Log notification creation attempt with timestamp
+    const startTime = Date.now();
+    console.log(`[MessagingService] [${new Date().toISOString()}] Creating notifications for message:`, {
+      message_id: messageId,
+      sender_id: senderId,
+      participants_count: participants.length,
+      participants: participants,
+      timestamp: startTime
+    });
+    
+    // Track notification creation calls
+    const notificationCalls = [];
+    
     for (const participantId of participants) {
       try {
-        await notificationService.createAndSendNotification(participantId, 'coe_message', {
+        const callStartTime = Date.now();
+        console.log(`[MessagingService] [${new Date().toISOString()}] Creating notification for participant:`, {
+          participant_id: participantId,
+          message_id: messageId,
+          coe_id: coeId?.toString(),
+          call_timestamp: callStartTime
+        });
+        
+        const result = await notificationService.createAndSendNotification(participantId, 'coe_message', {
           coe_id: coeId,
           message_id: message._id,
-          sender_id: message.sender_id, // Add sender_id for avatar display
+          sender_id: senderId, // Use ObjectId string instead of populated object
           coe: { name: coe.name },
           sender_name: message.sender_name,
           message_preview: messagePreview
         });
+        
+        const callEndTime = Date.now();
+        notificationCalls.push({
+          participant_id: participantId,
+          notification_id: result.notification?._id?.toString(),
+          was_existing: result.notification?._wasExisting,
+          push_sent: result.sendResult?.success !== false,
+          duration_ms: callEndTime - callStartTime
+        });
+        
+        console.log(`[MessagingService] [${new Date().toISOString()}] Notification completed for participant:`, {
+          participant_id: participantId,
+          notification_id: result.notification?._id?.toString(),
+          was_existing: result.notification?._wasExisting,
+          push_sent: result.sendResult?.success !== false,
+          duration_ms: callEndTime - callStartTime
+        });
       } catch (error) {
-        console.error(`[MessagingService] Failed to send notification to ${participantId}:`, error);
+        console.error(`[MessagingService] [${new Date().toISOString()}] Failed to send notification to ${participantId}:`, {
+          error: error.message,
+          stack: error.stack
+        });
         // Continue with other participants even if one fails
       }
     }
+    
+    const totalDuration = Date.now() - startTime;
+    console.log(`[MessagingService] [${new Date().toISOString()}] All notifications completed:`, {
+      message_id: messageId,
+      total_participants: participants.length,
+      notification_calls: notificationCalls,
+      total_duration_ms: totalDuration
+    });
 
     return message;
   } catch (error) {

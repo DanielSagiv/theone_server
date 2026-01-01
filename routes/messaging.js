@@ -61,9 +61,21 @@ router.get('/coe/:coeId', authenticateToken, async (req, res) => {
  * Send a message to COE thread
  */
 router.post('/coe/:coeId', authenticateToken, async (req, res) => {
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const startTime = Date.now();
+  
+  console.log(`[MessagingRoute] [${requestId}] [${new Date().toISOString()}] POST /coe/:coeId called:`, {
+    coe_id: req.params.coeId,
+    user_id: req.user._id?.toString(),
+    content_length: req.body?.content?.length,
+    ip: req.ip,
+    user_agent: req.get('user-agent')
+  });
+  
   try {
     const { error, value } = sendMessageSchema.validate(req.body);
     if (error) {
+      console.log(`[MessagingRoute] [${requestId}] Validation error:`, error.details[0].message);
       return res.status(400).json({
         success: false,
         error: {
@@ -73,11 +85,18 @@ router.post('/coe/:coeId', authenticateToken, async (req, res) => {
       });
     }
 
+    console.log(`[MessagingRoute] [${requestId}] Calling sendCOEMessage...`);
     const message = await messagingService.sendCOEMessage(
       req.params.coeId,
       req.user._id,
       value.content
     );
+
+    const duration = Date.now() - startTime;
+    console.log(`[MessagingRoute] [${requestId}] Message sent successfully in ${duration}ms:`, {
+      message_id: message._id?.toString(),
+      duration_ms: duration
+    });
 
     res.json({
       success: true,
@@ -86,10 +105,12 @@ router.post('/coe/:coeId', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Send COE message error:', {
+    const duration = Date.now() - startTime;
+    console.error(`[MessagingRoute] [${requestId}] Send COE message error (${duration}ms):`, {
       coe_id: req.params.coeId,
-      user_id: req.user._id,
+      user_id: req.user._id?.toString(),
       error: error.message,
+      stack: error.stack,
       timestamp: new Date().toISOString()
     });
 

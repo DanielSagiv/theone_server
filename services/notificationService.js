@@ -189,9 +189,135 @@ function generateDeepLink(type, data) {
  */
 async function createNotification(userId, type, data) {
   try {
+    // Check for existing notification to prevent duplicates (idempotency)
+    // Only check for message notifications to avoid blocking other notification types
+    if (type === 'coe_message' && data.message_id) {
+      // Normalize message_id to string for consistent comparison
+      const mongoose = require('mongoose');
+      let messageIdStr = null;
+      
+      // Extract ObjectId string from various formats
+      if (data.message_id && data.message_id.toString) {
+        messageIdStr = data.message_id.toString();
+      } else if (typeof data.message_id === 'string') {
+        messageIdStr = data.message_id;
+      } else if (data.message_id && data.message_id._id) {
+        // Handle populated object
+        messageIdStr = data.message_id._id.toString();
+      }
+      
+      if (messageIdStr && mongoose.Types.ObjectId.isValid(messageIdStr)) {
+        // Query using both ObjectId and string to catch any format
+        const messageIdObj = new mongoose.Types.ObjectId(messageIdStr);
+        
+        const existing = await Notification.findOne({
+          user_id: userId,
+          type: type,
+          $or: [
+            { 'data.message_id': messageIdObj },
+            { 'data.message_id': messageIdStr }
+          ]
+        });
+        
+        if (existing) {
+          console.log('[NotificationService] ✅ Duplicate notification prevented:', {
+            userId: userId?.toString(),
+            type,
+            message_id: messageIdStr,
+            existing_notification_id: existing._id?.toString(),
+            existing_created_at: existing.createdAt
+          });
+          return existing; // Return existing notification instead of creating duplicate
+        }
+        
+        // Log when creating new notification for debugging
+        console.log('[NotificationService] 📝 Creating new notification (no duplicate found):', {
+          userId: userId?.toString(),
+          type,
+          message_id: messageIdStr
+        });
+      } else {
+        console.warn('[NotificationService] ⚠️ Invalid message_id format, skipping duplicate check:', {
+          userId: userId?.toString(),
+          message_id: data.message_id,
+          message_id_type: typeof data.message_id
+        });
+      }
+    }
+
     const content = generateNotificationContent(type, data);
     const actionUrl = generateDeepLink(type, data);
 
+    // For message notifications, use findOneAndUpdate with upsert for atomic duplicate prevention
+    if (type === 'coe_message' && data.message_id) {
+      const mongoose = require('mongoose');
+      let messageIdForQuery = data.message_id;
+      
+      // Normalize message_id
+      if (messageIdForQuery && messageIdForQuery.toString) {
+        messageIdForQuery = messageIdForQuery.toString();
+      } else if (typeof messageIdForQuery === 'string') {
+        // Already a string
+      } else if (messageIdForQuery && messageIdForQuery._id) {
+        messageIdForQuery = messageIdForQuery._id.toString();
+      }
+      
+      if (messageIdForQuery && mongoose.Types.ObjectId.isValid(messageIdForQuery)) {
+        const messageIdObj = new mongoose.Types.ObjectId(messageIdForQuery);
+        
+        // Use findOneAndUpdate with upsert for atomic operation
+        // This ensures only one notification is created even in race conditions
+        const notificationData = {
+          user_id: userId,
+          type,
+          title: content.title,
+          body: content.body,
+          data: {
+            coe_id: data.coe_id,
+            message_id: messageIdObj,
+            payment_id: data.payment_id,
+            sender_id: data.sender_id,
+            action: type,
+            action_url: actionUrl
+          },
+          read: false,
+          sent: false
+        };
+        
+        // Check if notification already exists first
+        const existing = await Notification.findOne({
+          user_id: userId,
+          type: type,
+          'data.message_id': { $in: [messageIdObj, messageIdForQuery] }
+        });
+        
+        if (existing) {
+          console.log('[NotificationService] ✅ Found existing notification (skipping create and push):', {
+            notification_id: existing._id?.toString(),
+            user_id: userId?.toString(),
+            type,
+            message_id: messageIdForQuery,
+            created_at: existing.createdAt
+          });
+          // Mark that this is an existing notification (not new)
+          existing._wasExisting = true;
+          return existing;
+        }
+        
+        // Create new notification
+        const result = await Notification.create(notificationData);
+        
+        console.log('[NotificationService] ✅ Created new notification:', {
+          notification_id: result._id?.toString(),
+          user_id: userId?.toString(),
+          type,
+          message_id: messageIdForQuery
+        });
+        return result;
+      }
+    }
+
+    // For other notification types, use regular save
     const notification = new Notification({
       user_id: userId,
       type,
@@ -209,8 +335,69 @@ async function createNotification(userId, type, data) {
       sent: false
     });
 
-    await notification.save();
-    return notification;
+    try {
+      const savedNotification = await notification.save();
+      console.log('[NotificationService] ✅ Notification saved successfully:', {
+        notification_id: savedNotification._id?.toString(),
+        user_id: userId?.toString(),
+        type,
+        message_id: data.message_id?.toString()
+      });
+      return savedNotification;
+    } catch (saveError) {
+      // Handle duplicate key error (E11000) from unique index
+      if (saveError.code === 11000 || saveError.code === 11001 || saveError.message?.includes('duplicate key')) {
+        console.log('[NotificationService] ✅ Duplicate prevented by unique index:', {
+          userId: userId?.toString(),
+          type,
+          message_id: data.message_id?.toString(),
+          error_code: saveError.code,
+          error_message: saveError.message
+        });
+        
+        // Find and return the existing notification
+        // Try multiple query formats to find the existing one
+        const mongoose = require('mongoose');
+        let messageIdForQuery = data.message_id;
+        
+        if (messageIdForQuery && messageIdForQuery.toString) {
+          messageIdForQuery = messageIdForQuery.toString();
+        }
+        
+        let existing = null;
+        if (messageIdForQuery && mongoose.Types.ObjectId.isValid(messageIdForQuery)) {
+          const messageIdObj = new mongoose.Types.ObjectId(messageIdForQuery);
+          existing = await Notification.findOne({
+            user_id: userId,
+            type: type,
+            $or: [
+              { 'data.message_id': messageIdObj },
+              { 'data.message_id': messageIdForQuery }
+            ]
+          });
+        }
+        
+        if (existing) {
+          console.log('[NotificationService] ✅ Returning existing notification:', {
+            existing_id: existing._id?.toString()
+          });
+          return existing;
+        } else {
+          console.warn('[NotificationService] ⚠️ Duplicate error but existing notification not found, retrying create...');
+          // If we can't find existing, it might be a race condition - retry the query check
+          throw saveError;
+        }
+      }
+      
+      // Re-throw if it's not a duplicate error
+      console.error('[NotificationService] ❌ Error saving notification:', {
+        error_code: saveError.code,
+        error_message: saveError.message,
+        userId: userId?.toString(),
+        type
+      });
+      throw saveError;
+    }
   } catch (error) {
     console.error('[NotificationService] Error creating notification:', error);
     throw error;
@@ -236,6 +423,16 @@ async function sendPushNotification(userId, notification) {
       console.log(`[NotificationService] No push tokens found for user ${userId}`);
       return { success: false, reason: 'no_push_tokens' };
     }
+    
+    console.log(`[NotificationService] User has ${user.push_tokens.length} push token(s):`, {
+      user_id: userId?.toString(),
+      token_count: user.push_tokens.length,
+      tokens: user.push_tokens.map(t => ({
+        token_preview: t.token?.substring(0, 20) + '...',
+        type: t.token?.startsWith('ExponentPushToken[') ? 'expo' : 'fcm',
+        last_used: t.last_used_at
+      }))
+    });
 
     // Prepare FCM message
     const message = {
@@ -272,20 +469,39 @@ async function sendPushNotification(userId, notification) {
     const expoTokens = [];
     const fcmTokens = [];
     
-    // Separate Expo tokens from FCM tokens
+    // Track unique tokens to prevent duplicates
+    const seenTokens = new Set();
+    
+    // Separate Expo tokens from FCM tokens and deduplicate
     for (const tokenData of user.push_tokens) {
-      if (tokenData.token.startsWith('ExponentPushToken[')) {
+      const token = tokenData.token;
+      
+      // Skip if we've already seen this exact token
+      if (seenTokens.has(token)) {
+        console.warn(`[NotificationService] ⚠️ Skipping duplicate push token: ${token.substring(0, 20)}...`);
+        continue;
+      }
+      seenTokens.add(token);
+      
+      if (token.startsWith('ExponentPushToken[')) {
         expoTokens.push({
-          token: tokenData.token,
+          token: token,
           tokenData: tokenData
         });
       } else {
         fcmTokens.push({
-          token: tokenData.token,
+          token: token,
           tokenData: tokenData
         });
       }
     }
+    
+    console.log(`[NotificationService] Deduplicated push tokens:`, {
+      original_count: user.push_tokens.length,
+      unique_expo_tokens: expoTokens.length,
+      unique_fcm_tokens: fcmTokens.length,
+      total_unique: expoTokens.length + fcmTokens.length
+    });
     
     // Send Expo push notifications via Expo API
     if (expoTokens.length > 0) {
@@ -438,19 +654,68 @@ async function sendPushNotification(userId, notification) {
  * @returns {Promise<Object>} Created notification and send result
  */
 async function createAndSendNotification(userId, type, data) {
+  const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const startTime = Date.now();
+  
   try {
-    // Create notification document
+    console.log(`[NotificationService] [${callId}] [${new Date().toISOString()}] createAndSendNotification called:`, {
+      user_id: userId?.toString(),
+      type,
+      message_id: data.message_id?.toString(),
+      coe_id: data.coe_id?.toString()
+    });
+    
+    // Create notification document (or get existing)
     const notification = await createNotification(userId, type, data);
     
-    // Send push notification
-    const sendResult = await sendPushNotification(userId, notification);
+    console.log(`[NotificationService] [${callId}] Notification created/retrieved:`, {
+      notification_id: notification._id?.toString(),
+      was_existing: notification._wasExisting,
+      created_at: notification.createdAt
+    });
+    
+    // Only send push notification if this is a NEW notification
+    // If it was an existing notification, don't send push again (prevents duplicate alerts)
+    let sendResult = null;
+    if (!notification._wasExisting) {
+      console.log(`[NotificationService] [${callId}] Sending push notification for NEW notification:`, {
+        notification_id: notification._id?.toString(),
+        user_id: userId?.toString()
+      });
+      sendResult = await sendPushNotification(userId, notification);
+      console.log(`[NotificationService] [${callId}] Push notification sent:`, {
+        success: sendResult?.success,
+        sent_count: sendResult?.sent_count
+      });
+    } else {
+      console.log(`[NotificationService] [${callId}] ⚠️ SKIPPING push notification (notification already exists):`, {
+        notification_id: notification._id?.toString(),
+        user_id: userId?.toString(),
+        created_at: notification.createdAt
+      });
+      sendResult = { success: false, reason: 'notification_already_exists' };
+    }
+    
+    // Remove the internal flag before returning
+    delete notification._wasExisting;
+    
+    const duration = Date.now() - startTime;
+    console.log(`[NotificationService] [${callId}] Completed in ${duration}ms:`, {
+      notification_id: notification._id?.toString(),
+      push_sent: !notification._wasExisting,
+      duration_ms: duration
+    });
     
     return {
       notification,
       sendResult
     };
   } catch (error) {
-    console.error('[NotificationService] Error creating and sending notification:', error);
+    console.error(`[NotificationService] [${callId}] Error creating and sending notification:`, {
+      error: error.message,
+      stack: error.stack,
+      duration_ms: Date.now() - startTime
+    });
     throw error;
   }
 }
@@ -495,6 +760,32 @@ async function getUserNotifications(userId, filters = {}, pagination = {}) {
       .populate('data.payment_id', 'amount currency')
       .populate('data.sender_id', 'firstName lastName avatarUrl');
 
+    // Remove duplicates based on notification ID (defensive check)
+    const seenIds = new Set();
+    const uniqueNotifications = notifications.filter(notif => {
+      const id = notif._id.toString();
+      if (seenIds.has(id)) {
+        console.warn('[NotificationService] ⚠️ Duplicate notification found in query results:', {
+          notification_id: id,
+          user_id: userId?.toString(),
+          type: notif.type,
+          message_id: notif.data?.message_id?.toString()
+        });
+        return false;
+      }
+      seenIds.add(id);
+      return true;
+    });
+
+    // Log if duplicates were found
+    if (notifications.length !== uniqueNotifications.length) {
+      console.warn('[NotificationService] ⚠️ Removed duplicate notifications from query results:', {
+        original_count: notifications.length,
+        unique_count: uniqueNotifications.length,
+        removed: notifications.length - uniqueNotifications.length
+      });
+    }
+
     // Get total count
     const total = await Notification.countDocuments(query);
 
@@ -502,7 +793,7 @@ async function getUserNotifications(userId, filters = {}, pagination = {}) {
     const unreadCount = await Notification.countDocuments({ user_id: userId, read: false });
 
     return {
-      notifications,
+      notifications: uniqueNotifications,
       pagination: {
         total,
         page,

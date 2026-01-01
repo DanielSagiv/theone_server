@@ -670,23 +670,81 @@ router.post('/push-token', authenticateToken, async (req, res) => {
     }
 
     // Check if token already exists
+    // Check for exact token match
     const existingTokenIndex = user.push_tokens.findIndex(t => t.token === token);
 
     if (existingTokenIndex >= 0) {
       // Update existing token
+      console.log(`[UsersRoute] Updating existing push token for user ${req.user._id}:`, {
+        token_preview: token.substring(0, 20) + '...',
+        platform
+      });
       user.push_tokens[existingTokenIndex].last_used_at = new Date();
       user.push_tokens[existingTokenIndex].platform = platform;
     } else {
-      // Add new token
-      user.push_tokens.push({
-        token,
-        platform,
-        registered_at: new Date(),
-        last_used_at: new Date()
+      // Check for duplicate tokens (same token string but different object)
+      // This can happen if token was registered multiple times
+      const duplicateIndex = user.push_tokens.findIndex(t => 
+        t.token && t.token.toString() === token.toString()
+      );
+      
+      if (duplicateIndex >= 0) {
+        // Found duplicate - update existing instead of adding new
+        console.log(`[UsersRoute] Found duplicate push token, updating instead of adding:`, {
+          token_preview: token.substring(0, 20) + '...',
+          platform,
+          existing_index: duplicateIndex
+        });
+        user.push_tokens[duplicateIndex].last_used_at = new Date();
+        user.push_tokens[duplicateIndex].platform = platform;
+      } else {
+        // Add new token
+        console.log(`[UsersRoute] Adding new push token for user ${req.user._id}:`, {
+          token_preview: token.substring(0, 20) + '...',
+          platform,
+          total_tokens_before: user.push_tokens.length
+        });
+        user.push_tokens.push({
+          token,
+          platform,
+          registered_at: new Date(),
+          last_used_at: new Date()
+        });
+      }
+    }
+
+    // Clean up any duplicate tokens (defensive measure)
+    const uniqueTokens = [];
+    const seenTokens = new Set();
+    for (const tokenData of user.push_tokens) {
+      const tokenStr = tokenData.token?.toString();
+      if (tokenStr && !seenTokens.has(tokenStr)) {
+        seenTokens.add(tokenStr);
+        uniqueTokens.push(tokenData);
+      } else if (tokenStr) {
+        console.warn(`[UsersRoute] Removing duplicate push token during registration:`, {
+          token_preview: tokenStr.substring(0, 20) + '...',
+          user_id: req.user._id
+        });
+      }
+    }
+    
+    if (uniqueTokens.length !== user.push_tokens.length) {
+      console.log(`[UsersRoute] Cleaned up duplicate tokens:`, {
+        before: user.push_tokens.length,
+        after: uniqueTokens.length,
+        removed: user.push_tokens.length - uniqueTokens.length
       });
+      user.push_tokens = uniqueTokens;
     }
 
     await user.save();
+    
+    console.log(`[UsersRoute] Push token registration complete:`, {
+      user_id: req.user._id,
+      total_tokens: user.push_tokens.length,
+      token_preview: token.substring(0, 20) + '...'
+    });
 
     res.json({
       success: true,
