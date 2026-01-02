@@ -5,6 +5,7 @@ const Location = require('../models/Location');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { searchEvents } = require('../services/eventSearchService');
 const { extractSearchIntent } = require('../services/eventSearchIntentService');
+const { getEventSeatsWithSummaries } = require('../services/eventSeatService');
 const { 
   createEventSchema, 
   updateEventSchema, 
@@ -228,6 +229,39 @@ router.get('/search', authenticateToken, async (req, res) => {
       error: {
         message: 'Failed to search events',
         details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/events/:id/seats
+ * @description Get event seats with AI-generated sentiment summaries
+ * @access Client, Admin, Runner
+ * NOTE: This route must come BEFORE /:id to avoid route conflicts
+ */
+router.get('/:id/seats', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log('[EventsRoute] GET /:id/seats called:', {
+      eventId: id,
+      user_id: req.user._id?.toString()
+    });
+
+    const result = await getEventSeatsWithSummaries(id);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('[EventsRoute] Error getting event seats:', error);
+    res.status(error.message === 'Event not found' ? 404 : 500).json({
+      success: false,
+      error: {
+        message: error.message || 'Failed to get event seats',
+        code: error.message === 'Event not found' ? 'EVENT_NOT_FOUND' : 'SERVER_ERROR'
       }
     });
   }

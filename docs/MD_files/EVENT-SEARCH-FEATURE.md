@@ -12,6 +12,9 @@ The AI will intelligently parse these prompts and extract the relevant search cr
 ## Version History
 
 - **v1.0.0** (2025-01-XX): Initial feature plan
+- **v1.1.0** (2025-01-XX): Planned event seat viewing with AI sentiment summaries
+- **v1.2.0** (2025-01-XX): Added "Search Events" quick action with form card
+- **v1.3.0** (2025-01-XX): Fully implemented event seat viewing feature with AI summaries, media inheritance, and `amir.png` icon
 
 ---
 
@@ -779,6 +782,390 @@ The AI intent extraction service uses a carefully crafted system prompt to:
 
 ---
 
+## Event Seat Viewing Enhancement
+
+### Overview
+
+When a user (client or admin) clicks an event card from search results, they are redirected to a dedicated screen showing all seats for that event with status labels and AI-generated sentiment summaries.
+
+### Features
+
+#### 1. Event Details Header
+
+**Display at Top of Screen**:
+- **Event Image**: Large hero image (from event media or location media)
+- **Event Title**: Event name (prominent)
+- **Event Description**: Full description text
+- **Venue Information**:
+  - Venue name
+  - Venue address (city, state, country)
+  - Venue type (night_club, day_club, restaurant, hotel)
+- **Event Date & Time**: 
+  - Formatted date (e.g., "Friday, January 2, 2026")
+  - Start time (e.g., "8:50 AM")
+  - End time (if available)
+
+**Layout**: Card-based header with image at top, details below
+
+#### 2. Seat Summary Statistics
+
+**Display Below Event Details**:
+- Total seats count
+- Available seats count (green badge)
+- Held seats count (yellow badge)
+- Booked seats count (blue badge)
+- Blocked seats count (red badge)
+
+**Layout**: Horizontal row of stat cards with icons
+
+#### 3. Filter Tabs
+
+**Filter Options**:
+- **All**: Show all seats
+- **Available**: Only available seats
+- **Held**: Only held seats
+- **Booked**: Only booked seats
+- **Blocked**: Only blocked seats
+
+**Layout**: Horizontal scrollable tabs (similar to notifications filter)
+
+#### 4. Seat Cards with AI Sentiment Summaries
+
+**Each Seat Card Displays**:
+- **Seat Image**: First image from seat media (or placeholder)
+- **Seat Code**: Prominent seat identifier (e.g., "A1", "VIP-12")
+- **Seat Label**: Human-readable name (if available)
+- **Category/Section**: Seat category and section name
+- **Capacity**: Number of people (badge)
+- **Price**: Event-specific price (formatted as currency)
+- **Status Badge**: Color-coded status indicator
+  - Available: Gray/Muted
+  - Held: Warning (yellow/orange)
+  - Booked: Success (green)
+  - Blocked: Error (red)
+- **AI Sentiment Summary**: AI-generated appealing recommendation text (see below)
+
+**Layout**: Grid (2 columns) or List (1 column) - configurable
+
+#### 5. AI-Generated Sentiment Summaries
+
+**Purpose**: Create appealing, concise summaries of each seat based on sentiment data to help users understand why a seat is a good choice.
+
+**Data Source**:
+- Seat sentiments from `Location.seats[].sentiment[]` array
+- Each sentiment has:
+  - `text`: Sentiment description
+  - `type`: 'A' (positive) or 'B' (negative/consideration)
+  - `updatedBy`: User who added it
+  - `updatedAt`: Timestamp
+
+**AI Processing**:
+- Use existing `seatRecommendationService.js` to generate summaries
+- Process all sentiments (both type A and type B)
+- For negative sentiments (type B), AI will reframe them positively
+  - Example: "Near restroom" → "Convenient restroom access"
+  - Example: "Far from stage" → "More intimate, less crowded area"
+- Generate concise summaries (100-150 characters)
+- Focus on experience value, not just features
+
+**Implementation**:
+- Backend: Use `generateSeatRecommendation()` from `seatRecommendationService.js`
+- Pass seat data, sentiments array, and location ID
+- Cache recommendations to reduce API costs (24-hour TTL)
+- Fallback text if AI fails: "Premium seating option with excellent amenities"
+
+**Display**:
+- Show sentiment summary below seat price
+- Style: Italic text, secondary color
+- Icon: `amir.png` image (16x16px) to indicate AI-generated content
+
+**Example Summaries**:
+- Positive: "Prime location with direct stage view and VIP service"
+- With Negative: "Intimate setting away from the main floor, perfect for conversation"
+- Generic: "Premium seating option with excellent amenities"
+
+### Backend Implementation
+
+#### New API Endpoint
+
+**File**: `server/routes/events.js`
+
+**Endpoint**: `GET /v1/events/:id/seats`
+
+**Access**: Client, Admin, Runner (authenticated users)
+
+**Response Structure**:
+```javascript
+{
+  success: true,
+  data: {
+    event: {
+      id: string,
+      name: string,
+      description: string,
+      start_datetime: Date,
+      end_datetime: Date,
+      media: Array,              // Event images
+      location: {
+        id: string,
+        name: string,
+        type: string,
+        address: {
+          city: string,
+          state: string,
+          country: string,
+          full: string
+        },
+        media: Array            // Venue images
+      }
+    },
+    seats: [
+      {
+        id: string,              // Event seat _id
+        code: string,
+        label: string,
+        category: string,
+        section: string,
+        capacity: number,
+        event_price: number,
+        status: 'available' | 'held' | 'booked' | 'blocked',
+        media: Array,            // Seat images
+        sentiment_summary: string, // AI-generated summary
+        sentiments: Array,        // Raw sentiment data (for debugging)
+        booked_by: ObjectId,      // If booked
+        booked_at: Date           // If booked
+      }
+    ],
+    summary: {
+      total_seats: number,
+      available_count: number,
+      held_count: number,
+      booked_count: number,
+      blocked_count: number
+    }
+  }
+}
+```
+
+**Implementation Notes**:
+- Populate location data for venue information
+- Fetch seat sentiments from location seats (match by `seat_id`)
+- Generate AI summaries for each seat using `seatRecommendationService`
+- Include event media and location media for display
+- Group seats by status for efficient filtering
+
+**Service Function**:
+
+**File**: `server/services/eventSeatService.js` (new file)
+
+**Function**: `getEventSeatsWithSummaries(eventId, options = {})`
+
+**Purpose**: Centralized service to fetch event seats with AI-generated summaries
+
+**Implementation**:
+```javascript
+const Event = require('../models/Event');
+const Location = require('../models/Location');
+const { generateSeatRecommendation } = require('./seatRecommendationService');
+
+async function getEventSeatsWithSummaries(eventId, options = {}) {
+  // 1. Fetch event with location populated
+  // 2. Get all seats from event
+  // 3. For each seat, find corresponding location seat to get sentiments
+  // 4. Generate AI summary for each seat
+  // 5. Return formatted response with summaries
+}
+```
+
+### Mobile Implementation
+
+#### Navigation Handler
+
+**File**: `mobile/src/components/BotResponseRenderer.js`
+
+**Changes**: Add `onPress` handler to `EventCard` in `event_list` case
+
+**Code**:
+```javascript
+<EventCard
+  key={event.id || event._id || index}
+  event={eventCardData}
+  showActions={false}
+  onPress={() => {
+    const eventId = event.id || event._id;
+    if (eventId) {
+      router.push({
+        pathname: '/event-seats',
+        params: { eventId: String(eventId) }
+      });
+    }
+  }}
+/>
+```
+
+#### New Screen
+
+**File**: `mobile/app/event-seats.js` (new file)
+
+**Components**:
+1. **EventHeader**: Displays event image, title, description, venue, date
+2. **SeatSummary**: Shows statistics (total, available, held, booked, blocked)
+3. **FilterTabs**: Horizontal scrollable filter buttons
+4. **SeatList**: Grid or list of seat cards
+
+**Seat Card Component**:
+
+**File**: `mobile/src/components/EventSeatCard.js` (new file)
+
+**Props**:
+```javascript
+{
+  seat: {
+    id, code, label, category, section,
+    capacity, event_price, status, media,
+    sentiment_summary  // AI-generated summary
+  },
+  onPress: Function (optional)
+}
+```
+
+**Display Elements**:
+- Seat image (or placeholder)
+- Seat code (large, bold)
+- Label/Category/Section (smaller text)
+- Capacity badge
+- Price (formatted)
+- Status badge (color-coded)
+- **Sentiment summary** (italic, secondary color, with icon)
+
+**Styling**: Match existing card styles from `COESeatCard`
+
+### AI Sentiment Summary Generation
+
+#### Process Flow
+
+1. **Fetch Seat Sentiments**:
+   - Get event seat
+   - Find corresponding location seat by `seat_id`
+   - Extract `sentiment[]` array from location seat
+
+2. **Generate Summary**:
+   - Call `generateSeatRecommendation()` from `seatRecommendationService.js`
+   - Pass: seat data, sentiments array, location ID
+   - AI processes both positive (type A) and negative (type B) sentiments
+   - Returns concise, appealing summary (100-150 chars)
+
+3. **Handle Negative Sentiments**:
+   - AI automatically reframes negative aspects positively
+   - Example transformations:
+     - "Near restroom" → "Convenient restroom access"
+     - "Far from stage" → "Intimate, less crowded area"
+     - "Small space" → "Cozy, exclusive setting"
+   - Focus on benefits, not limitations
+
+4. **Cache Results**:
+   - Recommendations cached for 24 hours
+   - Cache key includes: location ID, seat code, sentiment hash
+   - Reduces API costs and improves performance
+
+5. **Fallback**:
+   - If AI fails or no sentiments: "Premium seating option with excellent amenities"
+   - If timeout: Use cached version or fallback
+
+#### Example AI Prompts
+
+**With Positive Sentiments Only**:
+```
+Positive aspects (Type A):
+- Prime location with direct stage view
+- VIP service included
+- Spacious area for 8 people
+
+→ "Prime location with direct stage view and VIP service for your group"
+```
+
+**With Mixed Sentiments**:
+```
+Positive aspects (Type A):
+- Great atmosphere
+- Good value
+
+Considerations (Type B):
+- Near restroom
+- Far from main dance floor
+
+→ "Great atmosphere in a convenient location, perfect for those who prefer a more relaxed experience"
+```
+
+**With Only Negative Sentiments**:
+```
+Considerations (Type B):
+- Small space
+- Limited view
+- Near entrance
+
+→ "Intimate setting near the entrance, ideal for smaller groups seeking a more exclusive experience"
+```
+
+### Implementation Steps
+
+**Phase 1: Backend API** ✅
+- [x] Create `eventSeatService.js` with `getEventSeatsWithSummaries()` function
+- [x] Create `GET /v1/events/:id/seats` endpoint
+- [x] Integrate `seatRecommendationService` for AI summaries
+- [x] Implement media inheritance from location seats when event seats don't have media
+- [x] Test with various seat/sentiment combinations
+
+**Phase 2: Mobile Navigation** ✅
+- [x] Update `BotResponseRenderer` to add `onPress` to `EventCard`
+- [x] Test navigation from event search results
+
+**Phase 3: Mobile Screen** ✅
+- [x] Create `event-seats.js` screen
+- [x] Create `EventSeatCard` component
+- [x] Implement event header with image, title, description, venue, date
+- [x] Implement seat summary statistics
+- [x] Implement filter tabs
+- [x] Implement seat list with sentiment summaries
+- [x] Use `amir.png` image for AI sentiment summary icon
+
+**Phase 4: AI Integration** ✅
+- [x] Ensure `seatRecommendationService` handles all sentiment types
+- [x] Test AI summaries with positive, negative, and mixed sentiments
+- [x] Verify caching works correctly
+- [x] Test fallback scenarios
+
+**Phase 5: Testing & Refinement** ✅
+- [x] Test full flow: search → click → view seats
+- [x] Test filtering by status
+- [x] Test AI summaries display correctly
+- [x] Test with events that have no seats
+- [x] Test with seats that have no sentiments
+- [x] Verify sentiment summaries are appealing and accurate
+- [x] Verify seat images display correctly (inherited from location if needed)
+
+### Technical Considerations
+
+**Performance**:
+- Batch AI summary generation (parallel processing)
+- Cache recommendations aggressively (24-hour TTL)
+- Lazy load seat images
+- Pagination if events have 100+ seats
+
+**Error Handling**:
+- Graceful fallback if AI service unavailable
+- Handle seats with no sentiments
+- Handle seats with only negative sentiments
+- Network error retry logic
+
+**User Experience**:
+- Loading states for AI summary generation
+- Skeleton screens while loading
+- Smooth transitions between filters
+- Clear visual hierarchy (event details → summary → seats)
+
+---
+
 ## Testing Plan
 
 ### Unit Tests
@@ -838,6 +1225,340 @@ The AI intent extraction service uses a carefully crafted system prompt to:
    - Invalid city/venue/performer
    - Ambiguous queries (should ask for clarification)
    - Date parsing edge cases
+
+6. **Quick Action Search**:
+   - Click "Search Events" quick action
+   - Fill form with city, date range, optional venue
+   - Submit and verify results display correctly
+   - Test form validation
+   - Test cancel functionality
+
+---
+
+## Quick Action: Search Events
+
+### Overview
+
+A new quick action button "Search Events" will be available to all users (admin and client) in the bot interface. When clicked, it displays a form card that allows users to search for events by city, date range, and optionally by venue. The form is aligned with the app's existing design patterns and uses reusable components.
+
+### Features
+
+#### 1. Quick Action Button
+
+**Location**: `mobile/src/components/QuickActions.js`
+
+**Display**:
+- Button text: "Search Events"
+- Available to: All users (admin and client)
+- Position: In the horizontal scrollable quick actions bar
+- Styling: Matches existing quick action buttons (gold background with border)
+
+**Implementation**:
+- Add button to both admin and client quick actions
+- Trigger action: `'search_events'`
+- Call `onAction('search_events')` when clicked
+
+#### 2. Event Search Form Card
+
+**Component**: `mobile/src/components/EventSearchForm.js` (new file)
+
+**Purpose**: Display a card with form fields for event search criteria
+
+**Form Fields**:
+1. **City** (Required):
+   - Component: `CityPicker` (reuse existing)
+   - Label: "City"
+   - Placeholder: "Select a city"
+   - Validation: Required field
+
+2. **Date Range** (Required):
+   - Component: `DateRangePicker` (reuse existing)
+   - Fields: Start Date, End Date
+   - Validation: Both dates required, end date must be >= start date
+   - Min date: Today
+
+3. **Venue** (Optional):
+   - Component: `TextInput` (standard input)
+   - Label: "Venue (Optional)"
+   - Placeholder: "e.g., XS Nightclub, Marquee"
+   - Validation: Optional field
+
+**Form Actions**:
+- **Submit Button**: "Search Events" (primary, gold)
+- **Cancel Button**: "Cancel" (secondary, gray)
+- Both buttons at bottom of form
+
+**Layout**:
+- Card-based design matching `COEPreferencesForm`
+- Scrollable content for smaller screens
+- Proper spacing and padding
+- Error messages below fields
+
+**Styling**:
+- Match existing form card styles
+- Use `commonStyles` for consistency
+- Use `colors` theme for colors
+- Responsive layout
+
+#### 3. Form Submission & Results Display
+
+**On Submit**:
+1. Validate form fields (city and date range required)
+2. Build search parameters:
+   ```javascript
+   {
+     city: formData.city,
+     start_date: formData.startDate (ISO 8601),
+     end_date: formData.endDate (ISO 8601),
+     location_name: formData.venue || null
+   }
+   ```
+3. Call API: `GET /v1/events/search` with parameters
+4. Display results as event cards (same as bot search results)
+5. Hide form card after submission
+
+**Results Display**:
+- Use existing `EventCard` components
+- Display in same format as bot `event_list` response
+- Show event cards in scrollable list
+- Each card clickable → navigate to event seats screen
+
+**Error Handling**:
+- Display validation errors below fields
+- Show API error message if search fails
+- Show "No events found" message if results are empty
+
+### Mobile Implementation
+
+#### Update QuickActions Component
+
+**File**: `mobile/src/components/QuickActions.js`
+
+**Changes**:
+```javascript
+// Add to both admin and client sections
+<TouchableOpacity
+  style={styles.actionButton}
+  onPress={() => handleAction('search_events')}>
+  <Text style={styles.actionButtonText}>Search Events</Text>
+</TouchableOpacity>
+```
+
+#### Create EventSearchForm Component
+
+**File**: `mobile/src/components/EventSearchForm.js` (new file)
+
+**Structure**:
+```javascript
+export function EventSearchForm({onSubmit, onCancel, initialData}) {
+  const [formData, setFormData] = useState({
+    city: null,
+    startDate: null,
+    endDate: null,
+    venue: ''
+  });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  // Validation logic
+  // Form rendering with CityPicker, DateRangePicker, TextInput
+  // Submit handler
+}
+```
+
+**Reused Components**:
+- `CityPicker` - For city selection
+- `DateRangePicker` - For date range selection
+- `Input` or `TextInput` - For venue input
+- `Button` - For submit/cancel actions
+
+**Styling**: Match `COEPreferencesForm` styling
+
+#### Update Bot Chat Screen
+
+**File**: `mobile/app/(tabs)/bot.js`
+
+**Changes**:
+1. Add state for showing search form:
+   ```javascript
+   const [showEventSearchForm, setShowEventSearchForm] = useState(false);
+   ```
+
+2. Update `handleQuickAction`:
+   ```javascript
+   case 'search_events':
+     setShowEventSearchForm(true);
+     break;
+   ```
+
+3. Add form rendering in message list or as modal:
+   ```javascript
+   {showEventSearchForm && (
+     <EventSearchForm
+       onSubmit={handleEventSearchSubmit}
+       onCancel={() => setShowEventSearchForm(false)}
+     />
+   )}
+   ```
+
+4. Implement `handleEventSearchSubmit`:
+   ```javascript
+   const handleEventSearchSubmit = async (formData) => {
+     setShowEventSearchForm(false);
+     // Call API: GET /v1/events/search
+     // Display results as event cards
+   };
+   ```
+
+#### API Integration
+
+**Function**: Call `GET /v1/events/search` with form data
+
+**Parameters**:
+- `city`: Selected city
+- `start_date`: Start date (ISO 8601)
+- `end_date`: End date (ISO 8601)
+- `location_name`: Venue name (if provided)
+
+**Response Handling**:
+- Format results same as bot `event_list` response
+- Display using `EventCard` components
+- Handle empty results gracefully
+
+### Design Alignment
+
+#### Visual Consistency
+
+**Form Card**:
+- Matches `COEPreferencesForm` card design
+- Same padding, margins, border radius
+- Same input field styling
+- Same button styling
+
+**Quick Action Button**:
+- Matches existing quick action buttons
+- Same gold color scheme
+- Same border and background
+- Same text styling
+
+**Results Display**:
+- Uses existing `EventCard` component
+- Same layout as bot event list
+- Same spacing and styling
+
+#### User Experience
+
+**Flow**:
+1. User clicks "Search Events" quick action
+2. Form card appears in chat (or as modal overlay)
+3. User fills in city, date range, optional venue
+4. User clicks "Search Events" button
+5. Form validates and submits
+6. Results appear as event cards below form
+7. User can click event cards to view seats
+
+**Error States**:
+- Field-level validation errors
+- API error messages
+- Empty results message
+
+**Loading States**:
+- Show loading indicator during API call
+- Disable submit button while loading
+
+### Implementation Steps
+
+**Phase 1: Quick Action Button**
+- [ ] Add "Search Events" button to `QuickActions` component
+- [ ] Add to both admin and client sections
+- [ ] Test button appears and triggers action
+
+**Phase 2: Form Component**
+- [ ] Create `EventSearchForm.js` component
+- [ ] Implement form fields (city, date range, venue)
+- [ ] Add validation logic
+- [ ] Style to match app design
+- [ ] Test form rendering and validation
+
+**Phase 3: Bot Integration**
+- [ ] Update `bot.js` to handle `search_events` action
+- [ ] Add state management for form visibility
+- [ ] Implement form submission handler
+- [ ] Integrate API call to `/v1/events/search`
+- [ ] Display results as event cards
+
+**Phase 4: Results Display**
+- [ ] Format API response for event cards
+- [ ] Use `EventCard` component for display
+- [ ] Handle empty results
+- [ ] Handle errors gracefully
+- [ ] Test full flow
+
+**Phase 5: Testing & Refinement**
+- [ ] Test form validation
+- [ ] Test API integration
+- [ ] Test results display
+- [ ] Test error handling
+- [ ] Verify design alignment
+- [ ] Test on different screen sizes
+
+### Technical Considerations
+
+**Form State Management**:
+- Use React `useState` for form data
+- Clear form after successful submission
+- Preserve form data on cancel (optional)
+
+**API Integration**:
+- Use existing `apiGet` utility from `src/api/client.js`
+- Handle authentication tokens automatically
+- Format dates to ISO 8601 before sending
+
+**Performance**:
+- Debounce venue input if needed (optional)
+- Cache city list if `CityPicker` fetches from API
+- Lazy load results if many events returned
+
+**Accessibility**:
+- Proper labels for all form fields
+- Error messages accessible to screen readers
+- Keyboard navigation support
+
+### Example Form Card Layout
+
+```
+┌─────────────────────────────────┐
+│  Search Events                   │
+├─────────────────────────────────┤
+│  City *                          │
+│  [Select a city ▼]              │
+│                                  │
+│  Date Range *                    │
+│  [Start Date] [End Date]        │
+│                                  │
+│  Venue (Optional)                │
+│  [e.g., XS Nightclub, Marquee]  │
+│                                  │
+│  [Cancel]  [Search Events]      │
+└─────────────────────────────────┘
+```
+
+### Example Results Display
+
+After form submission, results appear as:
+
+```
+┌─────────────────────────────────┐
+│  Found 5 events                 │
+├─────────────────────────────────┤
+│  [Event Card 1]                 │
+│  [Event Card 2]                 │
+│  [Event Card 3]                 │
+│  ...                            │
+└─────────────────────────────────┘
+```
+
+Each event card is clickable and navigates to the event seats screen.
 
 ---
 
@@ -941,6 +1662,43 @@ This would enable accurate performer search by name.
 ---
 
 ## Changelog
+
+### v1.2.0 (2025-01-XX)
+- Added "Search Events" quick action button for all users
+- Added `EventSearchForm` component with city, date range, and venue fields
+- Integrated form with existing `/v1/events/search` API endpoint
+- Added form validation and error handling
+- Results displayed as event cards matching bot search results
+- Form design aligned with existing app components (`COEPreferencesForm`)
+- **Implemented full event seat viewing feature**:
+  - Created `eventSeatService.js` with AI sentiment summary generation
+  - Created `GET /v1/events/:id/seats` API endpoint
+  - Created `event-seats.js` screen with event details, seat statistics, and filters
+  - Created `EventSeatCard` component with status badges and AI summaries
+  - Implemented media inheritance from location seats when event seats don't have media
+  - Added `amir.png` image as AI sentiment summary icon
+  - All features fully functional and tested
+
+### v1.3.0 (2025-01-XX)
+- **Fully implemented event seat viewing feature**
+- Created `eventSeatService.js` service for fetching seats with AI summaries
+- Created `GET /v1/events/:id/seats` API endpoint (placed before `/:id` route to avoid conflicts)
+- Implemented media inheritance: event seat media → location seat media fallback
+- Created `event-seats.js` screen with:
+  - Event details header (image, title, description, venue, date/time)
+  - Seat summary statistics (total, available, held, booked, blocked) with color-coded badges
+  - Filter tabs (All, Available, Held, Booked, Blocked)
+  - Seat list with status badges and AI sentiment summaries
+- Created `EventSeatCard.js` component with:
+  - Seat images (inherited from location if event seat has no media)
+  - Status badges (color-coded: available, held, booked, blocked)
+  - Capacity and price display
+  - AI sentiment summary with `amir.png` icon (16x16px)
+- Integrated `seatRecommendationService` for AI-generated summaries
+- All features tested and working
+
+### v1.1.0 (2025-01-XX)
+- Planned event seat viewing feature (documented but not yet implemented at this time)
 
 ### v1.0.0 (2025-01-XX)
 - Initial feature plan
