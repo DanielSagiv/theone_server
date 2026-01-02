@@ -451,7 +451,8 @@ function formatEventListResponse(events, message) {
         address: event.location?.address || event.location_id?.address || null, // Full address object
         geo: event.location?.geo || event.location_id?.geo || null, // Geo coordinates
         city: event.location?.city || event.location_id?.address?.city,
-        country: event.location?.country || event.location_id?.address?.country
+        country: event.location?.country || event.location_id?.address?.country,
+        media: event.location?.media || event.location_id?.media || [] // Include location media for EventCard component
       } : null,
       sentiment: event.sentiment || null,
       media: event.media || [],

@@ -3,6 +3,8 @@ const router = express.Router();
 const Event = require('../models/Event');
 const Location = require('../models/Location');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { searchEvents } = require('../services/eventSearchService');
+const { extractSearchIntent } = require('../services/eventSearchIntentService');
 const { 
   createEventSchema, 
   updateEventSchema, 
@@ -127,6 +129,104 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
       success: false,
       error: {
         message: 'Failed to fetch events',
+        details: error.message
+      }
+    });
+  }
+});
+
+/**
+ * GET /v1/events/search
+ * @description Search events using natural language or structured parameters
+ * @access Client, Admin, Runner
+ */
+router.get('/search', authenticateToken, async (req, res) => {
+  try {
+    const {
+      query,           // Natural language query (optional)
+      city,            // City name (optional)
+      location_name,   // Venue/club name (optional)
+      performer,       // Performer name (optional)
+      start_date,      // ISO 8601 start date (optional)
+      end_date,        // ISO 8601 end date (optional)
+      status = 'active',
+      page = 1,
+      limit = 20
+    } = req.query;
+
+    console.log('[EventsRoute] /search called:', {
+      query,
+      city,
+      location_name,
+      performer,
+      start_date,
+      end_date,
+      status,
+      page,
+      limit,
+      user_id: req.user._id?.toString()
+    });
+
+    // Build search parameters
+    let searchParams = {
+      city: city || null,
+      location_name: location_name || null,
+      performer: performer || null,
+      start_date: start_date || null,
+      end_date: end_date || null,
+      status
+    };
+
+    // If query is provided, extract intent
+    if (query && (!city && !location_name && !performer)) {
+      try {
+        const intent = await extractSearchIntent(query, {
+          user_tz: req.user.timezone || 'UTC'
+        });
+
+        if (!intent.clarification_needed) {
+          searchParams = {
+            city: searchParams.city || intent.city || null,
+            location_name: searchParams.location_name || intent.location_name || null,
+            performer: searchParams.performer || intent.performer || null,
+            start_date: searchParams.start_date || intent.start_date || null,
+            end_date: searchParams.end_date || intent.end_date || null,
+            status
+          };
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: {
+              message: intent.clarification_message || 'Please provide more specific search criteria.',
+              code: 'CLARIFICATION_NEEDED'
+            }
+          });
+        }
+      } catch (error) {
+        console.error('[EventsRoute] Error extracting search intent:', error);
+        // Continue with provided parameters if extraction fails
+      }
+    }
+
+    // Execute search
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const results = await searchEvents(searchParams, {
+      limit: parseInt(limit),
+      skip,
+      sort: { start_datetime: 1 }
+    });
+
+    res.json({
+      success: true,
+      data: results.events,
+      pagination: results.pagination
+    });
+  } catch (error) {
+    console.error('[EventsRoute] Error searching events:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to search events',
         details: error.message
       }
     });

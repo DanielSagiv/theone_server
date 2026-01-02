@@ -2211,8 +2211,142 @@ const toolHandlers = {
   handleGetLocations,
   handleGetUserProfile,
   handleGetClients,
-  handleOpenCreateCOEForClient
+  handleOpenCreateCOEForClient,
+  handleSearchEvents
 };
+
+/**
+ * Handler: Search Events
+ * @param {Object} params - Tool parameters
+ * @param {Object} user - Current user object
+ * @param {string} correlationId - Correlation ID for tracing
+ * @returns {Promise<Object>} Search results
+ */
+async function handleSearchEvents(params, user, correlationId) {
+  try {
+    const { extractSearchIntent } = require('./eventSearchIntentService');
+    const { searchEvents } = require('./eventSearchService');
+
+    const { query, city, location_name, performer, start_date, end_date } = params;
+
+    console.log('[BOT] handleSearchEvents called:', {
+      query,
+      provided_params: { city, location_name, performer, start_date, end_date },
+      correlationId
+    });
+
+    // Extract intent from query if parameters not explicitly provided
+    let searchParams = {
+      city: city || null,
+      location_name: location_name || null,
+      performer: performer || null,
+      start_date: start_date || null,
+      end_date: end_date || null
+    };
+
+    // If query is provided and parameters are missing, use AI to extract intent
+    if (query && (!city && !location_name && !performer)) {
+      console.log('[BOT] Extracting search intent from query:', query);
+      const intent = await extractSearchIntent(query, {
+        user_tz: user.timezone || 'UTC'
+      });
+
+      console.log('[BOT] Extracted intent:', intent);
+
+      if (intent.clarification_needed) {
+        return {
+          success: false,
+          message: intent.clarification_message || 'I need more information to search for events. Could you specify a city, venue, or performer?',
+          data: []
+        };
+      }
+
+      // Merge extracted parameters
+      searchParams = {
+        city: searchParams.city || intent.city || null,
+        location_name: searchParams.location_name || intent.location_name || null,
+        performer: searchParams.performer || intent.performer || null,
+        start_date: searchParams.start_date || intent.start_date || null,
+        end_date: searchParams.end_date || intent.end_date || null
+      };
+    }
+
+    // Execute search
+    const results = await searchEvents(searchParams, {
+      limit: 50,
+      skip: 0
+    });
+
+    // Format response to match EventCard component expectations
+    const formattedEvents = results.events.map(event => {
+      // Get media - prioritize event media, fallback to location media
+      let eventMedia = [];
+      if (event.media && Array.isArray(event.media) && event.media.length > 0) {
+        eventMedia = event.media.filter(m => m && m.url && m.type === 'image');
+      } else if (event.location_id?.media && Array.isArray(event.location_id.media) && event.location_id.media.length > 0) {
+        eventMedia = event.location_id.media.filter(m => m && m.url && m.type === 'image');
+      }
+
+      return {
+        id: event._id.toString(),
+        name: event.name,
+        description: event.description,
+        type: event.type,
+        start_datetime: event.start_datetime,
+        end_datetime: event.end_datetime,
+        base_price: event.base_price,
+        currency: event.currency || 'USD',
+        status: event.status,
+        location: event.location_id ? {
+          id: event.location_id._id.toString(),
+          name: event.location_id.name,
+          type: event.location_id.type,
+          city: event.location_id.address?.city,
+          country: event.location_id.address?.country,
+          address: event.location_id.address || null,
+          geo: event.location_id.geo || null,
+          media: event.location_id.media || [] // Include location media for EventCard component
+        } : null,
+        performers: event.performers || [],
+        media: eventMedia // Always include media array (event or location media)
+      };
+    });
+    
+    console.log('[BOT] handleSearchEvents - Sample formatted event media:', {
+      sampleEvent: formattedEvents.length > 0 ? {
+        name: formattedEvents[0].name,
+        hasMedia: !!formattedEvents[0].media,
+        mediaCount: formattedEvents[0].media?.length || 0,
+        mediaUrls: formattedEvents[0].media?.map(m => m?.url).filter(Boolean) || [],
+        hasLocation: !!formattedEvents[0].location,
+        locationMediaCount: formattedEvents[0].location?.media?.length || 0,
+        rawEventMedia: results.events[0]?.media,
+        rawLocationMedia: results.events[0]?.location_id?.media
+      } : null
+    });
+
+    // Use formatEventListResponse to ensure proper structure for BotResponseRenderer
+    const structuredResponse = formatEventListResponse(
+      formattedEvents,
+      `Found ${results.total} event(s) matching your search.`
+    );
+
+    return {
+      success: true,
+      data: structuredResponse,
+      total: results.total,
+      pagination: results.pagination,
+      message: `Found ${results.total} event(s) matching your search.`
+    };
+  } catch (error) {
+    console.error('[BOT] handleSearchEvents error:', error);
+    return {
+      success: false,
+      message: `Error searching events: ${error.message}`,
+      data: []
+    };
+  }
+}
 
 module.exports = {
   toolHandlers,
@@ -2226,6 +2360,7 @@ module.exports = {
   handleGetUserProfile,
   handleGetClients,
   handleOpenCreateCOEForClient,
+  handleSearchEvents,
   buildClientSearchFilter,
   formatClientForResponse
 };

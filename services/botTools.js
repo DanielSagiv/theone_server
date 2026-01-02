@@ -163,7 +163,51 @@ const toolRegistry = {
   },
 
   /**
-   * Tool 3: Update COE
+   * Tool 3: Search Events
+   * @description Search for events using natural language queries
+   */
+  search_events: {
+    name: 'search_events',
+    description: 'Search for events using natural language. Use this tool when users ask about events in a city, events at a venue/club, or events with a specific performer. Examples: "What are the events in Las Vegas?", "Show me events at XS Nightclub in December", "What are the events with Drake anywhere?". The tool will intelligently extract search parameters from the user\'s prompt.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'User\'s natural language search query (e.g., "events in Las Vegas", "Drake shows", "XS Nightclub in December")'
+        },
+        city: {
+          type: 'string',
+          description: 'City name (optional - will be extracted from query if present)'
+        },
+        location_name: {
+          type: 'string',
+          description: 'Venue/club name (optional - will be extracted from query if present)'
+        },
+        performer: {
+          type: 'string',
+          description: 'Performer/DJ/artist name (optional - will be extracted from query if present)'
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date in ISO 8601 format (optional - will be extracted from query if present)',
+          format: 'date-time'
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date in ISO 8601 format (optional - will be extracted from query if present)',
+          format: 'date-time'
+        }
+      },
+      required: ['query']
+    },
+    schema_version: '1.0.0',
+    permissions: ['admin', 'client', 'runner'],
+    handler: 'handleSearchEvents'
+  },
+
+  /**
+   * Tool 4: Update COE
    * @description Edit an existing COE (events, seats, dates, notes, etc.)
    */
   update_coe: {
