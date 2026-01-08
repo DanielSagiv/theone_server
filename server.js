@@ -44,7 +44,9 @@ app.use(helmet({
 }));
 app.use(morgan('combined'));
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.NODE_ENV === 'production' 
+    ? (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    : true, // Allow all origins in development (for mobile app testing)
   credentials: true
 }));
 app.use(express.json());
