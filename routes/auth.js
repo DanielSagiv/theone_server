@@ -154,6 +154,30 @@ router.post('/logout', authenticateToken, async (req, res) => {
     const token = req.headers['authorization'].split(' ')[1];
     await authService.logoutUser(token);
 
+    // Optionally remove current device's push token (if provided by mobile app)
+    // This allows users to have multiple devices (iPhone, iPad, Android) without affecting others
+    const { pushToken } = req.body;
+    
+    if (pushToken) {
+      try {
+        const user = await User.findById(req.user._id);
+        if (user && user.push_tokens && user.push_tokens.length > 0) {
+          const beforeCount = user.push_tokens.length;
+          user.push_tokens = user.push_tokens.filter(t => t.token !== pushToken);
+          const removedCount = beforeCount - user.push_tokens.length;
+          
+          if (removedCount > 0) {
+            await user.save();
+            console.log(`[AuthRoute] Removed current device's push token on logout for user ${req.user._id}`);
+          }
+        }
+      } catch (tokenError) {
+        // Don't fail logout if token removal fails
+        console.warn('[AuthRoute] Failed to remove push token on logout:', tokenError.message);
+      }
+    }
+    // If no pushToken provided, don't remove any tokens (safer - user might have multiple devices)
+
     res.json({
       success: true,
       message: 'Logout successful'
