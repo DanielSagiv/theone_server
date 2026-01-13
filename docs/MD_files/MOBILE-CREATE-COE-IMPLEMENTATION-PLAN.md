@@ -647,4 +647,3 @@ mobile/
 - **Bot Architecture**: See `architecture/bot-architecture-plan.md`
 - **Mobile App Plan**: See `MOBILE-APP-IMPLEMENTATION-PLAN.md`
 - **Feature Flags**: See `FEATURE-FLAGS.md` - Client COE creation/editing can be disabled via feature flag
-

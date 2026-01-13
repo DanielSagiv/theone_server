@@ -543,8 +543,11 @@ async function sendPushNotification(userId, notification) {
           }));
           
           // Send via Expo API (chunks messages automatically)
+          // First attempt: try sending all tokens together
           const chunks = expoClient.chunkPushNotifications(expoMessages);
           const tickets = [];
+          let hasProjectConflict = false;
+          let projectGroups = null;
           
           for (const chunk of chunks) {
             try {
@@ -552,29 +555,236 @@ async function sendPushNotification(userId, notification) {
               tickets.push(...ticketChunk);
             } catch (error) {
               console.error('[NotificationService] Error sending Expo chunk:', error);
-              // Add error tickets for this chunk
-              tickets.push(...chunk.map(() => ({ status: 'error', message: error.message })));
+              
+              // Check if error is due to different Expo projects
+              // Try multiple ways to access error properties (error structure may vary)
+              let errorCode, errorDetails, errorMessage;
+              
+              try {
+                errorCode = error.code || error.error?.code;
+                errorDetails = error.details || error.error?.details;
+                errorMessage = error.message || String(error);
+              } catch (e) {
+                // If accessing properties fails, try string conversion
+                errorMessage = String(error);
+                errorCode = null;
+                errorDetails = null;
+              }
+              
+              // Check for project conflict error - multiple detection methods
+              const hasConflictCode = errorCode === 'PUSH_TOO_MANY_EXPERIENCE_IDS';
+              const hasConflictMessage = errorMessage && (
+                errorMessage.includes('same project') || 
+                errorMessage.includes('conflicting tokens') ||
+                errorMessage.includes('PUSH_TOO_MANY_EXPERIENCE_IDS')
+              );
+              const hasDetails = errorDetails && typeof errorDetails === 'object' && Object.keys(errorDetails).length > 0;
+              
+              // Debug logging for project conflict errors
+              if (hasConflictCode || hasConflictMessage) {
+                console.log('[NotificationService] Debug - Project conflict detected:', {
+                  hasCode: !!error.code,
+                  code: error.code,
+                  errorCode: errorCode,
+                  hasDetails: !!error.details,
+                  errorDetails: errorDetails,
+                  detailsType: error.details ? typeof error.details : 'none',
+                  detailsKeys: error.details ? Object.keys(error.details) : null,
+                  message: errorMessage ? errorMessage.substring(0, 150) : 'no message'
+                });
+              }
+              
+              // If we have conflict indicators AND details, treat as project conflict
+              if ((hasConflictCode || hasConflictMessage) && hasDetails) {
+                hasProjectConflict = true;
+                projectGroups = errorDetails || error.details;
+                console.log('[NotificationService] ✅ Detected Expo tokens from different projects, will send separately:', projectGroups ? Object.keys(projectGroups) : 'no groups');
+                // Don't add error tickets - we'll retry by project
+                break;
+              } else {
+                // Other errors - add error tickets
+                console.log('[NotificationService] Not a project conflict error, adding error tickets');
+                tickets.push(...chunk.map(() => ({ status: 'error', message: errorMessage })));
+              }
             }
           }
           
-          // Process results
-          for (let i = 0; i < expoTokens.length; i++) {
-            const ticket = tickets[i];
-            const { token, tokenData } = expoTokens[i];
+          // If we have project conflicts, send tokens grouped by project
+          if (hasProjectConflict && projectGroups) {
+            console.log('[NotificationService] Sending Expo tokens grouped by project...');
             
-            if (ticket && ticket.status === 'ok') {
-              results.push({ token, success: true, messageId: ticket.id, method: 'expo' });
-              tokenData.last_used_at = new Date();
-            } else {
-              const error = ticket?.message || ticket?.details?.error || 'Unknown error';
-              console.error(`[NotificationService] Failed to send Expo token ${token}:`, error);
+            // Group tokens by project based on error details
+            const tokensByProject = {};
+            const ungroupedTokens = [];
+            
+            // First, identify which tokens belong to which project
+            for (const { token, tokenData } of expoTokens) {
+              let found = false;
+              for (const [projectId, projectTokens] of Object.entries(projectGroups)) {
+                if (projectTokens.includes(token)) {
+                  if (!tokensByProject[projectId]) {
+                    tokensByProject[projectId] = [];
+                  }
+                  tokensByProject[projectId].push({ token, tokenData });
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                // Token not in error details - might be valid, try to send separately
+                ungroupedTokens.push({ token, tokenData });
+              }
+            }
+            
+            // Send each project group separately
+            for (const [projectId, projectTokenList] of Object.entries(tokensByProject)) {
+              try {
+                console.log(`[NotificationService] Sending ${projectTokenList.length} token(s) for project ${projectId}`);
+                const projectMessages = projectTokenList.map(({ token }) => ({
+                  to: token,
+                  sound: 'default',
+                  title: notification.title,
+                  body: notification.body,
+                  data: {
+                    type: notification.type,
+                    notification_id: notification._id.toString(),
+                    ...(notification.data.action_url && { action_url: notification.data.action_url }),
+                    ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
+                    ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
+                    ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
+                  },
+                  badge: 1,
+                  priority: 'high',
+                  android: {
+                    channelId: 'default',
+                    color: '#D4AF37',
+                    priority: 'high',
+                    sound: 'default',
+                    vibrate: [0, 250, 250, 250],
+                  },
+                  ios: {
+                    sound: 'default',
+                    badge: 1,
+                  }
+                }));
+                
+                const projectChunks = expoClient.chunkPushNotifications(projectMessages);
+                const projectTickets = [];
+                
+                for (const chunk of projectChunks) {
+                  try {
+                    const ticketChunk = await expoClient.sendPushNotificationsAsync(chunk);
+                    projectTickets.push(...ticketChunk);
+                  } catch (chunkError) {
+                    console.error(`[NotificationService] Error sending chunk for project ${projectId}:`, chunkError.message);
+                    projectTickets.push(...chunk.map(() => ({ status: 'error', message: chunkError.message })));
+                  }
+                }
+                
+                // Process results for this project
+                for (let i = 0; i < projectTokenList.length; i++) {
+                  const ticket = projectTickets[i];
+                  const { token, tokenData } = projectTokenList[i];
+                  
+                  if (ticket && ticket.status === 'ok') {
+                    results.push({ token, success: true, messageId: ticket.id, method: 'expo' });
+                    tokenData.last_used_at = new Date();
+                  } else {
+                    const error = ticket?.message || ticket?.details?.error || 'Unknown error';
+                    console.error(`[NotificationService] Failed to send Expo token ${token} (project ${projectId}):`, error);
+                    
+                    // If token is invalid, remove it
+                    if (error.includes('Invalid') || error.includes('not registered') || error.includes('DeviceNotRegistered')) {
+                      user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+                      results.push({ token, success: false, reason: 'invalid_token', method: 'expo' });
+                    } else {
+                      results.push({ token, success: false, reason: error, method: 'expo' });
+                    }
+                  }
+                }
+              } catch (projectError) {
+                console.error(`[NotificationService] Error sending notifications for project ${projectId}:`, projectError.message);
+                projectTokenList.forEach(({ token }) => {
+                  results.push({ token, success: false, reason: projectError.message, method: 'expo' });
+                });
+              }
+            }
+            
+            // Handle ungrouped tokens (try to send them individually)
+            for (const { token, tokenData } of ungroupedTokens) {
+              try {
+                const message = {
+                  to: token,
+                  sound: 'default',
+                  title: notification.title,
+                  body: notification.body,
+                  data: {
+                    type: notification.type,
+                    notification_id: notification._id.toString(),
+                    ...(notification.data.action_url && { action_url: notification.data.action_url }),
+                    ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
+                    ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
+                    ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
+                  },
+                  badge: 1,
+                  priority: 'high',
+                  android: {
+                    channelId: 'default',
+                    color: '#D4AF37',
+                    priority: 'high',
+                    sound: 'default',
+                    vibrate: [0, 250, 250, 250],
+                  },
+                  ios: {
+                    sound: 'default',
+                    badge: 1,
+                  }
+                };
+                
+                const ticket = await expoClient.sendPushNotificationsAsync([message]);
+                if (ticket[0] && ticket[0].status === 'ok') {
+                  results.push({ token, success: true, messageId: ticket[0].id, method: 'expo' });
+                  tokenData.last_used_at = new Date();
+                } else {
+                  const error = ticket[0]?.message || 'Unknown error';
+                  console.error(`[NotificationService] Failed to send ungrouped Expo token ${token}:`, error);
+                  if (error.includes('Invalid') || error.includes('not registered')) {
+                    user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+                    results.push({ token, success: false, reason: 'invalid_token', method: 'expo' });
+                  } else {
+                    results.push({ token, success: false, reason: error, method: 'expo' });
+                  }
+                }
+              } catch (tokenError) {
+                console.error(`[NotificationService] Error sending ungrouped token ${token}:`, tokenError.message);
+                if (tokenError.message.includes('Invalid') || tokenError.message.includes('not registered')) {
+                  user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+                  results.push({ token, success: false, reason: 'invalid_token', method: 'expo' });
+                } else {
+                  results.push({ token, success: false, reason: tokenError.message, method: 'expo' });
+                }
+              }
+            }
+          } else {
+            // No project conflict - process results normally
+            for (let i = 0; i < expoTokens.length; i++) {
+              const ticket = tickets[i];
+              const { token, tokenData } = expoTokens[i];
               
-              // If token is invalid, remove it
-              if (error.includes('Invalid') || error.includes('not registered') || error.includes('DeviceNotRegistered')) {
-                user.push_tokens = user.push_tokens.filter(t => t.token !== token);
-                results.push({ token, success: false, reason: 'invalid_token', method: 'expo' });
+              if (ticket && ticket.status === 'ok') {
+                results.push({ token, success: true, messageId: ticket.id, method: 'expo' });
+                tokenData.last_used_at = new Date();
               } else {
-                results.push({ token, success: false, reason: error, method: 'expo' });
+                const error = ticket?.message || ticket?.details?.error || 'Unknown error';
+                console.error(`[NotificationService] Failed to send Expo token ${token}:`, error);
+                
+                // If token is invalid, remove it
+                if (error.includes('Invalid') || error.includes('not registered') || error.includes('DeviceNotRegistered')) {
+                  user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+                  results.push({ token, success: false, reason: 'invalid_token', method: 'expo' });
+                } else {
+                  results.push({ token, success: false, reason: error, method: 'expo' });
+                }
               }
             }
           }
@@ -610,11 +820,13 @@ async function sendPushNotification(userId, notification) {
         // Update last_used_at
         tokenData.last_used_at = new Date();
       } catch (error) {
-        console.error(`[NotificationService] Failed to send FCM token ${token}:`, error.message);
+        console.error(`[NotificationService] Failed to send FCM token ${token.substring(0, 20)}...:`, error.message);
         
         // If token is invalid, remove it
         if (error.code === 'messaging/invalid-registration-token' || 
-            error.code === 'messaging/registration-token-not-registered') {
+            error.code === 'messaging/registration-token-not-registered' ||
+            error.message?.includes('not a valid FCM registration token')) {
+          console.log(`[NotificationService] Removing invalid FCM token: ${token.substring(0, 20)}...`);
           user.push_tokens = user.push_tokens.filter(t => t.token !== token);
           results.push({ token, success: false, reason: 'invalid_token', method: 'fcm' });
         } else {
