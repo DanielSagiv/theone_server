@@ -635,6 +635,16 @@ router.put('/:id/tier', authenticateToken, requireAdmin, async (req, res) => {
  * Register device push token for notifications
  */
 router.post('/push-token', authenticateToken, async (req, res) => {
+  // Add logging at the very start to catch all requests
+  console.log(`[UsersRoute] 🔔 Push token registration request received:`, {
+    user_id: req.user._id?.toString(),
+    platform: req.body?.platform,
+    has_token: !!req.body?.token,
+    token_preview: req.body?.token ? req.body.token.substring(0, 20) + '...' : 'none',
+    user_agent: req.headers['user-agent'],
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const { token, platform } = req.body;
 
@@ -744,6 +754,10 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       // This is a native token (FCM for Android, APNs for iOS)
       const beforeCount = user.push_tokens.length;
       user.push_tokens = user.push_tokens.filter(t => {
+        // Safety check: skip if token is missing
+        if (!t || !t.token || typeof t.token !== 'string') {
+          return false;
+        }
         // Keep all native tokens (supports multiple devices: iPhone, iPad, Android, etc.)
         if (!t.token.startsWith('ExponentPushToken[')) {
           return true;
@@ -768,6 +782,10 @@ router.post('/push-token', authenticateToken, async (req, res) => {
     const beforeAgeCleanup = user.push_tokens.length;
     
     user.push_tokens = user.push_tokens.filter(t => {
+      // Safety check: skip if token is missing
+      if (!t || !t.token || typeof t.token !== 'string') {
+        return false;
+      }
       // Keep all native tokens (they're always valid)
       if (!t.token.startsWith('ExponentPushToken[')) {
         return true;
