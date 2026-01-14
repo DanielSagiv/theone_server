@@ -467,14 +467,16 @@ async function sendPushNotification(userId, notification) {
     // Send to all user's devices
     const results = [];
     const expoTokens = [];
-    const fcmTokens = [];
+    const iosApnsTokens = [];
+    const androidFcmTokens = [];
     
     // Track unique tokens to prevent duplicates
     const seenTokens = new Set();
     
-    // Separate Expo tokens from FCM tokens and deduplicate
+    // Separate tokens by type: Expo, iOS APNs, Android FCM
     for (const tokenData of user.push_tokens) {
       const token = tokenData.token;
+      const platform = tokenData.platform;
       
       // Skip if we've already seen this exact token
       if (seenTokens.has(token)) {
@@ -488,8 +490,15 @@ async function sendPushNotification(userId, notification) {
           token: token,
           tokenData: tokenData
         });
+      } else if (platform === 'ios') {
+        // iOS APNs tokens (long hex strings) - send via Firebase APNs gateway
+        iosApnsTokens.push({
+          token: token,
+          tokenData: tokenData
+        });
       } else {
-        fcmTokens.push({
+        // Android FCM tokens
+        androidFcmTokens.push({
           token: token,
           tokenData: tokenData
         });
@@ -499,8 +508,9 @@ async function sendPushNotification(userId, notification) {
     console.log(`[NotificationService] Deduplicated push tokens:`, {
       original_count: user.push_tokens.length,
       unique_expo_tokens: expoTokens.length,
-      unique_fcm_tokens: fcmTokens.length,
-      total_unique: expoTokens.length + fcmTokens.length
+      unique_ios_apns_tokens: iosApnsTokens.length,
+      unique_android_fcm_tokens: androidFcmTokens.length,
+      total_unique: expoTokens.length + iosApnsTokens.length + androidFcmTokens.length
     });
     
     // Send Expo push notifications via Expo API
@@ -802,8 +812,52 @@ async function sendPushNotification(userId, notification) {
       }
     }
     
-    // Send FCM push notifications via Firebase Admin SDK
-    for (const { token, tokenData } of fcmTokens) {
+    // Send iOS APNs tokens via Firebase Admin SDK (Firebase routes to Apple APNs)
+    for (const { token, tokenData } of iosApnsTokens) {
+      try {
+        if (!firebaseInitialized) {
+          results.push({ token, success: false, reason: 'firebase_not_initialized', method: 'apns' });
+          continue;
+        }
+
+        // Firebase Admin SDK can send to iOS using APNs tokens
+        // The message already has apns configuration, Firebase will route it correctly
+        const result = await admin.messaging().send({
+          ...message,
+          token: token,
+          // Ensure APNs configuration is present for iOS
+          apns: {
+            ...message.apns,
+            headers: {
+              'apns-priority': '10',
+              'apns-push-type': 'alert'
+            }
+          }
+        });
+
+        results.push({ token, success: true, messageId: result, method: 'apns' });
+        
+        // Update last_used_at
+        tokenData.last_used_at = new Date();
+      } catch (error) {
+        console.error(`[NotificationService] Failed to send iOS APNs token ${token.substring(0, 20)}...:`, error.message);
+        
+        // If token is invalid, remove it
+        if (error.code === 'messaging/invalid-registration-token' || 
+            error.code === 'messaging/registration-token-not-registered' ||
+            error.message?.includes('not a valid') || 
+            error.message?.includes('Invalid')) {
+          console.log(`[NotificationService] Removing invalid iOS APNs token: ${token.substring(0, 20)}...`);
+          user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+          results.push({ token, success: false, reason: 'invalid_token', method: 'apns' });
+        } else {
+          results.push({ token, success: false, reason: error.message, method: 'apns' });
+        }
+      }
+    }
+    
+    // Send Android FCM tokens via Firebase Admin SDK
+    for (const { token, tokenData } of androidFcmTokens) {
       try {
         if (!firebaseInitialized) {
           results.push({ token, success: false, reason: 'firebase_not_initialized', method: 'fcm' });
