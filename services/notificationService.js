@@ -419,8 +419,26 @@ async function sendPushNotification(userId, notification) {
 
     // Get user's push tokens
     const user = await User.findById(userId);
-    if (!user || !user.push_tokens || user.push_tokens.length === 0) {
-      console.log(`[NotificationService] No push tokens found for user ${userId}`);
+    
+    // Enhanced diagnostic logging to understand why tokens aren't found
+    if (!user) {
+      console.error(`[NotificationService] ❌ User not found for userId: ${userId} (type: ${typeof userId})`);
+      return { success: false, reason: 'user_not_found' };
+    }
+    
+    console.log(`[NotificationService] 🔍 User found: ${user._id}, checking push_tokens:`, {
+      user_found: true,
+      push_tokens_exists: user.push_tokens !== undefined,
+      push_tokens_is_array: Array.isArray(user.push_tokens),
+      push_tokens_length: user.push_tokens?.length || 0,
+      push_tokens_value: user.push_tokens ? JSON.stringify(user.push_tokens.map(t => ({
+        token_preview: t.token?.substring(0, 30) + '...',
+        platform: t.platform
+      }))) : 'null/undefined'
+    });
+    
+    if (!user.push_tokens || user.push_tokens.length === 0) {
+      console.log(`[NotificationService] ⚠️ No push tokens found for user ${userId}`);
       return { success: false, reason: 'no_push_tokens' };
     }
     
