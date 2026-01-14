@@ -842,14 +842,35 @@ async function sendPushNotification(userId, notification) {
       } catch (error) {
         console.error(`[NotificationService] Failed to send iOS APNs token ${token.substring(0, 20)}...:`, error.message);
         
-        // If token is invalid, remove it
-        if (error.code === 'messaging/invalid-registration-token' || 
-            error.code === 'messaging/registration-token-not-registered' ||
-            error.message?.includes('not a valid') || 
-            error.message?.includes('Invalid')) {
+        // Check if error is due to APNs not being configured in Firebase
+        // When APNs is not configured, Firebase tries to treat APNs tokens as FCM tokens
+        const isApnsConfigError = error.message?.includes('FCM') && error.message?.includes('not a valid');
+        
+        if (isApnsConfigError) {
+          console.error(`[NotificationService] ⚠️ CRITICAL: Firebase APNs not configured!`);
+          console.error(`[NotificationService] Error indicates Firebase is treating APNs token as FCM token.`);
+          console.error(`[NotificationService] This means APNs Authentication Key is not uploaded to Firebase Console.`);
+          console.error(`[NotificationService] Token is VALID - not removing. Configure APNs in Firebase Console.`);
+          console.error(`[NotificationService] See: https://console.firebase.google.com/project/the1-d23f4/settings/cloudmessaging`);
+          results.push({ token, success: false, reason: 'apns_not_configured', method: 'apns' });
+          // Don't remove token - it's valid, just can't be sent because APNs isn't configured
+        } else if (error.code === 'messaging/invalid-registration-token' || 
+                   error.code === 'messaging/registration-token-not-registered') {
+          // These are actual invalid token errors (not configuration issues)
           console.log(`[NotificationService] Removing invalid iOS APNs token: ${token.substring(0, 20)}...`);
           user.push_tokens = user.push_tokens.filter(t => t.token !== token);
           results.push({ token, success: false, reason: 'invalid_token', method: 'apns' });
+        } else if (error.message?.includes('not a valid') || error.message?.includes('Invalid')) {
+          // Generic "not valid" error - could be token or config issue
+          // If it mentions FCM, it's likely APNs config issue, otherwise might be invalid token
+          if (error.message?.includes('FCM')) {
+            console.error(`[NotificationService] ⚠️ Likely APNs configuration issue (FCM mentioned). Not removing token.`);
+            results.push({ token, success: false, reason: 'apns_not_configured', method: 'apns' });
+          } else {
+            console.log(`[NotificationService] Removing invalid iOS APNs token: ${token.substring(0, 20)}...`);
+            user.push_tokens = user.push_tokens.filter(t => t.token !== token);
+            results.push({ token, success: false, reason: 'invalid_token', method: 'apns' });
+          }
         } else {
           results.push({ token, success: false, reason: error.message, method: 'apns' });
         }
