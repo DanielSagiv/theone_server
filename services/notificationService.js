@@ -51,6 +51,8 @@ function initializeFirebase() {
 
       firebaseInitialized = true;
       console.log('[NotificationService] Firebase Admin initialized successfully');
+      console.log('[NotificationService] Firebase Project ID:', projectId);
+      console.log('[NotificationService] Firebase Client Email:', clientEmail);
     }
   } catch (error) {
     console.error('[NotificationService] Failed to initialize Firebase:', error.message);
@@ -840,7 +842,7 @@ async function sendPushNotification(userId, notification) {
 
         // Firebase Admin SDK can send to iOS using APNs tokens
         // The message already has apns configuration, Firebase will route it correctly
-        const result = await admin.messaging().send({
+        const messageToSend = {
           ...message,
           token: token,
           // Ensure APNs configuration is present for iOS
@@ -851,14 +853,29 @@ async function sendPushNotification(userId, notification) {
               'apns-push-type': 'alert'
             }
           }
+        };
+        
+        console.log(`[NotificationService] 📤 Sending iOS APNs notification:`, {
+          token_preview: token.substring(0, 30) + '...',
+          token_length: token.length,
+          has_apns_config: !!messageToSend.apns,
+          project_id: process.env.FIREBASE_PROJECT_ID
         });
+        
+        const result = await admin.messaging().send(messageToSend);
 
         results.push({ token, success: true, messageId: result, method: 'apns' });
         
         // Update last_used_at
         tokenData.last_used_at = new Date();
       } catch (error) {
-        console.error(`[NotificationService] Failed to send iOS APNs token ${token.substring(0, 20)}...:`, error.message);
+        console.error(`[NotificationService] Failed to send iOS APNs token ${token.substring(0, 20)}...`);
+        console.error(`[NotificationService] Error details:`, {
+          message: error.message,
+          code: error.code,
+          errorInfo: error.errorInfo,
+          stack: error.stack?.substring(0, 200)
+        });
         
         // Check if error is due to APNs not being configured in Firebase
         // When APNs is not configured, Firebase tries to treat APNs tokens as FCM tokens
@@ -869,7 +886,8 @@ async function sendPushNotification(userId, notification) {
           console.error(`[NotificationService] Error indicates Firebase is treating APNs token as FCM token.`);
           console.error(`[NotificationService] This means APNs Authentication Key is not uploaded to Firebase Console.`);
           console.error(`[NotificationService] Token is VALID - not removing. Configure APNs in Firebase Console.`);
-          console.error(`[NotificationService] See: https://console.firebase.google.com/project/the1-d23f4/settings/cloudmessaging`);
+          console.error(`[NotificationService] Current Firebase Project: ${process.env.FIREBASE_PROJECT_ID}`);
+          console.error(`[NotificationService] Verify APNs keys at: https://console.firebase.google.com/project/${process.env.FIREBASE_PROJECT_ID}/settings/cloudmessaging`);
           results.push({ token, success: false, reason: 'apns_not_configured', method: 'apns' });
           // Don't remove token - it's valid, just can't be sent because APNs isn't configured
         } else if (error.code === 'messaging/invalid-registration-token' || 

@@ -639,9 +639,7 @@ mobile/
 - Consider landscape orientation support
 - Optimize for one-handed use where possible
 
----
-
-## Related Documentation- **COE Specification**: See `architecture/coe-specification.md`
+---## Related Documentation- **COE Specification**: See `architecture/coe-specification.md`
 - **Bot Architecture**: See `architecture/bot-architecture-plan.md`
 - **Mobile App Plan**: See `MOBILE-APP-IMPLEMENTATION-PLAN.md`
 - **Feature Flags**: See `FEATURE-FLAGS.md` - Client COE creation/editing can be disabled via feature flag
