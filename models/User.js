@@ -230,6 +230,39 @@ userSchema.pre('save', async function(next) {
 });
 
 /**
+ * Sanitize push_tokens before saving
+ * @description Remove any invalid push token entries that are missing required fields
+ *              to prevent user validation errors from breaking login and other flows.
+ */
+userSchema.pre('save', function(next) {
+  try {
+    if (Array.isArray(this.push_tokens)) {
+      const beforeCount = this.push_tokens.length;
+      this.push_tokens = this.push_tokens.filter(tokenEntry => {
+        if (!tokenEntry) return false;
+        const tokenStr = typeof tokenEntry.token === 'string' ? tokenEntry.token.trim() : '';
+        const platformStr = typeof tokenEntry.platform === 'string' ? tokenEntry.platform.trim() : '';
+        return tokenStr.length > 0 && platformStr.length > 0;
+      });
+
+      const afterCount = this.push_tokens.length;
+      if (beforeCount !== afterCount) {
+        console.warn('[UserModel] Cleaned invalid push_tokens before save:', {
+          user_id: this._id?.toString?.(),
+          before: beforeCount,
+          after: afterCount,
+          removed: beforeCount - afterCount,
+        });
+      }
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * Compare password with hashed password
  * @param {string} candidatePassword - Password to compare
  * @returns {Promise<boolean>} True if password matches
