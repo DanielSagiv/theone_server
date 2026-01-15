@@ -233,21 +233,34 @@ userSchema.pre('save', async function(next) {
  * Sanitize push_tokens before saving
  * @description Remove any invalid push token entries that are missing required fields
  *              to prevent user validation errors from breaking login and other flows.
+ *              This runs BEFORE validation, so it prevents validation errors.
  */
-userSchema.pre('save', function(next) {
+userSchema.pre('validate', function(next) {
   try {
     if (Array.isArray(this.push_tokens)) {
       const beforeCount = this.push_tokens.length;
       this.push_tokens = this.push_tokens.filter(tokenEntry => {
-        if (!tokenEntry) return false;
-        const tokenStr = typeof tokenEntry.token === 'string' ? tokenEntry.token.trim() : '';
-        const platformStr = typeof tokenEntry.platform === 'string' ? tokenEntry.platform.trim() : '';
-        return tokenStr.length > 0 && platformStr.length > 0;
+        // Remove null/undefined entries
+        if (!tokenEntry || typeof tokenEntry !== 'object') return false;
+        
+        // Check token field - must be non-empty string
+        const tokenStr = tokenEntry.token;
+        if (!tokenStr || typeof tokenStr !== 'string' || tokenStr.trim().length === 0) {
+          return false;
+        }
+        
+        // Check platform field - must be non-empty string
+        const platformStr = tokenEntry.platform;
+        if (!platformStr || typeof platformStr !== 'string' || platformStr.trim().length === 0) {
+          return false;
+        }
+        
+        return true;
       });
 
       const afterCount = this.push_tokens.length;
       if (beforeCount !== afterCount) {
-        console.warn('[UserModel] Cleaned invalid push_tokens before save:', {
+        console.warn('[UserModel] Cleaned invalid push_tokens before validation:', {
           user_id: this._id?.toString?.(),
           before: beforeCount,
           after: afterCount,
@@ -258,6 +271,7 @@ userSchema.pre('save', function(next) {
 
     next();
   } catch (error) {
+    console.error('[UserModel] Error in push_tokens sanitizer:', error);
     next(error);
   }
 });

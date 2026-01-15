@@ -668,6 +668,78 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       });
     }
 
+    // Validate token format based on platform
+    const tokenStr = String(token).trim();
+    const isExpoToken = tokenStr.startsWith('ExponentPushToken[');
+    const isNativeApnsToken = tokenStr.length === 64 && /^[a-f0-9]+$/i.test(tokenStr);
+    const isFcmToken = tokenStr.length > 100 && !tokenStr.startsWith('ExponentPushToken[');
+
+    console.log(`[UsersRoute] Token format validation:`, {
+      platform,
+      token_length: tokenStr.length,
+      isExpoToken,
+      isNativeApnsToken,
+      isFcmToken,
+      token_preview: tokenStr.substring(0, 30) + '...'
+    });
+
+    // For iOS: Reject native APNs tokens, only accept Expo tokens
+    if (platform === 'ios') {
+      if (isNativeApnsToken) {
+        console.error(`[UsersRoute] ❌ Rejected native APNs token for iOS:`, {
+          token_preview: tokenStr.substring(0, 30) + '...',
+          reason: 'iOS must use Expo push tokens, not native APNs tokens'
+        });
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_TOKEN_FORMAT',
+            message: 'iOS must use Expo push tokens. Please ensure the app is using getExpoPushTokenAsync() and rebuild the IPA.'
+          }
+        });
+      }
+      
+      if (!isExpoToken) {
+        console.error(`[UsersRoute] ❌ Rejected invalid iOS token format:`, {
+          token_preview: tokenStr.substring(0, 30) + '...',
+          token_length: tokenStr.length,
+          reason: 'Token does not match Expo push token format'
+        });
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_TOKEN_FORMAT',
+            message: 'Invalid iOS token format. Expected Expo push token (starts with ExponentPushToken[).'
+          }
+        });
+      }
+
+      console.log(`[UsersRoute] ✅ Valid Expo push token for iOS`);
+    }
+
+    // For Android: Accept FCM tokens (native) or Expo tokens
+    if (platform === 'android') {
+      if (!isFcmToken && !isExpoToken) {
+        console.error(`[UsersRoute] ❌ Rejected invalid Android token format:`, {
+          token_preview: tokenStr.substring(0, 30) + '...',
+          token_length: tokenStr.length
+        });
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_TOKEN_FORMAT',
+            message: 'Invalid Android token format. Expected FCM token or Expo push token.'
+          }
+        });
+      }
+
+      if (isFcmToken) {
+        console.log(`[UsersRoute] ✅ Valid native FCM token for Android`);
+      } else if (isExpoToken) {
+        console.log(`[UsersRoute] ✅ Valid Expo push token for Android`);
+      }
+    }
+
     const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({
@@ -681,12 +753,12 @@ router.post('/push-token', authenticateToken, async (req, res) => {
 
     // Check if token already exists
     // Check for exact token match
-    const existingTokenIndex = user.push_tokens.findIndex(t => t.token === token);
+    const existingTokenIndex = user.push_tokens.findIndex(t => t.token === tokenStr);
 
     if (existingTokenIndex >= 0) {
       // Update existing token
       console.log(`[UsersRoute] Updating existing push token for user ${req.user._id}:`, {
-        token_preview: token.substring(0, 20) + '...',
+        token_preview: tokenStr.substring(0, 20) + '...',
         platform
       });
       user.push_tokens[existingTokenIndex].last_used_at = new Date();
@@ -695,13 +767,13 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       // Check for duplicate tokens (same token string but different object)
       // This can happen if token was registered multiple times
       const duplicateIndex = user.push_tokens.findIndex(t => 
-        t.token && t.token.toString() === token.toString()
+        t.token && t.token.toString() === tokenStr
       );
       
       if (duplicateIndex >= 0) {
         // Found duplicate - update existing instead of adding new
         console.log(`[UsersRoute] Found duplicate push token, updating instead of adding:`, {
-          token_preview: token.substring(0, 20) + '...',
+          token_preview: tokenStr.substring(0, 20) + '...',
           platform,
           existing_index: duplicateIndex
         });
@@ -710,12 +782,27 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       } else {
         // Add new token
         console.log(`[UsersRoute] Adding new push token for user ${req.user._id}:`, {
-          token_preview: token.substring(0, 20) + '...',
+          token_preview: tokenStr.substring(0, 20) + '...',
           platform,
           total_tokens_before: user.push_tokens.length
         });
+        // Validate token is not empty before adding
+        if (!tokenStr || tokenStr.length === 0) {
+          console.error(`[UsersRoute] ❌ Attempted to add empty token, rejecting:`, {
+            user_id: req.user._id,
+            platform
+          });
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'INVALID_TOKEN',
+              message: 'Token cannot be empty'
+            }
+          });
+        }
+
         user.push_tokens.push({
-          token,
+          token: tokenStr,
           platform,
           registered_at: new Date(),
           last_used_at: new Date()
@@ -727,13 +814,13 @@ router.post('/push-token', authenticateToken, async (req, res) => {
     const uniqueTokens = [];
     const seenTokens = new Set();
     for (const tokenData of user.push_tokens) {
-      const tokenStr = tokenData.token?.toString();
-      if (tokenStr && !seenTokens.has(tokenStr)) {
-        seenTokens.add(tokenStr);
+      const existingTokenStr = tokenData.token?.toString();
+      if (existingTokenStr && !seenTokens.has(existingTokenStr)) {
+        seenTokens.add(existingTokenStr);
         uniqueTokens.push(tokenData);
-      } else if (tokenStr) {
+      } else if (existingTokenStr) {
         console.warn(`[UsersRoute] Removing duplicate push token during registration:`, {
-          token_preview: tokenStr.substring(0, 20) + '...',
+          token_preview: existingTokenStr.substring(0, 20) + '...',
           user_id: req.user._id
         });
       }
@@ -748,12 +835,28 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       user.push_tokens = uniqueTokens;
     }
 
+    // Final validation before save - ensure no invalid entries
+    const validTokens = user.push_tokens.filter(t => {
+      const tToken = t.token?.toString?.() || '';
+      const tPlatform = t.platform?.toString?.() || '';
+      return tToken.trim().length > 0 && tPlatform.trim().length > 0;
+    });
+
+    if (validTokens.length !== user.push_tokens.length) {
+      console.warn(`[UsersRoute] Removing invalid tokens before save:`, {
+        before: user.push_tokens.length,
+        after: validTokens.length
+      });
+      user.push_tokens = validTokens;
+    }
+
     await user.save();
     
-    console.log(`[UsersRoute] Push token registration complete:`, {
+    console.log(`[UsersRoute] ✅ Push token registration complete:`, {
       user_id: req.user._id,
       total_tokens: user.push_tokens.length,
-      token_preview: token.substring(0, 20) + '...'
+      token_format: platform === 'ios' ? (isExpoToken ? 'Expo' : 'Unknown') : (isFcmToken ? 'FCM' : isExpoToken ? 'Expo' : 'Unknown'),
+      token_preview: tokenStr.substring(0, 30) + '...'
     });
 
     res.json({
