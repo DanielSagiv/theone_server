@@ -76,6 +76,14 @@ router.post('/message',
       });
     } catch (error) {
       console.error('Error sending bot message:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error details:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        userId: req.user?._id?.toString(),
+        prompt: req.body?.prompt?.substring(0, 200)
+      });
       res.status(500).json({
         success: false,
         error: {
@@ -83,7 +91,8 @@ router.post('/message',
           message: 'Failed to process bot message',
           category: 'service',
           retryable: true,
-          details: error.message
+          details: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         }
       });
     }

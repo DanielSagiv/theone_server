@@ -370,6 +370,16 @@ async function handleOpenCreateCOEForClient(params, user, correlationId) {
  * @returns {Promise<Object>} Tool execution result
  */
 async function handleCreateCOEDraft(params, user, correlationId) {
+  console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== START handleCreateCOEDraft ==========');
+  console.log('[BOT] [COE_CREATION_FULL_DEBUG] Entry point:', {
+    correlationId: correlationId,
+    userId: user._id?.toString(),
+    userRole: user.role,
+    userEmail: user.email,
+    paramsKeys: Object.keys(params),
+    paramsFull: JSON.stringify(params, null, 2)
+  });
+  
   try {
     const {
       name,
@@ -381,6 +391,20 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       client_id,
       preferences = {}
     } = params;
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Params destructured:', {
+      name: name,
+      description: description,
+      start_date: start_date,
+      end_date: end_date,
+      idempotency_key: idempotency_key,
+      eventsCount: events?.length || 0,
+      events: events,
+      client_id: client_id,
+      client_idType: typeof client_id,
+      preferencesKeys: Object.keys(preferences),
+      preferencesFull: JSON.stringify(preferences, null, 2)
+    });
 
     // Check feature flag for client COE creation
     const { isClientCOECreationEnabled } = require('../utils/featureFlags');
@@ -412,8 +436,23 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
 
     // Validate dates
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Date parsing:', {
+      start_date_raw: start_date,
+      end_date_raw: end_date,
+      start_dateType: typeof start_date,
+      end_dateType: typeof end_date
+    });
+    
     const startDate = new Date(start_date);
     const endDate = new Date(end_date);
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Parsed dates:', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      startDateValid: !isNaN(startDate.getTime()),
+      endDateValid: !isNaN(endDate.getTime()),
+      dateComparison: startDate > endDate ? 'INVALID: start > end' : 'VALID'
+    });
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw createError(
@@ -434,12 +473,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
 
     // Determine client_id based on user role
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client ID determination:', {
+      userRole: user.role,
+      client_id_provided: client_id,
+      client_idType: typeof client_id,
+      userId: user._id?.toString()
+    });
+    
     let targetClientId = client_id;
     if (user.role === 'client') {
       // Clients can only create COEs for themselves
       targetClientId = user._id.toString();
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client role - using user ID as targetClientId:', targetClientId);
     } else if (user.role === 'admin') {
       // Admins must provide client_id
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Admin role - checking client_id:', {
+        hasClientId: !!targetClientId,
+        targetClientId: targetClientId
+      });
+      
       if (!targetClientId) {
         throw createError(
           ErrorCodes.MISSING_REQUIRED_FIELD,
@@ -459,8 +511,17 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
 
     // Get client to generate COE name
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Fetching client:', {
+      targetClientId: targetClientId,
+      targetClientIdType: typeof targetClientId
+    });
+    
     const client = await User.findById(targetClientId);
     if (!client) {
+      console.error('[BOT] [COE_CREATION_FULL_DEBUG] Client not found:', {
+        targetClientId: targetClientId,
+        searchedWith: typeof targetClientId === 'string' ? targetClientId : String(targetClientId)
+      });
       throw createError(
         ErrorCodes.SERVICE_UNAVAILABLE,
         'Client not found.',
@@ -468,6 +529,13 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         false
       );
     }
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client found:', {
+      clientId: client._id?.toString(),
+      clientName: `${client.firstName || ''} ${client.lastName || ''}`.trim(),
+      clientEmail: client.email,
+      clientRole: client.role
+    });
 
     // Auto-generate COE name and description if not provided
     const { formatDateRange } = require('../utils/dateParser');
@@ -492,16 +560,40 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
     // Get preferences from conversation context
     let conversationPreferences = preferences;
+    console.log('[BOT] [COE_CREATION_DEBUG] Initial preferences from params:', {
+      preferences: JSON.stringify(preferences, null, 2),
+      budget_range: preferences.budget_range,
+      budget_max: preferences.budget_range?.max,
+      city: preferences.city,
+      party_size: preferences.party_size
+    });
+    
     try {
       const conversation = await BotConversation.findOne({ user_id: user._id });
       if (conversation && conversation.preference_data) {
+        console.log('[BOT] [COE_CREATION_DEBUG] Conversation preferences found:', {
+          conversationId: conversation._id.toString(),
+          conversationPreferences: JSON.stringify(conversation.preference_data, null, 2),
+          conversationBudget: conversation.preference_data.budget_range,
+          conversationBudgetMax: conversation.preference_data.budget_range?.max
+        });
+        
         conversationPreferences = {
           ...conversation.preference_data,
           ...preferences // Tool params override conversation preferences
         };
+        
+        console.log('[BOT] [COE_CREATION_DEBUG] Merged preferences (tool params override):', {
+          mergedPreferences: JSON.stringify(conversationPreferences, null, 2),
+          finalBudgetRange: conversationPreferences.budget_range,
+          finalBudgetMax: conversationPreferences.budget_range?.max,
+          finalBudgetMaxType: typeof conversationPreferences.budget_range?.max
+        });
+      } else {
+        console.log('[BOT] [COE_CREATION_DEBUG] No conversation preferences found, using tool params only');
       }
     } catch (error) {
-      console.error('Error fetching conversation preferences:', error);
+      console.error('[BOT] [COE_CREATION_DEBUG] Error fetching conversation preferences:', error);
       // Continue with provided preferences
     }
 
@@ -512,10 +604,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
                       (preferences.location_preferences && preferences.location_preferences[0]) ||
                       conversationPreferences.city ||
                       (conversationPreferences.location_preferences && conversationPreferences.location_preferences[0]);
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] City determination:', {
+      preferencesCity: preferences.city,
+      preferencesLocationPrefs: preferences.location_preferences,
+      conversationCity: conversationPreferences.city,
+      conversationLocationPrefs: conversationPreferences.location_preferences,
+      finalCityToUse: cityToUse
+    });
 
     // If events not provided, use sentiment-based auto-selection
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Event selection check:', {
+      eventsProvided: events?.length || 0,
+      eventsProvidedArray: events,
+      willAutoSelect: !events || events.length === 0
+    });
+    
     let finalEvents = events;
     if (!finalEvents || finalEvents.length === 0) {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Starting auto-selection of events');
       // Build event filter using overlap logic (same as routes/events.js COE date range filtering)
       // Events that overlap with COE date range:
       // Event starts before COE ends AND Event ends after COE starts
@@ -599,26 +706,54 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       .populate('location_id', 'name sentiment attributes address.city')
       .limit(50);
 
-      console.log('[BOT] Events found in query:', {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Events found in query:', {
         count: availableEvents.length,
         eventNames: availableEvents.map(e => e.name),
         eventDetails: availableEvents.map(e => ({
+          id: e._id?.toString(),
           name: e.name,
           start: e.start_datetime,
           end: e.end_datetime,
           city: e.location_id?.address?.city,
           status: e.status,
-          locationName: e.location_id?.name
-        }))
+          locationName: e.location_id?.name,
+          locationId: e.location_id?._id?.toString(),
+          seatsCount: e.seats?.length || 0
+        })),
+        filterUsed: JSON.stringify(eventFilter, null, 2)
       });
 
       if (availableEvents.length > 0) {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Calling autoSelectEventsBySentiment:', {
+          availableEventsCount: availableEvents.length,
+          preferencesForSelection: JSON.stringify({
+            city: cityToUse,
+            budget: conversationPreferences.budget,
+            budget_range: conversationPreferences.budget_range,
+            party_size: conversationPreferences.party_size,
+            seat_preferences: conversationPreferences.seat_preferences,
+            specific_preferences: conversationPreferences.specific_preferences
+          }, null, 2),
+          maxEvents: 5
+        });
+        
         // Auto-select events using sentiment matching
         const selectedEvents = await autoSelectEventsBySentiment(
           availableEvents,
           conversationPreferences,
           5 // Max 5 events
         );
+        
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Events selected by sentiment:', {
+          selectedCount: selectedEvents.length,
+          selectedEvents: selectedEvents.map(e => ({
+            eventId: e.event_id || (e.event && (e.event._id || e.event.id)),
+            eventName: (e.event && e.event.name) || e.name,
+            sentimentScore: e.sentimentScore,
+            matchReasons: e.matchReasons,
+            structuredPreferences: e.structuredPreferences
+          }))
+        });
         
         // Safety check: Validate no date conflicts in final selection
         if (selectedEvents.length > 0) {
@@ -726,6 +861,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         
         // Phase 2.5: Preserve sentiment match data for display
         // Note: Don't pre-select seats here - let budget-aware selection handle it to ensure seats exist in DB
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Mapping selected events to finalEvents format');
         finalEvents = selectedEvents.map(item => {
           // Ensure event_id is properly extracted - normalize to ObjectId or string
           const eventId = item.event_id || 
@@ -756,11 +892,31 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           };
         }).filter(Boolean); // Remove null entries
         
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Final events after mapping:', {
+          finalEventsCount: finalEvents.length,
+          finalEvents: finalEvents.map(e => ({
+            event_id: e.event_id?.toString(),
+            selected_seats_count: e.selected_seats?.length || 0,
+            hasSentimentMatch: !!e.sentiment_match
+          }))
+        });
+        
         // Store location exclusion info for later diagnostic creation
         if (allExcludedByLocation) {
           finalEvents._locationExclusionInfo = allExcludedByLocation;
+          console.log('[BOT] [COE_CREATION_FULL_DEBUG] Location exclusion info stored:', allExcludedByLocation);
         }
+      } else {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] No available events found - will create diagnostic');
       }
+    } else {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Using provided events, skipping auto-selection:', {
+        eventsCount: finalEvents.length,
+        events: finalEvents.map(e => ({
+          event_id: e.event_id?.toString(),
+          selected_seats_count: e.selected_seats?.length || 0
+        }))
+      });
     }
 
     // Get admin_id (first available admin if created by client, or current user if created by admin)
@@ -776,11 +932,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
 
     // Build selected_seats array from events (with budget-aware selection if needed)
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== SEAT SELECTION PHASE ==========');
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Starting seat selection:', {
+      finalEventsCount: finalEvents?.length || 0,
+      hasEvents: !!finalEvents && finalEvents.length > 0
+    });
+    
     const selectedSeats = [];
     const eventDiagnostics = []; // Collect diagnostics from all events
     
     // If no events found at all, create a diagnostic for that
     if (!finalEvents || finalEvents.length === 0) {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] No events - creating diagnostic');
       // Check if all events were excluded due to location preferences
       if (finalEvents && finalEvents._locationExclusionInfo) {
         const exclusionInfo = finalEvents._locationExclusionInfo;
@@ -822,20 +985,53 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     }
     
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Processing events for seat selection:', {
+      eventsCount: finalEvents.length
+    });
+    
     for (const eventData of finalEvents) {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Processing event:', {
+        eventId: eventData.event_id?.toString(),
+        hasSelectedSeats: !!eventData.selected_seats,
+        selectedSeatsCount: eventData.selected_seats?.length || 0
+      });
+      
       // Validate event_id exists
       if (!eventData.event_id) {
-        console.error('[BOT] Error: eventData missing event_id:', eventData);
+        console.error('[BOT] [COE_CREATION_FULL_DEBUG] ERROR: eventData missing event_id:', {
+          eventData: eventData,
+          eventDataKeys: Object.keys(eventData)
+        });
         continue; // Skip events without event_id
       }
       
       // Fetch event with location populated (including seats for sentiment checking)
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Fetching event from DB:', {
+        eventId: eventData.event_id.toString(),
+        eventIdType: typeof eventData.event_id
+      });
+      
       const event = await Event.findById(eventData.event_id)
         .populate('location_id', 'seats');
+        
       if (!event) {
-        console.error('[BOT] Error: Event not found for event_id:', eventData.event_id);
+        console.error('[BOT] [COE_CREATION_FULL_DEBUG] ERROR: Event not found in DB:', {
+          searchedEventId: eventData.event_id,
+          searchedEventIdType: typeof eventData.event_id,
+          searchedEventIdString: String(eventData.event_id)
+        });
         continue; // Skip missing events
       }
+      
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Event fetched successfully:', {
+        eventId: event._id?.toString(),
+        eventName: event.name,
+        eventStatus: event.status,
+        seatsCount: event.seats?.length || 0,
+        locationId: event.location_id?._id?.toString(),
+        locationName: event.location_id?.name,
+        locationSeatsCount: event.location_id?.seats?.length || 0
+      });
 
       // Ensure event has _id (should always be true for found documents, but add safety check)
       const eventId = event._id || eventData.event_id;
@@ -851,11 +1047,39 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           ...conversationPreferences,
           structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
         };
+        
+        const budgetForSelection = conversationPreferences.budget?.max || 
+                                  conversationPreferences.budget_range?.max || 
+                                  null;
+        
+        console.log('[BOT] [COE_CREATION_DEBUG] Calling selectSeatsByBudgetAndCapacity for event:', {
+          eventId: eventId.toString(),
+          eventName: event.name,
+          budgetForSelection: budgetForSelection,
+          budgetType: typeof budgetForSelection,
+          budgetFromPreferences: conversationPreferences.budget?.max,
+          budgetFromRange: conversationPreferences.budget_range?.max,
+          preferencesWithStructured: JSON.stringify({
+            budget: preferencesWithStructured.budget,
+            budget_range: preferencesWithStructured.budget_range,
+            party_size: preferencesWithStructured.party_size
+          }, null, 2)
+        });
+        
         const seatResult = await selectSeatsByBudgetAndCapacity(
           event,
           preferencesWithStructured,
-          conversationPreferences.budget?.max
+          budgetForSelection
         );
+        
+        console.log('[BOT] [COE_CREATION_DEBUG] Seat selection result:', {
+          eventId: eventId.toString(),
+          eventName: event.name,
+          seatResultType: Array.isArray(seatResult) ? 'array' : 'object',
+          seatsCount: Array.isArray(seatResult) ? seatResult.length : (seatResult.seats?.length || 0),
+          hasDiagnostics: !Array.isArray(seatResult) && !!seatResult.diagnostics,
+          diagnostics: !Array.isArray(seatResult) ? seatResult.diagnostics : null
+        });
         
         // Handle both old format (array) and new format (object with seats/diagnostics)
         const autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
@@ -868,9 +1092,30 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         }
         
         eventData.selected_seats = autoSeats;
+        
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Seat selection completed for event:', {
+          eventId: eventId.toString(),
+          eventName: event.name,
+          seatsSelected: autoSeats.length,
+          hasDiagnostics: !!seatDiagnostics,
+          diagnostics: seatDiagnostics ? {
+            primary_reason: seatDiagnostics.primary_reason,
+            budget: seatDiagnostics.budget,
+            filtering_stages: seatDiagnostics.filtering_stages
+          } : null
+        });
+      } else {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Event already has selected seats, skipping auto-selection:', {
+          eventId: eventId.toString(),
+          selectedSeatsCount: eventData.selected_seats?.length || 0
+        });
       }
 
       if (eventData.selected_seats && eventData.selected_seats.length > 0) {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Processing selected seats for event:', {
+          eventId: eventId.toString(),
+          seatsCount: eventData.selected_seats.length
+        });
         for (const seatData of eventData.selected_seats) {
           // Validate seat_id exists
           if (!seatData.seat_id) {
@@ -901,7 +1146,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             continue; // Skip if eventId is invalid
           }
 
-          selectedSeats.push({
+          const seatToAdd = {
             event_id: eventId, // Use validated event_id (from event._id or fallback to eventData.event_id)
             seat_id: seatData.seat_id,
             seat_code: seatData.seat_code || eventSeat.code,
@@ -911,15 +1156,47 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             available_from: event.start_datetime,
             available_until: event.end_datetime || event.start_datetime,
             status: 'selected'
+          };
+          
+          console.log('[BOT] [COE_CREATION_FULL_DEBUG] Adding seat to selection:', {
+            seatId: seatToAdd.seat_id?.toString(),
+            seatCode: seatToAdd.seat_code,
+            eventId: seatToAdd.event_id?.toString(),
+            capacity: seatToAdd.capacity,
+            eventPrice: seatToAdd.event_price,
+            basePrice: seatToAdd.base_price
           });
+          
+          selectedSeats.push(seatToAdd);
         }
+        
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Completed processing seats for event:', {
+          eventId: eventId.toString(),
+          seatsAdded: eventData.selected_seats.length,
+          totalSelectedSeatsSoFar: selectedSeats.length
+        });
+      } else {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] No seats selected for event:', {
+          eventId: eventId.toString(),
+          eventName: event.name
+        });
       }
     }
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Seat selection phase complete:', {
+      totalSeatsSelected: selectedSeats.length,
+      eventsProcessed: finalEvents.length,
+      eventDiagnosticsCount: eventDiagnostics.length
+    });
     
     // Validate we have at least some seats selected
     // If no seats found, try alternative events before giving up
     if (selectedSeats.length === 0) {
-      console.log('[BOT] No seats found for initial events. Attempting alternative search...');
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] No seats found - attempting alternative search:', {
+        selectedSeatsCount: selectedSeats.length,
+        finalEventsCount: finalEvents.length,
+        eventDiagnosticsCount: eventDiagnostics.length
+      });
       
       // Get original events with location info for exclusion
       const originalEventsWithLocations = [];
@@ -1160,6 +1437,16 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     }
 
+    // Determine initial status based on creator role
+    // Client-created COEs start as 'request', admin-created COEs start as 'draft'
+    const initialStatus = user.role === 'client' ? 'request' : 'draft';
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Setting initial COE status:', {
+      userRole: user.role,
+      initialStatus: initialStatus,
+      isClientCreated: user.role === 'client'
+    });
+    
     // Build base COE data
     const baseCoeData = {
       name: coeName,
@@ -1169,6 +1456,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       client_id: targetClientId,
       admin_id: adminId,
       created_by: user._id.toString(),
+      status: initialStatus, // Set status based on creator role
       events: finalEvents.map(e => ({
         event_id: e.event_id,
         event_date: startDate,
@@ -1186,12 +1474,52 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       sharable: false
     };
 
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== AUTO-FILL PHASE ==========');
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Base COE data before autoFill:', {
+      name: baseCoeData.name,
+      description: baseCoeData.description,
+      start_date: baseCoeData.start_date,
+      end_date: baseCoeData.end_date,
+      client_id: baseCoeData.client_id,
+      admin_id: baseCoeData.admin_id,
+      created_by: baseCoeData.created_by,
+      eventsCount: baseCoeData.events.length,
+      selectedSeatsCount: baseCoeData.selected_seats.length,
+      events: baseCoeData.events.map(e => ({
+        event_id: e.event_id?.toString(),
+        sequence: e.sequence
+      })),
+      seats: baseCoeData.selected_seats.map(s => ({
+        event_id: s.event_id?.toString(),
+        seat_id: s.seat_id?.toString(),
+        seat_code: s.seat_code,
+        event_price: s.event_price
+      }))
+    });
+    
     // Apply advanced auto-fill (runner, policies, budget-aware pricing)
     const coeData = await autoFillCOEData(
       baseCoeData,
       conversationPreferences,
       finalEvents.map(e => ({ event_id: e.event_id }))
     );
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE data after autoFill:', {
+      hasSubtotal: !!coeData.subtotal,
+      subtotal: coeData.subtotal,
+      hasTaxes: !!coeData.taxes,
+      taxes: coeData.taxes,
+      hasFees: !!coeData.fees,
+      fees: coeData.fees,
+      hasTotal: !!coeData.total,
+      total: coeData.total,
+      deposit_required: coeData.deposit_required,
+      selectedSeatsCount: coeData.selected_seats?.length || 0,
+      runnerAssignment: coeData.runner_assignment ? {
+        type: coeData.runner_assignment.type,
+        runner_id: coeData.runner_assignment.runner_id?.toString()
+      } : null
+    });
     
     // Safety check: Ensure pricing is calculated if seats exist
     if (coeData.selected_seats && coeData.selected_seats.length > 0) {
@@ -1243,8 +1571,33 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       seatsCount: coeData.selected_seats?.length || 0
     });
 
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== COE CREATION PHASE ==========');
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Calling coeService.createCOE:', {
+      coeDataKeys: Object.keys(coeData),
+      createdBy: user._id.toString(),
+      userRole: user.role,
+      coeDataSummary: {
+        name: coeData.name,
+        client_id: coeData.client_id,
+        eventsCount: coeData.events?.length || 0,
+        seatsCount: coeData.selected_seats?.length || 0,
+        subtotal: coeData.subtotal,
+        total: coeData.total
+      }
+    });
+    
     // Create COE
     const coe = await coeService.createCOE(coeData, user._id);
+    
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE created successfully:', {
+      coeId: coe._id?.toString(),
+      coeStatus: coe.status,
+      coeName: coe.name,
+      subtotal: coe.subtotal,
+      total: coe.total,
+      eventsCount: coe.events?.length || 0,
+      selectedSeatsCount: coe.selected_seats?.length || 0
+    });
 
     // Log pricing after COE creation (before population)
     console.log('[BOT] Pricing in coe after creation (before population):', {
@@ -1267,8 +1620,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       deposit_required: populatedCOE.deposit_required
     });
 
-    // Generate seat upgrade offers for draft COEs
-    if (populatedCOE.status === 'draft') {
+    // Generate seat upgrade offers for draft or request COEs
+    if (populatedCOE.status === 'draft' || populatedCOE.status === 'request') {
       try {
         console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
         const totalBudget = conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null;
@@ -1302,14 +1655,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Format structured response with budget comparison (Phase 2.5)
     const budgetForComparison = conversationPreferences.budget || 
                                 (conversationPreferences.budget_range ? { max: conversationPreferences.budget_range.max } : null);
-    // Phase 2.5: Use 'coe_draft' type for draft COEs to enable enhanced display
-    const responseType = populatedCOE.status === 'draft' ? 'coe_draft' : 'coe_created';
+    // Phase 2.5: Use 'coe_draft' type for draft or request COEs to enable enhanced display
+    const responseType = (populatedCOE.status === 'draft' || populatedCOE.status === 'request') ? 'coe_draft' : 'coe_created';
+    // Determine appropriate message based on status and creator role
+    let creationMessage;
+    if (populatedCOE.status === 'request') {
+      // User-requested COE
+      creationMessage = 'Your experience request has been submitted! THE1 will review it and update you soon. Review the details below.';
+    } else if (populatedCOE.status === 'draft' && user.role === 'client') {
+      // Client-created draft (edge case, but handle it)
+      creationMessage = 'Your experience request has been submitted! THE1 will review it and update you soon. Review the details below.';
+    } else {
+      // Admin-created draft
+      creationMessage = 'Your experience draft has been created! Review the selected events and details below.';
+    }
+    
     const structuredResponse = await formatCOEResponse(
       responseType,
       populatedCOE,
-      populatedCOE.status === 'draft' 
-        ? 'Your experience draft has been created! Review the selected events and details below.'
-        : 'COE created successfully in draft status. It requires approval before it can be accepted.',
+      creationMessage,
       actions,
       budgetForComparison
     );
@@ -1361,8 +1725,27 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     }
 
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== SUCCESS - Returning result ==========');
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Final result:', {
+      success: result.success,
+      hasData: !!result.data,
+      message: result.message,
+      responseType: result.data?.type
+    });
+    
     return result;
   } catch (error) {
+    console.error('[BOT] [COE_CREATION_FULL_DEBUG] ========== ERROR in handleCreateCOEDraft ==========');
+    console.error('[BOT] [COE_CREATION_FULL_DEBUG] Error details:', {
+      errorType: error?.type || error?.constructor?.name,
+      errorMessage: error?.message,
+      errorStack: error?.stack,
+      errorFull: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
+      correlationId: correlationId,
+      userId: user._id?.toString(),
+      userRole: user.role
+    });
+    
     console.error('Error in handleCreateCOEDraft:', error);
     
     // Handle NO_SEATS_AVAILABLE error specially

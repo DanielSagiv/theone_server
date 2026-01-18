@@ -69,7 +69,7 @@ const coeSchema = new mongoose.Schema({
   },
   status: { 
     type: String, 
-    enum: ['draft', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled'],
+    enum: ['draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled'],
     default: 'draft',
     index: true
   },

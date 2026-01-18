@@ -74,7 +74,7 @@ COE: "Las Vegas VIP Weekend"
   // Core Information
   name: String, // COE title/description
   description: String, // Detailed description
-  status: String, // draft, approved, sent, accepted, rejected, expired
+  status: String, // draft, request, approved, pending_pay, paid, rejected, expired, completed, cancelled
   
   // Manual Creation Fields
   created_method: String, // 'manual' or 'automated'
@@ -111,10 +111,11 @@ COE: "Las Vegas VIP Weekend"
   deposit_paid: Number,
   
   // Timeline
-  request_date: Date, // When client submitted request
+  request_date: Date, // When client submitted request (for request status COEs)
   approved_date: Date, // When admin approved
-  sent_date: Date, // When sent to client
-  accepted_date: Date, // When client accepted
+  pending_pay_date: Date, // When client initiated payment
+  paid_date: Date, // When payment was received (replaces accepted_date)
+  accepted_date: Date, // Deprecated - use paid_date (kept for backward compatibility)
   start_date: Date, // First event date
   end_date: Date, // Last event date
   
@@ -250,38 +251,43 @@ COE: "Las Vegas VIP Weekend"
 - COE status: `approved`
 
 #### **Step 7: Client Communication**
-- System sends COE to client for review
-- Client can accept, reject, or request changes
+- System sends COE to client for review (status: `approved`)
+- Client can accept (initiate payment), reject, cancel, or request changes
 - Admin handles client communication and modifications
-- COE status: `sent` → `accepted` or `rejected`
+- COE status flow: `approved` → `pending_pay`/`paid` or `rejected` or `cancelled`
+- Client-created COEs start as `request` → `approved` → `pending_pay`/`paid`
 
 ## COE Workflow
 
-### **1. Client Request Phase**
-- Client submits request with preferences
-- System creates initial COE draft
-- Admin receives notification
+### **1. Client Request Phase (Client-Created COEs)**
+- Client submits request with preferences via bot or mobile app
+- System creates COE with status `request` (awaiting admin review)
+- Admin receives notification (when implemented)
+- Client can view but not edit until approved
 
-### **2. COE Building Phase**
+### **2. COE Building Phase (Admin-Created COEs)**
 - Admin curates events from available locations
 - Builds COE with events, pricing, policies
 - Sets runner assignments (COE or event level)
 - COE status: `draft`
 
 ### **3. Admin Approval Phase**
-- Admin reviews and approves COE
+- Admin reviews and approves COE (draft or request)
 - System validates availability
 - COE status: `approved`
+- Client can now see and interact with approved COE
 
 ### **4. Client Review Phase**
-- COE sent to client for review
-- Client can communicate with admin
-- COE status: `sent`
+- COE visible to client for review
+- Client can accept (initiate payment), reject, or cancel
+- COE status: `approved` (client actions pending)
 
-### **5. Client Acceptance Phase**
-- Client accepts terms and pays deposit
-- System captures payment
-- COE status: `accepted`
+### **5. Payment Phase**
+- Client accepts terms and initiates payment
+- Payment processing begins
+- COE status: `pending_pay`
+- Payment completes
+- COE status: `paid` (seats booked, COE confirmed)
 
 ### **6. Execution Phase**
 - Runner receives assignment notification

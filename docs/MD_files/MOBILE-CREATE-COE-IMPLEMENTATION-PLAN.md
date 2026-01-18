@@ -15,9 +15,9 @@ When disabled, clients cannot create or edit COEs (admin-only). See `FEATURE-FLA
 
 ### Client Flow
 ```
-1. User clicks "Create Experience" quick action button
+1. User clicks "Request Experience" quick action button (if enabled via feature flag)
    ↓
-2. Bot receives "build my experience" prompt
+2. Bot receives "request my experience" prompt
    ↓
 3. Bot responds with `coe_preferences_form` structured data
    ↓
@@ -29,9 +29,9 @@ When disabled, clients cannot create or edit COEs (admin-only). See `FEATURE-FLA
    ↓
 7. Form data sent to bot as message
    ↓
-8. Bot creates COE draft and responds with COE card
+8. Bot creates COE with status 'request' (awaiting admin review) and responds with success message
    ↓
-9. User can view created COE
+9. User can view created COE (view-only until admin approval)
 ```
 
 ### Admin Flow
@@ -56,7 +56,7 @@ When disabled, clients cannot create or edit COEs (admin-only). See `FEATURE-FLA
     - Admin fills form (Dates, Budget, Party Size, Notes)
     - Admin submits form
     - Form data sent to bot as message
-    - Bot creates COE draft for that client and responds with COE card
+    - Bot creates COE with status 'draft' for that client and responds with COE card
     - Admin can view created COE
    ↓
 6b. If "View experiences" clicked:

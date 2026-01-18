@@ -288,7 +288,7 @@ const coeSelectedSeatSchema = Joi.object({
 const createCOESchema = Joi.object({
   name: Joi.string().min(2).max(200).required(),
   description: Joi.string().max(1000).required(),
-  status: Joi.string().valid('draft', 'approved', 'sent', 'accepted', 'rejected', 'expired', 'completed', 'cancelled').default('draft'),
+  status: Joi.string().valid('draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').default('draft'),
   created_method: Joi.string().valid('manual', 'automated').default('manual'),
   creation_notes: Joi.string().max(500).allow(''),
   client_id: Joi.string().hex().length(24).required(),
@@ -368,7 +368,7 @@ const addEventToCOESchema = Joi.object({
 
 // Update COE status validation schema
 const updateCOEStatusSchema = Joi.object({
-  status: Joi.string().valid('draft', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
+  status: Joi.string().valid('draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
 });
 
 // Assign runner to COE validation schema

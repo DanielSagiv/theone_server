@@ -911,9 +911,9 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
 /**
  * PUT /v1/coes/:id/status
  * Update COE status
- * @access Admin only
+ * @access Admin or Client (can cancel their own COEs before payment)
  */
-router.put('/:id/status', authenticateToken, requireAdmin, async (req, res) => {
+router.put('/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -934,7 +934,40 @@ router.put('/:id/status', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    const coe = await coeService.updateCOEStatus(id, value.status, req.user.id);
+    // Fetch COE for authorization check
+    const coe = await COE.findById(id).populate('client_id', '_id');
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found'
+      });
+    }
+
+    // Authorization check: Admin can change any status, Client can only cancel their own COEs
+    const isAdmin = req.user.role === 'admin';
+    const isClientOwner = (coe.client_id?._id?.toString() || coe.client_id?.toString()) === req.user.id.toString();
+    
+    // Allow client cancellation from specific statuses
+    const clientCancelAllowed = !isAdmin && 
+                                isClientOwner &&
+                                value.status === 'cancelled' &&
+                                ['request', 'draft', 'approved', 'pending_pay'].includes(coe.status);
+    
+    if (!isAdmin && !clientCancelAllowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Permission denied. Only admins can change COE status, or clients can cancel their own COEs before payment.',
+        error: {
+          code: 'PERMISSION_DENIED',
+          current_status: coe.status,
+          requested_status: value.status,
+          user_role: req.user.role,
+          is_owner: isClientOwner
+        }
+      });
+    }
+
+    const updatedCoe = await coeService.updateCOEStatus(id, value.status, req.user.id);
 
     res.json({
       success: true,
@@ -1103,21 +1136,32 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
       });
     }
 
-    // Check feature flag for client COE editing (seat replacement is an edit operation)
-    const { isClientCOEEditingEnabled } = require('../utils/featureFlags');
-    if (req.user.role === 'client' && !isClientCOEEditingEnabled()) {
-      return res.status(403).json({
+    // Get COE to check permissions
+    const coe = await COE.findById(id).populate('created_by', 'role');
+    if (!coe) {
+      return res.status(404).json({
         success: false,
-        error: 'Client COE editing is currently disabled. Please contact an admin for assistance.'
+        error: 'COE not found'
       });
     }
 
-    const coe = await coeService.acceptSeatUpgrade(id, current_seat_id, alternative_seat_id, event_id);
+    // Check if client can edit this COE (blocks client-created draft COEs)
+    const { canClientEditCOE } = require('../utils/coeUtils');
+    const permissionCheck = canClientEditCOE(coe, req.user.id, req.user);
+    if (!permissionCheck.canEdit) {
+      return res.status(403).json({
+        success: false,
+        error: permissionCheck.reason || 'You do not have permission to edit this COE'
+      });
+    }
+
+    // Continue with seat upgrade
+    const updatedCoe = await coeService.acceptSeatUpgrade(id, current_seat_id, alternative_seat_id, event_id);
 
     res.json({
       success: true,
       message: 'Seat upgrade accepted successfully',
-      data: coe
+      data: updatedCoe
     });
   } catch (error) {
     console.error('Error accepting seat upgrade:', error);
@@ -1173,6 +1217,14 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
       return res.status(404).json({
         success: false,
         error: 'COE not found or access denied'
+      });
+    }
+
+    // Check COE status - must be approved or pending_pay before payment
+    if (coe.status === 'draft' || coe.status === 'request') {
+      return res.status(403).json({
+        success: false,
+        error: 'COE must be approved by admin before payment'
       });
     }
 
@@ -1547,7 +1599,7 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
 
 /**
  * DELETE /v1/coes/:coeId/events
- * Remove events from a draft COE
+ * Remove events from a draft or request COE
  * @access Authenticated users (admin or COE owner)
  */
 router.delete('/:coeId/events', authenticateToken, async (req, res) => {
@@ -1562,11 +1614,21 @@ router.delete('/:coeId/events', authenticateToken, async (req, res) => {
       });
     }
 
-    const coe = await COE.findById(coeId);
+    const coe = await COE.findById(coeId).populate('created_by', 'role');
     if (!coe) {
       return res.status(404).json({
         success: false,
         error: 'COE not found'
+      });
+    }
+
+    // Check if client can edit this COE (blocks client-created draft COEs)
+    const { canClientEditCOE } = require('../utils/coeUtils');
+    const permissionCheck = canClientEditCOE(coe, req.user.id, req.user);
+    if (!permissionCheck.canEdit) {
+      return res.status(403).json({
+        success: false,
+        error: permissionCheck.reason || 'You do not have permission to edit this COE'
       });
     }
 
@@ -1618,7 +1680,7 @@ router.delete('/:coeId/events', authenticateToken, async (req, res) => {
 
 /**
  * PUT /v1/coes/:coeId/events/:oldEventId
- * Replace an event in a draft COE
+ * Replace an event in a draft or request COE
  * @access Authenticated users (admin or COE owner)
  */
 router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => {
@@ -1651,12 +1713,22 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
       });
     }
 
-    // Check feature flag for client COE editing
-    const { isClientCOEEditingEnabled } = require('../utils/featureFlags');
-    if (req.user.role === 'client' && !isClientCOEEditingEnabled()) {
+    // Fetch COE with Mongoose for permission check (needs populated created_by)
+    const coeForPermission = await COE.findById(coeId).populate('created_by', 'role');
+    if (!coeForPermission) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Check if client can edit this COE (blocks client-created draft COEs)
+    const { canClientEditCOE } = require('../utils/coeUtils');
+    const permissionCheck = canClientEditCOE(coeForPermission, req.user.id, req.user);
+    if (!permissionCheck.canEdit) {
       return res.status(403).json({
         success: false,
-        error: 'Client COE editing is currently disabled. Please contact an admin for assistance.'
+        error: permissionCheck.reason || 'You do not have permission to edit this COE'
       });
     }
 

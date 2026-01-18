@@ -20,13 +20,16 @@ Feature flags allow enabling or disabling specific features in the application w
 
 **When Disabled (`false` or missing)**:
 - Clients cannot create COEs via bot (`create_coe_draft` tool)
-- "Create Experience" button is hidden for clients in mobile app quick actions
+- "Request Experience" button is hidden for clients in mobile app quick actions
 - Admins are **not affected** - they can always create COEs
 
 **When Enabled (`'true'`)**:
 - Clients can create COEs for themselves via bot
-- "Create Experience" button is visible for clients in mobile app
+- "Request Experience" button is visible for clients in mobile app
 - Clients can submit COE creation requests through the bot conversation flow
+- **Client-created COEs have status `'request'`** (awaiting admin review)
+- Clients can view but cannot edit their request COEs until admin approves
+- Clients can cancel their request COEs before approval
 
 ---
 

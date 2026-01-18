@@ -501,7 +501,7 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
     });
     
     // Only generate offers for draft COEs
-    if (coe.status !== 'draft') {
+    if (coe.status !== 'draft' && coe.status !== 'request') {
       console.log('[SEAT_UPGRADE] generateSeatUpgradeOffers: COE not in draft status:', coe.status);
       return [];
     }

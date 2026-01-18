@@ -738,11 +738,12 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     // Validate status transition
     const validTransitions = {
       'draft': ['approved', 'cancelled'],
+      'request': ['approved', 'cancelled'],
       'approved': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
       'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
       'paid': ['completed', 'cancelled'],
-      'rejected': ['draft'],
-      'expired': ['draft'],
+      'rejected': ['draft', 'request'],
+      'expired': ['draft', 'request'],
       'completed': [],
       'cancelled': []
     };
@@ -1152,8 +1153,8 @@ async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
       throw new Error('COE not found');
     }
 
-    if (coe.status !== 'draft') {
-      throw new Error('Seat upgrades can only be accepted for draft COEs');
+    if (coe.status !== 'draft' && coe.status !== 'request') {
+      throw new Error('Seat upgrades can only be accepted for draft or request COEs');
     }
 
     // Find the upgrade offer
@@ -1228,8 +1229,8 @@ async function removeEventsFromCOE(coeId, eventIds) {
       throw new Error('COE not found');
     }
 
-    if (coe.status !== 'draft') {
-      throw new Error('Can only remove events from draft COEs');
+    if (coe.status !== 'draft' && coe.status !== 'request') {
+      throw new Error('Can only remove events from draft or request COEs');
     }
 
     // Normalize event IDs to strings for comparison
@@ -1314,8 +1315,8 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       throw new Error('COE not found');
     }
 
-    if (coe.status !== 'draft') {
-      throw new Error('Can only replace events in draft COEs');
+    if (coe.status !== 'draft' && coe.status !== 'request') {
+      throw new Error('Can only replace events in draft or request COEs');
     }
 
     // Normalize event IDs early for logging
@@ -2571,7 +2572,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
     // Phase: COE Event Management – Regenerate seat upgrade offers after event replacement
     // Reuse seatUpgradeService.generateSeatUpgradeOffers to avoid logic duplication.
     try {
-      if (updatedCoe && updatedCoe.status === 'draft') {
+      if (updatedCoe && (updatedCoe.status === 'draft' || updatedCoe.status === 'request')) {
         console.log('[COE_SERVICE] Regenerating seat upgrade offers after event replacement for COE:', coeId);
 
         // Derive total budget and user preferences if available (bot-created COEs)
@@ -2585,7 +2586,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         const coeForUpgrades = await COE.findById(coeId);
         if (!coeForUpgrades) {
           console.warn('[COE_SERVICE] Regenerate upgrades: COE not found when reloading, skipping upgrade regeneration');
-        } else if (coeForUpgrades.status === 'draft') {
+        } else if (coeForUpgrades.status === 'draft' || coeForUpgrades.status === 'request') {
           // Use isAdmin flag passed from route to determine upgrade generation behavior
           const upgradeOffers = await generateSeatUpgradeOffers(
             coeForUpgrades,

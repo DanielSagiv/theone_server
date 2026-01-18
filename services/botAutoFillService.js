@@ -168,13 +168,34 @@ function calculateSeatScore(eventSeat, locationSeat) {
  * @returns {Object} { seats: Array, diagnostics: Object }
  */
 async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remainingBudget = null) {
+  const finalBudget = remainingBudget || preferences.budget?.max || preferences.budget_range?.max || Infinity;
+  
+  console.log('[BOT] [COE_CREATION_DEBUG] selectSeatsByBudgetAndCapacity called:', {
+    eventId: event._id?.toString() || null,
+    eventName: event.name || 'Unknown Event',
+    remainingBudget: remainingBudget,
+    remainingBudgetType: typeof remainingBudget,
+    preferencesBudgetMax: preferences.budget?.max,
+    preferencesBudgetMaxType: typeof preferences.budget?.max,
+    preferencesBudgetRangeMax: preferences.budget_range?.max,
+    preferencesBudgetRangeMaxType: typeof preferences.budget_range?.max,
+    finalBudget: finalBudget,
+    finalBudgetType: typeof finalBudget,
+    partySize: preferences.party_size || 2,
+    fullPreferences: JSON.stringify({
+      budget: preferences.budget,
+      budget_range: preferences.budget_range,
+      party_size: preferences.party_size
+    }, null, 2)
+  });
+  
   // Initialize diagnostics
   const diagnostics = {
     event_id: event._id?.toString() || null,
     event_name: event.name || 'Unknown Event',
     total_seats: event.seats?.length || 0,
     party_size: preferences.party_size || 2,
-    budget: remainingBudget || preferences.budget?.max || Infinity,
+    budget: finalBudget,
     exclusions: preferences.structuredPreferences?.exclusions || preferences.exclusions || [],
     filtering_stages: {
       initial_count: event.seats?.length || 0,
@@ -199,7 +220,17 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   }
 
   const partySize = preferences.party_size || 2; // Default to 2
-  const budget = remainingBudget || preferences.budget?.max || Infinity;
+  const budget = finalBudget;
+
+  console.log('[BOT] [COE_CREATION_DEBUG] Seat selection parameters:', {
+    eventId: event._id?.toString(),
+    eventName: event.name,
+    partySize: partySize,
+    budget: budget,
+    budgetType: typeof budget,
+    isInfinity: budget === Infinity,
+    totalSeats: event.seats?.length || 0
+  });
 
   // Get exclusions from structured preferences or direct preferences
   const exclusions = preferences.structuredPreferences?.exclusions || 
@@ -250,11 +281,53 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   }
 
   // Stage 3: Filter by budget
+  console.log('[BOT] [COE_CREATION_DEBUG] Before budget filter:', {
+    eventId: event._id?.toString(),
+    eventName: event.name,
+    seatsAfterCapacityFilter: availableSeats.length,
+    budget: budget,
+    budgetType: typeof budget,
+    isInfinity: budget === Infinity
+  });
+  
+  // Log all seat prices for debugging
+  const allSeatPrices = availableSeats.map(seat => ({
+    seat_id: seat._id?.toString(),
+    seat_code: seat.code,
+    event_price: seat.event_price,
+    min_spend: seat.min_spend,
+    price_used: seat.event_price || seat.min_spend || 0
+  }));
+  console.log('[BOT] [COE_CREATION_DEBUG] Seat prices before budget filter:', {
+    eventId: event._id?.toString(),
+    seatCount: allSeatPrices.length,
+    seatPrices: allSeatPrices.slice(0, 10), // Log first 10 to avoid spam
+    minPrice: allSeatPrices.length > 0 ? Math.min(...allSeatPrices.map(s => s.price_used).filter(p => p > 0)) : 0,
+    maxPrice: allSeatPrices.length > 0 ? Math.max(...allSeatPrices.map(s => s.price_used)) : 0
+  });
+  
   availableSeats = availableSeats.filter(seat => {
     const price = seat.event_price || seat.min_spend || 0;
-    return price <= budget;
+    const withinBudget = budget === Infinity || price <= budget;
+    if (!withinBudget) {
+      console.log('[BOT] [COE_CREATION_DEBUG] Seat excluded by budget:', {
+        seat_id: seat._id?.toString(),
+        seat_code: seat.code,
+        price: price,
+        budget: budget,
+        comparison: `${price} <= ${budget} = ${withinBudget}`
+      });
+    }
+    return withinBudget;
   });
   diagnostics.filtering_stages.after_budget_filter = availableSeats.length;
+
+  console.log('[BOT] [COE_CREATION_DEBUG] After budget filter:', {
+    eventId: event._id?.toString(),
+    eventName: event.name,
+    seatsAfterBudgetFilter: availableSeats.length,
+    seatsExcludedByBudget: diagnostics.filtering_stages.after_capacity_filter - availableSeats.length
+  });
 
   if (availableSeats.length === 0) {
     const prices = event.seats
@@ -262,6 +335,25 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
       .filter(p => p > 0);
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
+    
+    console.log('[BOT] [COE_CREATION_DEBUG] BUDGET_TOO_LOW diagnostic created:', {
+      eventId: event._id?.toString(),
+      eventName: event.name,
+      budget: budget,
+      budgetType: typeof budget,
+      isInfinity: budget === Infinity,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      totalSeatsChecked: event.seats?.length || 0,
+      seatsWithPrices: prices.length,
+      diagnostic: {
+        budget: budget === Infinity ? null : budget,
+        min_seat_price: minPrice,
+        max_seat_price: maxPrice,
+        seats_within_budget: 0
+      }
+    });
+    
     diagnostics.primary_reason = 'BUDGET_TOO_LOW';
     diagnostics.details.budget_too_low = {
       budget: budget === Infinity ? null : budget,

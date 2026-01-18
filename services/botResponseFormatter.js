@@ -338,9 +338,9 @@ async function formatCOEResponse(type, coe, message, actions = [], budget = null
         const eventDate = event.event_id?.start_datetime || event.event_date || null;
         const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
         
-        // Check if there are same-day alternatives (only for draft COEs)
+        // Check if there are same-day alternatives (only for draft or request COEs)
         let hasSameDayAlternatives = false;
-        if (coe.status === 'draft' && eventId && coe._id) {
+        if ((coe.status === 'draft' || coe.status === 'request') && eventId && coe._id) {
           try {
             const { hasAlternativeEventsSameDay } = require('./coeService');
             console.log('[BOT_RESPONSE_FORMATTER] Checking same-day alternatives for event:', {
@@ -719,9 +719,9 @@ async function formatCOEListResponse(coes, message) {
           const runner_assignment = buildEventRunnerAssignment(event, coe);
           const eventId = event.event_id?._id?.toString() || event.event_id?.toString() || event.event_id;
           
-          // Check if there are same-day alternatives (only for draft COEs)
+          // Check if there are same-day alternatives (only for draft or request COEs)
           let hasSameDayAlternatives = false;
-          if (coe.status === 'draft' && eventId && (coe.id || coe._id)) {
+          if ((coe.status === 'draft' || coe.status === 'request') && eventId && (coe.id || coe._id)) {
             try {
               const { hasAlternativeEventsSameDay } = require('./coeService');
               const coeId = coe.id || coe._id?.toString() || coe._id;
@@ -810,7 +810,7 @@ function createCOEActions(coe, userRole) {
   });
 
   // Edit - available for draft/approved COEs
-  if (userRole === 'admin' || (userRole === 'client' && ['draft', 'approved'].includes(status))) {
+  if (userRole === 'admin' || (userRole === 'client' && ['draft', 'request', 'approved'].includes(status))) {
     actions.push({
       label: 'Edit',
       action: 'edit_coe',
@@ -819,8 +819,8 @@ function createCOEActions(coe, userRole) {
     });
   }
 
-  // Approve - only for admins on draft COEs
-  if (userRole === 'admin' && status === 'draft') {
+  // Approve - only for admins on draft or request COEs
+  if (userRole === 'admin' && (status === 'draft' || status === 'request')) {
     actions.push({
       label: 'Approve',
       action: 'approve_coe',
@@ -829,8 +829,12 @@ function createCOEActions(coe, userRole) {
     });
   }
 
-  // Phase 2.5: Cancel - available for draft COEs (clients can cancel their own drafts)
-  if (status === 'draft' && (userRole === 'client' || userRole === 'admin')) {
+  // Cancel - available for clients on their own COEs (request, draft, approved, pending_pay)
+  // Admin can cancel any COE (except completed)
+  const isClientOwner = coe.client_id?.toString() === (userRole === 'client' ? coe.client_id?.toString() : null);
+  const cancelableStatusesForClient = ['request', 'draft', 'approved', 'pending_pay'];
+  if ((userRole === 'admin' && status !== 'completed') ||
+      (userRole === 'client' && cancelableStatusesForClient.includes(status))) {
     actions.push({
       label: 'Cancel',
       action: 'cancel_draft',
@@ -911,7 +915,7 @@ function formatLocationListResponse(locations, message) {
 function formatCOEPreferencesFormResponse(message) {
   return {
     type: 'coe_preferences_form',
-    message: message || 'Please fill in your preferences to build your experience.',
+    message: message || 'Please fill in your preferences to request your experience.',
     fields: {
       city: {
         label: 'City',
@@ -1012,6 +1016,14 @@ function formatProfileResponse(user, message) {
  * @returns {Object} Formatted error response
  */
 function formatNoSeatsAvailableResponse(errorData) {
+  console.log('[BOT] [COE_CREATION_DEBUG] formatNoSeatsAvailableResponse called:', {
+    errorDataType: typeof errorData,
+    hasPreferences: !!errorData.preferences,
+    preferences: JSON.stringify(errorData.preferences, null, 2),
+    eventDiagnosticsCount: errorData.event_diagnostics?.length || 0,
+    errorMessage: errorData.message
+  });
+  
   const { searchAttempts = [], preferences = {}, event_diagnostics = [] } = errorData;
   
   // Extract dates from multiple possible locations in preferences
@@ -1023,6 +1035,18 @@ function formatNoSeatsAvailableResponse(errorData) {
                null;
   const budget = preferences.budget?.max || preferences.budget_range?.max;
   const partySize = preferences.party_size;
+  
+  console.log('[BOT] [COE_CREATION_DEBUG] Extracted budget from preferences:', {
+    budgetFromBudgetMax: preferences.budget?.max,
+    budgetFromBudgetRangeMax: preferences.budget_range?.max,
+    finalBudget: budget,
+    budgetType: typeof budget,
+    isInfinity: budget === Infinity,
+    preferencesObject: JSON.stringify({
+      budget: preferences.budget,
+      budget_range: preferences.budget_range
+    }, null, 2)
+  });
   
   // Analyze diagnostics to determine primary reason
   let primaryReason = null;
@@ -1067,11 +1091,30 @@ function formatNoSeatsAvailableResponse(errorData) {
       }
     } else if (primaryReason === 'BUDGET_TOO_LOW') {
       const budgetDetails = reasonDetails[primaryReason][0]?.details?.budget_too_low;
+      
+      console.log('[BOT] [COE_CREATION_DEBUG] Formatting BUDGET_TOO_LOW error response:', {
+        budgetDetails: budgetDetails,
+        budgetFromPreferences: budget,
+        budgetType: typeof budget,
+        isInfinity: budget === Infinity,
+        minSeatPrice: budgetDetails?.min_seat_price,
+        maxSeatPrice: budgetDetails?.max_seat_price,
+        budgetInDetails: budgetDetails?.budget,
+        fullErrorData: JSON.stringify(errorData, null, 2)
+      });
+      
       if (budgetDetails && budgetDetails.min_seat_price > 0) {
         const budgetFormatted = budget && budget !== Infinity ? `$${budget.toLocaleString()}` : 'your budget';
         const minPriceFormatted = `$${Math.ceil(budgetDetails.min_seat_price).toLocaleString()}`;
         specificMessage = `We couldn't find any available seats/tables matching your preferences. All available seats exceed ${budgetFormatted}. The minimum seat price is ${minPriceFormatted}.`;
         suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        
+        console.log('[BOT] [COE_CREATION_DEBUG] BUDGET_TOO_LOW message formatted:', {
+          specificMessage: specificMessage,
+          budgetFormatted: budgetFormatted,
+          minPriceFormatted: minPriceFormatted,
+          suggestions: suggestions
+        });
       }
     } else if (primaryReason === 'NO_AVAILABLE_SEATS') {
       specificMessage = `We couldn't find any available seats/tables matching your preferences. All seats for the selected events are currently booked or reserved.`;

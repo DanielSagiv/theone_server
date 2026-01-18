@@ -5,7 +5,7 @@
 This document defines the complete status flow for Curated One Experiences (COEs). The status system tracks the lifecycle of a COE from creation through completion, including payment processing and execution phases.
 
 **Last Updated:** January 2025  
-**Version:** 2.0 (Simplified - removed `sent` and `accepted` statuses)
+**Version:** 2.2 (Added keyboard handling improvements and form UX fixes)
 
 ---
 
@@ -16,6 +16,7 @@ status: {
   type: String,
   enum: [
     'draft',           // Admin building/editing the COE
+    'request',         // User-requested COE (awaiting admin review)
     'approved',        // Admin finished, client can see it
     'pending_pay',     // Client accepted terms, payment processing
     'paid',            // Payment received, seats booked, COE confirmed
@@ -36,13 +37,14 @@ status: {
 ```javascript
 const validTransitions = {
   'draft': ['approved', 'cancelled'],
+  'request': ['approved', 'cancelled'],  // Same permissions as draft
   'approved': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
   'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
   'paid': ['completed', 'cancelled'],
-  'rejected': ['draft'],           // Can restart if rejected
-  'expired': ['draft'],            // Can restart if expired
-  'completed': [],                 // Terminal state
-  'cancelled': []                  // Terminal state
+  'rejected': ['draft', 'request'],      // Can restart to draft OR request
+  'expired': ['draft', 'request'],       // Can restart to draft OR request
+  'completed': [],                       // Terminal state
+  'cancelled': []                        // Terminal state
 };
 ```
 
@@ -123,18 +125,46 @@ const validTransitions = {
 
 **Who Can Edit:**
 - Admin (always)
-- Client (if `ENABLE_CLIENT_COE_EDITING` feature flag is enabled)
+- Client (if `ENABLE_CLIENT_COE_EDITING` feature flag is enabled, but cannot edit draft COEs they created)
 
 **Valid Transitions:**
 - → `approved` (admin approves the COE)
-- → `cancelled` (admin cancels during creation)
+- → `cancelled` (admin or client cancels during creation)
 
 **Side Effects:**
 - None
 
 ---
 
-### 2. APPROVED
+### 2. REQUEST
+
+**Description:** Initial state when COE is created by a client (user-requested).
+
+**Key Characteristics:**
+- Client requested this experience
+- Events and seats are auto-selected by the system
+- Client can view but cannot edit until approved
+- Visible to client (view-only)
+- Admin can see, edit, and approve the request
+
+**Who Can Edit:**
+- Admin (always)
+- Client (view-only - cannot edit request COEs they created)
+
+**Valid Transitions:**
+- → `approved` (admin approves the request)
+- → `cancelled` (admin or client cancels the request)
+
+**Side Effects:**
+- None
+
+**Visual Distinction:**
+- Mobile app shows orange badge with "Requested" label
+- Shows message: "Your experience request is awaiting admin review. THE1 will update you once it's ready."
+
+---
+
+### 3. APPROVED
 
 **Description:** Admin has finished building the COE and it's ready for client review.
 
@@ -159,7 +189,7 @@ const validTransitions = {
 
 ---
 
-### 3. PENDING_PAY
+### 4. PENDING_PAY
 
 **Description:** Client has accepted the COE terms and payment is being processed.
 
@@ -184,7 +214,7 @@ const validTransitions = {
 
 ---
 
-### 4. PAID
+### 5. PAID
 
 **Description:** Payment has been received and confirmed. COE is locked in and ready for execution.
 
@@ -211,7 +241,7 @@ const validTransitions = {
 
 ---
 
-### 5. REJECTED
+### 6. REJECTED
 
 **Description:** Client has rejected the COE.
 
@@ -233,7 +263,7 @@ const validTransitions = {
 
 ---
 
-### 6. EXPIRED
+### 7. EXPIRED
 
 **Description:** COE offer has expired (time limit reached).
 
@@ -247,6 +277,7 @@ const validTransitions = {
 
 **Valid Transitions:**
 - → `draft` (admin can restart the COE)
+- → `request` (admin can restart to request if originally requested)
 
 **Side Effects:**
 - Releases seats (status → `available` or `released`)
@@ -255,7 +286,7 @@ const validTransitions = {
 
 ---
 
-### 7. COMPLETED (Terminal)
+### 8. COMPLETED (Terminal)
 
 **Description:** All events in the COE have been executed.
 
@@ -275,7 +306,7 @@ const validTransitions = {
 
 ---
 
-### 8. CANCELLED (Terminal)
+### 9. CANCELLED (Terminal)
 
 **Description:** COE was cancelled at any stage.
 
@@ -300,7 +331,7 @@ const validTransitions = {
 
 ## Typical Flows
 
-### Happy Path (Standard Flow)
+### Happy Path - Admin Created (Standard Flow)
 ```
 DRAFT → APPROVED → PENDING_PAY → PAID → COMPLETED
 ```
@@ -314,27 +345,41 @@ DRAFT → APPROVED → PENDING_PAY → PAID → COMPLETED
 
 ---
 
+### Happy Path - Client Requested
+```
+REQUEST → APPROVED → PENDING_PAY → PAID → COMPLETED
+```
+
+**Steps:**
+1. Client requests COE → `request`
+2. Admin reviews and approves → `approved`
+3. Client accepts and initiates payment → `pending_pay`
+4. Payment received → `paid`
+5. Events executed → `completed`
+
+---
+
 ### Client Rejects Flow
 ```
-APPROVED → REJECTED → DRAFT (restart)
+APPROVED → REJECTED → DRAFT/REQUEST (restart)
 ```
 
 **Steps:**
 1. Admin approves COE → `approved`
 2. Client rejects → `rejected`
-3. Admin can restart → `draft`
+3. Admin can restart → `draft` (if admin-created) or `request` (if client-requested)
 
 ---
 
 ### Expired Offer Flow
 ```
-APPROVED → EXPIRED → DRAFT (restart)
+APPROVED → EXPIRED → DRAFT/REQUEST (restart)
 ```
 
 **Steps:**
 1. Admin approves COE → `approved`
 2. Offer expires → `expired`
-3. Admin can restart → `draft`
+3. Admin can restart → `draft` (if admin-created) or `request` (if client-requested)
 
 ---
 
@@ -421,18 +466,22 @@ This matrix defines who can change COE status from one state to another:
 |-------------|-----------|:-----:|:------:|-------|
 | `draft` | `approved` | ✅ | ❌ | Admin approves the COE |
 | `draft` | `cancelled` | ✅ | ✅ | Both can cancel during creation (if client is creator and editing enabled) |
+| `request` | `approved` | ✅ | ❌ | Admin approves the request |
+| `request` | `cancelled` | ✅ | ✅ | Client can cancel their request, admin can cancel any request |
 | `approved` | `pending_pay` | ❌ | ✅ | Client accepts and initiates payment |
 | `approved` | `rejected` | ❌ | ✅ | Client rejects the COE |
 | `approved` | `expired` | ✅ | ❌ | Admin or system sets expired |
-| `approved` | `cancelled` | ✅ | ❌ | Admin cancels |
+| `approved` | `cancelled` | ✅ | ✅ | **NEW: Client can cancel approved COE** |
 | `pending_pay` | `paid` | ❌ | ❌ | Automatic (payment service) |
 | `pending_pay` | `rejected` | ❌ | ✅ | Client cancels payment |
 | `pending_pay` | `expired` | ✅ | ❌ | Admin or system sets expired |
 | `pending_pay` | `cancelled` | ✅ | ✅ | Either can cancel payment |
 | `paid` | `completed` | ✅ | ❌ | Admin marks as completed |
 | `paid` | `cancelled` | ✅ | ❌ | Admin cancels (requires refund) |
-| `rejected` | `draft` | ✅ | ❌ | Admin restarts COE |
-| `expired` | `draft` | ✅ | ❌ | Admin restarts COE |
+| `rejected` | `draft` | ✅ | ❌ | Admin restarts COE to draft |
+| `rejected` | `request` | ✅ | ❌ | Admin restarts COE to request (if originally requested) |
+| `expired` | `draft` | ✅ | ❌ | Admin restarts COE to draft |
+| `expired` | `request` | ✅ | ❌ | Admin restarts COE to request (if originally requested) |
 
 ### Permission Notes:
 - **Clients** can only perform actions on COEs where they are the `client_id` (the assigned client purchasing the COE)
@@ -459,9 +508,15 @@ Before allowing status transitions, the following business rules must be validat
 - ✅ Seats must be available (re-validated at payment time)
 
 ### Transition to `approved`:
+- ✅ COE status must be `draft` or `request`
 - ✅ COE must have at least one event (COEs are always created with events)
 - ✅ COE must have at least one selected seat (COEs are always created with seats)
 - ✅ Only admin can approve
+
+### Transition to `cancelled` (Client Cancellation):
+- ✅ Client can cancel their own COEs from: `request`, `draft`, `approved`, `pending_pay`
+- ✅ Client cannot cancel `paid` COEs (requires refund, admin-only)
+- ✅ Client must be the owner (`client_id` matches user ID)
 
 ### Transition to `cancelled` from `paid`:
 - ✅ Refund process must be initiated if payment was made
@@ -1316,6 +1371,22 @@ Notifications should be triggered from:
 ---
 
 ## Changelog
+
+### Version 2.2 (January 2025)
+- **Added:** Mobile App Keyboard Handling - Smart keyboard behavior based on input type
+  - Bot message input: Pushes bot controls above keyboard
+  - Form fields: Keyboard overlays bot controls (natural behavior)
+  - Fixed: Form padding reduced from 300px to 20px to eliminate gaps
+- **Improved:** Form UX - Removed nested KeyboardAvoidingView from forms, forms scroll naturally when keyboard appears
+
+### Version 2.1 (January 2025)
+- **Added:** `request` status - New status for user-requested COEs (same permissions as `draft`)
+- **Added:** Client cancellation - Clients can now cancel their own COEs from `request`, `draft`, `approved`, `pending_pay` statuses
+- **Updated:** Status transitions - `request` can transition to `approved` or `cancelled`
+- **Updated:** Status transitions - `rejected` and `expired` can restart to either `draft` OR `request`
+- **Updated:** Permissions matrix - Added client cancellation permissions
+- **Updated:** Mobile UI - Visual distinction for `request` status (orange badge)
+- **Updated:** Mobile UI - Cancel button available for clients on appropriate statuses
 
 ### Version 2.2 (December 2025)
 - **Updated:** `validTransitions` - Added `approved` → `paid` transition to support direct payment completion

@@ -569,8 +569,12 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
       role: 'user',
       content: prompt
     });
-    // Return preferences form as structured response
-    const preferencesForm = formatCOEPreferencesFormResponse('Let\'s build your perfect experience! Please fill in your preferences below.');
+    // Return preferences form as structured response - use "request" language for clients
+    const isClient = user && user.role === 'client';
+    const formMessage = isClient 
+      ? 'Let\'s request your perfect experience! Please fill in your preferences below.'
+      : 'Let\'s build your perfect experience! Please fill in your preferences below.';
+    const preferencesForm = formatCOEPreferencesFormResponse(formMessage);
     const ruleReply = {
       role: 'assistant',
       content: JSON.stringify(preferencesForm),
@@ -681,36 +685,82 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     const existingPreferences = conversation.preference_data || {};
     
     // Phase 2.1: Detect if this is a structured form submission
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Checking for form submission:', {
+      promptLength: prompt.length,
+      promptFirst200Chars: prompt.substring(0, 200),
+      hasBuildMyExperience: prompt.includes('Build my experience with the following preferences:') || prompt.includes('Request my experience with the following preferences:'),
+      hasStartDate: prompt.includes('Start date:'),
+      hasEndDate: prompt.includes('End date:'),
+      hasBudget: prompt.includes('Budget:'),
+      hasCity: prompt.includes('City:')
+    });
+    
+    // Accept both "Build" (admin) and "Request" (client) form submissions
     const isFormSubmission = prompt.includes('Build my experience with the following preferences:') ||
+                             prompt.includes('Request my experience with the following preferences:') ||
                              (
                                prompt.includes('Start date:') &&
                                prompt.includes('End date:') &&
                                prompt.includes('Budget:')
                              ); // Allow admin flow without City:
     
-    let extractedPreferences;
-    let extractionResult;
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Form submission detection result:', {
+      isFormSubmission: isFormSubmission
+    });
+    
+    let extractedPreferences = {};
+    let extractionResult = null;
     
     if (isFormSubmission) {
       // Use structured form extraction (Phase 2.1)
-      console.log('[BOT] ✅ Phase 2.1: Detected form submission, using extractPreferencesFromFormSubmission');
-      extractionResult = extractPreferencesFromFormSubmission(prompt);
-      
-      console.log('[BOT] Phase 2.1: Extraction result:', {
-        valid: extractionResult.valid,
-        errors: extractionResult.errors,
-        raw: extractionResult.raw,
-        formatted: extractionResult.formatted
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] ✅ Phase 2.1: Detected form submission, using extractPreferencesFromFormSubmission');
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Full prompt for extraction:', {
+        prompt: prompt,
+        promptLength: prompt.length
       });
       
-      if (!extractionResult.valid) {
-        console.error('[BOT] Phase 2.1: Form submission validation failed:', extractionResult.errors);
-        // Still continue, but log the errors
+      try {
+        extractionResult = extractPreferencesFromFormSubmission(prompt);
+        
+        if (!extractionResult) {
+          console.error('[BOT] Phase 2.1: extractPreferencesFromFormSubmission returned undefined/null');
+          extractionResult = { valid: false, errors: ['Failed to extract preferences'], raw: {}, formatted: {} };
+        }
+        
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Extraction result complete:', {
+          valid: extractionResult.valid,
+          errors: extractionResult.errors,
+          rawKeys: extractionResult.raw ? Object.keys(extractionResult.raw) : [],
+          formattedKeys: extractionResult.formatted ? Object.keys(extractionResult.formatted) : []
+        });
+        
+        console.log('[BOT] Phase 2.1: Extraction result:', {
+          valid: extractionResult.valid,
+          errors: extractionResult.errors,
+          raw: extractionResult.raw,
+          formatted: extractionResult.formatted
+        });
+        
+        if (!extractionResult.valid) {
+          console.error('[BOT] Phase 2.1: Form submission validation failed:', extractionResult.errors);
+          // Still continue, but log the errors
+        }
+        
+        // Use formatted preferences for storage
+        extractedPreferences = extractionResult.formatted || {};
+        console.log('[BOT] Phase 2.1: Extracted preferences (formatted for storage):', JSON.stringify(extractedPreferences, null, 2));
+      } catch (extractionError) {
+        console.error('[BOT] Phase 2.1: Error during preference extraction:', extractionError);
+        console.error('[BOT] Phase 2.1: Error stack:', extractionError.stack);
+        // Set default values to allow the flow to continue
+        extractionResult = { 
+          valid: false, 
+          errors: [`Extraction error: ${extractionError.message}`], 
+          raw: {}, 
+          formatted: {} 
+        };
+        extractedPreferences = {};
       }
-      
-      // Use formatted preferences for storage
-      extractedPreferences = extractionResult.formatted || {};
-      console.log('[BOT] Phase 2.1: Extracted preferences (formatted for storage):', JSON.stringify(extractedPreferences, null, 2));
     } else {
       // Use natural language extraction (existing behavior)
       extractedPreferences = extractPreferencesFromMessage(prompt, existingPreferences);
@@ -807,14 +857,29 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
       try {
         console.log('[BOT] Phase 2.4: Auto-triggering COE creation from form submission...');
         
+        // Safety check: ensure extractionResult has raw data
+        if (!extractionResult || !extractionResult.raw) {
+          console.error('[BOT] Phase 2.4: extractionResult or extractionResult.raw is missing, cannot proceed with COE creation');
+          throw new Error('Failed to extract preferences from form submission');
+        }
+        
         // Prepare tool parameters for create_coe_draft
+        const extractedBudget = extractionResult.raw.budget?.amount || 0;
+        console.log('[BOT] [COE_CREATION_DEBUG] Budget extraction from form:', {
+          hasBudget: !!extractionResult.raw.budget,
+          budgetAmount: extractedBudget,
+          budgetObject: extractionResult.raw.budget,
+          rawBudget: extractionResult.raw.budget,
+          extractionResultRaw: JSON.stringify(extractionResult.raw, null, 2)
+        });
+        
         const toolParams = {
           start_date: extractionResult.raw.start_date,
           end_date: extractionResult.raw.end_date,
           preferences: {
             city: extractionResult.raw.city || null, // Add city directly for handleCreateCOEDraft
             budget_range: {
-              max: extractionResult.raw.budget?.amount || 0
+              max: extractedBudget
             },
             location_preferences: extractionResult.raw.city ? [extractionResult.raw.city] : [],
             party_size: extractionResult.raw.party_size,
@@ -828,6 +893,15 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
             specific_preferences: extractionResult.raw.specific_preferences || ''
           }
         };
+        
+        console.log('[BOT] [COE_CREATION_DEBUG] Tool params prepared:', {
+          start_date: toolParams.start_date,
+          end_date: toolParams.end_date,
+          city: toolParams.preferences.city,
+          budget_max: toolParams.preferences.budget_range.max,
+          party_size: toolParams.preferences.party_size,
+          fullPreferences: JSON.stringify(toolParams.preferences, null, 2)
+        });
         
         // Add client_id if user is admin (required for admin)
         if (user.role === 'admin') {
@@ -909,9 +983,27 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
         });
         
         // Execute create_coe_draft tool
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== EXECUTING create_coe_draft TOOL ==========');
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Tool execution start:', {
+          toolName: 'create_coe_draft',
+          correlationId: correlationId,
+          userId: user._id?.toString(),
+          userRole: user.role,
+          toolParamsFull: JSON.stringify(toolParams, null, 2)
+        });
+        
         const toolResult = await executeTool('create_coe_draft', toolParams, user, correlationId);
         
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] Tool execution complete:', {
+          success: toolResult.success,
+          hasData: !!toolResult.data,
+          message: toolResult.message,
+          error: toolResult.error,
+          dataType: toolResult.data?.type
+        });
+        
         if (toolResult.success && toolResult.data) {
+          console.log('[BOT] [COE_CREATION_FULL_DEBUG] ✅ COE draft created successfully');
           console.log('[BOT] Phase 2.4: ✅ COE draft created successfully');
           
           // toolResult.data is already a formatted structured response from handleCreateCOEDraft
@@ -919,9 +1011,24 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           
           // Extract COE ID from the response (could be in coe.coe_id or coe.id)
           const coeId = coeResponse.coe_id || coeResponse.coe?.id || coeResponse.coe?._id;
+          console.log('[BOT] [COE_CREATION_FULL_DEBUG] Extracting COE ID from response:', {
+            coeResponseKeys: Object.keys(coeResponse),
+            coeIdFromCoeId: coeResponse.coe_id,
+            coeIdFromCoeIdField: coeResponse.coe?.id,
+            coeIdFromCoe_idField: coeResponse.coe?._id,
+            finalCoeId: coeId,
+            coeIdType: typeof coeId
+          });
+          
           if (coeId) {
             conversation.active_coe_id = typeof coeId === 'string' ? coeId : coeId.toString();
             await conversation.save();
+            console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE ID saved to conversation:', {
+              conversationId: conversation._id.toString(),
+              activeCoeId: conversation.active_coe_id
+            });
+          } else {
+            console.warn('[BOT] [COE_CREATION_FULL_DEBUG] WARNING: No COE ID found in response');
           }
           
           // Add assistant message with structured COE response
