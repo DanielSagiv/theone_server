@@ -354,11 +354,15 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
 
     // Use getCOEById for consistent population (same as other endpoints)
     // First verify user has access - convert userId to ObjectId for proper comparison
-    console.log('[GET /coes/my/:id] Checking user access:', {
+    // DEBUG: Log user access check (for TestFlight debugging)
+    console.log('[GET /coes/my/:id] 🔍 CHECKING USER ACCESS:', {
       coeId: id,
       userId: userId?.toString(),
       userIdObj: userIdObj?.toString(),
-      userRole: req.user.role
+      userRole: req.user.role,
+      userRoleType: typeof req.user.role,
+      userEmail: req.user.email,
+      timestamp: new Date().toISOString()
     });
     
     const coeCheck = await COE.findOne({
@@ -668,6 +672,20 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
     coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
+
+    // DEBUG: Log COE data being sent to client (for TestFlight debugging)
+    console.log('[GET /coes/my/:id] 📱 COE DATA SENT TO CLIENT:', {
+      coeId: coe._id?.toString() || coe.id?.toString(),
+      coeStatus: coe.status,
+      coeName: coe.name,
+      userId: userId?.toString(),
+      userRole: req.user.role,
+      userEmail: req.user.email,
+      canApprove: req.user.role === 'admin' && (coe.status === 'draft' || coe.status === 'request'),
+      isAdmin: req.user.role === 'admin',
+      isDraftOrRequest: coe.status === 'draft' || coe.status === 'request',
+      timestamp: new Date().toISOString()
+    });
 
     res.json({
       success: true,

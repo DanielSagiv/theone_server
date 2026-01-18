@@ -15,9 +15,22 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 
  */
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
+    const userProfile = req.user.getProfile();
+    
+    // DEBUG: Log user profile data being sent to client (for TestFlight debugging)
+    console.log('[GET /users/profile] 📱 USER PROFILE DATA SENT TO CLIENT:', {
+      userId: userProfile._id?.toString() || userProfile.id?.toString(),
+      userEmail: userProfile.email,
+      userRole: userProfile.role,
+      userRoleType: typeof userProfile.role,
+      hasRole: 'role' in userProfile,
+      userObjectKeys: Object.keys(userProfile),
+      timestamp: new Date().toISOString()
+    });
+    
     res.json({
       success: true,
-      data: req.user.getProfile(),
+      data: userProfile,
       message: 'Profile retrieved successfully'
     });
 
