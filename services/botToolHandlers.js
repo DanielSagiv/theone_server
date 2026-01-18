@@ -1364,9 +1364,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         const recommendationData = [];
         const eventMap = new Map();
         
-        // Build event map for quick lookup
-        for (const event of finalEvents) {
-          eventMap.set(event.event_id.toString(), event);
+        // Fetch unique event IDs and populate with location.seats
+        const uniqueEventIds = [...new Set(validatedSeats.map(s => s.event_id.toString()))];
+        const eventsWithLocations = await Event.find({ _id: { $in: uniqueEventIds } })
+          .populate({
+            path: 'location_id',
+            select: 'seats',
+            options: { lean: false }
+          });
+        
+        // Build event map with populated location.seats
+        for (const event of eventsWithLocations) {
+          eventMap.set(event._id.toString(), event);
         }
         
         // Collect seat data with location and sentiments
@@ -1401,7 +1410,28 @@ async function handleCreateCOEDraft(params, user, correlationId) {
                 sentiments: locationSeat.sentiment,
                 locationId: location._id?.toString() || location.toString()
               });
+            } else {
+              // Log why recommendation wasn't generated for debugging
+              console.log('[BOT] No sentiment found for seat:', {
+                seat_code: seat.seat_code,
+                seat_id: seat.seat_id?.toString(),
+                hasEvent: !!event,
+                hasLocation: !!event?.location_id,
+                hasLocationSeats: !!event?.location_id?.seats,
+                locationSeatsCount: event?.location_id?.seats?.length || 0,
+                locationSeatFound: !!locationSeat,
+                hasSentiment: !!(locationSeat?.sentiment),
+                sentimentLength: locationSeat?.sentiment?.length || 0
+              });
             }
+          } else {
+            console.log('[BOT] Event or location not found for seat:', {
+              seat_code: seat.seat_code,
+              seat_id: seat.seat_id?.toString(),
+              eventId: eventId,
+              hasEvent: !!event,
+              hasLocation: !!event?.location_id
+            });
           }
         }
         
@@ -1427,7 +1457,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             }
           });
           
+          // Log recommendations after attachment for debugging
+          const seatsWithRecommendations = validatedSeats.filter(s => s.ai_recommendation);
           console.log('[BOT] Generated', recommendations.length, 'seat recommendations');
+          console.log('[BOT] Recommendations attached to seats:', {
+            totalSeats: validatedSeats.length,
+            seatsWithRecommendations: seatsWithRecommendations.length,
+            recommendations: seatsWithRecommendations.map(s => ({
+              seat_code: s.seat_code,
+              hasRecommendation: !!s.ai_recommendation,
+              recommendation: s.ai_recommendation?.substring(0, 50) + '...'
+            }))
+          });
         } else {
           console.log('[BOT] No sentiments found for seats, skipping recommendation generation');
         }
@@ -1493,7 +1534,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         event_id: s.event_id?.toString(),
         seat_id: s.seat_id?.toString(),
         seat_code: s.seat_code,
-        event_price: s.event_price
+        event_price: s.event_price,
+        hasAiRecommendation: !!s.ai_recommendation
       }))
     });
     
@@ -1571,6 +1613,17 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       seatsCount: coeData.selected_seats?.length || 0
     });
 
+    // Log recommendations before COE creation for debugging
+    const seatsWithRecsBeforeSave = (coeData.selected_seats || []).filter(s => s.ai_recommendation);
+    console.log('[BOT] Recommendations before COE creation:', {
+      totalSeats: coeData.selected_seats?.length || 0,
+      seatsWithRecommendations: seatsWithRecsBeforeSave.length,
+      recommendations: seatsWithRecsBeforeSave.map(s => ({
+        seat_code: s.seat_code,
+        recommendation: s.ai_recommendation?.substring(0, 50) + '...'
+      }))
+    });
+
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== COE CREATION PHASE ==========');
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Calling coeService.createCOE:', {
       coeDataKeys: Object.keys(coeData),
@@ -1619,6 +1672,43 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       total: populatedCOE.total,
       deposit_required: populatedCOE.deposit_required
     });
+
+    // Send notification to admin if COE status is 'request'
+    if (populatedCOE.status === 'request' && populatedCOE.admin_id) {
+      try {
+        const notificationService = require('./notificationService');
+        const adminId = populatedCOE.admin_id?._id 
+          ? populatedCOE.admin_id._id.toString() 
+          : (populatedCOE.admin_id?.toString ? populatedCOE.admin_id.toString() : String(populatedCOE.admin_id));
+        
+        // Get client info for notification
+        const client = await User.findById(targetClientId).select('firstName lastName');
+        const clientName = client 
+          ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || 'A client'
+          : 'A client';
+        
+        await notificationService.createAndSendNotification(
+          adminId,
+          'coe_requested',
+          {
+            coe_id: populatedCOE._id,
+            coe: { name: populatedCOE.name },
+            sender_name: clientName,
+            sender_id: targetClientId
+          }
+        );
+        
+        console.log('[BOT] Sent COE request notification to admin:', {
+          adminId: adminId,
+          coeId: populatedCOE._id.toString(),
+          coeName: populatedCOE.name,
+          clientName: clientName
+        });
+      } catch (notificationError) {
+        console.error('[BOT] Failed to send COE request notification:', notificationError);
+        // Don't fail COE creation if notification fails
+      }
+    }
 
     // Generate seat upgrade offers for draft or request COEs
     if (populatedCOE.status === 'draft' || populatedCOE.status === 'request') {

@@ -77,6 +77,10 @@ function generateNotificationContent(type, data) {
       title: 'Experience Sent',
       body: `Your experience '${coeName}' has been sent for review`
     },
+    coe_requested: {
+      title: 'New Experience Request',
+      body: `${senderName} has requested an experience '${coeName}'. Review and approve.`
+    },
     coe_approved: {
       title: 'Experience Approved',
       body: `Your experience '${coeName}' has been approved`
@@ -157,6 +161,7 @@ function generateDeepLink(type, data) {
       case 'coe_message':
         return `${baseUrl}coe-messages?coeId=${coeId}`;
       case 'coe_sent':
+      case 'coe_requested':
       case 'coe_approved':
       case 'coe_accepted':
       case 'coe_rejected':
@@ -192,7 +197,61 @@ function generateDeepLink(type, data) {
 async function createNotification(userId, type, data) {
   try {
     // Check for existing notification to prevent duplicates (idempotency)
-    // Only check for message notifications to avoid blocking other notification types
+    
+    // For coe_requested notifications, check for existing notification with same COE
+    if (type === 'coe_requested' && data.coe_id) {
+      const mongoose = require('mongoose');
+      let coeIdStr = null;
+      
+      // Extract ObjectId string from various formats
+      if (data.coe_id && data.coe_id.toString) {
+        coeIdStr = data.coe_id.toString();
+      } else if (typeof data.coe_id === 'string') {
+        coeIdStr = data.coe_id;
+      } else if (data.coe_id && data.coe_id._id) {
+        // Handle populated object
+        coeIdStr = data.coe_id._id.toString();
+      }
+      
+      if (coeIdStr && mongoose.Types.ObjectId.isValid(coeIdStr)) {
+        // Query using both ObjectId and string to catch any format
+        const coeIdObj = new mongoose.Types.ObjectId(coeIdStr);
+        
+        const existing = await Notification.findOne({
+          user_id: userId,
+          type: type,
+          $or: [
+            { 'data.coe_id': coeIdObj },
+            { 'data.coe_id': coeIdStr }
+          ]
+        });
+        
+        if (existing) {
+          console.log('[NotificationService] ✅ Duplicate coe_requested notification prevented:', {
+            userId: userId?.toString(),
+            type,
+            coe_id: coeIdStr,
+            existing_notification_id: existing._id?.toString(),
+            existing_created_at: existing.createdAt
+          });
+          return existing; // Return existing notification instead of creating duplicate
+        }
+        
+        console.log('[NotificationService] 📝 Creating new coe_requested notification (no duplicate found):', {
+          userId: userId?.toString(),
+          type,
+          coe_id: coeIdStr
+        });
+      } else {
+        console.warn('[NotificationService] ⚠️ Invalid coe_id format, skipping duplicate check:', {
+          userId: userId?.toString(),
+          coe_id: data.coe_id,
+          coe_id_type: typeof data.coe_id
+        });
+      }
+    }
+    
+    // Check for message notifications to avoid blocking other notification types
     if (type === 'coe_message' && data.message_id) {
       // Normalize message_id to string for consistent comparison
       const mongoose = require('mongoose');
@@ -249,6 +308,88 @@ async function createNotification(userId, type, data) {
 
     const content = generateNotificationContent(type, data);
     const actionUrl = generateDeepLink(type, data);
+
+    // For coe_requested notifications, use findOneAndUpdate with upsert for atomic duplicate prevention
+    if (type === 'coe_requested' && data.coe_id) {
+      const mongoose = require('mongoose');
+      let coeIdForQuery = data.coe_id;
+      
+      // Normalize coe_id
+      if (coeIdForQuery && coeIdForQuery.toString) {
+        coeIdForQuery = coeIdForQuery.toString();
+      } else if (typeof coeIdForQuery === 'string') {
+        // Already a string
+      } else if (coeIdForQuery && coeIdForQuery._id) {
+        coeIdForQuery = coeIdForQuery._id.toString();
+      }
+      
+      if (coeIdForQuery && mongoose.Types.ObjectId.isValid(coeIdForQuery)) {
+        const coeIdObj = new mongoose.Types.ObjectId(coeIdForQuery);
+        
+        // Use findOneAndUpdate with upsert for atomic operation
+        // This ensures only one notification is created even in race conditions
+        const notificationData = {
+          user_id: userId,
+          type,
+          title: content.title,
+          body: content.body,
+          data: {
+            coe_id: coeIdObj,
+            message_id: data.message_id,
+            payment_id: data.payment_id,
+            sender_id: data.sender_id,
+            action: type,
+            action_url: actionUrl
+          },
+          read: false,
+          sent: false
+        };
+        
+        // Check if notification already exists first
+        const existing = await Notification.findOne({
+          user_id: userId,
+          type: type,
+          'data.coe_id': { $in: [coeIdObj, coeIdForQuery] }
+        });
+        
+        if (existing) {
+          console.log('[NotificationService] ✅ Duplicate coe_requested notification found (returning existing):', {
+            userId: userId?.toString(),
+            type,
+            coe_id: coeIdForQuery,
+            existing_notification_id: existing._id?.toString()
+          });
+          return existing;
+        }
+        
+        // Create new notification using findOneAndUpdate with upsert for atomicity
+        const notification = await Notification.findOneAndUpdate(
+          {
+            user_id: userId,
+            type: type,
+            'data.coe_id': coeIdObj
+          },
+          {
+            $setOnInsert: notificationData
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true
+          }
+        );
+        
+        console.log('[NotificationService] 📝 Created/updated coe_requested notification:', {
+          userId: userId?.toString(),
+          type,
+          coe_id: coeIdForQuery,
+          notification_id: notification._id?.toString(),
+          was_created: !existing
+        });
+        
+        return notification;
+      }
+    }
 
     // For message notifications, use findOneAndUpdate with upsert for atomic duplicate prevention
     if (type === 'coe_message' && data.message_id) {
@@ -1050,9 +1191,9 @@ async function createAndSendNotification(userId, type, data) {
  * @param {Object} pagination - Pagination options { page, limit }
  * @returns {Promise<Object>} Notifications with pagination
  */
-async function getUserNotifications(userId, filters = {}, pagination = {}) {
+async function getUserNotifications(userId, filters = {}, pagination = {}, isAdmin = false) {
   try {
-    const { read, type } = filters;
+    const { read, type, startDate, endDate } = filters;
     const page = parseInt(pagination.page) || 1;
     const limit = Math.min(parseInt(pagination.limit) || 20, 100);
     const skip = (page - 1) * limit;
@@ -1071,6 +1212,20 @@ async function getUserNotifications(userId, filters = {}, pagination = {}) {
         query.type = type;
       }
     }
+    
+    // Date filtering
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        // Add 1 day to endDate to include the full day
+        const end = new Date(endDate);
+        end.setDate(end.getDate() + 1);
+        query.createdAt.$lt = end;
+      }
+    }
 
     // Get notifications
     // Use createdAt (camelCase) since timestamps: true creates createdAt, not created_at
@@ -1078,10 +1233,49 @@ async function getUserNotifications(userId, filters = {}, pagination = {}) {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate('data.coe_id', 'name')
+      .populate('data.coe_id', isAdmin ? 'name status' : 'name')
       .populate('data.message_id', 'content')
       .populate('data.payment_id', 'amount currency')
       .populate('data.sender_id', 'firstName lastName avatarUrl');
+    
+    // For admin users, fetch fresh COE status to ensure it's up-to-date
+    if (isAdmin) {
+      const COE = require('../models/COE');
+      const mongoose = require('mongoose');
+      for (const notification of notifications) {
+        if (notification.data?.coe_id && notification.type?.startsWith('coe_')) {
+          try {
+            // Extract COE ID - handle both populated object and ObjectId/string
+            let coeId = null;
+            if (notification.data.coe_id._id) {
+              coeId = notification.data.coe_id._id;
+            } else if (notification.data.coe_id instanceof mongoose.Types.ObjectId) {
+              coeId = notification.data.coe_id;
+            } else if (typeof notification.data.coe_id === 'string') {
+              coeId = notification.data.coe_id;
+            } else {
+              coeId = notification.data.coe_id;
+            }
+            
+            if (coeId) {
+              const freshCoe = await COE.findById(coeId).select('name status').lean();
+              if (freshCoe) {
+                // Update populated COE with fresh status
+                if (notification.data.coe_id && typeof notification.data.coe_id === 'object') {
+                  if (notification.data.coe_id._doc) {
+                    notification.data.coe_id._doc.status = freshCoe.status;
+                  }
+                  notification.data.coe_id.status = freshCoe.status;
+                }
+              }
+            }
+          } catch (fetchError) {
+            console.error('[NotificationService] Error fetching fresh COE status:', fetchError);
+            // Continue with existing populated data if fetch fails
+          }
+        }
+      }
+    }
 
     // Remove duplicates based on notification ID (defensive check)
     const seenIds = new Set();

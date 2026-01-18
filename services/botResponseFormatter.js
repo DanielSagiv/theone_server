@@ -1105,13 +1105,31 @@ function formatNoSeatsAvailableResponse(errorData) {
       
       if (budgetDetails && budgetDetails.min_seat_price > 0) {
         const budgetFormatted = budget && budget !== Infinity ? `$${budget.toLocaleString()}` : 'your budget';
+        const relaxedBudget = budgetDetails.relaxed_budget || (budget && budget !== Infinity ? budget * 1.25 : null);
+        const relaxedBudgetFormatted = relaxedBudget ? `$${Math.ceil(relaxedBudget).toLocaleString()}` : null;
         const minPriceFormatted = `$${Math.ceil(budgetDetails.min_seat_price).toLocaleString()}`;
-        specificMessage = `We couldn't find any available seats/tables matching your preferences. All available seats exceed ${budgetFormatted}. The minimum seat price is ${minPriceFormatted}.`;
-        suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        const tolerancePercent = budgetDetails.budget_tolerance_percent || 25;
+        
+        // Determine if seats exceed even the relaxed budget
+        if (relaxedBudgetFormatted && budgetDetails.min_seat_price > relaxedBudget) {
+          // Even with 25% tolerance, seats are too expensive
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. Even with a ${tolerancePercent}% budget tolerance (up to ${relaxedBudgetFormatted}), all seats exceed the price range. The minimum seat price is ${minPriceFormatted}.`;
+          suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        } else if (budgetDetails.min_seat_price > budget) {
+          // Seats exceed original budget but might be within tolerance (though this shouldn't happen if we filtered correctly)
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. All available seats exceed ${budgetFormatted} (minimum price: ${minPriceFormatted}).`;
+          suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        } else {
+          // Original message for cases where price is within budget but no seats available for other reasons
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. All available seats exceed ${budgetFormatted}. The minimum seat price is ${minPriceFormatted}.`;
+          suggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        }
         
         console.log('[BOT] [COE_CREATION_DEBUG] BUDGET_TOO_LOW message formatted:', {
           specificMessage: specificMessage,
           budgetFormatted: budgetFormatted,
+          relaxedBudgetFormatted: relaxedBudgetFormatted,
+          tolerancePercent: tolerancePercent,
           minPriceFormatted: minPriceFormatted,
           suggestions: suggestions
         });
@@ -1124,10 +1142,61 @@ function formatNoSeatsAvailableResponse(errorData) {
       }
     } else if (primaryReason === 'EXCLUDED_BY_PREFERENCES') {
       const exclusionDetails = reasonDetails[primaryReason][0]?.details?.excluded_by_preferences;
-      if (exclusionDetails && exclusionDetails.matching_keywords && exclusionDetails.matching_keywords.length > 0) {
-        const keywords = exclusionDetails.matching_keywords.join(', ');
-        specificMessage = `We couldn't find any available seats/tables matching your preferences. The available seats were excluded based on your preferences: ${keywords}.`;
-        suggestions.push(`Consider removing exclusion: ${keywords}`);
+      const diag = reasonDetails[primaryReason][0];
+      const filteringStages = diag?.filtering_stages || {};
+      
+      // Check if seats were excluded by multiple reasons (budget + exclusions)
+      const seatsAfterCapacity = filteringStages.after_capacity_filter || 0;
+      const seatsAfterBudget = filteringStages.after_budget_filter || 0;
+      const seatsAfterExclusion = filteringStages.after_exclusion_filter || 0;
+      
+      // Build comprehensive message including all exclusion reasons
+      const exclusionReasons = [];
+      const exclusionSuggestions = [];
+      
+      // Check if seats were excluded by budget
+      if (seatsAfterCapacity > seatsAfterBudget) {
+        const seatsExcludedByBudget = seatsAfterCapacity - seatsAfterBudget;
+        const budgetDetails = diag?.details?.budget_too_low;
+        if (budgetDetails && budgetDetails.min_seat_price) {
+          const budgetFormatted = budget && budget !== Infinity ? `$${budget.toLocaleString()}` : 'your budget';
+          const minPriceFormatted = `$${Math.ceil(budgetDetails.min_seat_price).toLocaleString()}`;
+          exclusionReasons.push(`${seatsExcludedByBudget} seat${seatsExcludedByBudget > 1 ? 's were' : ' was'} over ${budgetFormatted} (minimum price: ${minPriceFormatted})`);
+          exclusionSuggestions.push(`Consider increasing your budget to at least ${minPriceFormatted}`);
+        } else {
+          exclusionReasons.push(`${seatsExcludedByBudget} seat${seatsExcludedByBudget > 1 ? 's were' : ' was'} over your budget`);
+          exclusionSuggestions.push('Consider increasing your budget');
+        }
+      }
+      
+      // Check if seats were excluded by preferences
+      if (seatsAfterBudget > seatsAfterExclusion) {
+        const seatsExcludedByPrefs = seatsAfterBudget - seatsAfterExclusion;
+        if (exclusionDetails && exclusionDetails.matching_keywords && exclusionDetails.matching_keywords.length > 0) {
+          const keywords = exclusionDetails.matching_keywords.join(', ');
+          exclusionReasons.push(`${seatsExcludedByPrefs} seat${seatsExcludedByPrefs > 1 ? 's were' : ' was'} excluded based on your preferences: ${keywords}`);
+          exclusionSuggestions.push(`Consider removing exclusion: ${keywords}`);
+        } else {
+          exclusionReasons.push(`${seatsExcludedByPrefs} seat${seatsExcludedByPrefs > 1 ? 's were' : ' was'} excluded based on your preferences`);
+          exclusionSuggestions.push('Consider adjusting your preferences');
+        }
+      }
+      
+      // Build combined message
+      if (exclusionReasons.length > 0) {
+        if (exclusionReasons.length === 1) {
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. ${exclusionReasons[0]}.`;
+        } else {
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. ${exclusionReasons.join('; ')}.`;
+        }
+        suggestions.push(...exclusionSuggestions);
+      } else {
+        // Fallback to original logic if filtering_stages not available
+        if (exclusionDetails && exclusionDetails.matching_keywords && exclusionDetails.matching_keywords.length > 0) {
+          const keywords = exclusionDetails.matching_keywords.join(', ');
+          specificMessage = `We couldn't find any available seats/tables matching your preferences. The available seats were excluded based on your preferences: ${keywords}.`;
+          suggestions.push(`Consider removing exclusion: ${keywords}`);
+        }
       }
     } else if (primaryReason === 'ALL_EVENTS_EXCLUDED_BY_PREFERENCES') {
       // Location-level exclusion: all events were from excluded locations

@@ -293,10 +293,27 @@ async function createCOE(coeData, createdBy) {
         if (!seat.status) {
           seat.status = 'selected';
         }
+        // Explicitly mark ai_recommendation as modified to ensure it's preserved during save
+        if (seat.ai_recommendation) {
+          seat.markModified('ai_recommendation');
+          seat.markModified('recommendation_generated_at');
+          seat.markModified('recommendation_version');
+        }
       });
     }
     
     await coe.save();
+    
+    // Log recommendations after save for debugging
+    const seatsWithRecsAfterSave = (coe.selected_seats || []).filter(s => s.ai_recommendation);
+    console.log('[COE_SERVICE] Recommendations after COE save:', {
+      totalSeats: coe.selected_seats?.length || 0,
+      seatsWithRecommendations: seatsWithRecsAfterSave.length,
+      recommendations: seatsWithRecsAfterSave.map(s => ({
+        seat_code: s.seat_code,
+        recommendation: s.ai_recommendation?.substring(0, 50) + '...'
+      }))
+    });
     
     // Update seat statuses to 'held' after COE is created
     if (coeData.selected_seats && coeData.selected_seats.length > 0) {
@@ -795,6 +812,59 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       
       switch (status) {
         case 'approved':
+          // Update coe_requested notification to coe_approved for admin (if status changed from 'request')
+          if (oldStatus === 'request') {
+            try {
+              const Notification = require('../models/Notification');
+              const mongoose = require('mongoose');
+              // Convert coeId to ObjectId for query (handles both string and ObjectId)
+              const coeIdObj = mongoose.Types.ObjectId.isValid(coeId) 
+                ? (typeof coeId === 'string' ? new mongoose.Types.ObjectId(coeId) : coeId)
+                : coeId;
+              
+              // Update notification type from coe_requested to coe_approved and mark as read
+              // Get notification content for approved status
+              const adminName = admin ? `${admin.firstName} ${admin.lastName}`.trim() : 'Admin';
+              const notificationContent = {
+                title: 'Experience Approved',
+                body: adminName === 'Admin' 
+                  ? `Experience '${updatedCoe.name}' has been approved`
+                  : `${adminName} approved the experience '${updatedCoe.name}'`
+              };
+              
+              // Convert adminId to ObjectId for query
+              const adminIdObj = mongoose.Types.ObjectId.isValid(adminId)
+                ? new mongoose.Types.ObjectId(adminId)
+                : adminId;
+              
+              const result = await Notification.updateMany(
+                {
+                  user_id: adminIdObj,
+                  type: 'coe_requested',
+                  'data.coe_id': coeIdObj
+                },
+                {
+                  $set: {
+                    type: 'coe_approved',
+                    title: notificationContent.title,
+                    body: notificationContent.body,
+                    read: true,
+                    read_at: new Date()
+                  }
+                }
+              );
+              console.log('[COEService] Updated coe_requested to coe_approved for admin:', {
+                adminId,
+                coeId: coeId.toString(),
+                matchedCount: result.matchedCount,
+                modifiedCount: result.modifiedCount
+              });
+            } catch (updateError) {
+              console.error('[COEService] Error updating coe_requested notification:', updateError);
+              // Don't fail status update if this fails
+            }
+          }
+          
           // Notify client
           notifications.push({
             userId: clientId,

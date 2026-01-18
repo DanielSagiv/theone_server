@@ -22,7 +22,9 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const filters = {
       read: req.query.read,
-      type: req.query.type
+      type: req.query.type,
+      startDate: req.query.start_date,
+      endDate: req.query.end_date
     };
 
     const pagination = {
@@ -33,7 +35,8 @@ router.get('/', authenticateToken, async (req, res) => {
     const result = await notificationService.getUserNotifications(
       req.user._id,
       filters,
-      pagination
+      pagination,
+      req.user.role === 'admin'
     );
 
     res.json({

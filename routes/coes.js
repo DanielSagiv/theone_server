@@ -27,15 +27,20 @@ router.get('/my', authenticateToken, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const Event = require('../models/Event');
-    const userId = req.user.id;
+    
+    // Ensure userId is properly formatted for comparison
+    const userId = req.user._id || req.user.id;
+    const userIdObj = userId instanceof mongoose.Types.ObjectId 
+      ? userId 
+      : new mongoose.Types.ObjectId(userId);
     
     // Get COEs where user is admin, client, runner, or participant
     const coes = await COE.find({
       $or: [
-        { admin_id: userId },
-        { client_id: userId },
-        { 'runner_assignment.runner_id': userId },
-        { 'participants.user_id': userId }
+        { admin_id: userIdObj },
+        { client_id: userIdObj },
+        { 'runner_assignment.runner_id': userIdObj },
+        { 'participants.user_id': userIdObj }
       ]
     })
     .populate('admin_id', 'name email')
@@ -332,7 +337,13 @@ router.get('/runner/:runnerId', authenticateToken, requireAdmin, async (req, res
 router.get('/my/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
+    const mongoose = require('mongoose');
+    
+    // Ensure userId is properly formatted for comparison
+    const userId = req.user._id || req.user.id;
+    const userIdObj = userId instanceof mongoose.Types.ObjectId 
+      ? userId 
+      : new mongoose.Types.ObjectId(userId);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
@@ -342,27 +353,51 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     }
 
     // Use getCOEById for consistent population (same as other endpoints)
-    // First verify user has access
+    // First verify user has access - convert userId to ObjectId for proper comparison
+    console.log('[GET /coes/my/:id] Checking user access:', {
+      coeId: id,
+      userId: userId?.toString(),
+      userIdObj: userIdObj?.toString(),
+      userRole: req.user.role
+    });
+    
     const coeCheck = await COE.findOne({
       _id: id,
       $or: [
-        { admin_id: userId },
-        { client_id: userId },
-        { 'runner_assignment.runner_id': userId },
-        { 'participants.user_id': userId }
+        { admin_id: userIdObj },
+        { client_id: userIdObj },
+        { 'runner_assignment.runner_id': userIdObj },
+        { 'participants.user_id': userIdObj }
       ]
-    }).select('_id');
+    }).select('_id admin_id client_id runner_assignment.runner_id');
     
     if (!coeCheck) {
+      // Log for debugging
+      const coeExists = await COE.findById(id).select('admin_id client_id runner_assignment.runner_id').lean();
+      console.log('[GET /coes/my/:id] Access denied:', {
+        coeId: id,
+        userId: userId?.toString(),
+        userIdObj: userIdObj?.toString(),
+        coeExists: !!coeExists,
+        coeAdminId: coeExists?.admin_id?.toString(),
+        coeClientId: coeExists?.client_id?.toString(),
+        coeRunnerId: coeExists?.runner_assignment?.runner_id?.toString()
+      });
+      
       return res.status(404).json({
         success: false,
         error: 'COE not found or access denied'
       });
     }
     
+    console.log('[GET /coes/my/:id] Access granted:', {
+      coeId: id,
+      userId: userId?.toString()
+    });
+    
     // CRITICAL: Use native MongoDB to get absolute latest data (same as findAlternativeEvents)
     // This ensures we get fresh data after event replacements that use native MongoDB updates
-    const mongoose = require('mongoose');
+    // mongoose already required above
     const db = mongoose.connection.db;
     const coesCollection = db.collection('coes');
     const coeObjectId = mongoose.Types.ObjectId.isValid(id) 

@@ -16,6 +16,7 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       // COE Status Notifications
       'coe_sent',
+      'coe_requested',
       'coe_approved',
       'coe_accepted',
       'coe_rejected',

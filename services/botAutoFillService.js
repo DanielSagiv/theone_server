@@ -9,6 +9,15 @@ const COE = require('../models/COE');
 const Event = require('../models/Event');
 const Location = require('../models/Location');
 const { findLocationSeat } = require('./seatUpgradeService');
+const OpenAI = require('openai');
+
+// Initialize OpenAI client for AI-based exclusion detection
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+// Budget tolerance for seat selection (25% relaxation)
+const BUDGET_TOLERANCE_PERCENT = parseFloat(process.env.BUDGET_TOLERANCE_PERCENT) || 0.25; // 25% default
 
 /**
  * Find available runner for COE assignment
@@ -153,6 +162,262 @@ function calculateSeatScore(eventSeat, locationSeat) {
 }
 
 /**
+ * Use AI to directly check if a seat violates the user's exclusion preference
+ * Takes the user's full exclusion preference text and compares it to seat sentiment
+ * Returns true if seat should be EXCLUDED (violates user preference), false otherwise
+ * @param {string} userExclusionText - User's exclusion preference text (e.g., "I do not want to seat next to the toilets")
+ * @param {string} seatSentimentText - Seat sentiment text from database
+ * @returns {Promise<boolean>} True if seat violates preference (should exclude), false otherwise
+ */
+async function checkIfSeatViolatesExclusionPreference(userExclusionText, seatSentimentText) {
+  if (!userExclusionText || !seatSentimentText || !userExclusionText.trim() || !seatSentimentText.trim()) {
+    return false; // No exclusion preference or no sentiment - don't exclude
+  }
+
+  // Fallback pattern matching if no OpenAI client
+  if (!openaiClient) {
+    // Conservative fallback: don't exclude without AI confirmation
+    console.log('[SEAT SELECTION] OpenAI client unavailable - skipping exclusion check (conservative: don\'t exclude)');
+    return false;
+  }
+
+  try {
+    const prompt = `Analyze if this seat description violates the user's exclusion preference.
+
+**User's Exclusion Preference:** "${userExclusionText}"
+
+**Seat Description:** "${seatSentimentText}"
+
+Return JSON with:
+{
+  "violates_preference": true/false,
+  "confidence": "high"/"medium"/"low",
+  "reasoning": "brief explanation"
+}
+
+IMPORTANT:
+- Return "violates_preference": TRUE if the seat description indicates the seat DOES violate the user's exclusion preference
+- Return "violates_preference": FALSE if:
+  * The seat description says the seat is NOT what the user wants to avoid (e.g., user says "not next to toilets" and seat says "not next to toilets" = FALSE - seat is good)
+  * The seat doesn't have the excluded feature
+  * The description is unclear
+
+EXAMPLES:
+1. User: "I do not want to seat next to the toilets"
+   Seat: "next to the toilets" → violates_preference: TRUE (seat IS next to toilets)
+   
+2. User: "I do not want to seat next to the toilets"
+   Seat: "not next to the toilets" → violates_preference: FALSE (seat is NOT next to toilets)
+   
+3. User: "I do not want to seat next to the toilets"
+   Seat: "VIP area, great view" → violates_preference: FALSE (seat doesn't violate preference)
+   
+4. User: "I do not want to seat near the bathroom"
+   Seat: "near the bathroom" → violates_preference: TRUE (seat IS near bathroom)`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert at understanding user preferences and matching them against seat descriptions. You must carefully analyze if a seat violates the user\'s exclusion preference. If the user says "I do not want X" and the seat has "X", it violates. If the seat says "not X", it does NOT violate. Always return valid JSON with violates_preference boolean.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2 // Low temperature for consistent analysis
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content);
+    const violatesPreference = result.violates_preference === true;
+    
+    console.log('[SEAT SELECTION] AI exclusion preference check:', {
+      user_exclusion: userExclusionText.substring(0, 100),
+      sentiment_snippet: seatSentimentText.substring(0, 100),
+      violates_preference: violatesPreference,
+      confidence: result.confidence,
+      reasoning: result.reasoning?.substring(0, 150)
+    });
+    
+    return violatesPreference; // true = exclude, false = don't exclude
+  } catch (error) {
+    console.error('[SEAT SELECTION] AI exclusion preference check failed:', error.message);
+    // Conservative fallback: don't exclude without AI confirmation
+    return false;
+  }
+}
+
+/**
+ * Use AI to calculate preference match score between seat sentiment and user positive preferences
+ * Uses actual seat sentiment data from database to compare against user preferences
+ * Returns score (0-100) where higher = better match with user preferences
+ * Falls back to pattern matching if AI is unavailable
+ * IMPORTANT: Only performs AI matching if userPreferenceText is provided. If no text, returns 0 (skip AI call).
+ * @param {string} sentimentText - Seat sentiment text (lowercase, all sentiment items joined)
+ * @param {Object} structuredPreferences - User structured preferences (categories, keywords, requirements, intent)
+ * @param {Array} sentimentItems - Optional: Array of sentiment objects with type (A/B) for context
+ * @param {string} userPreferenceText - Optional: Original user preference text for better semantic understanding
+ * @returns {Promise<number>} Match score (0-100)
+ */
+async function calculatePreferenceMatchScore(sentimentText, structuredPreferences, sentimentItems = null, userPreferenceText = null) {
+  // If no preferences or no sentiment, return neutral score
+  if (!structuredPreferences || !sentimentText || !sentimentText.trim()) {
+    return 0;
+  }
+  
+  // CRITICAL: Only perform AI preference matching if user has provided preference text
+  // If no user text provided, skip AI call entirely (return 0)
+  if (!userPreferenceText || !userPreferenceText.trim()) {
+    console.log('[SEAT SELECTION] Skipping preference matching - no user preference text provided');
+    return 0;
+  }
+
+  // Extract positive preferences (exclude exclusions - those are handled separately)
+  const categories = structuredPreferences.categories || [];
+  const keywords = structuredPreferences.keywords || [];
+  const requirements = structuredPreferences.requirements || [];
+  const intent = structuredPreferences.intent || '';
+
+  // If no positive preferences, return neutral score
+  const hasPositivePreferences = categories.length > 0 || 
+                                  keywords.length > 0 || 
+                                  requirements.length > 0 || 
+                                  intent.trim();
+  
+  if (!hasPositivePreferences) {
+    return 0;
+  }
+
+  // Fallback pattern matching if no OpenAI client
+  if (!openaiClient) {
+    // Simple keyword matching fallback
+    const allPositiveTerms = [
+      ...categories,
+      ...keywords,
+      ...requirements,
+      intent
+    ].filter(Boolean).map(term => term.toLowerCase());
+
+    let matchCount = 0;
+    for (const term of allPositiveTerms) {
+      if (sentimentText.includes(term.toLowerCase())) {
+        matchCount++;
+      }
+    }
+
+    // Score: (matches / total terms) * 50 (max 50 points for pattern matching)
+    const score = allPositiveTerms.length > 0 
+      ? Math.round((matchCount / allPositiveTerms.length) * 50)
+      : 0;
+    
+    return score;
+  }
+
+  try {
+    // Extract sentiment type information if available (Type A = high importance, Type B = standard)
+    const typeASentiments = sentimentItems?.filter(s => s.type === 'A').map(s => s.text).filter(Boolean) || [];
+    const typeBSentiments = sentimentItems?.filter(s => s.type === 'B').map(s => s.text).filter(Boolean) || [];
+    const hasHighImportanceSentiments = typeASentiments.length > 0;
+
+    const prompt = `Analyze how well this seat's sentiment data matches the user's preferences to determine if it's the right seat for them.
+
+**User's Original Preference Text:** "${userPreferenceText}"
+
+**User's Structured Preferences:**
+- Categories: ${categories.join(', ') || 'None'}
+- Keywords: ${keywords.join(', ') || 'None'}
+- Requirements: ${requirements.join(', ') || 'None'}
+- Intent: ${intent || 'Not specified'}
+
+**Seat Sentiment Data** (actual data from database):
+"${sentimentText}"
+${hasHighImportanceSentiments ? `\n**High Importance Features (Type A):** ${typeASentiments.join(', ')}` : ''}
+${typeBSentiments.length > 0 ? `**Standard Features (Type B):** ${typeBSentiments.slice(0, 3).join(', ')}${typeBSentiments.length > 3 ? '...' : ''}` : ''}
+
+Return JSON with:
+{
+  "match_score": 0-100,
+  "confidence": "high"/"medium"/"low",
+  "reasoning": "brief explanation of why this seat matches or doesn't match user preferences"
+}
+
+IMPORTANT:
+- This is SEAT SENTIMENT DATA from the venue database - analyze it thoroughly
+- Use the user's original preference text to understand full context and intent
+- Compare the seat's actual features (from sentiment) against what the user wants
+- Return match_score 0-100 where:
+  * 80-100: Excellent match (seat sentiment strongly aligns with user preferences, fulfills requirements)
+  * 50-79: Good match (seat partially aligns with preferences, some requirements met)
+  * 20-49: Weak match (seat has some related features but doesn't strongly match)
+  * 0-19: Poor match (seat doesn't align with preferences, doesn't meet requirements)
+- Consider semantic meaning, not just keyword matching
+- Use the original text to understand user intent and context
+- Higher scores for seats that fulfill specific requirements or match user intent
+- Give more weight to Type A (high importance) sentiment features if they match user preferences
+- Lower scores if seat conflicts with preferences (though exclusions are handled separately)
+- Example: User wants "birthday, VIP area" and seat sentiment says "VIP area, great for celebrations" = HIGH match score`;
+
+    const completion = await openaiClient.chat.completions.create({
+      model: MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert at analyzing seat sentiment data from venue databases to match with user preferences. You understand that seat sentiment data describes actual seat features and characteristics. You must analyze semantic meaning, understand user intent from the original preference text, and compare seat features against user requirements. Always return valid JSON with match_score 0-100.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3 // Low temperature for consistent scoring
+    });
+
+    const result = JSON.parse(completion.choices[0].message.content);
+    const matchScore = Math.max(0, Math.min(100, result.match_score || 0)); // Clamp to 0-100
+    
+    console.log('[SEAT SELECTION] AI preference match score:', {
+      matchScore,
+      confidence: result.confidence,
+      reasoning: result.reasoning?.substring(0, 100),
+      preferences: {
+        categories: categories.length,
+        keywords: keywords.length,
+        requirements: requirements.length,
+        hasIntent: !!intent
+      }
+    });
+    
+    return matchScore;
+  } catch (error) {
+    console.error('[SEAT SELECTION] AI preference match failed, using fallback:', error.message);
+    // Fallback to pattern matching on error
+    const allPositiveTerms = [
+      ...categories,
+      ...keywords,
+      ...requirements,
+      intent
+    ].filter(Boolean).map(term => term.toLowerCase());
+
+    let matchCount = 0;
+    for (const term of allPositiveTerms) {
+      if (sentimentText.includes(term.toLowerCase())) {
+        matchCount++;
+      }
+    }
+
+    const score = allPositiveTerms.length > 0 
+      ? Math.round((matchCount / allPositiveTerms.length) * 50)
+      : 0;
+    
+    return score;
+  }
+}
+
+/**
  * Select seats based on budget and capacity with quality-based scoring
  * Prioritizes: 1) Quality score, 2) Budget maximization, 3) Exclusion filtering
  * @param {Object} event - Event object (may have populated location_id with seats)
@@ -232,8 +497,19 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     totalSeats: event.seats?.length || 0
   });
 
-  // Get exclusions from structured preferences or direct preferences
-  const exclusions = preferences.structuredPreferences?.exclusions || 
+  // Get structured preferences for use in both exclusions and positive preference matching
+  const structuredPreferences = preferences.structuredPreferences || null;
+  
+  // Get user's exclusion preference text (from seat_preferences or exclusion_intent)
+  // CRITICAL: Only perform exclusion filtering if user has provided exclusion preference text
+  // Priority: seat_preferences > exclusion_intent > notes
+  const userExclusionText = (typeof preferences.seat_preferences === 'string' && preferences.seat_preferences.trim()) ||
+                            (typeof structuredPreferences?.exclusion_intent === 'string' && structuredPreferences.exclusion_intent.trim()) ||
+                            (typeof preferences.notes === 'string' && preferences.notes.trim()) ||
+                            null;
+  
+  // Get exclusions array for diagnostics/error messages (populate matchingKeywords for error messages)
+  const exclusions = structuredPreferences?.exclusions || 
                      preferences.exclusions || 
                      [];
 
@@ -306,18 +582,43 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     maxPrice: allSeatPrices.length > 0 ? Math.max(...allSeatPrices.map(s => s.price_used)) : 0
   });
   
+  // Calculate relaxed budget with 25% tolerance
+  const relaxedBudget = budget === Infinity ? Infinity : budget * (1 + BUDGET_TOLERANCE_PERCENT);
+  
+  console.log('[BOT] [COE_CREATION_DEBUG] Budget tolerance applied:', {
+    originalBudget: budget,
+    relaxedBudget: relaxedBudget,
+    tolerancePercent: (BUDGET_TOLERANCE_PERCENT * 100).toFixed(0) + '%',
+    toleranceAmount: budget !== Infinity ? (budget * BUDGET_TOLERANCE_PERCENT) : null
+  });
+  
   availableSeats = availableSeats.filter(seat => {
     const price = seat.event_price || seat.min_spend || 0;
-    const withinBudget = budget === Infinity || price <= budget;
+    const withinBudget = budget === Infinity || price <= relaxedBudget;
+    
     if (!withinBudget) {
       console.log('[BOT] [COE_CREATION_DEBUG] Seat excluded by budget:', {
         seat_id: seat._id?.toString(),
         seat_code: seat.code,
         price: price,
-        budget: budget,
-        comparison: `${price} <= ${budget} = ${withinBudget}`
+        originalBudget: budget,
+        relaxedBudget: relaxedBudget,
+        tolerance: `${(BUDGET_TOLERANCE_PERCENT * 100).toFixed(0)}%`,
+        comparison: `${price} <= ${relaxedBudget} = ${withinBudget}`
+      });
+    } else if (price > budget && price <= relaxedBudget) {
+      // Log when seat exceeds original budget but is within tolerance
+      console.log('[BOT] [COE_CREATION_DEBUG] Seat within budget tolerance:', {
+        seat_id: seat._id?.toString(),
+        seat_code: seat.code,
+        price: price,
+        originalBudget: budget,
+        relaxedBudget: relaxedBudget,
+        overBudget: price - budget,
+        overBudgetPercent: ((price - budget) / budget * 100).toFixed(1) + '%'
       });
     }
+    
     return withinBudget;
   });
   diagnostics.filtering_stages.after_budget_filter = availableSeats.length;
@@ -336,74 +637,129 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
     
+    const relaxedBudget = budget === Infinity ? null : budget * (1 + BUDGET_TOLERANCE_PERCENT);
+    
+    // Count seats within relaxed budget
+    const seatsWithinRelaxedBudget = prices.filter(p => p <= relaxedBudget).length;
+    
     console.log('[BOT] [COE_CREATION_DEBUG] BUDGET_TOO_LOW diagnostic created:', {
       eventId: event._id?.toString(),
       eventName: event.name,
       budget: budget,
+      relaxedBudget: relaxedBudget,
       budgetType: typeof budget,
       isInfinity: budget === Infinity,
+      tolerance: `${(BUDGET_TOLERANCE_PERCENT * 100).toFixed(0)}%`,
       minPrice: minPrice,
       maxPrice: maxPrice,
       totalSeatsChecked: event.seats?.length || 0,
       seatsWithPrices: prices.length,
+      seatsWithinRelaxedBudget: seatsWithinRelaxedBudget,
       diagnostic: {
         budget: budget === Infinity ? null : budget,
+        relaxed_budget: relaxedBudget,
+        budget_tolerance_percent: BUDGET_TOLERANCE_PERCENT * 100,
         min_seat_price: minPrice,
         max_seat_price: maxPrice,
-        seats_within_budget: 0
+        seats_within_budget: 0,
+        seats_within_relaxed_budget: seatsWithinRelaxedBudget
       }
     });
     
     diagnostics.primary_reason = 'BUDGET_TOO_LOW';
     diagnostics.details.budget_too_low = {
       budget: budget === Infinity ? null : budget,
+      relaxed_budget: relaxedBudget,
+      budget_tolerance_percent: BUDGET_TOLERANCE_PERCENT * 100,
       min_seat_price: minPrice,
       max_seat_price: maxPrice,
-      seats_within_budget: 0
+      seats_within_budget: 0,
+      seats_within_relaxed_budget: seatsWithinRelaxedBudget
     };
     diagnostics.secondary_reasons.push('NO_AVAILABLE_SEATS'); // Also no available seats
     return { seats: [], diagnostics };
   }
 
-  // Stage 4: Filter out seats with excluded sentiment keywords
+  // Stage 4: Filter out seats that violate user's exclusion preferences (AI-only, no keyword matching)
   let seatsExcludedCount = 0;
   const matchingKeywords = [];
-  if (exclusions && exclusions.length > 0 && location && location.seats && Array.isArray(location.seats)) {
-    const exclusionKeywords = exclusions.map(ex => ex.toLowerCase().trim());
-    
+  
+  // CRITICAL: Only perform exclusion filtering if user has provided exclusion preference text
+  // If no user exclusion text, skip this stage entirely (no AI calls, all seats pass through)
+  if (userExclusionText && userExclusionText.trim() && location && location.seats && Array.isArray(location.seats)) {
     const beforeExclusion = availableSeats.length;
-    availableSeats = availableSeats.filter(eventSeat => {
-      // Use helper function that prioritizes seat_id matching (stable reference)
-      const locationSeat = findLocationSeat(eventSeat, location);
-      
-      if (!locationSeat || !locationSeat.sentiment || !Array.isArray(locationSeat.sentiment)) {
-        return true; // No sentiment - allow through
-      }
-      
-      const locationSeatSentimentText = locationSeat.sentiment
-        .map(s => (s.text || '').toLowerCase())
-        .join(' ');
-      
-      const hasExcludedSentiment = exclusionKeywords.some(exclusion => 
-        locationSeatSentimentText.includes(exclusion)
-      );
-      
-      if (hasExcludedSentiment) {
-        seatsExcludedCount++;
-        const matchedKeyword = exclusionKeywords.find(ex => locationSeatSentimentText.includes(ex));
-        if (matchedKeyword && !matchingKeywords.includes(matchedKeyword)) {
-          matchingKeywords.push(matchedKeyword);
-        }
-        console.log('[SEAT SELECTION] Excluding seat due to negative preference:', {
-          seat_code: eventSeat.code,
-          exclusion_matched: matchedKeyword
-        });
-        return false;
-      }
-      
-      return true;
+    
+    console.log('[SEAT SELECTION] Starting exclusion filter with user preference:', {
+      user_exclusion_text: userExclusionText.substring(0, 150),
+      seats_to_check: availableSeats.length
     });
     
+    // Populate matchingKeywords from exclusions array for error messages (extracted keywords for display)
+    if (exclusions && exclusions.length > 0) {
+      exclusions.forEach(ex => {
+        if (!matchingKeywords.includes(ex)) {
+          matchingKeywords.push(ex);
+        }
+      });
+    }
+    
+    // Convert filter to async Promise.all since we need AI calls
+    const seatFilterResults = await Promise.all(
+      availableSeats.map(async (eventSeat) => {
+        // Use helper function that prioritizes seat_id matching (stable reference)
+        const locationSeat = findLocationSeat(eventSeat, location);
+        
+        if (!locationSeat || !locationSeat.sentiment || !Array.isArray(locationSeat.sentiment)) {
+          // No sentiment - allow through (can't determine if it violates preference without sentiment)
+          return { eventSeat, shouldInclude: true };
+        }
+        
+        const locationSeatSentimentText = locationSeat.sentiment
+          .map(s => (s.text || '').toLowerCase())
+          .join(' ');
+        
+        // Use AI to directly check if this seat violates the user's exclusion preference
+        const violatesPreference = await checkIfSeatViolatesExclusionPreference(
+          userExclusionText,
+          locationSeatSentimentText
+        );
+        
+        console.log('[SEAT SELECTION] Exclusion preference check result:', {
+          seat_code: eventSeat.code,
+          seat_id: eventSeat.seat_id?.toString(),
+          seat_price: eventSeat.event_price || eventSeat.min_spend || 0,
+          user_exclusion: userExclusionText.substring(0, 100),
+          sentiment_snippet: locationSeatSentimentText.substring(0, 100),
+          full_sentiment: locationSeatSentimentText,
+          violates_preference: violatesPreference,
+          final_decision: violatesPreference ? 'EXCLUDE' : 'INCLUDE'
+        });
+        
+        if (violatesPreference) {
+          console.log('[SEAT SELECTION] ✓ Excluding seat - AI confirmed seat violates user exclusion preference:', {
+            seat_code: eventSeat.code,
+            seat_price: eventSeat.event_price || eventSeat.min_spend || 0,
+            user_exclusion: userExclusionText.substring(0, 80),
+            sentiment_snippet: locationSeatSentimentText.substring(0, 80)
+          });
+          return { eventSeat, shouldInclude: false };
+        } else {
+          console.log('[SEAT SELECTION] ✗ NOT excluding seat - AI confirmed seat does NOT violate user preference:', {
+            seat_code: eventSeat.code,
+            seat_price: eventSeat.event_price || eventSeat.min_spend || 0,
+            sentiment_snippet: locationSeatSentimentText.substring(0, 80)
+          });
+          return { eventSeat, shouldInclude: true };
+        }
+      })
+    );
+    
+    // Filter seats based on results
+    availableSeats = seatFilterResults
+      .filter(result => result.shouldInclude)
+      .map(result => result.eventSeat);
+    
+    seatsExcludedCount = beforeExclusion - availableSeats.length;
     diagnostics.filtering_stages.after_exclusion_filter = availableSeats.length;
     
     if (availableSeats.length === 0 && beforeExclusion > 0) {
@@ -416,6 +772,10 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
       return { seats: [], diagnostics };
     }
   } else {
+    // No user exclusion preference text - skip exclusion filtering entirely (no AI calls)
+    if (!userExclusionText || !userExclusionText.trim()) {
+      console.log('[SEAT SELECTION] Skipping exclusion filtering - no user exclusion preference text provided');
+    }
     diagnostics.filtering_stages.after_exclusion_filter = availableSeats.length;
   }
 
@@ -423,27 +783,71 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   diagnostics.filtering_stages.final_count = availableSeats.length;
   diagnostics.primary_reason = null; // Success - no reason needed
 
-  // Score all seats and sort by: quality DESC, then price DESC (to maximize budget)
-  const scoredSeats = availableSeats.map(eventSeat => {
-    // Find corresponding location seat by code (primary) or seat_id
-    const locationSeat = location?.seats?.find(locSeat => {
-      if (locSeat.code === eventSeat.code) return true;
-      const eventSeatId = eventSeat.seat_id ? eventSeat.seat_id.toString() : null;
-      const locSeatId = locSeat._id ? locSeat._id.toString() : null;
-      return eventSeatId && locSeatId && locSeatId === eventSeatId;
-    });
-    
-    const score = calculateSeatScore(eventSeat, locationSeat);
-    const price = eventSeat.event_price || eventSeat.min_spend || 0;
-    
-    return {
-      seat: eventSeat,
-      score,
-      price
-    };
-  });
+  // Score all seats: quality score + preference match score (AI-enhanced)
+  // Use Promise.all for async preference matching
+  const scoredSeats = await Promise.all(
+    availableSeats.map(async (eventSeat) => {
+      // Find corresponding location seat by code (primary) or seat_id
+      const locationSeat = location?.seats?.find(locSeat => {
+        if (locSeat.code === eventSeat.code) return true;
+        const eventSeatId = eventSeat.seat_id ? eventSeat.seat_id.toString() : null;
+        const locSeatId = locSeat._id ? locSeat._id.toString() : null;
+        return eventSeatId && locSeatId && locSeatId === eventSeatId;
+      });
+      
+      // Calculate quality score (existing logic)
+      const qualityScore = calculateSeatScore(eventSeat, locationSeat);
+      
+      // Calculate preference match score if we have structured preferences and user preference text
+      // Use actual seat sentiment data to compare against user preferences
+      // CRITICAL: Only perform AI preference matching if user has provided preference text
+      let preferenceMatchScore = 0;
+      
+      // Get user's positive preference text (for positive preference matching, not exclusions)
+      const userPreferenceText = (typeof preferences.seat_preferences === 'string' && preferences.seat_preferences.trim()) ||
+                                (typeof preferences.specific_preferences === 'string' && preferences.specific_preferences.trim()) ||
+                                (typeof preferences.notes === 'string' && preferences.notes.trim()) ||
+                                (typeof structuredPreferences?.intent === 'string' && structuredPreferences.intent.trim()) ||
+                                null;
+      
+      // ONLY perform preference matching if user has provided preference text AND we have sentiment
+      if (userPreferenceText && structuredPreferences && locationSeat?.sentiment && Array.isArray(locationSeat.sentiment)) {
+        const locationSeatSentimentText = locationSeat.sentiment
+          .map(s => (s.text || '').toLowerCase())
+          .join(' ');
+        
+        // Pass sentiment items array and user preference text for better AI understanding
+        preferenceMatchScore = await calculatePreferenceMatchScore(
+          locationSeatSentimentText,
+          structuredPreferences,
+          locationSeat.sentiment, // Pass full sentiment array to include type information
+          userPreferenceText // Pass original user preference text for semantic matching
+        );
+      } else if (!userPreferenceText) {
+        // No user preference text - skip AI preference matching (score = 0)
+        console.log('[SEAT SELECTION] Skipping preference matching for seat - no user preference text provided:', {
+          seat_code: eventSeat.code
+        });
+      }
+      
+      // Combined score: quality score (10-100+) + preference match score (0-100)
+      // Quality score typically ranges 50-150, preference match 0-100
+      // Weight: 60% quality + 40% preference (preference match is bonus on top)
+      const combinedScore = qualityScore + Math.round(preferenceMatchScore * 0.4);
+      
+      const price = eventSeat.event_price || eventSeat.min_spend || 0;
+      
+      return {
+        seat: eventSeat,
+        score: combinedScore,
+        qualityScore: qualityScore,
+        preferenceMatchScore: preferenceMatchScore,
+        price
+      };
+    })
+  );
   
-  // Sort by score DESC, then price DESC (higher price preferred to maximize budget utilization)
+  // Sort by combined score DESC, then price DESC (higher price preferred to maximize budget utilization)
   scoredSeats.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
     return b.price - a.price; // Prefer higher price among same score to max budget
@@ -454,9 +858,17 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     total_available: scoredSeats.length,
     top_seat: scoredSeats[0] ? {
       code: scoredSeats[0].seat.code,
-      score: scoredSeats[0].score,
+      combined_score: scoredSeats[0].score,
+      quality_score: scoredSeats[0].qualityScore,
+      preference_match_score: scoredSeats[0].preferenceMatchScore,
       price: scoredSeats[0].price
-    } : null
+    } : null,
+    has_preferences: !!(structuredPreferences && (
+      structuredPreferences.categories?.length > 0 ||
+      structuredPreferences.keywords?.length > 0 ||
+      structuredPreferences.requirements?.length > 0 ||
+      structuredPreferences.intent
+    ))
   });
 
   // Select the best seat (highest score, and among same score, highest price)
@@ -830,11 +1242,12 @@ async function findAlternativeEventsWithSeats(
               .populate('location_id', 'seats');
             if (!fullEvent || !fullEvent.seats || fullEvent.seats.length === 0) continue;
             
-            // Check for available seats
+            // Check for available seats with 25% budget tolerance
+            const relaxedBudget = budget === Infinity ? Infinity : budget * (1 + BUDGET_TOLERANCE_PERCENT);
             const availableSeats = fullEvent.seats.filter(seat => 
               seat.status === 'available' && 
               seat.capacity >= partySize &&
-              (seat.event_price || seat.min_spend || 0) <= budget
+              (seat.event_price || seat.min_spend || 0) <= relaxedBudget
             );
             
             if (availableSeats.length > 0) {
@@ -906,10 +1319,12 @@ async function findAlternativeEventsWithSeats(
           .populate('location_id', 'seats');
         if (!fullEvent || !fullEvent.seats || fullEvent.seats.length === 0) continue;
         
+        // Check for available seats with 25% budget tolerance
+        const relaxedBudget = budget === Infinity ? Infinity : budget * (1 + BUDGET_TOLERANCE_PERCENT);
         const availableSeats = fullEvent.seats.filter(seat => 
           seat.status === 'available' && 
           seat.capacity >= partySize &&
-          (seat.event_price || seat.min_spend || 0) <= budget
+          (seat.event_price || seat.min_spend || 0) <= relaxedBudget
         );
         
         if (availableSeats.length > 0) {
@@ -949,14 +1364,15 @@ async function findAlternativeEventsWithSeats(
       }
     }
     
-    // Strategy 3: Relaxed criteria (±3 days, +10% budget)
+    // Strategy 3: Relaxed criteria (±3 days, +25% budget tolerance)
     console.log('[ALTERNATIVE SEARCH] Strategy 3: Relaxed criteria');
     
     const relaxedStartDate = new Date(startDate);
     relaxedStartDate.setDate(relaxedStartDate.getDate() - 3);
     const relaxedEndDate = new Date(endDate);
     relaxedEndDate.setDate(relaxedEndDate.getDate() + 3);
-    const relaxedBudget = budget !== Infinity ? budget * 1.1 : Infinity;
+    // Use same 25% tolerance as primary selection for consistency
+    const relaxedBudget = budget !== Infinity ? budget * (1 + BUDGET_TOLERANCE_PERCENT) : Infinity;
     
     const relaxedEvents = await Event.find({
       status: 'active',
@@ -1021,7 +1437,7 @@ async function findAlternativeEventsWithSeats(
         locations_tried: uniqueLocations,
         events_with_seats: eventsWithSeats.length,
         date_adjustment: '±3 days',
-        budget_adjustment: '+10%',
+        budget_adjustment: `+${(BUDGET_TOLERANCE_PERCENT * 100).toFixed(0)}%`,
         reason: eventsWithSeats.length > 0 
           ? `Found ${eventsWithSeats.length} events with available seats (relaxed criteria)`
           : 'No available seats even with relaxed criteria'
