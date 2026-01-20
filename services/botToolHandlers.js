@@ -1624,6 +1624,66 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }))
     });
 
+    // Capture original request data for client-created COEs (status 'request')
+    if (initialStatus === 'request') {
+      try {
+        // Get conversation to extract original request text
+        const conversation = await BotConversation.findOne({ user_id: user._id });
+        let originalRequestText = '';
+        
+        if (conversation && conversation.messages && conversation.messages.length > 0) {
+          // Find the most recent user message that likely triggered COE creation
+          // Look for user messages containing COE-related keywords or recent messages
+          const userMessages = conversation.messages
+            .filter(msg => msg.role === 'user')
+            .slice(-5) // Check last 5 user messages
+            .reverse(); // Most recent first
+          
+          // Use the most recent user message as original request
+          if (userMessages.length > 0) {
+            originalRequestText = userMessages[0].content || '';
+          }
+        }
+        
+        // Build original request data
+        const originalRequestData = {
+          original_request_text: originalRequestText,
+          budget: conversationPreferences.budget_range ? {
+            max: conversationPreferences.budget_range.max,
+            currency: conversationPreferences.budget_range.currency || 'USD'
+          } : (conversationPreferences.budget ? {
+            max: conversationPreferences.budget.max,
+            currency: conversationPreferences.budget.currency || 'USD'
+          } : undefined),
+          requested_dates: {
+            start_date: startDate,
+            end_date: endDate
+          },
+          party_size: conversationPreferences.party_size,
+          seat_preferences: conversationPreferences.seat_preferences,
+          general_preferences: conversationPreferences.specific_preferences,
+          city: cityToUse || conversationPreferences.city,
+          requested_at: new Date()
+        };
+        
+        // Only add if we have meaningful data
+        if (originalRequestText || originalRequestData.budget || originalRequestData.party_size) {
+          coeData.original_request_data = originalRequestData;
+          console.log('[BOT] Original request data captured:', {
+            hasOriginalText: !!originalRequestText,
+            originalTextLength: originalRequestText.length,
+            budget: originalRequestData.budget,
+            partySize: originalRequestData.party_size,
+            hasSeatPreferences: !!originalRequestData.seat_preferences,
+            city: originalRequestData.city
+          });
+        }
+      } catch (error) {
+        console.error('[BOT] Error capturing original request data:', error);
+        // Don't fail COE creation if we can't capture request data
+      }
+    }
+
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== COE CREATION PHASE ==========');
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Calling coeService.createCOE:', {
       coeDataKeys: Object.keys(coeData),

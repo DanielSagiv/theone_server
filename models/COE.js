@@ -159,6 +159,35 @@ const coeSchema = new mongoose.Schema({
     updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
   
+  // Original Request Data (only for client-created COEs with status 'request')
+  original_request_data: {
+    // Original user request text/message
+    original_request_text: { type: String, trim: true },
+    
+    // Budget from request
+    budget: {
+      max: { type: Number, min: 0 },
+      currency: { type: String, default: 'USD' }
+    },
+    
+    // Dates from request
+    requested_dates: {
+      start_date: { type: Date },
+      end_date: { type: Date }
+    },
+    
+    // Party size
+    party_size: { type: Number, min: 1 },
+    
+    // Preferences
+    seat_preferences: { type: String, trim: true },
+    general_preferences: { type: String, trim: true }, // specific_preferences
+    city: { type: String, trim: true },
+    
+    // When this request was made
+    requested_at: { type: Date, default: Date.now }
+  },
+  
   // Detailed pricing breakdown (event-specific pricing)
   pricing_breakdown: {
     events: [{
