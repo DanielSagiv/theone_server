@@ -672,7 +672,34 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
     coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
+    
+    // DEBUG: Log original_request_data so we can inspect what mobile receives
+    try {
+      const originalRequestPreview = coe.original_request_data
+        ? {
+            hasData: true,
+            keys: Object.keys(coe.original_request_data),
+            // Key fields that are relevant for the mobile "Original Request Details" card
+            budget: coe.original_request_data.budget || null,
+            requested_dates: coe.original_request_data.requested_dates || null,
+            party_size: coe.original_request_data.party_size || null,
+            city: coe.original_request_data.city || null,
+            has_seat_preferences: !!coe.original_request_data.seat_preferences,
+            has_general_preferences: !!coe.original_request_data.general_preferences,
+          }
+        : { hasData: false };
 
+      console.log(
+        '[GET /coes/my/:id] [COE request json to inspect]:',
+        JSON.stringify(originalRequestPreview)
+      );
+    } catch (previewError) {
+      console.error(
+        '[GET /coes/my/:id] Failed to log [COE request json to inspect]:',
+        previewError
+      );
+    }
+    
     // DEBUG: Log COE data being sent to client (for TestFlight debugging)
     console.log('[GET /coes/my/:id] 📱 COE DATA SENT TO CLIENT:', {
       coeId: coe._id?.toString() || coe.id?.toString(),
