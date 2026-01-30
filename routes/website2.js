@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
-const { requireWebsitePasswordAuth } = require('../middleware/websitePasswordProtection');
+const { requireWebsite2AuthOptional } = require('../middleware/websitePasswordProtection');
 const { sendContactFormEmail, sendNewsletterSubscriptionEmail } = require('../utils/emailService');
 
 /**
@@ -28,9 +28,9 @@ function isContactRateLimited(ip) {
 
 /**
  * GET /website2
- * Serve the new single-page website (password protected)
+ * Serve the new single-page website (optionally password protected via ENABLE_WEBSITE2_PASSWORD_PROTECTION)
  */
-router.get('/', requireWebsitePasswordAuth, (req, res) => {
+router.get('/', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/index.html'));
   } catch (error) {
@@ -41,9 +41,9 @@ router.get('/', requireWebsitePasswordAuth, (req, res) => {
 
 /**
  * GET /website2/membership
- * Serve the membership page (password protected)
+ * Serve the membership page (optionally password protected)
  */
-router.get('/membership', requireWebsitePasswordAuth, (req, res) => {
+router.get('/membership', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/membership.html'));
   } catch (error) {
@@ -54,9 +54,9 @@ router.get('/membership', requireWebsitePasswordAuth, (req, res) => {
 
 /**
  * GET /website2/contact
- * Serve the contact page (password protected)
+ * Serve the contact page (optionally password protected)
  */
-router.get('/contact', requireWebsitePasswordAuth, (req, res) => {
+router.get('/contact', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/contact.html'));
   } catch (error) {
@@ -67,9 +67,9 @@ router.get('/contact', requireWebsitePasswordAuth, (req, res) => {
 
 /**
  * GET /website2/terms
- * Serve the terms and conditions page (password protected)
+ * Serve the terms and conditions page (optionally password protected)
  */
-router.get('/terms', requireWebsitePasswordAuth, (req, res) => {
+router.get('/terms', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/terms.html'));
   } catch (error) {
@@ -80,9 +80,9 @@ router.get('/terms', requireWebsitePasswordAuth, (req, res) => {
 
 /**
  * GET /website2/privacy
- * Serve the privacy policy page (password protected)
+ * Serve the privacy policy page (optionally password protected)
  */
-router.get('/privacy', requireWebsitePasswordAuth, (req, res) => {
+router.get('/privacy', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/privacy.html'));
   } catch (error) {
@@ -93,9 +93,9 @@ router.get('/privacy', requireWebsitePasswordAuth, (req, res) => {
 
 /**
  * GET /website2/refund
- * Serve the refund policy page (password protected)
+ * Serve the refund policy page (optionally password protected)
  */
-router.get('/refund', requireWebsitePasswordAuth, (req, res) => {
+router.get('/refund', requireWebsite2AuthOptional, (req, res) => {
   try {
     res.sendFile(path.join(__dirname, '../website2/refund.html'));
   } catch (error) {
@@ -108,7 +108,7 @@ router.get('/refund', requireWebsitePasswordAuth, (req, res) => {
  * POST /website2/contact
  * Handle contact form submission for website2
  */
-router.post('/contact', requireWebsitePasswordAuth, async (req, res) => {
+router.post('/contact', requireWebsite2AuthOptional, async (req, res) => {
   try {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
 
@@ -198,7 +198,7 @@ router.post('/contact', requireWebsitePasswordAuth, async (req, res) => {
  * POST /website2/newsletter
  * Handle newsletter subscription
  */
-router.post('/newsletter', requireWebsitePasswordAuth, async (req, res) => {
+router.post('/newsletter', requireWebsite2AuthOptional, async (req, res) => {
   try {
     const ip = req.ip || req.connection?.remoteAddress || 'unknown';
 

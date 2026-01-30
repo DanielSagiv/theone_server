@@ -65,8 +65,23 @@ function requireWebsitePasswordAuth(req, res, next) {
   });
 }
 
+/**
+ * Website2 auth: only runs password check when ENABLE_WEBSITE2_PASSWORD_PROTECTION is 'true'.
+ * When unset or not 'true', allows access without the password page (easy to re-enable later).
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next function
+ */
+function requireWebsite2AuthOptional(req, res, next) {
+  if (process.env.ENABLE_WEBSITE2_PASSWORD_PROTECTION === 'true') {
+    return requireWebsitePasswordAuth(req, res, next);
+  }
+  return next();
+}
+
 module.exports = {
-  requireWebsitePasswordAuth
+  requireWebsitePasswordAuth,
+  requireWebsite2AuthOptional
 };
 
 
