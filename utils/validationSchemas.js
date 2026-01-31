@@ -366,6 +366,23 @@ const addEventToCOESchema = Joi.object({
   client_notes: Joi.string().allow('')
 });
 
+// Add event with seat to COE validation schema (admin add-event flow)
+const addEventToCOEWithSeatSchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  seat_id: Joi.string().required(),
+  seat_code: Joi.string().allow(''),
+  capacity: Joi.number().min(1).default(1),
+  base_price: Joi.number().min(0),
+  event_price: Joi.number().min(0).required(),
+  event_date: Joi.date(),
+  event_time: Joi.string().allow(''),
+  quantity: Joi.number().min(1).default(1),
+  budget_override: Joi.boolean().default(false),
+  party_size_override: Joi.boolean().default(false),
+  notes: Joi.string().allow(''),
+  client_notes: Joi.string().allow('')
+});
+
 // Update COE status validation schema
 const updateCOEStatusSchema = Joi.object({
   status: Joi.string().valid('draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
@@ -533,6 +550,7 @@ module.exports = {
   coeItemSchema,
   coeSelectedSeatSchema,
   addEventToCOESchema,
+  addEventToCOEWithSeatSchema,
   updateCOEStatusSchema,
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema,

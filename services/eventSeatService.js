@@ -46,9 +46,14 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
       locationSeatMap.set(seat._id.toString(), seat);
     });
 
+    // When available_only, filter to seats with status 'available' before processing
+    const seatsToProcess = options.available_only
+      ? (event.seats || []).filter(s => s.status === 'available')
+      : (event.seats || []);
+
     // 4. Process event seats and generate AI summaries
     const seatsWithSummaries = await Promise.all(
-      event.seats.map(async (eventSeat) => {
+      seatsToProcess.map(async (eventSeat) => {
         // Find corresponding location seat to get sentiments and media
         const locationSeat = locationSeatMap.get(eventSeat.seat_id?.toString());
         const sentiments = locationSeat?.sentiment || [];

@@ -8,6 +8,7 @@ const {
   createCOESchema,
   updateCOESchema,
   addEventToCOESchema,
+  addEventToCOEWithSeatSchema,
   updateCOEStatusSchema,
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema
@@ -1679,10 +1680,11 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
 
 /**
  * DELETE /v1/coes/:coeId/events
- * Remove events from a draft or request COE
- * @access Authenticated users (admin or COE owner)
+ * Remove events from an unpaid COE (admin only)
+ * When removing last event: deletes COE and notifies admin and user
+ * @access Admin only
  */
-router.delete('/:coeId/events', authenticateToken, async (req, res) => {
+router.delete('/:coeId/events', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { coeId } = req.params;
     const { event_ids } = req.body;
@@ -1702,43 +1704,136 @@ router.delete('/:coeId/events', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if client can edit this COE (blocks client-created draft COEs)
-    const { canClientEditCOE } = require('../utils/coeUtils');
-    const permissionCheck = canClientEditCOE(coe, req.user.id, req.user);
-    if (!permissionCheck.canEdit) {
-      return res.status(403).json({
+    // Reject removal for paid COEs
+    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+      return res.status(400).json({
         success: false,
-        error: permissionCheck.reason || 'You do not have permission to edit this COE'
+        error: 'Cannot remove events from a paid experience'
       });
     }
 
-    // Check permissions: admin or COE owner
-    const isAdmin = req.user.role === 'admin';
-    const isOwner = coe.client_id?.toString() === req.user.id || coe.admin_id?.toString() === req.user.id;
-    
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({
-        success: false,
-        error: 'You do not have permission to modify this COE'
-      });
-    }
-
-    // Validate at least one event remains
+    // Build set of event IDs currently in COE (from events array)
     const currentEventIds = new Set();
-    (coe.selected_seats || []).forEach(seat => {
-      const eventIdStr = seat.event_id?.toString() || seat.event_id;
-      if (eventIdStr) {
-        currentEventIds.add(eventIdStr);
-      }
+    (coe.events || []).forEach(e => {
+      const eventIdStr = e.event_id?.toString() || e.event_id;
+      if (eventIdStr) currentEventIds.add(eventIdStr);
     });
 
     const eventIdsToRemove = event_ids.map(id => id.toString());
-    const remainingEvents = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
+    const remainingEventIds = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
 
-    if (remainingEvents.length === 0) {
+    // When removing last event: delete COE, notify admin and user
+    if (remainingEventIds.length === 0) {
+      const coeName = coe.name || 'Experience';
+      await coeService.deleteCOE(coeId);
+
+      // Notify admin and user (async, non-blocking)
+      try {
+        const notificationService = require('../services/notificationService');
+        const notifyData = { coe_id: coeId, coe: { name: coeName } };
+        const userIds = new Set();
+        if (coe.admin_id) userIds.add(coe.admin_id.toString());
+        if (coe.client_id) userIds.add(coe.client_id.toString());
+        for (const userId of userIds) {
+          notificationService.createAndSendNotification(userId, 'coe_cancelled', notifyData)
+            .catch(err => console.error('[COES] Failed to notify:', err));
+        }
+      } catch (notifErr) {
+        console.error('[COES] Error sending last-event notifications:', notifErr);
+      }
+
+      return res.json({
+        success: true,
+        deleted: true,
+        message: 'Experience removed (last event deleted)',
+        data: null
+      });
+    }
+
+    const updatedCoe = await coeService.removeEventsFromCOE(coeId, event_ids);
+
+    res.json({
+      success: true,
+      message: `Successfully removed ${event_ids.length} event(s) from COE`,
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('Error removing events from COE:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to remove events from COE'
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:coeId/events/remove
+ * Remove events from an unpaid COE (admin only)
+ * Uses POST instead of DELETE because many proxies strip DELETE request bodies
+ * @access Admin only
+ */
+router.post('/:coeId/events/remove', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { coeId } = req.params;
+    const { event_ids } = req.body;
+
+    if (!event_ids || !Array.isArray(event_ids) || event_ids.length === 0) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot remove all events from COE. At least one event must remain.'
+        error: 'event_ids array is required and must not be empty'
+      });
+    }
+
+    const coe = await COE.findById(coeId).populate('created_by', 'role');
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        error: 'COE not found'
+      });
+    }
+
+    // Reject removal for paid COEs
+    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot remove events from a paid experience'
+      });
+    }
+
+    // Build set of event IDs currently in COE (from events array)
+    const currentEventIds = new Set();
+    (coe.events || []).forEach(e => {
+      const eventIdStr = e.event_id?.toString() || e.event_id;
+      if (eventIdStr) currentEventIds.add(eventIdStr);
+    });
+
+    const eventIdsToRemove = event_ids.map(id => id.toString());
+    const remainingEventIds = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
+
+    // When removing last event: delete COE, notify admin and user
+    if (remainingEventIds.length === 0) {
+      const coeName = coe.name || 'Experience';
+      await coeService.deleteCOE(coeId);
+
+      try {
+        const notificationService = require('../services/notificationService');
+        const notifyData = { coe_id: coeId, coe: { name: coeName } };
+        const userIds = new Set();
+        if (coe.admin_id) userIds.add(coe.admin_id.toString());
+        if (coe.client_id) userIds.add(coe.client_id.toString());
+        for (const userId of userIds) {
+          notificationService.createAndSendNotification(userId, 'coe_cancelled', notifyData)
+            .catch(err => console.error('[COES] Failed to notify:', err));
+        }
+      } catch (notifErr) {
+        console.error('[COES] Error sending last-event notifications:', notifErr);
+      }
+
+      return res.json({
+        success: true,
+        deleted: true,
+        message: 'Experience removed (last event deleted)',
+        data: null
       });
     }
 
@@ -1842,6 +1937,72 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     res.status(400).json({
       success: false,
       error: error.message || 'Failed to replace event in COE'
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/:coeId/events/available-to-add
+ * Get events available to add to COE (admin add-event flow)
+ * Uses COE date range and city from client request
+ * @access Admin only
+ */
+router.get('/:coeId/events/available-to-add', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { coeId } = req.params;
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      return res.status(404).json({ success: false, error: 'COE not found' });
+    }
+    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot add event to a paid experience'
+      });
+    }
+    const events = await coeService.findEventsAvailableToAdd(coeId);
+    res.json({ success: true, data: events, count: events.length });
+  } catch (error) {
+    console.error('Error finding events available to add:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to find events available to add'
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:coeId/events/add-with-seat
+ * Add event with selected seat to COE (admin add-event flow)
+ * @access Admin only
+ */
+router.post('/:coeId/events/add-with-seat', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { coeId } = req.params;
+    console.log('[COES] add-with-seat body:', JSON.stringify(req.body, null, 2));
+    const { error, value } = addEventToCOEWithSeatSchema.validate(req.body);
+    if (error) {
+      const msg = error.details[0]?.message || 'Validation error';
+      console.log('[COES] add-with-seat validation failed:', msg);
+      return res.status(400).json({
+        success: false,
+        error: msg
+      });
+    }
+    const adminUserId = req.user._id?.toString() || req.user.id;
+    const updatedCoe = await coeService.addEventToCOEWithSeat(coeId, value, adminUserId);
+    res.json({
+      success: true,
+      message: 'Event added to experience successfully',
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('Error adding event with seat to COE:', error);
+    const status = error.message?.includes('not found') ? 404 :
+      error.message?.includes('paid') || error.message?.includes('already') || error.message?.includes('no longer') ? 400 : 500;
+    res.status(status).json({
+      success: false,
+      error: error.message || 'Failed to add event to experience'
     });
   }
 });

@@ -1,5 +1,6 @@
 const COE = require('../models/COE');
 const Event = require('../models/Event');
+const Location = require('../models/Location');
 const User = require('../models/User');
 const { selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
 const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
@@ -1287,6 +1288,7 @@ async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
 /**
  * Remove events from a draft COE
  * Also removes associated selected_seats and seat_upgrade_offers
+ * Releases held seats back to inventory before removal
  * @param {string} coeId - COE ID
  * @param {Array<string>} eventIds - Array of event IDs to remove
  * @returns {Promise<Object>} Updated COE
@@ -1299,12 +1301,51 @@ async function removeEventsFromCOE(coeId, eventIds) {
       throw new Error('COE not found');
     }
 
-    if (coe.status !== 'draft' && coe.status !== 'request') {
-      throw new Error('Can only remove events from draft or request COEs');
+    // Reject removal for paid COEs
+    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+      throw new Error('Cannot remove events from a paid experience');
+    }
+
+    // Allow removal only for unpaid COEs (draft, request, approved, pending_pay)
+    const allowedStatuses = ['draft', 'request', 'approved', 'pending_pay'];
+    if (!allowedStatuses.includes(coe.status)) {
+      throw new Error('Can only remove events from draft, request, approved, or pending_pay COEs');
     }
 
     // Normalize event IDs to strings for comparison
     const eventIdStrings = eventIds.map(id => id.toString());
+
+    // Get seats for removed events BEFORE filtering (for seat release)
+    const seatsToRelease = (coe.selected_seats || []).filter(seat => {
+      const seatEventId = seat.event_id?.toString() || seat.event_id;
+      return eventIdStrings.includes(seatEventId);
+    });
+
+    // Release held seats back to inventory (mirror replaceEventInCOE pattern)
+    if (seatsToRelease.length > 0) {
+      try {
+        const releaseOps = seatsToRelease.map(seatData => ({
+          updateOne: {
+            filter: { '_id': seatData.event_id, 'seats._id': seatData.seat_id },
+            update: {
+              $set: {
+                'seats.$.status': 'available',
+                'seats.$.booking_reference': undefined,
+                'seats.$.booked_at': undefined,
+                'seats.$.booked_by': undefined
+              }
+            }
+          }
+        }));
+        if (releaseOps.length > 0) {
+          await Event.bulkWrite(releaseOps);
+          console.log('[COE_SERVICE] Released', releaseOps.length, 'seats from removed events back to inventory');
+        }
+      } catch (releaseError) {
+        console.error('[COE_SERVICE] Error releasing seats:', releaseError);
+        // Continue - seats are still removed from COE
+      }
+    }
 
     // Remove events from COE.events array (if it exists)
     if (coe.events && Array.isArray(coe.events)) {
@@ -2950,6 +2991,197 @@ async function findAlternativeEvents(coeId, eventId, filters = {}) {
 }
 
 /**
+ * Find events available to add to a COE (admin add-event flow)
+ * Uses COE date range and city from client request; excludes events already in COE
+ * @param {string} coeId - COE ID
+ * @returns {Promise<Array>} List of events available to add
+ */
+async function findEventsAvailableToAdd(coeId) {
+  try {
+    const coe = await COE.findById(coeId).lean();
+    if (!coe) throw new Error('COE not found');
+
+    const requestedDates = coe.original_request_data?.requested_dates;
+    const startDate = requestedDates?.start_date ? new Date(requestedDates.start_date) : coe.start_date ? new Date(coe.start_date) : null;
+    const endDate = requestedDates?.end_date ? new Date(requestedDates.end_date) : coe.end_date ? new Date(coe.end_date) : null;
+    if (!startDate || !endDate) {
+      throw new Error('COE has no date range; add-event requires requested dates');
+    }
+
+    const targetCity = coe.original_request_data?.city || coe.preferences?.city || null;
+    const normalizeEventId = (id) => {
+      if (!id) return null;
+      if (id.toString && typeof id.toString === 'function') return id.toString();
+      if (id._id && id._id.toString) return id._id.toString();
+      return String(id);
+    };
+
+    const existingEventIds = new Set();
+    (coe.events || []).forEach(event => {
+      const eventIdStr = normalizeEventId(event.event_id);
+      if (eventIdStr) existingEventIds.add(eventIdStr);
+    });
+
+    const query = {
+      status: 'active',
+      _id: { $nin: Array.from(existingEventIds) },
+      // Use $or to allow events where total_available > 0 OR where seats have available status
+      // (total_available can be stale after seat release via bulkWrite)
+      $or: [
+        { total_available: { $gt: 0 } },
+        { 'seats.status': 'available' },
+      ],
+    };
+    // Filter by city via Location (Event.location_id is ObjectId; city lives in Location.address.city)
+    if (targetCity && targetCity.trim()) {
+      const cityRegex = new RegExp(targetCity.trim(), 'i');
+      const locations = await Location.find({ 'address.city': cityRegex }).select('_id');
+      const locationIds = locations.map(loc => loc._id);
+      if (locationIds.length > 0) {
+        query.location_id = { $in: locationIds };
+      } else {
+        query.location_id = { $in: [] }; // No locations in this city
+      }
+    }
+    const now = new Date();
+    query.start_datetime = { $lte: endDate };
+    query.$and = [
+      {
+        $or: [
+          { end_datetime: { $gte: startDate } },
+          { end_datetime: { $exists: false } },
+          { end_datetime: null },
+        ],
+      },
+      {
+        $or: [
+          { end_datetime: { $gte: now } },
+          { end_datetime: { $exists: false } },
+          { end_datetime: null },
+        ],
+      },
+    ];
+
+    const events = await Event.find(query)
+      .populate('location_id', 'name address city state country media')
+      .sort({ start_datetime: 1 })
+      .limit(100);
+
+    const results = events
+      .map(event => {
+        const availableSeatsCount = (event.seats || []).filter(s => s.status === 'available').length;
+        const totalAvailable = event.total_available || availableSeatsCount;
+        const seatPrices = (event.seats || []).filter(s => s.status === 'available').map(s => s.event_price || s.base_price || event.base_price || 0);
+        const minPrice = seatPrices.length > 0 ? Math.min(...seatPrices) : (event.base_price || 0);
+        const maxPrice = seatPrices.length > 0 ? Math.max(...seatPrices) : (event.base_price || 0);
+        return {
+          _id: event._id,
+          name: event.name,
+          description: event.description || null,
+          start_datetime: event.start_datetime,
+          end_datetime: event.end_datetime,
+          location: event.location_id,
+          media: event.media || [],
+          available_seats_count: availableSeatsCount,
+          total_available: totalAvailable,
+          price_range: { min: minPrice, max: maxPrice },
+        };
+      })
+      .filter(event => event.available_seats_count > 0 && event.total_available > 0);
+
+    return results;
+  } catch (error) {
+    console.error('[COE_SERVICE] Error findEventsAvailableToAdd:', error);
+    throw error;
+  }
+}
+
+/**
+ * Add event with selected seat to COE (admin add-event flow)
+ * Updates COE first, then holds seat in Event model
+ * @param {string} coeId - COE ID
+ * @param {Object} eventData - event_id, seat_id, seat_code, capacity, base_price, event_price, event_date, event_time, budget_override?, party_size_override?
+ * @param {string} adminUserId - Admin user ID for held_by
+ * @returns {Promise<Object>} Updated COE
+ */
+async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
+  try {
+    const coe = await COE.findById(coeId);
+    if (!coe) throw new Error('COE not found');
+    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+      throw new Error('Cannot add event to a paid experience');
+    }
+
+    const event = await Event.findById(eventData.event_id);
+    if (!event) throw new Error('Event not found');
+    if (event.status !== 'active') throw new Error('Event is not active');
+    const eventIdStr = event._id.toString();
+
+    const existingEventIds = new Set();
+    (coe.events || []).forEach(e => {
+      const id = e.event_id?.toString?.() || e.event_id;
+      if (id) existingEventIds.add(id);
+    });
+    if (existingEventIds.has(eventIdStr)) {
+      throw new Error('Event already in experience');
+    }
+
+    const seat = event.seats?.find(s => s._id.toString() === eventData.seat_id?.toString());
+    if (!seat) throw new Error('Seat not found');
+    if (seat.status !== 'available') {
+      throw new Error('Seat no longer available');
+    }
+
+    const eventDate = eventData.event_date ? new Date(eventData.event_date) : (event.start_datetime || new Date());
+    const eventTime = eventData.event_time || (event.start_datetime ? new Date(event.start_datetime).toTimeString().slice(0, 5) : '00:00');
+    const seatPrice = eventData.event_price ?? seat.event_price ?? seat.base_price ?? 0;
+    const basePrice = eventData.base_price ?? seat.base_price ?? seatPrice;
+
+    const newSequence = (coe.events?.length || 0) + 1;
+    const coeItem = {
+      coe_id: coeId,
+      event_id: event._id,
+      event_date: eventDate,
+      event_time: eventTime,
+      base_price: basePrice,
+      quantity: eventData.quantity ?? 1,
+      total_price: seatPrice * (eventData.quantity ?? 1),
+      status: 'pending',
+      notes: eventData.notes || '',
+      client_notes: eventData.client_notes || '',
+      sequence: newSequence,
+    };
+
+    const availFrom = event.start_datetime || new Date();
+    const availUntil = event.end_datetime || event.start_datetime || new Date();
+    const newSeat = {
+      event_id: event._id,
+      seat_id: seat._id,
+      seat_code: seat.code || eventData.seat_code,
+      capacity: seat.capacity ?? eventData.capacity ?? 1,
+      base_price: basePrice,
+      event_price: seatPrice,
+      available_from: availFrom,
+      available_until: availUntil, // COE schema requires this; fallback to start if end is null
+      status: 'selected',
+    };
+
+    coe.events.push(coeItem);
+    coe.selected_seats.push(newSeat);
+    const newSubtotal = coe.selected_seats.reduce((sum, s) => sum + (s.event_price || s.base_price || 0), 0);
+    coe.subtotal = newSubtotal;
+    coe.total = newSubtotal + (coe.taxes || 0) + (coe.fees || 0);
+    await coe.save();
+
+    await updateSelectedSeatsStatus([{ event_id: event._id, seat_id: seat._id }], coeId, 'held');
+    return await getCOEById(coeId);
+  } catch (error) {
+    console.error('[COE_SERVICE] Error addEventToCOEWithSeat:', error);
+    throw error;
+  }
+}
+
+/**
  * Check if alternative events exist for a given event on the same day
  * @param {string} coeId - COE ID
  * @param {string} eventId - Event ID to check
@@ -3087,5 +3319,7 @@ module.exports = {
   removeEventsFromCOE,
   replaceEventInCOE,
   findAlternativeEvents,
+  findEventsAvailableToAdd,
+  addEventToCOEWithSeat,
   hasAlternativeEventsSameDay
 };
