@@ -1317,14 +1317,15 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
       });
     }
 
-    // Process payment using existing payment service
+    // Process payment using existing payment service (full_payment type for correct COE/Invoice tracking)
     const paymentService = require('../services/paymentService');
     const payment = await paymentService.chargeSavedCard(
       userId,
       token_id,
       coe.total,
       `COE Payment - ${coe.name}`,
-      id
+      id,
+      'full_payment'
     );
 
     // Update COE payment status

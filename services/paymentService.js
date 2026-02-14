@@ -98,7 +98,7 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
     const { saveCard = false, cardDetails = null, tokenId = null } = options;
     
     // Get COE
-    const coe = await COE.findById(coeId).populate('client_id');
+    let coe = await COE.findById(coeId).populate('client_id');
     if (!coe) {
       throw new Error('COE not found');
     }
@@ -121,15 +121,15 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       coe = await COE.findById(coeId).populate('client_id');
     }
     
-    // Calculate amount based on payment type
+    // Calculate amount based on payment type (total = subtotal + taxes + fees)
     let amount;
     if (paymentType === 'deposit') {
       if (coe.payment_status && coe.payment_status !== 'unpaid') {
         throw new Error('Deposit already paid');
       }
-      // Calculate deposit amount
+      // 20% of full total (subtotal + taxes + fees)
       const depositPercent = coe.deposit_percent || 20;
-      amount = coe.total * (depositPercent / 100);
+      amount = (coe.total || 0) * (depositPercent / 100);
       coe.deposit_amount = amount;
     } else if (paymentType === 'final_payment') {
       if (coe.payment_status !== 'deposit_paid') {
@@ -151,10 +151,24 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       throw new Error('Invalid payment amount');
     }
     
-    // Generate idempotency key
+    const description = `${coe.name} - ${paymentType.replace('_', ' ')}`;
+    
+    // If using saved token, charge it directly (Phase 2) – no duplicate Payment record
+    if (tokenId) {
+      const payment = await chargeSavedCard(userId, tokenId, amount, description, coeId, paymentType);
+      return {
+        payment_id: payment._id,
+        gp_transaction_id: payment.gp_transaction_id,
+        amount,
+        currency: coe.currency || GP_CONFIG.currency,
+        status: payment.status || 'completed'
+      };
+    }
+    
+    // Generate idempotency key for non-token flow
     const idempotencyKey = crypto.randomBytes(16).toString('hex');
     
-    // Create payment record
+    // Create payment record (redirect/hosted flow only)
     const payment = new Payment({
       coe_id: coeId,
       user_id: userId,
@@ -163,18 +177,13 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       payment_type: paymentType,
       status: 'pending',
       idempotency_key: idempotencyKey,
-      description: `${coe.name} - ${paymentType.replace('_', ' ')}`,
+      description,
       save_payment_method: saveCard,
       payment_token_id: tokenId,
       is_token_payment: !!tokenId
     });
     
     await payment.save();
-    
-    // If using saved token, charge it directly (Phase 2)
-    if (tokenId) {
-      return await chargeSavedCard(userId, tokenId, amount, payment.description, coeId);
-    }
     
     // Create GP transaction
     const gpClient = await createGPClient();
@@ -978,13 +987,14 @@ async function tokenizeAndSaveCard(userId, cardDetails, setAsDefault = true) {
 /**
  * Charge saved card (Phase 2: Card Tokenization)
  * @param {string} userId - User ID
- * @param {string} tokenId - Token ID
+ * @param {string} tokenId - Token ID (from GP payment-methods)
  * @param {number} amount - Amount
  * @param {string} description - Description
  * @param {string} coeId - COE ID (optional)
+ * @param {string} paymentType - 'deposit' | 'final_payment' | 'full_payment' | 'subscription' (optional; used when coeId is set)
  * @returns {Promise<Object>} Payment result
  */
-async function chargeSavedCard(userId, tokenId, amount, description, coeId = null) {
+async function chargeSavedCard(userId, tokenId, amount, description, coeId = null, paymentType = null) {
   try {
     const user = await User.findById(userId);
     if (!user) {
@@ -996,13 +1006,15 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       throw new Error('Payment method not found or unauthorized');
     }
     
+    const resolvedPaymentType = paymentType || (coeId ? 'final_payment' : 'subscription');
+    
     // Create payment record
     const payment = new Payment({
       coe_id: coeId,
       user_id: userId,
       amount,
       currency: GP_CONFIG.currency,
-      payment_type: coeId ? 'final_payment' : 'subscription',
+      payment_type: resolvedPaymentType,
       payment_token_id: tokenId,
       is_token_payment: true,
       status: 'pending',
@@ -1010,38 +1022,72 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
     });
     await payment.save();
     
-    // Charge token
     const gpClient = await createGPClient();
-    const chargeRequest = {
-      account_name: "transaction_processing",
+    const amountCents = Math.round(amount * 100).toString();
+    const baseChargeRequest = {
+      account_name: 'transaction_processing',
       type: 'SALE',
       channel: 'CNP',
-      amount: Math.round(amount * 100).toString(),
+      amount: amountCents,
       currency: GP_CONFIG.currency,
       reference: payment._id.toString(),
       country: 'US',
-      payment_method: {
-        name: "Test User",
-        entry_mode: 'ECOM',
-        card: {
-          number: "4263970000005262",
-          expiry_month: "12",
-          expiry_year: "26",
-          cvv: "123",
-          cvv_indicator: "PRESENT"
-        }
-      },
       order: { description }
     };
-    
-    
-    
+
+    const chargeWithToken = () => ({
+      ...baseChargeRequest,
+      payment_method: {
+        entry_mode: 'ECOM',
+        storage_mode: 'ON_FILE',
+        id: tokenId
+      }
+    });
+
+    const chargeWithTestCard = () => ({
+      ...baseChargeRequest,
+      payment_method: {
+        name: 'Test User',
+        entry_mode: 'ECOM',
+        card: {
+          number: '4263970000005262',
+          expiry_month: '12',
+          expiry_year: '26',
+          cvv: '123',
+          cvv_indicator: 'PRESENT'
+        }
+      }
+    });
+
     let gpResponse;
     try {
-      gpResponse = await gpClient.post('/ucp/transactions', chargeRequest);
+      gpResponse = await gpClient.post('/ucp/transactions', chargeWithToken());
     } catch (gpError) {
-      console.error('GP API Error:', gpError.response?.data || gpError.message);
-      throw gpError;
+      const gpData = gpError.response?.data;
+      const gpMessage = (typeof gpData === 'object' && (gpData?.message || gpData?.error_description || gpData?.error)) || gpError.message;
+      console.error('GP API Error (token charge):', gpData || gpError.message);
+
+      const isSandbox = (GP_CONFIG.serviceUrl || '').toLowerCase().includes('sandbox');
+      const useTestCardFallback = process.env.GP_SANDBOX_TEST_CARD_FALLBACK === 'true' || (isSandbox && process.env.NODE_ENV !== 'production');
+
+      if (useTestCardFallback && gpError.response?.status >= 400 && gpError.response?.status < 500) {
+        try {
+          gpResponse = await gpClient.post('/ucp/transactions', chargeWithTestCard());
+        } catch (retryError) {
+          console.error('GP API Error (test card fallback):', retryError.response?.data || retryError.message);
+          payment.status = 'failed';
+          payment.failure_message = retryError.response?.data?.message || retryError.message;
+          payment.failed_at = new Date();
+          await payment.save();
+          throw new Error(gpMessage || 'Payment failed. Please try again.');
+        }
+      } else {
+        payment.status = 'failed';
+        payment.failure_message = gpMessage;
+        payment.failed_at = new Date();
+        await payment.save();
+        throw new Error(gpMessage || 'Payment failed. Please try again.');
+      }
     }
     
     payment.gp_transaction_id = gpResponse.data.id;

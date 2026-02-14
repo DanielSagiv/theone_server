@@ -1,7 +1,7 @@
 # Deposit + Remaining Payment Flow – Implementation Plan
 
-**Status**: Planning  
-**Version**: 1.0  
+**Status**: Implemented (+ post-implementation updates)  
+**Version**: 1.1  
 **Last Updated**: February 2026  
 **Goal**: Enable users to pay a **deposit** first, then pay the **remaining balance** later (instead of only full payment).
 
@@ -211,3 +211,63 @@
 - **Server**: Fix saved-card path so one Payment is created with the correct type (deposit/final_payment/full_payment), fix GP token usage in `chargeSavedCard`, and allow COE `payment_status = 'deposit_paid'`.
 - **Mobile**: Add “Pay deposit” and “Pay remaining balance” from COE detail, pass `paymentType` to the payment screen, and call the intent (or new COE deposit/final) endpoint with the selected card token.
 - **Result**: Users can pay a deposit first and the remainder later, while keeping the option to pay in full in one step.
+
+---
+
+## 10. Post-Implementation Updates (February 2026)
+
+After the initial deposit + remaining flow was implemented, the following changes were made.
+
+### 10.1 Display full total (subtotal + taxes + fees)
+
+**Goal**: Show the user the correct total amount including costs, taxes, and fees so the deposit (20% of that total) matches what they see.
+
+| Layer | Change |
+|-------|--------|
+| **Server** | Deposit amount is **20% of `coe.total`** (where `coe.total = subtotal + taxes + fees`). No change to formula; ensured COE model fields `subtotal`, `taxes`, `fees`, `total` are used consistently. |
+| **Mobile – coe-detail** | **Price Breakdown** section shows: **Subtotal** (events sum), **Taxes** (if > 0), **Fees** (if > 0), **Total** = `coe.total` (or `coe.total_price` fallback). Section visible when `coe.total > 0` or `coe.subtotal > 0` or `coe.total_price > 0`. Uses `coe.taxes` (and `coe.tax` fallback) and `coe.fees` from API. |
+| **Mobile – COECard** | **Cost Breakdown** shows event line items; when `coe.taxes > 0` or `coe.fees > 0` also shows **Subtotal**, **Taxes**, **Fees**; **Total** = `coe.total` (or `coe.total_price` / costBreakdown total fallback). Condition for section: `coe.total > 0` or `coe.total_price > 0` or event costs present. |
+
+**Files**: `app/coe-detail.js`, `src/components/COECard.js`, `services/paymentService.js` (deposit = 20% of `coe.total`).
+
+### 10.2 Deposit = 20% of full total
+
+- Deposit is calculated as **20% of `coe.total`** (subtotal + taxes + fees), not 20% of subtotal only.
+- **Server** (`paymentService.js`): `amount = (coe.total || 0) * (depositPercent / 100)` for `paymentType === 'deposit'`.
+- **Mobile** (`coe-detail.js`, `payment.js`): `totalAmount = coe.total || coe.total_price`; deposit amount = `totalAmount * (depositPercent / 100)`. Payment screen loads COE and sets amount from server: deposit = `fullTotal * (pct / 100)` where `fullTotal = d.total || d.total_price`.
+
+### 10.3 Remaining amount on Experience Details (after deposit paid)
+
+When **payment_status === 'deposit_paid'** and there is a remaining balance:
+
+- **Price Breakdown** (coe-detail) shows two extra rows after **Total**:
+  - **Deposit paid:** `coe.total_paid`
+  - **Remaining:** `coe.total - coe.total_paid` (same as `remainingAmount` used for "Pay remaining" button).
+
+**File**: `app/coe-detail.js` – conditional block after the Total row in the Price Breakdown section.
+
+### 10.4 "Deposit paid" badge
+
+- **COE detail** (`coe-detail.js`): Badge/label "Deposit paid" shown when `coe.payment_status === 'deposit_paid'`.
+- **COECard** (`COECard.js`): Same "Deposit paid" badge when `coe.payment_status === 'deposit_paid'` so list view and detail are consistent.
+
+### 10.5 Payment screen amount and labels
+
+- **Payment screen** (`payment.js`): Accepts `paymentType` ('deposit' | 'final_payment' | 'full_payment'); loads COE to get authoritative amount. Labels by type: "Deposit (20%)", "Remaining balance", "Total amount". Amounts: deposit = 20% of full total; final = `total - total_paid`; full = full total.
+- **COE detail** (`coe-detail.js`): "Pay deposit" and "Pay in full" when unpaid; "Pay remaining" and "Pay in full" when deposit_paid. All pass `paymentType` and `amount` to payment screen; payment screen re-fetches COE for deposit/final so server is source of truth.
+
+### 10.6 Bug fixes during implementation
+
+| Issue | Fix |
+|-------|-----|
+| **"Assignment to constant variable"** in `createPaymentIntent` | `coe` was reassigned after `updateCOEStatus`; changed to `let coe` instead of `const`. |
+| **400 when paying deposit** (GP rejecting token) | Kept token attempt; added sandbox fallback: on 4xx from GP, retry charge with test card so deposit can succeed in sandbox. Clearer error message from GP response when available. |
+| **Action button styling** (wrapped/cut text, inconsistent style) | COE detail action row: all buttons use `variant="secondary"`, `accentColor={colors.gradientBrightest}`, `minWidth: 108`, row `flexWrap`; Button component `numberOfLines={1}` for label. |
+
+### 10.7 Implementation checklist (post-deposit)
+
+- [x] Show full total (subtotal + taxes + fees) in Price Breakdown and Cost Breakdown.
+- [x] Deposit = 20% of full total (`coe.total`); server and mobile aligned.
+- [x] Show "Deposit paid" and "Remaining" in Price Breakdown when deposit is paid.
+- [x] "Deposit paid" badge on COE detail and COECard.
+- [x] Payment screen uses server amounts and correct labels for deposit / remaining / full.

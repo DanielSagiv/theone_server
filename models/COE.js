@@ -271,10 +271,16 @@ const coeSchema = new mongoose.Schema({
   // Payment Information (Full Payment Only)
   payment_status: {
     type: String,
-    enum: ['unpaid', 'paid'],
+    enum: ['unpaid', 'deposit_paid', 'paid'],
     default: 'unpaid',
     index: true
   },
+  // Deposit / final payment tracking (for deposit-then-remaining flow)
+  deposit_percent: { type: Number, min: 0, max: 100, default: 20 },
+  deposit_paid_at: Date,
+  deposit_payment_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
+  final_paid_at: Date,
+  final_payment_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment' },
   // Full Payment Fields
   payment_id: {
     type: mongoose.Schema.Types.ObjectId,
