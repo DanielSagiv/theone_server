@@ -385,7 +385,8 @@ const addEventToCOEWithSeatSchema = Joi.object({
 
 // Update COE status validation schema
 const updateCOEStatusSchema = Joi.object({
-  status: Joi.string().valid('draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
+  // Accept 'proposal' as an alias for 'approved' (normalized server-side)
+  status: Joi.string().valid('draft', 'request', 'approved', 'proposal', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
 });
 
 // Assign runner to COE validation schema

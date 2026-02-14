@@ -753,6 +753,10 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       throw new Error('COE not found');
     }
 
+    // Normalize aliases (keep DB status values stable)
+    // 'proposal' is treated as 'approved' internally
+    const normalizedStatus = status === 'proposal' ? 'approved' : status;
+
     // Validate status transition
     const validTransitions = {
       'draft': ['approved', 'cancelled'],
@@ -766,15 +770,15 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       'cancelled': []
     };
 
-    if (!validTransitions[coe.status]?.includes(status)) {
-      throw new Error(`Invalid status transition from ${coe.status} to ${status}`);
+    if (!validTransitions[coe.status]?.includes(normalizedStatus)) {
+      throw new Error(`Invalid status transition from ${coe.status} to ${normalizedStatus}`);
     }
 
     const oldStatus = coe.status;
-    await coe.updateStatus(status, updatedBy);
+    await coe.updateStatus(normalizedStatus, updatedBy);
     
     // Handle seat status changes based on COE status
-    if (status === 'paid') {
+    if (normalizedStatus === 'paid') {
       // When COE is paid, seats become 'booked'
       await updateSeatStatusesToBooked(coeId);
       // Update selected_seats status in COE
@@ -785,7 +789,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
         });
         await coe.save();
       }
-    } else if (['cancelled', 'rejected', 'expired'].includes(status)) {
+    } else if (['cancelled', 'rejected', 'expired'].includes(normalizedStatus)) {
       // When COE is cancelled/rejected/expired, seats are released
       await releaseSelectedSeats(coeId);
     }
@@ -811,7 +815,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       // Determine notification recipients and types
       const notifications = [];
       
-      switch (status) {
+      switch (normalizedStatus) {
         case 'approved':
           // Update coe_requested notification to coe_approved for admin (if status changed from 'request')
           if (oldStatus === 'request') {
