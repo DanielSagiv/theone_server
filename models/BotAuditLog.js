@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const crypto = require('crypto');
 
 /**
- * Bot Audit Log Schema
+ * Bot Audit Log Schema //
  * @description Tracks all bot tool calls for audit trails and compliance
  */
 const BotAuditLogSchema = new mongoose.Schema({
