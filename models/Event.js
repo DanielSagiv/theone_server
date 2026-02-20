@@ -27,6 +27,8 @@ const EventSeatSchema = new mongoose.Schema({
   booked_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Who booked it
   booked_at: { type: Date }, // When it was booked
   booking_reference: { type: String, trim: true }, // COE or booking reference
+  // Additional COEs sharing this seat (primary COE is in booking_reference)
+  merged_coe_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'COE' }],
   
   /**
    * GXN Integration Identifiers

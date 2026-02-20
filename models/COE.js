@@ -342,6 +342,9 @@ const coeSchema = new mongoose.Schema({
       enum: ['selected', 'held', 'booked', 'released', 'expired', 'rejected'], 
       default: 'selected' 
     },
+    // Merge metadata (for shared tables)
+    is_merged_booking: { type: Boolean, default: false },
+    primary_coe_id: { type: mongoose.Schema.Types.ObjectId, ref: 'COE' },
     ai_recommendation: { type: String, trim: true, maxlength: 200 },
     recommendation_generated_at: { type: Date },
     recommendation_version: { type: Number, default: 1 }

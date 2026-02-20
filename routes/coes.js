@@ -4,6 +4,7 @@ const COE = require('../models/COE');
 const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
+const mergeService = require('../services/mergeService');
 const {
   createCOESchema,
   updateCOESchema,
@@ -18,6 +19,160 @@ const {
  * COE Routes
  * @description API endpoints for COE management
  */
+
+/**
+ * GET /v1/coes/merge-opportunities
+ * List possible merge opportunities between COEs (admin only)
+ */
+router.get('/merge-opportunities', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { status, event_id, limit, coe_id, debug } = req.query;
+
+    const options = {};
+    if (status) {
+      options.status = String(status)
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+    if (event_id) {
+      options.event_id = event_id;
+    }
+    if (coe_id) {
+      options.coe_id = coe_id;
+    }
+    if (limit) {
+      const parsed = parseInt(limit, 10);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        options.limit = parsed;
+      }
+    }
+    if (debug === '1' || debug === 'true') {
+      options.debug = true;
+    }
+
+    const result = await mergeService.findMergeOpportunities(options);
+
+    const data = { opportunities: result.opportunities };
+    if (result.debug) {
+      data.debug = result.debug;
+    }
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error('[COES] Error getting merge opportunities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get merge opportunities',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/merge
+ * Execute merge between two COEs for a specific event/seat (admin only)
+ */
+router.post('/merge', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const {
+      coe_id_a,
+      coe_id_b,
+      event_id,
+      target_seat_id,
+      target_owner_coe_id,
+    } = req.body || {};
+
+    if (!coe_id_a || !coe_id_b || !event_id || !target_seat_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'coe_id_a, coe_id_b, event_id and target_seat_id are required',
+      });
+    }
+
+    const result = await mergeService.executeMerge({
+      coe_id_a,
+      coe_id_b,
+      event_id,
+      target_seat_id,
+      target_owner_coe_id,
+      admin_id: req.user.id,
+    });
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('[COES] Error executing merge:', error);
+    const status =
+      error.message &&
+      (error.message.includes('not found') ||
+        error.message.includes('Cannot merge the same COE'))
+        ? 400
+        : 500;
+
+    res.status(status).json({
+      success: false,
+      message: 'Failed to execute merge',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/unmerge
+ * Unmerge a single COE from a shared seat (admin only)
+ */
+router.post('/unmerge', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { primary_coe_id, merged_coe_id, event_id, mode } = req.body || {};
+
+    if (!primary_coe_id || !event_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'primary_coe_id and event_id are required',
+      });
+    }
+
+    let result;
+    if (mode === 'all') {
+      result = await mergeService.unmergeAllForSeat({
+        primary_coe_id,
+        event_id,
+      });
+    } else {
+      if (!merged_coe_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'merged_coe_id is required when mode is not "all"',
+        });
+      }
+      result = await mergeService.unmergeSingle({
+        primary_coe_id,
+        merged_coe_id,
+        event_id,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('[COES] Error executing unmerge:', error);
+    const status =
+      error.message && error.message.includes('not found') ? 404 : 500;
+
+    res.status(status).json({
+      success: false,
+      message: 'Failed to execute unmerge',
+      error: error.message,
+    });
+  }
+});
 
 /**
  * GET /v1/coes/my
@@ -667,6 +822,13 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       // Log final result
       const seatsWithMedia = coe.selected_seats.filter(s => s.media && s.media.length > 0);
       console.log('[GET /coes/my/:id] Enhancement complete. Seats with media:', seatsWithMedia.length, 'out of', coe.selected_seats.length);
+    }
+
+    // Enrich selected_seats with shared_with (other client name + avatar) when seat is part of a merge
+    try {
+      await mergeService.enrichCoeSelectedSeatsWithSharedWith(coe);
+    } catch (sharedErr) {
+      console.warn('[GET /coes/my/:id] Failed to enrich shared_with:', sharedErr.message);
     }
 
     // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE

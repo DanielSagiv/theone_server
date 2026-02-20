@@ -281,7 +281,9 @@ const coeSelectedSeatSchema = Joi.object({
   event_price: Joi.number().min(0).required(),
   available_from: Joi.date().required(),
   available_until: Joi.date().required(),
-  status: Joi.string().valid('selected', 'held', 'booked', 'released', 'expired', 'rejected').default('selected')
+  status: Joi.string().valid('selected', 'held', 'booked', 'released', 'expired', 'rejected').default('selected'),
+  is_merged_booking: Joi.boolean().default(false),
+  primary_coe_id: Joi.string().hex().length(24).optional()
 });
 
 // Create COE validation schema

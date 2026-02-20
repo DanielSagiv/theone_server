@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const COE = require('../models/COE');
 const Event = require('../models/Event');
 const Location = require('../models/Location');
@@ -192,35 +193,94 @@ async function updateSeatStatusesToBooked(coeId) {
 
 /**
  * Release selected seats when COE is deleted or cancelled
+ * Handles both primary and merged COEs for shared seats.
  * @param {string} coeId - COE ID
  */
 async function releaseSelectedSeats(coeId) {
   try {
-    // Use bulk update for better performance
-    await Event.updateMany(
-      { 'seats.booking_reference': coeId.toString() },
-      { 
-        $set: { 
-          'seats.$[seat].status': 'available',
-          'seats.$[seat].booking_reference': undefined,
-          'seats.$[seat].booked_at': undefined,
-          'seats.$[seat].booked_by': undefined
+    const coeIdStr = coeId.toString();
+    const coeObjectId = new mongoose.Types.ObjectId(coeIdStr);
+
+    // Find all events where this COE is either the primary booking_reference
+    // or included in merged_coe_ids
+    const events = await Event.find({
+      $or: [
+        { 'seats.booking_reference': coeIdStr },
+        { 'seats.merged_coe_ids': coeObjectId }
+      ]
+    });
+
+    const mergedCoesToRelease = new Set();
+
+    for (const event of events) {
+      let eventModified = false;
+
+      event.seats.forEach(seat => {
+        const bookingRef = seat.booking_reference;
+        const mergedIds = (seat.merged_coe_ids || []).map(id => id.toString());
+
+        // Case 1: this COE is primary for the seat
+        if (bookingRef === coeIdStr) {
+          // When primary COE releases, free the seat completely
+          // and mark all merged COEs' seat entries as released.
+          mergedIds.forEach(id => mergedCoesToRelease.add(id));
+
+          seat.status = 'available';
+          seat.booking_reference = undefined;
+          seat.booked_at = undefined;
+          seat.booked_by = undefined;
+          seat.merged_coe_ids = [];
+          eventModified = true;
+        } else if (mergedIds.includes(coeIdStr)) {
+          // Case 2: this COE is merged onto another primary
+          // Remove it from merged_coe_ids but keep seat reserved for primary.
+          seat.merged_coe_ids = seat.merged_coe_ids.filter(
+            id => id.toString() !== coeIdStr
+          );
+          eventModified = true;
         }
-      },
-      { 
-        arrayFilters: [{ 'seat.booking_reference': coeId.toString() }]
+      });
+
+      if (eventModified) {
+        event.markModified('seats');
+        await event.save();
+      }
+    }
+
+    // Update status in COE selected_seats array to 'released'
+    // and clear merge metadata on this COE
+    await COE.updateOne(
+      { _id: coeIdStr },
+      {
+        $set: {
+          'selected_seats.$[].status': 'released',
+          'selected_seats.$[].is_merged_booking': false,
+          'selected_seats.$[].primary_coe_id': undefined
+        }
       }
     );
 
-    // Update status in COE selected_seats array to 'released'
-    await COE.updateOne(
-      { '_id': coeId },
-      {
-        $set: {
-          'selected_seats.$[].status': 'released'
+    // For any merged COEs that were sharing a seat with this primary,
+    // also mark their corresponding entries as released.
+    if (mergedCoesToRelease.size > 0) {
+      await COE.updateMany(
+        { _id: { $in: Array.from(mergedCoesToRelease).map(id => new mongoose.Types.ObjectId(id)) } },
+        {
+          $set: {
+            'selected_seats.$[seat].status': 'released',
+            'selected_seats.$[seat].is_merged_booking': false,
+            'selected_seats.$[seat].primary_coe_id': undefined
+          }
+        },
+        {
+          arrayFilters: [
+            {
+              'seat.primary_coe_id': coeObjectId
+            }
+          ]
         }
-      }
-    );
+      );
+    }
   } catch (error) {
     console.error('Error releasing selected seats:', error);
     throw error;
