@@ -4771,6 +4771,7 @@
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="testLocationModal()">Test Modal</button>
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importGXNVenues()">Import from GXN</button>
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importTaoGroup()">Import from Tao Group</button>
                                 <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateLocation()">Create Location</button>
                             </div>
                         </div>
@@ -4816,6 +4817,7 @@
                             <div style="display:flex;gap:8px;">
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="refreshEvents()">Refresh</button>
                                 <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importGXNEvents()">Import from GXN</button>
+                                <button class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="importTaoGroup()">Import from Tao Group</button>
                                 <button class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="openCreateEvent()">Create Event</button>
                             </div>
                         </div>
@@ -13999,6 +14001,38 @@
             } catch (error) {
                 console.error('Import error:', error);
                 showAlert('Import error: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Import all data from Tao Group (venues + events). Fetches listing page and event details, creates/updates Location and Event records.
+         */
+        async function importTaoGroup() {
+            if (!confirm('Import venues and events from Tao Group? This will fetch the Tao Group events page, drill into event details, and create or update Location and Event records.')) {
+                return;
+            }
+            try {
+                showAlert('Starting Tao Group import...', 'info');
+                const response = await makeApiRequest('/tao/import', 'POST', {});
+                const body = response.data || {};
+                if (response.success && body.success) {
+                    const s = body.summary || {};
+                    const total = (s.venuesCreated || 0) + (s.venuesUpdated || 0) + (s.eventsCreated || 0) + (s.eventsUpdated || 0);
+                    const msg = total === 0 && Array.isArray(s.errors) && s.errors.length > 0
+                        ? s.errors[0]
+                        : `Tao Group import done. Venues: ${s.venuesCreated || 0} created, ${s.venuesUpdated || 0} updated. Events: ${s.eventsCreated || 0} created, ${s.eventsUpdated || 0} updated. Failed: ${s.failed || 0}.`;
+                    showAlert(msg, total === 0 ? 'warning' : (s.failed > 0 ? 'warning' : 'success'));
+                    if (Array.isArray(s.errors) && s.errors.length > 0 && total > 0) {
+                        console.warn('Tao import messages:', s.errors);
+                    }
+                    await loadLocations();
+                    await loadEvents();
+                } else {
+                    showAlert('Tao Group import failed: ' + (body.error?.message || body.error?.details || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Tao Group import error:', error);
+                showAlert('Tao Group import error: ' + error.message, 'error');
             }
         }
 

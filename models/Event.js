@@ -177,6 +177,8 @@ const EventSchema = new mongoose.Schema({
   gxnEventCode: { type: String, trim: true }, // GXN event code (e.g., EVE50511500020251101) - primary unique identifier - sparse index defined below
   gxnEventId: { type: String, trim: true }, // GXN numeric event ID (e.g., 2048373)
   gxnEventDate: { type: String, trim: true }, // GXN date key (e.g., D251101) for reference
+  // Tao Group integration - external event id for import idempotency
+  taoEventId: { type: String, trim: true },
   performers: [{ // Performer information from GXN
     perfcode: { type: String, trim: true }, // Performer code (e.g., PER1242)
     importance: { type: String, trim: true }, // Performer importance level
@@ -238,6 +240,7 @@ EventSchema.index({ name: 'text', description: 'text' });
 EventSchema.index({ tags: 1 });
 EventSchema.index({ created_by: 1, status: 1 });
 EventSchema.index({ gxnEventCode: 1 }, { sparse: true }); // Index for GXN event code lookups
+EventSchema.index({ taoEventId: 1 }, { sparse: true }); // Index for Tao Group event lookups
 
 // Pre-save middleware to update availability
 EventSchema.pre('save', function(next) {
