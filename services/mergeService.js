@@ -113,7 +113,7 @@ async function findMergeOpportunities(options = {}) {
   const eventsById = {};
   if (eventIds.length) {
     const events = await Event.find({ _id: { $in: eventIds } })
-      .select('name start_datetime location_id seats.booking_reference seats.merged_coe_ids')
+      .select('name start_datetime location_id seats')
       .populate('location_id', 'name')
       .lean();
     for (const ev of events) {
@@ -144,6 +144,15 @@ async function findMergeOpportunities(options = {}) {
       location_id: eventDoc?.location_id?._id || eventDoc?.location_id || null,
       location_name: eventDoc?.location_id?.name || null,
       opportunities: [],
+      available_seats: (eventDoc?.seats || [])
+        .filter(s => s && s.status === 'available')
+        .map(s => ({
+          _id: normalizeId(s._id),
+          seat_id: normalizeId(s.seat_id),
+          code: s.code || s.seat_code || '',
+          capacity: s.capacity ?? 0,
+          event_price: s.event_price ?? 0,
+        })),
     };
 
     // Deduplicate by COE id (in case multiple seats per event)
@@ -690,6 +699,28 @@ async function unmergeSingle(params) {
     mergedSeatEntry?.capacity || 0,
     mergedCoe?.original_request_data?.party_size || 0
   );
+  // Prefer to restore the merged COE to its *original* table when possible,
+  // even if that table would not satisfy the strict capacity heuristic.
+  // During merge, the original table is kept in selected_seats with status "released".
+  let preferredSeat = null;
+  if (mergedCoe && Array.isArray(mergedCoe.selected_seats)) {
+    const originalReleasedSeatEntry = mergedCoe.selected_seats.find(s =>
+      normalizeId(s.event_id) === eventIdStr &&
+      s.status === 'released' &&
+      !s.is_merged_booking &&
+      // Make sure this is not the shared seat we're unmerging from
+      normalizeId(s.seat_id) !== normalizeId(seat._id)
+    );
+    if (originalReleasedSeatEntry) {
+      preferredSeat = (eventDoc.seats || []).find(s =>
+        normalizeId(s._id) === normalizeId(originalReleasedSeatEntry.seat_id) ||
+        normalizeId(s.seat_id) === normalizeId(originalReleasedSeatEntry.seat_id)
+      );
+      if (preferredSeat && normalizeId(preferredSeat._id) === normalizeId(seat._id)) {
+        preferredSeat = null;
+      }
+    }
+  }
 
   const availableSeats = (eventDoc.seats || [])
     .filter(
@@ -700,8 +731,9 @@ async function unmergeSingle(params) {
     )
     .sort((a, b) => (a.capacity || 0) - (b.capacity || 0));
 
-  if (availableSeats.length > 0) {
-    const newSeat = availableSeats[0];
+  const newSeat = preferredSeat || availableSeats[0];
+
+  if (newSeat) {
     const availFrom = eventDoc.start_datetime || new Date();
     const availUntil = eventDoc.end_datetime || eventDoc.start_datetime || new Date();
     const basePrice = newSeat.base_price ?? newSeat.event_price ?? 0;

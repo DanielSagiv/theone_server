@@ -28,16 +28,21 @@ function getChromePath() {
 }
 
 /**
- * Fetch HTML using headless browser so client-rendered content (e.g. Tao Group) is available
+ * Fetch HTML using headless browser so client-rendered content (e.g. Tao Group) is available.
+ * Tao's listing page is client-rendered; plain HTTP returns no event list, so browser is required.
  * @param {string} url
- * @returns {Promise<string|null>} HTML or null if puppeteer unavailable / failed
+ * @returns {Promise<{ html: string|null, browserError: string|null }>}
  */
 async function fetchHtmlWithBrowser(url) {
   const puppeteer = getPuppeteer();
   const executablePath = getChromePath();
-  if (!puppeteer || !executablePath) {
-    console.log('[Tao import] fetchHtmlWithBrowser: puppeteer-core or Chrome path not available (set PUPPETEER_EXECUTABLE_PATH?), skip');
-    return null;
+  if (!puppeteer) {
+    console.log('[Tao import] fetchHtmlWithBrowser: puppeteer-core not installed (npm install puppeteer-core)');
+    return { html: null, browserError: 'puppeteer-core not installed. Run: npm install puppeteer-core' };
+  }
+  if (!executablePath) {
+    console.log('[Tao import] fetchHtmlWithBrowser: Chrome path not found. Set PUPPETEER_EXECUTABLE_PATH in .env (e.g. /Applications/Google Chrome.app/Contents/MacOS/Google Chrome on Mac)');
+    return { html: null, browserError: 'Chrome not found. Set PUPPETEER_EXECUTABLE_PATH in .env to your Chrome path.' };
   }
   console.log('[Tao import] fetchHtmlWithBrowser: launching browser for', url);
   let browser;
@@ -45,20 +50,31 @@ async function fetchHtmlWithBrowser(url) {
     browser = await puppeteer.launch({
       headless: true,
       executablePath,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     });
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    await page.waitForSelector('a[href*="/events/"], a[href*="/event/"]', { timeout: 12000 }).catch(() => {});
-    await new Promise(r => setTimeout(r, 3000));
-    const html = await page.content();
+    await page.waitForSelector('a[href*="/events/"], a[href*="/event/"]', { timeout: 15000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 5000));
+    let html = await page.content();
+    const nextDataFromWindow = await page.evaluate(() => {
+      const el = document.getElementById('__NEXT_DATA__');
+      if (el && el.textContent) return el.textContent;
+      if (typeof window.__NEXT_DATA__ !== 'undefined') return JSON.stringify(window.__NEXT_DATA__);
+      return null;
+    }).catch(() => null);
+    if (nextDataFromWindow && typeof html === 'string' && html.indexOf('id="__NEXT_DATA__"') === -1) {
+      html = html.replace('</head>', '<script id="__NEXT_DATA__" type="application/json">' + nextDataFromWindow + '</script></head>');
+      console.log('[Tao import] fetchHtmlWithBrowser: injected __NEXT_DATA__ from page');
+    }
     const len = html ? html.length : 0;
     console.log('[Tao import] fetchHtmlWithBrowser: got content length=', len);
-    return html;
+    return { html, browserError: null };
   } catch (e) {
-    console.warn('[Tao import] fetchHtmlWithBrowser failed:', e.message);
-    return null;
+    const msg = (e.message || 'Browser launch or page load failed').split(/\n/)[0].trim();
+    console.warn('[Tao import] fetchHtmlWithBrowser failed:', msg);
+    return { html: null, browserError: msg };
   } finally {
     if (browser) await browser.close().catch(() => {});
   }
@@ -108,8 +124,8 @@ function parseListingPage(html, baseUrl = 'https://taogroup.com') {
       const props = json.props?.pageProps ?? json.props ?? {};
       const topKeys = Object.keys(props);
       console.log('[Tao import] parseListingPage: pageProps keys=', topKeys.join(', '));
-      const eventsList = props.events ?? props.eventsList ?? props.data?.events ?? [];
-      const venuesList = props.venues ?? props.venuesList ?? props.data?.venues ?? [];
+      const eventsList = props.events ?? props.eventsList ?? props.data?.events ?? props.pageProps?.events ?? [];
+      const venuesList = props.venues ?? props.venuesList ?? props.data?.venues ?? props.pageProps?.venues ?? [];
       console.log('[Tao import] parseListingPage: eventsList length=', Array.isArray(eventsList) ? eventsList.length : 'not array', 'venuesList length=', Array.isArray(venuesList) ? venuesList.length : 'not array');
       if (Array.isArray(eventsList)) {
         eventsList.forEach(ev => {
@@ -314,8 +330,34 @@ async function fetchEventDetailsAndTablesWithBrowser(page, detailUrl) {
       return og ? og.getAttribute('content') : null;
     });
 
+    let start_datetime = null;
+    let end_datetime = null;
+    let timezone = 'America/Los_Angeles';
+    const html = await page.content();
+    const $ = cheerio.load(html);
+    const nextData = $('script#__NEXT_DATA__').html();
+    if (nextData) {
+      try {
+        const json = JSON.parse(nextData);
+        const props = json.props?.pageProps ?? json.props ?? {};
+        const ev = props.event ?? props.data ?? {};
+        start_datetime = ev.start_datetime ?? ev.start ?? ev.date ?? ev.event_date ?? null;
+        end_datetime = ev.end_datetime ?? ev.end ?? ev.end_date ?? null;
+        timezone = ev.timezone ?? ev.time_zone ?? timezone;
+      } catch (_) {
+        // ignore parse errors
+      }
+    }
+
     console.log('[Tao import] fetchEventDetailsAndTablesWithBrowser: tables count=', tables.length, 'for', detailUrl);
-    return { name, image, tables: Array.isArray(tables) ? tables : [] };
+    return {
+      name,
+      image,
+      tables: Array.isArray(tables) ? tables : [],
+      start_datetime: start_datetime || undefined,
+      end_datetime: end_datetime || undefined,
+      timezone
+    };
   } catch (e) {
     console.warn('[Tao import] fetchEventDetailsAndTablesWithBrowser failed', detailUrl, e.message);
     return null;
@@ -432,6 +474,24 @@ function parseEventDate(val, fallback) {
 }
 
 /**
+ * Try to parse a date from the start of an event name (e.g. "2/21/2026 - Jerzy - TAO Nightclub").
+ * @param {string} name - Event name
+ * @returns {Date|null} Date with time set to 22:00:00 local, or null if no match
+ */
+function parseDateFromEventName(name) {
+  if (!name || typeof name !== 'string') return null;
+  const match = name.trim().match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!match) return null;
+  const [, month, day, year] = match;
+  const m = parseInt(month, 10);
+  const d = parseInt(day, 10);
+  const y = parseInt(year, 10);
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const date = new Date(y, m - 1, d, 22, 0, 0, 0);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+/**
  * Run full Tao Group import: fetch listing, optionally drill into event details, upsert venues and events
  * @param {string} userId - Admin user id for created_by
  * @returns {Promise<{ summary: Object, data: Object }>}
@@ -442,11 +502,18 @@ async function runTaoGroupImport(userId) {
 
   console.log('[Tao import] runTaoGroupImport: start userId=', userId, 'url=', TAO_EVENTS_LISTING_URL);
   try {
-    let html = await fetchHtmlWithBrowser(TAO_EVENTS_LISTING_URL);
+    const browserResult = await fetchHtmlWithBrowser(TAO_EVENTS_LISTING_URL);
+    let html = browserResult.html;
     const usedBrowser = !!html;
+    const browserError = browserResult.browserError || null;
     if (!html) {
-      console.log('[Tao import] runTaoGroupImport: no browser HTML, falling back to axios');
-      html = await fetchHtml(TAO_EVENTS_LISTING_URL);
+      console.log('[Tao import] runTaoGroupImport: no browser HTML, falling back to axios. browserError=', browserError);
+      try {
+        html = await fetchHtml(TAO_EVENTS_LISTING_URL);
+      } catch (fetchErr) {
+        summary.errors.push('Fetch failed: ' + (fetchErr.message || 'Network error'));
+        return { summary, data };
+      }
     }
     const htmlLen = typeof html === 'string' ? html.length : 0;
     console.log('[Tao import] runTaoGroupImport: listing page html length=', htmlLen, 'usedBrowser=', usedBrowser);
@@ -454,11 +521,15 @@ async function runTaoGroupImport(userId) {
     const { events: rawEvents, venues: rawVenues } = parseListingPage(html, baseUrl);
 
     if (rawEvents.length === 0) {
-      const hint = usedBrowser
-        ? 'Page structure may have changed or selector timed out.'
-        : 'Tao Group page is client-rendered. Install puppeteer (npm install puppeteer) and restart the server to load events.';
-      summary.errors.push('No events found on listing page. ' + hint);
-      console.log('[Tao import] runTaoGroupImport: no events parsed. First 1200 chars of body:', typeof html === 'string' ? html.substring(0, 1200) : 'n/a');
+      if (browserError) {
+        summary.errors.push('Tao Group events page is client-rendered; the server must use a browser to see events. ' + browserError);
+      } else {
+        const hint = usedBrowser
+          ? 'Page structure may have changed or selector timed out.'
+          : 'Listing page is client-rendered; browser fetch did not run or failed.';
+        summary.errors.push('No events found on listing page. ' + hint);
+      }
+      console.log('[Tao import] runTaoGroupImport: no events parsed. usedBrowser=', usedBrowser, 'htmlLen=', htmlLen, 'browserError=', browserError);
       return { summary, data };
     }
 
@@ -528,6 +599,7 @@ async function runTaoGroupImport(userId) {
         let endDatetime = defaultEnd;
         let timezone = 'America/Los_Angeles';
         let imageUrl = null;
+        let gotStartFromSource = false;
         const venueKey = ev.venue?.taoVenueId ?? `${ev.venue?.name ?? ''}|${ev.venue?.city ?? ''}`;
         const locationId = locationIdByKey.get(venueKey);
         if (rawEvents.indexOf(ev) < 3) {
@@ -537,16 +609,33 @@ async function runTaoGroupImport(userId) {
         if (ev.detailsWithTables) {
           if (ev.detailsWithTables.name) name = ev.detailsWithTables.name;
           if (ev.detailsWithTables.image) imageUrl = ev.detailsWithTables.image;
+          if (ev.detailsWithTables.start_datetime) {
+            startDatetime = parseEventDate(ev.detailsWithTables.start_datetime, defaultStart);
+            gotStartFromSource = true;
+          }
+          if (ev.detailsWithTables.end_datetime) endDatetime = parseEventDate(ev.detailsWithTables.end_datetime, defaultEnd);
+          if (ev.detailsWithTables.timezone) timezone = ev.detailsWithTables.timezone;
         } else if (ev.detailUrl) {
           await delay(REQUEST_DELAY_MS);
           const details = await fetchEventDetails(ev.detailUrl);
           if (details) {
             if (details.name) name = details.name;
             if (details.description) description = details.description;
-            if (details.start_datetime) startDatetime = parseEventDate(details.start_datetime, defaultStart);
+            if (details.start_datetime) {
+              startDatetime = parseEventDate(details.start_datetime, defaultStart);
+              gotStartFromSource = true;
+            }
             if (details.end_datetime) endDatetime = parseEventDate(details.end_datetime, defaultEnd);
             if (details.timezone) timezone = details.timezone;
             if (details.image) imageUrl = details.image;
+          }
+        }
+
+        if (!gotStartFromSource) {
+          const fromName = parseDateFromEventName(name);
+          if (fromName) {
+            startDatetime = fromName;
+            endDatetime = new Date(fromName.getTime() + 4 * 60 * 60 * 1000);
           }
         }
 
