@@ -54,8 +54,18 @@ async function fetchHtmlWithBrowser(url) {
     });
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-    await page.waitForSelector('a[href*="/events/"], a[href*="/event/"]', { timeout: 15000 }).catch(() => {});
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+    } catch (navErr) {
+      if (navErr.message && navErr.message.includes('timeout')) {
+        console.log('[Tao import] fetchHtmlWithBrowser: networkidle2 timed out, retrying with load');
+        await page.goto(url, { waitUntil: 'load', timeout: 25000 });
+        await new Promise(r => setTimeout(r, 8000));
+      } else {
+        throw navErr;
+      }
+    }
+    await page.waitForSelector('a[href*="/events/"], a[href*="/event/"]', { timeout: 20000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 5000));
     let html = await page.content();
     const nextDataFromWindow = await page.evaluate(() => {
@@ -248,6 +258,61 @@ function tableNameToCode(name) {
 }
 
 /**
+ * Only these Tao TABLES section tier names are imported. Matches the drill-down list: Prime, Entry Level, Dance Floor, Standard, Small 1st Tier Prime.
+ * Anything else (venue names, cities, nav links) is ignored.
+ */
+const TAO_ALLOWED_TABLE_TIERS = [
+  'prime',
+  'entry level',
+  'dance floor',
+  'standard',
+  'premium',
+  'small 1st tier prime'
+];
+
+/**
+ * Normalize scraped table name to one of the allowed tier names (for allowlist match).
+ */
+function normalizeTableTierName(name) {
+  if (!name || typeof name !== 'string') return '';
+  const n = name.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (n.includes('small') && n.includes('prime')) return 'small 1st tier prime';
+  for (const tier of TAO_ALLOWED_TABLE_TIERS) {
+    if (tier === 'small 1st tier prime') continue;
+    if (n === tier || n.startsWith(tier) || n.includes(tier)) return tier;
+  }
+  return '';
+}
+
+/**
+ * Filter scraped "tables" to only the real TABLES section tiers (Prime, Entry Level, Dance Floor, Standard, Small 1st Tier Prime).
+ * Rejects venue names (Tao-Group-Hospitality, New-York, Las-Vegas, etc.), nav/footer, and any other non-tier text.
+ * @param {Array<{ name: string, price?: number, capacity?: number }>} tables
+ * @returns {Array<{ name: string, price?: number, capacity?: number }>}
+ */
+function filterRealTables(tables) {
+  if (!Array.isArray(tables) || tables.length === 0) return [];
+  const out = [];
+  const seen = new Set();
+  for (const t of tables) {
+    const name = (t.name || '').trim();
+    if (!name) continue;
+    const tier = normalizeTableTierName(name);
+    if (!tier) continue;
+    const key = tier;
+    if (seen.has(key)) {
+      const existing = out.find(o => normalizeTableTierName(o.name) === tier);
+      if (existing && t.price && t.price > 0 && (!existing.price || t.price < existing.price)) existing.price = t.price;
+      continue;
+    }
+    seen.add(key);
+    const label = tier.charAt(0).toUpperCase() + tier.slice(1);
+    out.push({ name: label, price: t.price, capacity: t.capacity });
+  }
+  return out;
+}
+
+/**
  * Using Puppeteer page: open event detail URL, click "VIP table reservations", expand "Tables", extract table names and prices.
  * @param {Object} page - Puppeteer page
  * @param {string} detailUrl - Event detail URL
@@ -255,7 +320,7 @@ function tableNameToCode(name) {
  */
 async function fetchEventDetailsAndTablesWithBrowser(page, detailUrl) {
   try {
-    await page.goto(detailUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+    await page.goto(detailUrl, { waitUntil: 'load', timeout: 14000 });
     await delay(2000);
 
     const clickByText = async (text) => {
@@ -282,42 +347,70 @@ async function fetchEventDetailsAndTablesWithBrowser(page, detailUrl) {
 
     const tables = await page.evaluate(() => {
       const results = [];
-      const text = document.body.innerText || document.body.textContent || '';
-      const lines = text.split(/\n/).map(s => s.trim()).filter(s => s.length > 0 && s.length < 100);
-      const skip = /^(tables|vip|reservation|buy|click|expand|event|date|time|view all|back|menu)/i;
-      const listItems = document.querySelectorAll('li, [role="listitem"], tr, div[class*="table"], div[class*="row"]');
-      const fromDom = [];
-      listItems.forEach((el) => {
-        const t = (el.textContent || '').trim();
-        if (t.length > 1 && t.length < 80 && !skip.test(t)) {
-          const pricePart = t.match(/\$[\d,]+/);
-          const price = pricePart ? parseInt(pricePart[0].replace(/[$,]/g, ''), 10) : undefined;
-          const name = t.replace(/\$[\d,]+.*$/, '').replace(/\s+/g, ' ').trim();
-          if (name) fromDom.push({ name, price });
-        }
-      });
-      const seen = new Set();
-      for (const item of fromDom) {
-        if (!seen.has(item.name)) {
-          seen.add(item.name);
-          results.push(item);
-        }
-      }
-      if (results.length === 0) {
-        for (const line of lines) {
-          if (line.length > 1 && line.length < 60 && !skip.test(line) && !/^[\d:]+$/.test(line)) {
-            const pricePart = line.match(/\$[\d,]+/);
-            const price = pricePart ? parseInt(pricePart[0].replace(/[$,]/g, ''), 10) : undefined;
-            const name = line.replace(/\$[\d,]+.*$/, '').trim();
-            if (name && !seen.has(name)) {
-              seen.add(name);
-              results.push({ name, price });
-            }
+      const tierNames = ['small 1st tier prime', 'entry level', 'dance floor', 'standard', 'prime', 'premium'];
+
+      const findTablesSection = () => {
+        const all = document.querySelectorAll('section, [class*="section"], [class*="tables"], [class*="Tables"], div[class*="accordion"], div[class*="content"]');
+        for (const el of all) {
+          const text = (el.textContent || '').toLowerCase();
+          if (text.includes('tables') && (text.includes('pay now') || text.includes('minimum spend'))) {
+            return el;
           }
         }
+        return null;
+      };
+
+      const section = findTablesSection();
+      const root = section || document.body;
+      const text = (root.textContent || '');
+      const lines = text.split(/\n/).map(s => s.trim()).filter(s => s.length > 0 && s.length < 120);
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lineLower = line.toLowerCase();
+        let matchedTier = '';
+        for (const tier of tierNames) {
+          if (lineLower.includes(tier) && line.length < 60) {
+            matchedTier = tier;
+            break;
+          }
+        }
+        if (!matchedTier) continue;
+        const payNowMatch = line.match(/pay\s*now\s*\$?([\d,]+)/i);
+        const minSpendMatch = line.match(/minimum\s*spend\s*\$?([\d,]+)/i);
+        const price = minSpendMatch ? parseInt(minSpendMatch[1].replace(/,/g, ''), 10) : (payNowMatch ? parseInt(payNowMatch[1].replace(/,/g, ''), 10) : null);
+        if (!price || price <= 0) continue;
+        const guestsMatch = line.match(/(\d+)\s*guests?/i) || line.match(/\b(\d+)\b/);
+        const capacity = guestsMatch ? parseInt(guestsMatch[1], 10) : undefined;
+        const existing = results.find(r => r.name.toLowerCase() === matchedTier);
+        if (!existing) {
+          results.push({ name: matchedTier, price, capacity: capacity && capacity <= 20 ? capacity : undefined });
+        } else if (!existing.price || price < existing.price) {
+          existing.price = price;
+          if (capacity && capacity <= 20) existing.capacity = capacity;
+        }
+      }
+
+      if (results.length === 0 && section) {
+        const cards = root.querySelectorAll('[class*="card"], [class*="item"], [class*="tier"], li, [role="listitem"]');
+        cards.forEach((el) => {
+          const t = (el.textContent || '').trim();
+          if (t.length < 10 || t.length > 200) return;
+          const tierMatch = t.match(/(small 1st tier prime|entry level|dance floor|standard|prime|premium)/i);
+          if (!tierMatch) return;
+          const priceMatch = t.match(/\$([\d,]+)/);
+          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 0;
+          if (price <= 0) return;
+          const guestsMatch = t.match(/(\d+)\s*guests?/i);
+          const capacity = guestsMatch ? parseInt(guestsMatch[1], 10) : undefined;
+          const tier = tierMatch[1].toLowerCase();
+          if (!results.some(r => r.name === tier)) results.push({ name: tier, price, capacity: capacity && capacity <= 20 ? capacity : undefined });
+        });
       }
       return results;
     });
+
+    const filteredTables = filterRealTables(Array.isArray(tables) ? tables : []);
 
     const name = await page.evaluate(() => {
       const og = document.querySelector('meta[property="og:title"]');
@@ -349,11 +442,11 @@ async function fetchEventDetailsAndTablesWithBrowser(page, detailUrl) {
       }
     }
 
-    console.log('[Tao import] fetchEventDetailsAndTablesWithBrowser: tables count=', tables.length, 'for', detailUrl);
+    console.log('[Tao import] fetchEventDetailsAndTablesWithBrowser: tables raw=', (tables || []).length, 'filtered=', filteredTables.length, 'for', detailUrl);
     return {
       name,
       image,
-      tables: Array.isArray(tables) ? tables : [],
+      tables: filteredTables,
       start_datetime: start_datetime || undefined,
       end_datetime: end_datetime || undefined,
       timezone
@@ -364,8 +457,24 @@ async function fetchEventDetailsAndTablesWithBrowser(page, detailUrl) {
   }
 }
 
+/** Tao Vegas venue id from listing URL (event_venue=121). */
+const TAO_VENUE_ID_FOR_TAO_NIGHTCLUB = '121';
+
 /**
- * Find or create Location from Tao venue data
+ * Resolve the single existing Tao Night club location for events-only import. Import always uses this location
+ * when present so we never create a new venue. Matches by taoVenueId "121" or name "Tao Night club".
+ * @returns {Promise<Object|null>} Location doc or null
+ */
+async function getExistingTaoLocation() {
+  const byTaoId = await Location.findOne({ taoVenueId: TAO_VENUE_ID_FOR_TAO_NIGHTCLUB });
+  if (byTaoId) return byTaoId;
+  const byName = await Location.findOne({ name: /^Tao Night club$/i });
+  return byName || null;
+}
+
+/**
+ * Find or create Location from Tao venue data. For Tao import we prefer the existing "Tao Night club" location
+ * (see getExistingTaoLocation); this is only used when that location does not exist.
  * @param {Object} venue - { taoVenueId?, name, city? }
  * @param {string} userId
  * @returns {Promise<{ location: Object, created: boolean }>}
@@ -383,8 +492,9 @@ async function findOrCreateVenue(venue, userId) {
     { code: 'GA', label: 'General Admission', category: 'lower_dance', section: 'GA', capacity: 1, minSpendUSD: 0, priceTier: 1 }
   ];
 
-  if (venue.taoVenueId) {
-    const existing = await Location.findOne({ taoVenueId: venue.taoVenueId });
+  if (venue.taoVenueId != null && venue.taoVenueId !== '') {
+    const taoId = String(venue.taoVenueId);
+    const existing = await Location.findOne({ taoVenueId: taoId });
     if (existing) {
       console.log('[Tao import] findOrCreateVenue: found existing by taoVenueId', existing._id);
       if (!existing.seats || existing.seats.length === 0) {
@@ -428,35 +538,55 @@ async function findOrCreateVenue(venue, userId) {
   return { location, created: true };
 }
 
+/** Table suffixes we create per category (3 tables per category: A, B, C). */
+const TAO_TABLE_SUFFIXES = ['TABLE A', 'TABLE B', 'TABLE C'];
+
 /**
- * Merge scraped Tao tables into Location seats (add new seats by code, update price if we have it).
+ * Merge Tao table categories into Location seats. Each category (Prime, Entry Level, etc.) becomes 3 seats:
+ * "<Category>, TABLE A", "<Category>, TABLE B", "<Category>, TABLE C". We do not use scraped table instances.
  * @param {Object} location - Location document
- * @param {Array<{ name: string, price?: number, capacity?: number }>} tables
+ * @param {Array<{ name: string, price?: number, capacity?: number }>} categories - Table categories from drill-down
  */
-function mergeTablesIntoLocation(location, tables) {
-  if (!tables || tables.length === 0) return;
+/** Map Tao category label (any case) to seat category value (matches Create Location dropdown). */
+const TAO_CATEGORY_TO_SEAT_CATEGORY = {
+  'prime': 'prime',
+  'entry level': 'entry_level',
+  'dance floor': 'dance_floor',
+  'standard': 'standard',
+  'small 1st tier prime': 'small_1st_tier_prime',
+  'premium': 'stage_tables'
+};
+
+function mergeTablesIntoLocation(location, categories) {
+  if (!categories || categories.length === 0) return;
   const existingCodes = new Set((location.seats || []).map(s => (s.code || '').trim()));
   const toAdd = [];
-  for (const t of tables) {
-    const name = (t.name || '').trim();
-    if (!name) continue;
-    const code = tableNameToCode(name);
-    if (existingCodes.has(code)) continue;
-    existingCodes.add(code);
-    toAdd.push({
-      code,
-      label: name,
-      category: 'stage_tables',
-      section: 'VIP',
-      capacity: t.capacity || 4,
-      minSpendUSD: t.price || 0,
-      priceTier: 1
-    });
+  for (const cat of categories) {
+    const categoryName = (cat.name || '').trim();
+    if (!categoryName) continue;
+    const capacity = cat.capacity || 4;
+    const minSpend = cat.price || 0;
+    const seatCategory = TAO_CATEGORY_TO_SEAT_CATEGORY[categoryName.toLowerCase()] || 'stage_tables';
+    for (const suffix of TAO_TABLE_SUFFIXES) {
+      const label = `${categoryName}, ${suffix}`;
+      const code = tableNameToCode(label);
+      if (existingCodes.has(code)) continue;
+      existingCodes.add(code);
+      toAdd.push({
+        code,
+        label,
+        category: seatCategory,
+        section: 'VIP',
+        capacity,
+        minSpendUSD: minSpend,
+        priceTier: 1
+      });
+    }
   }
   if (toAdd.length > 0) {
     location.seats = (location.seats || []).concat(toAdd);
     location.markModified('seats');
-    console.log('[Tao import] mergeTablesIntoLocation: added', toAdd.length, 'seats to', location.name);
+    console.log('[Tao import] mergeTablesIntoLocation: added', toAdd.length, 'seats (', categories.length, 'categories x 3) to', location.name);
   }
 }
 
@@ -537,8 +667,9 @@ async function runTaoGroupImport(userId) {
 
     const puppeteer = getPuppeteer();
     const executablePath = getChromePath();
-    if (puppeteer && executablePath && rawEvents.some(e => e.detailUrl)) {
-      console.log('[Tao import] runTaoGroupImport: fetching event details + VIP tables with browser');
+    if (puppeteer && executablePath && rawEvents.some(e => e.detailUrl && (e.detailUrl || '').includes('taogroup.com'))) {
+      const detailLimit = Math.min(rawEvents.filter(e => (e.detailUrl || '').includes('taogroup.com')).length, 20);
+      console.log('[Tao import] runTaoGroupImport: fetching event details for first', detailLimit, 'Tao events (rest use listing data)');
       let browser;
       try {
         browser = await puppeteer.launch({
@@ -548,10 +679,19 @@ async function runTaoGroupImport(userId) {
         });
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        let detailFetched = 0;
+        const maxDetailFetches = 20;
         for (const ev of rawEvents) {
-          if (ev.detailUrl) {
-            await delay(REQUEST_DELAY_MS);
-            ev.detailsWithTables = await fetchEventDetailsAndTablesWithBrowser(page, ev.detailUrl);
+          const url = ev.detailUrl || '';
+          if (!url || !url.includes('taogroup.com')) continue;
+          if (detailFetched >= maxDetailFetches) break;
+          detailFetched++;
+          await delay(REQUEST_DELAY_MS);
+          try {
+            ev.detailsWithTables = await fetchEventDetailsAndTablesWithBrowser(page, url);
+          } catch (e) {
+            console.warn('[Tao import] detail fetch failed', url.slice(0, 60), e.message);
+            ev.detailsWithTables = null;
           }
         }
       } catch (e) {
@@ -571,18 +711,27 @@ async function runTaoGroupImport(userId) {
       if (key && !venueByKey.has(key)) venueByKey.set(key, ev.venue || { name: 'Tao Group Venue', city: '' });
     });
 
+    // Use the existing "Tao Night club" location for all events so we never create a new venue (events-only import).
+    const existingTaoLocation = await getExistingTaoLocation();
     const locationIdByKey = new Map();
-    for (const [key, venue] of venueByKey) {
-      try {
-        const { location, created } = await findOrCreateVenue(venue, userId);
-        locationIdByKey.set(key, location._id);
-        if (created) summary.venuesCreated++;
-        else summary.venuesUpdated++;
-      } catch (e) {
-        console.error('[Tao import] findOrCreateVenue error for', venue?.name, e.message, e.stack);
-        summary.failed++;
-        data.failed.push({ type: 'venue', name: venue.name, error: e.message });
-        summary.errors.push(`Venue ${venue.name}: ${e.message}`);
+    if (existingTaoLocation) {
+      for (const key of venueByKey.keys()) {
+        locationIdByKey.set(key, existingTaoLocation._id);
+      }
+      console.log('[Tao import] runTaoGroupImport: using existing Tao location', existingTaoLocation._id.toString(), 'name=', existingTaoLocation.name, 'for all', venueByKey.size, 'venue(s)');
+    } else {
+      for (const [key, venue] of venueByKey) {
+        try {
+          const { location, created } = await findOrCreateVenue(venue, userId);
+          locationIdByKey.set(key, location._id);
+          if (created) summary.venuesCreated++;
+          else summary.venuesUpdated++;
+        } catch (e) {
+          console.error('[Tao import] findOrCreateVenue error for', venue?.name, e.message, e.stack);
+          summary.failed++;
+          data.failed.push({ type: 'venue', name: venue.name, error: e.message });
+          summary.errors.push(`Venue ${venue.name}: ${e.message}`);
+        }
       }
     }
     console.log('[Tao import] runTaoGroupImport: after venues locationIdByKey size=', locationIdByKey.size, 'venuesCreated=', summary.venuesCreated, 'venuesUpdated=', summary.venuesUpdated);
@@ -653,10 +802,14 @@ async function runTaoGroupImport(userId) {
           continue;
         }
 
+        // Only merge scraped tables into location when it has no seats (e.g. auto-created). Manual locations keep their seats.
         if (ev.detailsWithTables && ev.detailsWithTables.tables && ev.detailsWithTables.tables.length > 0) {
-          mergeTablesIntoLocation(location, ev.detailsWithTables.tables);
-          await location.save();
-          location = await Location.findById(locationId);
+          const hasSeats = location.seats && location.seats.length > 0;
+          if (!hasSeats) {
+            mergeTablesIntoLocation(location, ev.detailsWithTables.tables);
+            await location.save();
+            location = await Location.findById(locationId);
+          }
         }
 
         let event = null;

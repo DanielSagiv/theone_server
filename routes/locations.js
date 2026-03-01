@@ -93,6 +93,44 @@ router.get('/cities', authenticateToken, async (req, res) => {
 });
 
 /**
+ * GET /v1/locations/the1-categories
+ * Get all distinct THE1 seat category values from all locations (must be before /:id)
+ */
+router.get('/the1-categories', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const locations = await Location.find({}).select('seats.the1Category');
+    const categoriesSet = new Set();
+
+    locations.forEach((loc) => {
+      if (loc.seats && Array.isArray(loc.seats)) {
+        loc.seats.forEach((seat) => {
+          if (seat && typeof seat.the1Category === 'string') {
+            const val = seat.the1Category.trim();
+            if (val) {
+              categoriesSet.add(val);
+            }
+          }
+        });
+      }
+    });
+
+    const categories = Array.from(categoriesSet).sort();
+
+    return res.json({
+      success: true,
+      data: categories,
+      message: 'THE1 categories retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get THE1 categories error:', { error: error.message, timestamp: new Date().toISOString() });
+    return res.status(500).json({
+      success: false,
+      error: { code: 'THE1_CATEGORIES_FETCH_FAILED', message: 'Failed to retrieve THE1 categories' }
+    });
+  }
+});
+
+/**
  * GET /v1/locations/:id
  */
 router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
@@ -271,44 +309,6 @@ router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) =
     return res.status(500).json({
       success: false,
       error: { code: 'MEDIA_UPLOAD_FAILED', message: 'Failed to upload media' }
-    });
-  }
-});
-
-/**
- * GET /v1/locations/the1-categories
- * Get all distinct THE1 seat category values from all locations
- */
-router.get('/the1-categories', authenticateToken, requireAdmin, async (req, res) => {
-  try {
-    const locations = await Location.find({}).select('seats.the1Category');
-    const categoriesSet = new Set();
-
-    locations.forEach((loc) => {
-      if (loc.seats && Array.isArray(loc.seats)) {
-        loc.seats.forEach((seat) => {
-          if (seat && typeof seat.the1Category === 'string') {
-            const val = seat.the1Category.trim();
-            if (val) {
-              categoriesSet.add(val);
-            }
-          }
-        });
-      }
-    });
-
-    const categories = Array.from(categoriesSet).sort();
-
-    return res.json({
-      success: true,
-      data: categories,
-      message: 'THE1 categories retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Get THE1 categories error:', { error: error.message, timestamp: new Date().toISOString() });
-    return res.status(500).json({
-      success: false,
-      error: { code: 'THE1_CATEGORIES_FETCH_FAILED', message: 'Failed to retrieve THE1 categories' }
     });
   }
 });

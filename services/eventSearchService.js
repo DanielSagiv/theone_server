@@ -2,6 +2,16 @@ const Event = require('../models/Event');
 const Location = require('../models/Location');
 
 /**
+ * City display name -> possible DB values (e.g. locations may store "LV" not "Las Vegas")
+ */
+const CITY_ALIASES = {
+  'las vegas': ['LV', 'Las Vegas', 'Las Vegas, NV'],
+  'new york': ['NYC', 'New York', 'New York City'],
+  'la': ['LA', 'Los Angeles'],
+  'miami': ['Miami', 'Miami Beach'],
+};
+
+/**
  * Event Search Service
  * @description Centralized service for building flexible event queries based on search parameters
  */
@@ -68,20 +78,27 @@ async function searchEvents(searchParams, options = {}) {
       filter.start_datetime = { $gte: new Date() };
     }
 
-    // Location filter (city or venue)
+    // Location filter (city or venue) - when neither is set, no location filter (all events in date range)
     if (city || location_name) {
       const locationFilter = {};
-      
+
+      // City: match the search term OR any alias (e.g. "Las Vegas" also matches "LV" so Tao is included)
       if (city) {
-        locationFilter['address.city'] = { $regex: city, $options: 'i' };
-      }
-      
-      if (location_name) {
-        locationFilter.name = { $regex: location_name, $options: 'i' };
+        const cityKey = city.trim().toLowerCase();
+        const cityValues = [city.trim()];
+        const aliases = CITY_ALIASES[cityKey];
+        if (aliases && Array.isArray(aliases)) {
+          aliases.forEach(a => { if (a && !cityValues.some(c => c.toLowerCase() === a.toLowerCase())) cityValues.push(a); });
+        }
+        locationFilter.$or = cityValues.map(c => ({ 'address.city': { $regex: c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }));
       }
 
-      const locations = await Location.find(locationFilter).select('_id');
-      
+      if (location_name) {
+        locationFilter.name = { $regex: location_name.trim(), $options: 'i' };
+      }
+
+      let locations = await Location.find(locationFilter).select('_id');
+
       if (locations.length > 0) {
         filter.location_id = { $in: locations.map(loc => loc._id) };
         console.log('[EventSearchService] Found locations:', {
@@ -90,7 +107,7 @@ async function searchEvents(searchParams, options = {}) {
         });
       } else {
         // No matching locations found, return empty result
-        console.log('[EventSearchService] No matching locations found');
+        console.log('[EventSearchService] No matching locations found for city=', city, 'location_name=', location_name);
         return {
           events: [],
           total: 0,

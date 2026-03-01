@@ -4,6 +4,8 @@
 
 Feature to import **events** and **venues** from Tao Group Hospitality’s public events page into THE1: create or update **Location** (venue) records and **Event** records, and expose a single “Import all data” action from the EJS test dashboard.
 
+**Current behavior (events-only when Tao location exists):** If a Location exists with **`taoVenueId: "121"`** or **name "Tao Night club"**, the importer uses that location for **all** scraped events and **does not create a new venue**. Each import run only creates/updates **Event** records and links them to that location; the location’s seats (e.g. the five manual categories) are left unchanged. If no such location exists, the importer falls back to find-or-create per venue as before.
+
 ## Goals
 
 - **Single action:** One button on the server-side EJS test UI that runs the full import/sync.
@@ -26,10 +28,11 @@ Feature to import **events** and **venues** from Tao Group Hospitality’s publi
 
 ### Venues → Location
 
-- **Match:** By external id (e.g. `taoVenueId` from URL or API) or by **name + city** if no id is available.
-- **Create when missing:** If no matching Location exists, create one with:
-  - `name`, `address` (line1, city, state, country, postalCode if available), `type` (e.g. `night_club` / `day_club` from context), `description`, `contact`, `media`, and any other fields the source provides.
+- **Prefer existing “Tao Night club” location (events-only import):** Before creating or matching any venue, the importer looks up a Location by **`taoVenueId: "121"`** (Tao Vegas from the listing URL) or by **name `"Tao Night club"`**. If found, **all** scraped events are attached to that location and **no new venue is ever created**. This allows a manually created location (e.g. from JSON with correct seats) to be the single target for Tao imports.
+- **Match when no existing Tao location:** By external id (e.g. `taoVenueId` from URL or API) or by **name + city** if no id is available.
+- **Create when missing:** If no matching Location exists and no “Tao Night club” exists, create one with placeholder seats (see Table categories below).
 - **Update:** If a match exists, optionally update a subset of fields (e.g. name, address) to keep data current.
+- **Seats:** If the resolved location **already has seats** (e.g. manually created with five categories), the importer **does not** merge scraped table categories into it. Table merging only runs when the location has no seats (e.g. was auto-created by a previous import).
 
 ### Events → Event
 
@@ -51,8 +54,9 @@ Feature to import **events** and **venues** from Tao Group Hospitality’s publi
   1. Fetch the listing URL (and handle pagination if present).
   2. Parse response (HTML and/or embedded JSON) to get event list and, for each, venue name/id and link to detail page.
   3. For each event, fetch the detail page and parse full event (and venue) data. When using the browser (Puppeteer), the detail page HTML is also parsed for `__NEXT_DATA__` to read `start_datetime` / `end_datetime` so each event gets the correct date.
-  4. For each venue: find or create **Location**; collect a map of venue key → THE1 `location_id`.
-  5. For each event: find or create/update **Event** with `location_id` from that map. If the detail page did not provide a date, the service parses a leading `M/D/YYYY` from the event name and uses it (at 22:00) so the Event Management UI shows the correct date per event.
+  4. **Resolve venue → Location:** Call `getExistingTaoLocation()` (find by `taoVenueId: "121"` or name `"Tao Night club"`). If found, use that Location for **all** venue keys (events-only; no new venue created). Otherwise, for each venue call `findOrCreateVenue` and build venue key → `location_id`.
+  5. For each event: find or create/update **Event** with `location_id` from that map. If the detail page did not provide a date, the service parses a leading `M/D/YYYY` from the event name and uses it (at 22:00) so the Event Management UI shows the correct date per event. When attaching to an existing location that already has seats, **do not** merge scraped table categories into the location (preserve manual seats).
+- **Table categories (Location seats):** The Tao drill-down “TABLES” section lists **table categories** (e.g. Prime, Entry Level, Dance Floor, Standard, Small 1st Tier Prime), not individual table instances. On import we do **not** create one seat per scraped row. For each **category** we create **3 seats** with labels `<Category>, TABLE A`, `<Category>, TABLE B`, `<Category>, TABLE C`, using that category’s capacity and minimum spend. Events then use these location seats as already implemented.
 - **Idempotency:** Use stable external identifiers (or name+date+venue) so re-running the import updates existing records instead of duplicating.
 
 ### API
@@ -129,6 +133,37 @@ This section documents issues encountered with the Tao Group import and the fixe
 ### 7. Listing link fallback
 
 - **Behavior:** When `__NEXT_DATA__` is absent (or has no events array), the parser falls back to scraping links: `a[href*="/events/"]` and `a[href*="/event/"]`. Links whose path after `/events/` or `/event/` is empty (e.g. query-only) are skipped so that listing/filter links are not treated as events. With the correct wait strategy, the browser-rendered page contains many such event links (e.g. 118), so the import can succeed even when `__NEXT_DATA__` is not available in the HTML.
+
+### 8. Wrong “tens of tables” (nav/footer items as tables)
+
+- **Issue:** The import was adding many incorrect “tables” to the venue (e.g. About, News, Careers, Gift-Cards, Restaurants, Nightlife, Privacy, Terms), all with the same placeholder (e.g. Capacity 4, Section VIP). These are site navigation/footer links, not VIP table tiers.
+- **Cause:** Table extraction used a broad selector (`li`, `[role="listitem"]`, `div[class*="table"]`, etc.) and scraped the whole page, so any list item or row with a dollar amount was treated as a table.
+- **Fix:**
+  - **Scope to TABLES section:** In the browser, after opening “VIP table reservations” and “Tables”, the code now finds a section that contains both “TABLES” and (“Pay Now” or “Minimum Spend”) and only parses content within that section.
+  - **Parse real table tiers:** Extraction looks for lines/cards with “Pay Now $X” and “Minimum Spend $X”, and for known tier names (Prime, Entry Level, Dance Floor, Standard, Premium). Minimum Spend is used as the table price when present.
+  - **Blocklist:** A blocklist of non-table terms (about, news, careers, gift-cards, contact, privacy, terms, rewards, restaurants, nightlife, etc.) is applied so scraped results are filtered before being merged into the venue. Only real table tiers or items with a positive price and a non-blocklisted name are kept.
+
+### 9. Import creating a new location instead of using the existing “Tao Night club”
+
+- **Issue:** The Tao import was creating a **new** Location and attaching all events to it, instead of using the manually created “Tao Night club” location (with correct address, seats, and categories).
+- **Cause:** The scraper may return a venue id in a different format (e.g. number, slug, or missing), so lookup by `taoVenueId` failed and the code fell through to “create new venue.”
+- **Fix:**
+  - **Resolve existing Tao location first:** At import time the service calls `getExistingTaoLocation()`, which finds a Location by **`taoVenueId: "121"`** or by **name `"Tao Night club"`** (case-insensitive). If found, that location is used for **all** scraped events; `findOrCreateVenue` is **not** called, so no new venue is ever created.
+  - **Events-only import:** When the existing Tao location is used, the import only creates/updates **Event** records and links them to that location. Venue count in the summary shows 0 created.
+  - **Seats preserved:** If the resolved location already has seats (e.g. the five categories from the manual JSON), the importer **does not** run `mergeTablesIntoLocation`. Table merging only runs when the location has no seats (e.g. an auto-created placeholder venue).
+  - **Normalize `taoVenueId` in findOrCreateVenue:** When falling back to find-or-create (no existing Tao location), `taoVenueId` is normalized with `String(venue.taoVenueId)` so numeric `121` from the page still matches a document with `taoVenueId: "121"`.
+
+### 10. One-off setup: create “Tao Night club” and link it to Tao import
+
+- **Goal:** Have a single Location that represents Tao (Las Vegas) with the correct name, address, attributes, and five seat categories (Prime, Entry Level, Dance Floor, Standard, Small 1st Tier Prime), and have every Tao import attach events to that location.
+- **Scripts (run once from `server/`):**
+  1. **Create the location from JSON:**  
+     `node scripts/create-tao-location.js`  
+     Creates the “Tao Night club” Location with the predefined payload (name, type, address, attributes, five seats with `code`, `category`, `the1Category`, `capacity`, `minSpendUSD`, `qualityScore`, `priceTier`). Uses an admin user for `createdBy` / `updatedBy` if available.
+  2. **Set Tao venue id on the location:**  
+     `node scripts/set-tao-venue-id.js`  
+     Finds the Location by name “Tao Night club” and sets `taoVenueId: "121"` so that `getExistingTaoLocation()` can find it by id as well as by name.
+- **Create Location (EJS) categories:** The same five Tao categories (`prime`, `entry_level`, `dance_floor`, `standard`, `small_1st_tier_prime`) were added to the Create Location flow: dropdown in the test dashboard (step 3 INVENTORY) and to the Location/seat schema and validation so manually created locations can use these categories and stay consistent with Tao import.
 
 ---
 

@@ -19,7 +19,8 @@ const seatSchema = Joi.object({
   label: Joi.string().allow(''),
   category: Joi.string().valid(
     'backwall','large_3rd_tier_couch','third_tier_couch',
-    'upper_dance','lower_dance','four_tops','stage_tables','owner_tables'
+    'upper_dance','lower_dance','four_tops','stage_tables','owner_tables',
+    'prime','entry_level','dance_floor','standard','small_1st_tier_prime'
   ),
   the1Category: Joi.string().allow(''),
   section: Joi.string().allow(''),

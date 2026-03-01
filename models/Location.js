@@ -30,7 +30,8 @@ const SeatSchema = new mongoose.Schema({
     type: String,
     enum: [
       'backwall', 'large_3rd_tier_couch', 'third_tier_couch',
-      'upper_dance', 'lower_dance', 'four_tops', 'stage_tables', 'owner_tables'
+      'upper_dance', 'lower_dance', 'four_tops', 'stage_tables', 'owner_tables',
+      'prime', 'entry_level', 'dance_floor', 'standard', 'small_1st_tier_prime'
     ],
     index: true
   },
