@@ -1350,6 +1350,271 @@ async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
 }
 
 /**
+ * Admin-only: replace a selected seat with any available seat from the same event.
+ * This bypasses pre-generated seat_upgrade_offers and works directly on inventory.
+ *
+ * @param {string} coeId - COE ID
+ * @param {string} currentSeatId - Current event seat _id stored in selected_seats.seat_id
+ * @param {string} newSeatId - Target event seat _id to switch to
+ * @param {string} eventId - Event ID
+ * @returns {Promise<Object>} Updated COE (populated)
+ */
+async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
+  try {
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      throw new Error('COE not found');
+    }
+
+    if (coe.status !== 'draft' && coe.status !== 'request') {
+      throw new Error('Seat upgrades can only be applied for draft or request COEs');
+    }
+
+    const coeIdStr = coeId.toString();
+
+    // Find the selected seat entry we are replacing on this COE
+    const seatIndex = coe.selected_seats.findIndex(
+      s => s.seat_id.toString() === currentSeatId && s.event_id.toString() === eventId
+    );
+
+    if (seatIndex === -1) {
+      throw new Error('Current seat not found in COE');
+    }
+
+    const existingSeat = coe.selected_seats[seatIndex];
+
+    // Load event and its seats so we can inspect merge state and the new target seat
+    const event = await Event.findById(eventId);
+    if (!event) {
+      throw new Error('Event not found');
+    }
+
+    // Resolve the current event seat – support both event seat _id and seat_id references
+    let oldEventSeat = event.seats.id(currentSeatId);
+    if (!oldEventSeat) {
+      const currentSeatIdStr = currentSeatId?.toString() || currentSeatId;
+      oldEventSeat = (event.seats || []).find(seat => {
+        const eventSeatIdStr = seat._id?.toString();
+        const locationSeatIdStr = seat.seat_id?.toString();
+        return eventSeatIdStr === currentSeatIdStr || locationSeatIdStr === currentSeatIdStr;
+      });
+    }
+    if (!oldEventSeat) {
+      throw new Error('Current seat not found in event');
+    }
+
+    const newSeat = event.seats.id(newSeatId);
+    if (!newSeat) {
+      throw new Error('New seat not found in event');
+    }
+
+    if (newSeat.status !== 'available') {
+      throw new Error('New seat is not available');
+    }
+
+    // Detect if this seat is part of a merged booking group
+    const primaryBookingRef = oldEventSeat.booking_reference?.toString() || coeIdStr;
+    const mergedIds = (oldEventSeat.merged_coe_ids || []).map(id => id.toString());
+    const isMergedGroup = mergedIds.length > 0;
+
+    if (!isMergedGroup) {
+      // === Single-COE upgrade (no merged clients sharing this table) ===
+
+      // Release only this COE's old seat back to available
+      try {
+        const releaseOps = [
+          {
+            updateOne: {
+              filter: { '_id': existingSeat.event_id, 'seats._id': existingSeat.seat_id },
+              update: {
+                $set: {
+                  'seats.$.status': 'available',
+                  'seats.$.booking_reference': undefined,
+                  'seats.$.booked_at': undefined,
+                  'seats.$.booked_by': undefined,
+                  'seats.$.merged_coe_ids': []
+                }
+              }
+            }
+          }
+        ];
+        await Event.bulkWrite(releaseOps);
+      } catch (releaseError) {
+        console.error('[COE_SERVICE] Error releasing previous seat during adminReplaceSeat:', releaseError);
+        // Do not fail the whole operation solely because release failed; continue and log.
+      }
+
+      // Update selected_seats entry to point at the new seat for this single COE
+      const newEventPrice = newSeat.event_price || newSeat.event_min_spend || newSeat.min_spend || 0;
+      const newBasePrice = newSeat.min_spend || newSeat.event_min_spend || 0;
+
+      coe.selected_seats[seatIndex] = {
+        event_id: existingSeat.event_id,
+        seat_id: newSeat._id,
+        seat_code: newSeat.code,
+        capacity: newSeat.capacity || existingSeat.capacity,
+        base_price: newBasePrice || existingSeat.base_price,
+        event_price: newEventPrice || existingSeat.event_price,
+        available_from: existingSeat.available_from,
+        available_until: existingSeat.available_until,
+        status: 'selected',
+        is_merged_booking: existingSeat.is_merged_booking || false,
+        primary_coe_id: existingSeat.primary_coe_id,
+        ai_recommendation: existingSeat.ai_recommendation,
+        recommendation_generated_at: existingSeat.recommendation_generated_at,
+        recommendation_version: existingSeat.recommendation_version ?? 1
+      };
+
+      // Remove any stale seat_upgrade_offers for this event (they no longer match reality)
+      if (Array.isArray(coe.seat_upgrade_offers) && coe.seat_upgrade_offers.length > 0) {
+        coe.seat_upgrade_offers = coe.seat_upgrade_offers.filter(
+          offer => offer.event_id.toString() !== eventId.toString()
+        );
+      }
+
+      const singleSubtotal = coe.selected_seats.reduce((sum, s) => sum + (s.event_price || 0), 0);
+      coe.subtotal = singleSubtotal;
+      coe.total = singleSubtotal + (coe.taxes || 0) + (coe.fees || 0);
+
+      await coe.save();
+
+      // Hold the new seat for this COE in event inventory
+      try {
+        await updateSelectedSeatsStatus(
+          [{ event_id: event._id, seat_id: newSeat._id }],
+          coeId,
+          'held'
+        );
+      } catch (holdError) {
+        console.error('[COE_SERVICE] Error holding new seat during adminReplaceSeat (single):', holdError);
+      }
+
+      return await getCOEById(coeId);
+    }
+
+    // === Merged-group upgrade: move entire merge group to the new table ===
+
+    const groupIdStrings = new Set([
+      primaryBookingRef,
+      ...mergedIds
+    ]);
+
+    // Ensure the coeId that triggered this is part of the group
+    groupIdStrings.add(coeIdStr);
+
+    const groupObjectIds = Array.from(groupIdStrings).map(id => new mongoose.Types.ObjectId(id));
+
+    // Release the old event seat and apply merge metadata to the new seat in a single bulk operation
+    try {
+      const primaryIdStr = primaryBookingRef;
+      const mergedCoesForNewSeat = Array.from(groupIdStrings).filter(id => id !== primaryIdStr);
+
+      const bulkOps = [
+        {
+          updateOne: {
+            filter: { _id: event._id, 'seats._id': oldEventSeat._id },
+            update: {
+              $set: {
+                'seats.$.status': 'available',
+                'seats.$.booking_reference': undefined,
+                'seats.$.booked_at': undefined,
+                'seats.$.booked_by': undefined,
+                'seats.$.merged_coe_ids': []
+              }
+            }
+          }
+        },
+        {
+          updateOne: {
+            filter: { _id: event._id, 'seats._id': newSeat._id },
+            update: {
+              $set: {
+                'seats.$.status': 'held',
+                'seats.$.booking_reference': primaryIdStr,
+                'seats.$.booked_at': new Date(),
+                'seats.$.booked_by': oldEventSeat.booked_by,
+                'seats.$.merged_coe_ids': mergedCoesForNewSeat.map(id => new mongoose.Types.ObjectId(id))
+              }
+            }
+          }
+        }
+      ];
+
+      await Event.bulkWrite(bulkOps);
+    } catch (mergeSeatError) {
+      console.error('[COE_SERVICE] Error moving merged group to new seat in adminReplaceSeat:', mergeSeatError);
+      throw mergeSeatError;
+    }
+
+    // Update selected_seats and totals for all COEs in the merge group
+    const groupCoes = await COE.find({ _id: { $in: groupObjectIds } });
+
+    for (const groupCoe of groupCoes) {
+      if (groupCoe.status !== 'draft' && groupCoe.status !== 'request') {
+        console.warn('[COE_SERVICE] adminReplaceSeat: Skipping COE not in draft/request status for merged upgrade', {
+          coeId: groupCoe._id,
+          status: groupCoe.status
+        });
+        continue;
+      }
+
+      const groupSeatIndex = (groupCoe.selected_seats || []).findIndex(
+        s => s.seat_id.toString() === currentSeatId && s.event_id.toString() === eventId
+      );
+
+      if (groupSeatIndex === -1) {
+        console.warn('[COE_SERVICE] adminReplaceSeat: COE in merge group missing selected seat entry', {
+          coeId: groupCoe._id,
+          eventId,
+          currentSeatId
+        });
+        continue;
+      }
+
+      const groupExistingSeat = groupCoe.selected_seats[groupSeatIndex];
+      const newEventPrice = newSeat.event_price || newSeat.event_min_spend || newSeat.min_spend || 0;
+      const newBasePrice = newSeat.min_spend || newSeat.event_min_spend || 0;
+
+      groupCoe.selected_seats[groupSeatIndex] = {
+        event_id: groupExistingSeat.event_id,
+        seat_id: newSeat._id,
+        seat_code: newSeat.code,
+        capacity: newSeat.capacity || groupExistingSeat.capacity,
+        base_price: newBasePrice || groupExistingSeat.base_price,
+        event_price: newEventPrice || groupExistingSeat.event_price,
+        available_from: groupExistingSeat.available_from,
+        available_until: groupExistingSeat.available_until,
+        status: 'selected',
+        is_merged_booking: true,
+        primary_coe_id: new mongoose.Types.ObjectId(primaryBookingRef),
+        ai_recommendation: groupExistingSeat.ai_recommendation,
+        recommendation_generated_at: groupExistingSeat.recommendation_generated_at,
+        recommendation_version: groupExistingSeat.recommendation_version ?? 1
+      };
+
+      // Remove any stale seat_upgrade_offers for this event on this COE
+      if (Array.isArray(groupCoe.seat_upgrade_offers) && groupCoe.seat_upgrade_offers.length > 0) {
+        groupCoe.seat_upgrade_offers = groupCoe.seat_upgrade_offers.filter(
+          offer => offer.event_id.toString() !== eventId.toString()
+        );
+      }
+
+      const groupSubtotal = groupCoe.selected_seats.reduce((sum, s) => sum + (s.event_price || 0), 0);
+      groupCoe.subtotal = groupSubtotal;
+      groupCoe.total = groupSubtotal + (groupCoe.taxes || 0) + (groupCoe.fees || 0);
+
+      await groupCoe.save();
+    }
+
+    // Return fully populated COE for the one that triggered the upgrade
+    return await getCOEById(coeId);
+  } catch (error) {
+    console.error('Error in adminReplaceSeat:', error);
+    throw error;
+  }
+}
+
+/**
  * Remove events from a draft COE
  * Also removes associated selected_seats and seat_upgrade_offers
  * Releases held seats back to inventory before removal
@@ -3380,6 +3645,7 @@ module.exports = {
   getCOEsByRunner,
   getCOEStatistics,
   acceptSeatUpgrade,
+  adminReplaceSeat,
   removeEventsFromCOE,
   replaceEventInCOE,
   findAlternativeEvents,

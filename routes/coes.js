@@ -1423,6 +1423,65 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
 });
 
 /**
+ * POST /v1/coes/:id/admin/seat-upgrade
+ * Admin-only: replace a selected seat with any available seat from the same event.
+ * Body: { current_seat_id, new_seat_id, event_id }
+ * @access Admin only
+ */
+router.post('/:id/admin/seat-upgrade', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { current_seat_id, new_seat_id, event_id } = req.body || {};
+
+    if (!current_seat_id || !new_seat_id || !event_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'current_seat_id, new_seat_id, and event_id are required'
+      });
+    }
+
+    const updatedCoe = await coeService.adminReplaceSeat(
+      id,
+      current_seat_id,
+      new_seat_id,
+      event_id
+    );
+
+    res.json({
+      success: true,
+      message: 'Seat upgraded successfully',
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('[COES] Error in admin seat upgrade:', error);
+
+    if (error.message === 'COE not found') {
+      return res.status(404).json({ success: false, message: 'COE not found' });
+    }
+    if (error.message === 'Event not found') {
+      return res.status(404).json({ success: false, message: 'Event not found' });
+    }
+    if (
+      error.message.includes('Seat upgrades can only be applied') ||
+      error.message.includes('Current seat not found') ||
+      error.message.includes('New seat not found') ||
+      error.message.includes('New seat is not available')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to perform admin seat upgrade',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /v1/coes/:id/payments/full
  * Process full payment for COE
  * @access Authenticated users (COE client only)

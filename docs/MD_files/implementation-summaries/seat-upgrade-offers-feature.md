@@ -21,27 +21,88 @@ As a client, I want to be offered premium seating upgrades when creating a COE t
 
 ### What Makes a Seat "Better"?
 
-A seat is considered "better" than the currently selected seat if it meets these criteria:
+A seat is considered a **candidate upgrade** relative to the currently selected seat using a combination of **hard filters** and **quality/price comparison**. The exact rules differ slightly for clients vs admins.
 
-1. **Sentiment Quality**:
-   - Type A sentiment > Type B sentiment
-   - Higher `priceTier` (1-5 scale)
-   - Positive sentiment keywords: "upper", "premium", "VIP", "exclusive", "better view"
+#### Universal hard filters (clients and admins)
 
-2. **Category Hierarchy**:
-   - `owner_tables` > `upper_dance` > `stage_tables` > `lower_dance` > `third_tier_couch` > `backwall`
+For a seat to be considered at all:
 
-3. **Capacity Match**:
-   - Same or higher capacity than current seat
-   - Meets party size requirements
+1. **Same event**:  
+   - Seat belongs to the same `Event` as the current seat.
 
-4. **Availability**:
-   - Seat status is `'available'`
-   - Seat is in the same event
+2. **Availability**:
+   - `seat.status === 'available'` (not held or booked).
 
-5. **Price Consideration**:
-   - May cost more (not a requirement, but expected for premium seats)
-   - Price difference is reasonable (optional: max 50% increase)
+3. **Capacity / party size**:
+   - `seat.capacity >= partySize`  
+   - `partySize` is taken from `coe.preferences.party_size` (default `2`).
+
+4. **Location mapping required**:
+   - The system must be able to resolve a **location seat** for the event seat using `seat_id` or `code` (via `findLocationSeat`).  
+   - If we cannot map the event seat to a `location.seats[]` entry, it is **dropped** from consideration.
+
+5. **COE status**:
+   - COE status must be `draft` or `request`.  
+   - No upgrade offers are generated for paid / finalized COEs.
+
+#### Client-facing "better" definition
+
+For **clients**, after the hard filters above, a candidate seat is only kept if it is **strictly an upgrade**:
+
+1. **Current seat must be resolvable**:
+   - We must successfully locate the current seat in the location via `findLocationSeat`.  
+   - If we can’t, the function returns **no upgrades** for clients (we don’t guess).
+
+2. **Quality score and price comparison**:
+   - Each seat gets a **quality score** (see “Sentiment Quality Scoring Algorithm” below).
+   - Let:
+     - `currentScore` = quality of the current seat.
+     - `currentPrice` = current seat price (`event_price` / `base_price` / `min_spend`).
+     - `seatScore` / `seatPrice` = score and price for a candidate.
+   - A seat is considered an upgrade if:
+     - `seatScore > currentScore` **OR**
+     - `seatPrice > currentPrice`.
+
+3. **Exclude the current seat**:
+   - By code and by `seat_id`, the current seat is removed from the candidates for clients.
+
+4. **Sorting and limits (clients)**:
+   - Sorts candidates **more expensive first**, then by **quality score (descending)**.
+   - Keeps **top 5** upgrade options per seat.
+
+#### Admin-facing definition
+
+For **admins** (e.g. “Check available merges” / manual upgrade management):
+
+1. **Same hard filters**:
+   - Same availability, capacity, location mapping, and COE status rules as above.
+
+2. **Current seat may be unresolved**:
+   - If we can’t find the current seat in the location, **admins still get offers**.  
+   - In that case, `currentScore`/`currentPrice` fall back to safe defaults and we don’t strictly enforce “must be better”.
+
+3. **Include the current seat**:
+   - The candidate list includes the seat that matches the current selection, marked as `"Currently Selected"` so the admin can see the baseline.
+
+4. **No “must be better” filter**:
+   - For admins, we effectively expose the **whole available inventory** (after hard filters), annotated with:
+     - Quality score.
+     - Price.
+     - Sentiment‑based reasons.
+     - Budget tags (`Within Budget` vs `Premium Upgrade`).
+
+5. **Sorting and limits (admins)**:
+   - Sorts seats by **price ascending**, then by **quality score (descending)**.  
+   - Keeps up to **100** rows per seat/event (a practical cap, but effectively “all relevant”).
+
+6. **Merged tables – group upgrades**:
+   - When the current seat is a **merged table** (one event seat shared by multiple COEs via `booking_reference` + `merged_coe_ids`):
+     - An admin upgrade is treated as a **group operation**.
+     - The entire merge group (primary COE + all `merged_coe_ids`) is moved to the **new seat together**.
+     - The old seat is reset to `status: 'available'` and has its `booking_reference` / `merged_coe_ids` cleared.
+     - The new seat is marked as `status: 'held'`, with `booking_reference = primary COE id` and `merged_coe_ids = [other COE ids]`.
+     - Each COE in the group gets its `selected_seats` entry updated to point at the new seat, and its totals are recalculated.
+   - This ensures upgrading a merged table **does not silently break the merge**; all merged clients now sit at the upgraded table.
 
 ### Example Scenario
 
@@ -70,7 +131,7 @@ A seat is considered "better" than the currently selected seat if it meets these
 
 ## Implementation Phases
 
-### Phase 1: Seat Comparison Service (Backend Logic)
+### Phase 1: Seat Comparison Service (Backend Logic – shared for client & admin)
 
 **Goal**: Create service to identify better seats based on sentiment
 
@@ -87,131 +148,160 @@ A seat is considered "better" than the currently selected seat if it meets these
 - Quality scoring algorithm works correctly
 - Upgrade reasons are generated from sentiment data
 
-**Technical Details**:
+**Technical Details (current implementation)**:
 
 ```javascript
 // services/seatUpgradeService.js
 
 /**
- * Score a seat's quality based on sentiment, category, and price tier
- * @param {Object} seat - Seat object
- * @param {Object} location - Location with seat sentiments
+ * Resolve an event seat to its location seat (primary by seat_id, fallback by code)
+ */
+function findLocationSeat(seat, location) {
+  if (!location?.seats || location.seats.length === 0) return null;
+
+  const seatId = seat.seat_id?.toString();
+  if (seatId) {
+    const matchById = location.seats.find(s => s._id?.toString() === seatId);
+    if (matchById) return matchById;
+  }
+
+  const seatCode = seat.seat_code || seat.code;
+  if (seatCode) {
+    const matchByCode = location.seats.find(s => s.code === seatCode);
+    if (matchByCode) return matchByCode;
+  }
+
+  return null;
+}
+
+/**
+ * Score a seat's quality based on qualityScore and sentiment
+ * @param {Object} seat - Seat object (event or COE seat)
+ * @param {Object} location - Location with seats + sentiment
  * @returns {number} Quality score (higher = better)
  */
 function scoreSeatQuality(seat, location) {
-  let score = 0;
-  
-  // Price tier (1-5, higher = better)
-  score += (seat.priceTier || 1) * 10;
-  
-  // Get seat sentiment from location
-  const locationSeat = location.seats.find(s => 
-    s._id.toString() === seat.seat_id?.toString() || 
-    s.code === seat.seat_code
-  );
-  
-  if (locationSeat && locationSeat.sentiment) {
-    locationSeat.sentiment.forEach(sent => {
-      if (sent.type === 'A') score += 20;
-      if (sent.type === 'B') score += 10;
+  const locationSeat = findLocationSeat(seat, location);
+  const plain = locationSeat?.toObject ? locationSeat.toObject() : locationSeat;
+
+  // Base quality: qualityScore 1–10 scaled to 10–100
+  const qualityScore = plain?.qualityScore || seat.qualityScore || 5;
+  let score = qualityScore * 10;
+
+  // Sentiment bonus: Type A = +5, Type B = +2
+  if (plain?.sentiment) {
+    plain.sentiment.forEach(sent => {
+      if (sent.type === 'A') score += 5;
+      if (sent.type === 'B') score += 2;
     });
   }
-  
-  // Category hierarchy
-  const categoryScores = {
-    'owner_tables': 50,
-    'upper_dance': 40,
-    'stage_tables': 35,
-    'lower_dance': 30,
-    'third_tier_couch': 25,
-    'backwall': 20,
-    'four_tops': 15
-  };
-  score += categoryScores[seat.category] || 0;
-  
-  // Sentiment keywords
-  if (locationSeat && locationSeat.sentiment) {
-    const sentimentText = locationSeat.sentiment
-      .map(s => s.text)
-      .join(' ')
-      .toLowerCase();
-    
-    if (sentimentText.includes('upper')) score += 15;
-    if (sentimentText.includes('premium')) score += 15;
-    if (sentimentText.includes('vip')) score += 20;
-    if (sentimentText.includes('exclusive')) score += 20;
-    if (sentimentText.includes('better view')) score += 10;
-    if (sentimentText.includes('best')) score += 15;
-  }
-  
+
   return score;
 }
 
 /**
- * Find better alternative seats for a given selected seat
- * @param {Object} currentSeat - Currently selected seat from COE
- * @param {Object} event - Event with all available seats
- * @param {Object} location - Location with seat sentiments
+ * Find alternative seats for a selected seat
+ * @param {Object} currentSeat - Selected seat from COE
+ * @param {Object} event - Event with seats[]
+ * @param {Object} location - Location with seats + sentiment
  * @param {number} partySize - Party size requirement
- * @returns {Array} Array of better alternative seats (sorted by quality)
+ * @param {number} remainingBudget - Remaining budget (for fits_budget tag)
+ * @param {boolean} isAdmin - If true, admin mode (show inventory)
+ * @returns {Array} Candidate seats with quality/price/budget info
  */
-async function findBetterSeats(currentSeat, event, location, partySize = 2) {
-  if (!event.seats || event.seats.length === 0) {
+async function findBetterSeats(currentSeat, event, location, partySize = 2, remainingBudget = 0, isAdmin = false) {
+  if (!event.seats || event.seats.length === 0) return [];
+
+  const currentLocation = findLocationSeat(currentSeat, location);
+  let currentScore = 0;
+  let currentPrice = currentSeat.event_price || currentSeat.base_price || currentSeat.min_spend || 0;
+
+  // For clients: require a resolvable current seat
+  if (!currentLocation && !isAdmin) {
     return [];
   }
-  
-  // Get current seat's quality score
-  const currentSeatLocation = location.seats.find(s => 
-    s._id.toString() === currentSeat.seat_id?.toString() ||
-    s.code === currentSeat.seat_code
-  );
-  
-  if (!currentSeatLocation) {
-    return []; // Can't compare if current seat not found in location
+
+  if (currentLocation) {
+    const currentObj = currentSeat.toObject ? currentSeat.toObject() : currentSeat;
+    currentScore = scoreSeatQuality(
+      { ...currentObj, seat_id: currentObj.seat_id, code: currentObj.seat_code || currentObj.code },
+      location
+    );
   }
-  
-  const currentScore = scoreSeatQuality(
-    { ...currentSeat, seat_id: currentSeat.seat_id },
-    location
-  );
-  
-  // Find all available seats in the same event
-  const availableSeats = event.seats.filter(seat => 
-    seat.status === 'available' &&
-    seat.capacity >= partySize &&
-    // Exclude the current seat
-    seat._id.toString() !== currentSeat.seat_id?.toString() &&
-    seat.code !== currentSeat.seat_code
-  );
-  
-  // Score and filter better seats
-  const betterSeats = availableSeats
+
+  // Hard filters: availability + capacity, and exclude current seat for clients
+  const availableSeats = event.seats.filter(seat => {
+    if (seat.status !== 'available') return false;
+    if (seat.capacity < partySize) return false;
+
+    if (!isAdmin) {
+      const sameCode = seat.code === (currentSeat.seat_code || currentSeat.code);
+      const sameId =
+        seat._id?.toString() && currentSeat.seat_id?.toString() &&
+        seat._id.toString() === currentSeat.seat_id.toString();
+      if (sameCode || sameId) return false;
+    }
+
+    return true;
+  });
+
+  const processed = availableSeats
     .map(seat => {
-      const locationSeat = location.seats.find(s => 
-        s._id.toString() === seat.seat_id?.toString() ||
-        s.code === seat.code
-      );
-      
-      if (!locationSeat) return null;
-      
+      const locSeat = findLocationSeat(seat, location);
+      if (!locSeat) return null;
+
+      const seatObj = seat.toObject ? seat.toObject() : seat;
       const seatScore = scoreSeatQuality(
-        { ...seat, seat_id: seat._id },
+        { ...seatObj, seat_id: seatObj._id, code: seatObj.code },
         location
       );
-      
-      return {
-        seat,
-        locationSeat,
-        score: seatScore,
-        isBetter: seatScore > currentScore
-      };
+
+      const seatPrice = seat.event_price || seat.min_spend || 0;
+      const isBetterQuality = seatScore > currentScore;
+      const isMoreExpensive = seatPrice > currentPrice;
+      const isUpgrade = isBetterQuality || isMoreExpensive;
+
+      const shouldInclude = isAdmin ? true : isUpgrade;
+
+      return shouldInclude
+        ? {
+            seat,
+            score: seatScore,
+            price: seatPrice,
+            isBetterQuality,
+            isMoreExpensive,
+          }
+        : null;
     })
-    .filter(item => item && item.isBetter)
-    .sort((a, b) => b.score - a.score) // Sort by quality (best first)
-    .slice(0, 3) // Top 3 alternatives
-    .map(item => item.seat);
-  
-  return betterSeats;
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (isAdmin) {
+        if (a.price !== b.price) return a.price - b.price;       // cheaper first
+        return b.score - a.score;                                // then higher quality
+      } else {
+        if (a.isMoreExpensive !== b.isMoreExpensive) {
+          return (b.isMoreExpensive ? 1 : 0) - (a.isMoreExpensive ? 1 : 0);
+        }
+        return b.score - a.score;
+      }
+    });
+
+  const limited = isAdmin ? processed.slice(0, 100) : processed.slice(0, 5);
+
+  // Attach budget tags
+  return limited.map(item => {
+    const seatObj = item.seat.toObject ? item.seat.toObject() : item.seat;
+    const seatPrice = item.price;
+    const priceDelta = seatPrice - currentPrice;
+    const fitsBudget = priceDelta <= remainingBudget;
+
+    return {
+      ...seatObj,
+      event_price: seatPrice,
+      fits_budget: fitsBudget,
+      tag: fitsBudget ? 'Within Budget' : 'Premium Upgrade',
+    };
+  });
 }
 
 /**
@@ -332,7 +422,7 @@ function calculateUpgradeReasons(currentLocationSeat, upgradeLocationSeat, curre
 
 ---
 
-### Phase 2: Offer Generation After COE Creation
+### Phase 2: Offer Generation After COE Creation (client-focused)
 
 **Goal**: Automatically generate upgrade offers when COE is created
 
@@ -794,310 +884,53 @@ function handleRejectUpgrade(coeId, seatId) {
 
 ---
 
-### Phase 6: API Endpoints (Optional - For Manual Triggers)
+### Phase 6: API Endpoints (Client + Admin Flows)
 
-**Goal**: Allow manual triggering and management of upgrade offers
+We currently have two main API surfaces for upgrades:
 
-**Tasks**:
-1. Add GET endpoint to retrieve offers
-2. Add POST endpoint to accept upgrade
-3. Add POST endpoint to reject upgrade
-4. Add validation and error handling
+1. **Client acceptance of pre-generated offers**  
+   - `POST /v1/coes/:id/seat-upgrades/accept`  
+   - Body: `{ current_seat_id, alternative_seat_id, event_id }`  
+   - Delegates to `coeService.acceptSeatUpgrade(...)`, which:
+     - Validates COE status (`draft` / `request`).
+     - Validates that the requested alternative exists in `seat_upgrade_offers`.
+     - Swaps the seat in `selected_seats`, marks the alternative as `accepted`, and recalculates COE totals.
 
-**Deliverables**:
-- API endpoints for upgrade management
-- Manual trigger capability (optional)
+2. **Admin free-choice seat change for a specific event**  
+   - `POST /v1/coes/:id/admin/seat-upgrade`  
+   - Protected by `authenticateToken` + `requireAdmin`.  
+   - Body:  
+     ```json
+     {
+       "current_seat_id": "<event seat _id currently in selected_seats>",
+       "new_seat_id": "<target event seat _id>",
+       "event_id": "<event id>"
+     }
+     ```
+   - Delegates to `coeService.adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId)`, which:
+     - Ensures the triggering COE exists and is in `draft` or `request`.
+     - Loads the Event and validates that the **new seat exists and is `available`**.
+     - Detects whether the old seat is:
+       - A **single‑COE seat** (no `merged_coe_ids`) – or  
+       - A **merged seat** with `booking_reference` + `merged_coe_ids` (multiple COEs sharing one table).
+     - **Single‑COE path** (no merge):
+       - Releases only this COE’s previous seat back to `available`.
+       - Updates this COE’s `selected_seats` entry to the new seat.
+       - Clears stale `seat_upgrade_offers` for that event on this COE.
+       - Recalculates this COE’s totals and holds the new seat using `updateSelectedSeatsStatus`.
+     - **Merged‑group path**:
+       - Builds the **merge group** from the event seat’s `booking_reference` (primary COE) and `merged_coe_ids` (other COEs), plus the triggering COE id.
+       - Uses `Event.bulkWrite` to:
+         - Set the old seat to `status: 'available'` and clear all booking/merge metadata.
+         - Set the new seat to `status: 'held'`, `booking_reference = primary COE id`, and `merged_coe_ids = [other COE ids]`, preserving `booked_by`.
+       - For **each COE in the group**:
+         - Finds the `selected_seats` entry for this `event_id` + old `seat_id` and rewrites it to the new seat (code, capacity, price).
+         - Marks `is_merged_booking = true` and `primary_coe_id = primary COE id`.
+         - Clears stale `seat_upgrade_offers` for that event.
+         - Recalculates `subtotal` and `total`, then saves the COE.
+       - Returns the fully populated COE for the one that triggered the upgrade.
 
-**Technical Details**:
-
-```javascript
-// routes/coes.js
-
-/**
- * GET /v1/coes/:id/seat-upgrades
- * Get available seat upgrade offers for a COE
- * Only available for draft COEs
- */
-router.get('/:id/seat-upgrades', authenticateToken, async (req, res) => {
-  try {
-    const coe = await coeService.getCOEById(req.params.id);
-    
-    if (!coe) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'COE_NOT_FOUND', message: 'COE not found' }
-      });
-    }
-    
-    // Only draft COEs can have upgrade offers
-    if (coe.status !== 'draft') {
-      return res.status(400).json({
-        success: false,
-        error: { 
-          code: 'INVALID_STATUS', 
-          message: 'Upgrade offers only available for draft COEs' 
-        }
-      });
-    }
-    
-    // Permission check
-    if (req.user.role === 'client' && coe.client_id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'PERMISSION_DENIED', message: 'Access denied' }
-      });
-    }
-    
-    // Generate offers if they don't exist
-    let offers = coe.seat_upgrade_offers || [];
-    if (offers.length === 0) {
-      const { generateSeatUpgradeOffers } = require('../services/seatUpgradeService');
-      offers = await generateSeatUpgradeOffers(coe);
-      
-      // Store in COE
-      coe.seat_upgrade_offers = offers;
-      await coe.save();
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        coe_id: coe._id.toString(),
-        offers: offers
-      }
-    });
-  } catch (error) {
-    console.error('Error getting seat upgrades:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to get upgrade offers' }
-    });
-  }
-});
-
-/**
- * POST /v1/coes/:id/seat-upgrades/accept
- * Accept a seat upgrade offer
- * Body: { current_seat_id, alternative_seat_id, event_id }
- */
-router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => {
-  try {
-    const { current_seat_id, alternative_seat_id, event_id } = req.body;
-    
-    if (!current_seat_id || !alternative_seat_id || !event_id) {
-      return res.status(400).json({
-        success: false,
-        error: { 
-          code: 'VALIDATION_ERROR', 
-          message: 'Missing required fields: current_seat_id, alternative_seat_id, event_id' 
-        }
-      });
-    }
-    
-    const coe = await coeService.getCOEById(req.params.id);
-    
-    if (!coe) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'COE_NOT_FOUND', message: 'COE not found' }
-      });
-    }
-    
-    if (coe.status !== 'draft') {
-      return res.status(400).json({
-        success: false,
-        error: { 
-          code: 'INVALID_STATUS', 
-          message: 'Can only accept upgrades for draft COEs' 
-        }
-      });
-    }
-    
-    // Permission check
-    if (req.user.role === 'client' && coe.client_id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: { code: 'PERMISSION_DENIED', message: 'Access denied' }
-      });
-    }
-    
-    // Find the offer
-    const offer = coe.seat_upgrade_offers?.find(o => 
-      o.current_seat_id.toString() === current_seat_id &&
-      o.event_id.toString() === event_id
-    );
-    
-    if (!offer) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'OFFER_NOT_FOUND', message: 'Upgrade offer not found' }
-      });
-    }
-    
-    const alternative = offer.alternatives.find(alt =>
-      alt.seat_id.toString() === alternative_seat_id
-    );
-    
-    if (!alternative) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'ALTERNATIVE_NOT_FOUND', message: 'Alternative seat not found in offer' }
-      });
-    }
-    
-    // Replace seat in COE
-    const seatIndex = coe.selected_seats.findIndex(seat =>
-      seat.seat_id.toString() === current_seat_id &&
-      seat.event_id.toString() === event_id
-    );
-    
-    if (seatIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'SEAT_NOT_FOUND', message: 'Current seat not found in COE' }
-      });
-    }
-    
-    // Get event to get full seat details
-    const Event = require('../models/Event');
-    const event = await Event.findById(event_id)
-      .populate('location_id', 'seats');
-    
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        error: { code: 'EVENT_NOT_FOUND', message: 'Event not found' }
-      });
-    }
-    
-    const upgradeSeat = event.seats.find(s =>
-      s._id.toString() === alternative_seat_id
-    );
-    
-    if (!upgradeSeat || upgradeSeat.status !== 'available') {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'SEAT_UNAVAILABLE', message: 'Upgrade seat is no longer available' }
-      });
-    }
-    
-    // Update seat in COE
-    const oldSeat = coe.selected_seats[seatIndex];
-    coe.selected_seats[seatIndex] = {
-      event_id: event_id,
-      seat_id: upgradeSeat._id,
-      seat_code: upgradeSeat.code,
-      capacity: upgradeSeat.capacity,
-      base_price: upgradeSeat.min_spend || 0,
-      event_price: upgradeSeat.event_price || upgradeSeat.min_spend || 0,
-      available_from: event.start_datetime,
-      available_until: event.end_datetime || event.start_datetime,
-      status: 'selected'
-    };
-    
-    // Recalculate pricing
-    const { autoFillCOEData } = require('../services/botAutoFillService');
-    const updatedCoeData = await autoFillCOEData(
-      {
-        ...coe.toObject(),
-        selected_seats: coe.selected_seats
-      },
-      {},
-      []
-    );
-    
-    coe.subtotal = updatedCoeData.subtotal;
-    coe.taxes = updatedCoeData.taxes;
-    coe.fees = updatedCoeData.fees;
-    coe.total = updatedCoeData.total;
-    coe.deposit_required = updatedCoeData.deposit_required;
-    
-    // Update offer status
-    alternative.status = 'accepted';
-    alternative.accepted_at = new Date();
-    alternative.accepted_by = req.user._id;
-    
-    // Release old seat
-    await releaseSeat(oldSeat.seat_id, oldSeat.event_id);
-    
-    // Hold new seat
-    await holdSeat(upgradeSeat._id, event_id);
-    
-    await coe.save();
-    
-    // Get updated COE
-    const updatedCOE = await coeService.getCOEById(coe._id);
-    
-    res.json({
-      success: true,
-      data: {
-        coe: updatedCOE,
-        upgrade: {
-          old_seat: oldSeat,
-          new_seat: coe.selected_seats[seatIndex],
-          price_delta: alternative.price_delta
-        }
-      },
-      message: 'Seat upgrade accepted successfully'
-    });
-  } catch (error) {
-    console.error('Error accepting seat upgrade:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to accept upgrade' }
-    });
-  }
-});
-
-/**
- * POST /v1/coes/:id/seat-upgrades/reject
- * Reject a seat upgrade offer
- * Body: { current_seat_id, alternative_seat_id, event_id }
- */
-router.post('/:id/seat-upgrades/reject', authenticateToken, async (req, res) => {
-  try {
-    const { current_seat_id, alternative_seat_id, event_id } = req.body;
-    
-    const coe = await coeService.getCOEById(req.params.id);
-    
-    if (!coe || coe.status !== 'draft') {
-      return res.status(400).json({
-        success: false,
-        error: { code: 'INVALID_STATUS', message: 'Can only reject upgrades for draft COEs' }
-      });
-    }
-    
-    // Find and mark offer as rejected
-    const offer = coe.seat_upgrade_offers?.find(o => 
-      o.current_seat_id.toString() === current_seat_id &&
-      o.event_id.toString() === event_id
-    );
-    
-    if (offer) {
-      const alternative = offer.alternatives.find(alt =>
-        alt.seat_id.toString() === alternative_seat_id
-      );
-      
-      if (alternative) {
-        alternative.status = 'rejected';
-        alternative.rejected_at = new Date();
-        await coe.save();
-      }
-    }
-    
-    res.json({
-      success: true,
-      message: 'Upgrade offer rejected'
-    });
-  } catch (error) {
-    console.error('Error rejecting seat upgrade:', error);
-    res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: 'Failed to reject upgrade' }
-    });
-  }
-});
-```
+This split keeps the **client** experience based on curated upgrade offers, while giving **admins** a direct “pick any available table for this event” workflow that properly releases the old table back into inventory.
 
 ---
 
@@ -1157,38 +990,33 @@ router.post('/:id/seat-upgrades/reject', authenticateToken, async (req, res) => 
 
 ### Scoring Components
 
-1. **Price Tier** (0-50 points)
-   - Tier 1: 10 points
-   - Tier 2: 20 points
-   - Tier 3: 30 points
-   - Tier 4: 40 points
-   - Tier 5: 50 points
+The **current implementation** intentionally keeps scoring simple and driven by the `qualityScore` field plus explicit sentiment tags on `location.seats`.
 
-2. **Sentiment Type** (0-40 points)
-   - Type A sentiment: +20 points each
-   - Type B sentiment: +10 points each
-   - Max 2 sentiments counted
+1. **Base quality (10–100 points)**
+   - `qualityScore` is stored on each `location.seats[]` entry (typically `1–10`).
+   - We compute:  
+     \[
+     \text{baseScore} = (\text{qualityScore} \text{ or } 5) \times 10
+     \]
+   - If no `qualityScore` is present, we default to `5` → base score `50`.
 
-3. **Category Hierarchy** (0-50 points)
-   - `owner_tables`: 50 points
-   - `upper_dance`: 40 points
-   - `stage_tables`: 35 points
-   - `lower_dance`: 30 points
-   - `third_tier_couch`: 25 points
-   - `backwall`: 20 points
-   - `four_tops`: 15 points
+2. **Sentiment Type bonuses**
+   - For each sentiment attached to the location seat:
+     - Type **A** → `+5` points.
+     - Type **B** → `+2` points.
+   - There is no hard cap; all sentiments are counted.
 
-4. **Sentiment Keywords** (0-60 points)
-   - "upper": +15 points
-   - "premium": +15 points
-   - "VIP": +20 points
-   - "exclusive": +20 points
-   - "better view": +10 points
-   - "best": +15 points
+3. **Final score**
+   - Final quality score is simply:
+     \[
+     \text{finalScore} = \text{baseScore} + \text{sentimentBonus}
+     \]
 
-**Total Possible Score**: 200 points
-
-**Upgrade Threshold**: A seat is considered "better" if its score is higher than the current seat's score.
+4. **Upgrade threshold (clients)**
+   - For clients, a candidate counts as an upgrade if:
+     - `seatScore > currentScore` **OR**
+     - `seatPrice > currentPrice`.
+   - For admins, we **do not** require `seatScore > currentScore`; all filtered seats are shown and scored, and the UX uses price/score/budget tags to help the admin decide.
 
 ---
 
@@ -1312,6 +1140,16 @@ router.post('/:id/seat-upgrades/reject', authenticateToken, async (req, res) => 
 - [Bot Architecture Plan](../architecture/bot-architecture-plan.md) - Overall bot system
 - [COE Specification](../architecture/coe-specification.md) - COE data model
 - [Bot COE Creation Stage 2](../architecture/bot-coe-creation-stage2.md) - COE creation flow
+
+---
+
+## TODO / Future Enhancements
+
+- [ ] **Admin seat selection UX**: In the mobile `seat-upgrades` screen, add explicit sorting controls (e.g. sort by price ascending/descending, by quality score, or by capacity) so admins can quickly find the right table when many are available.
+- [ ] **Visual grouping for admin view**: Group available seats by `section` / `category` (e.g. “Dance Floor”, “Upper Level”, “Owner Tables”) with sticky headers to make scanning large inventories easier.
+- [ ] **Highlight current vs target seat**: In the admin list, visually indicate which seat is currently held for the COE (e.g. “Current table” badge) and highlight potential conflicts such as seats already used in merges.
+- [ ] **Budget awareness in client UI**: Surface the `Within Budget` vs `Premium Upgrade` tags in the client-facing upgrade cards, and optionally add a filter toggle to hide/show “Premium Upgrade” options.
+- [ ] **Audit / logging view**: Add an internal report or log view showing when upgrades were accepted/changed (client vs admin), including old/new seat codes and price deltas, to help debug and review decisions.
 
 ---
 
