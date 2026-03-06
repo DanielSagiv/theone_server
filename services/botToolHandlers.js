@@ -389,7 +389,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       idempotency_key,
       events = [],
       client_id,
-      preferences = {}
+      preferences = {},
+      manual_event_selection = false
     } = params;
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Params destructured:', {
@@ -617,7 +618,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Event selection check:', {
       eventsProvided: events?.length || 0,
       eventsProvidedArray: events,
-      willAutoSelect: !events || events.length === 0
+      willAutoSelect: !events || events.length === 0,
+      manualEventSelection: !!manual_event_selection
     });
     
     let finalEvents = events;
@@ -1066,10 +1068,12 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           }, null, 2)
         });
         
+        const preferredCategory = eventData.preferred_seat_category || null;
         const seatResult = await selectSeatsByBudgetAndCapacity(
           event,
           preferencesWithStructured,
-          budgetForSelection
+          budgetForSelection,
+          preferredCategory
         );
         
         console.log('[BOT] [COE_CREATION_DEBUG] Seat selection result:', {
@@ -1192,6 +1196,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     // Validate we have at least some seats selected
     // If no seats found, try alternative events before giving up
     if (selectedSeats.length === 0) {
+      // If events came from an explicit manual selection, do NOT auto-replace them
+      // with alternative events. Instead, return a clear NO_SEATS_AVAILABLE error.
+      if (manual_event_selection) {
+        console.log('[BOT] [COE_CREATION_FULL_DEBUG] No seats found and manual_event_selection=true - returning NO_SEATS_AVAILABLE without alternative events');
+        const noSeatsError = createError(
+          ErrorCodes.NO_SEATS_AVAILABLE,
+          'No available seats/tables were found for the selected events.',
+          ErrorCategories.BUSINESS,
+          false
+        );
+        noSeatsError.type = 'NO_SEATS_AVAILABLE';
+        noSeatsError.details = {
+          event_diagnostics: eventDiagnostics,
+          location_exclusion_info: finalEvents && finalEvents._locationExclusionInfo
+            ? finalEvents._locationExclusionInfo
+            : null
+        };
+        throw noSeatsError;
+      }
       console.log('[BOT] [COE_CREATION_FULL_DEBUG] No seats found - attempting alternative search:', {
         selectedSeatsCount: selectedSeats.length,
         finalEventsCount: finalEvents.length,

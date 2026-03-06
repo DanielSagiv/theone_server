@@ -894,13 +894,41 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           }
         };
         
+        // If user selected specific events on the client, pass them through to create_coe_draft
+        if (
+          extractionResult.raw.selected_events &&
+          Array.isArray(extractionResult.raw.selected_events) &&
+          extractionResult.raw.selected_events.length > 0
+        ) {
+          const categoryByEventId = {};
+          if (
+            extractionResult.raw.selected_seat_categories &&
+            Array.isArray(extractionResult.raw.selected_seat_categories)
+          ) {
+            for (const { event_id, seat_category } of extractionResult.raw.selected_seat_categories) {
+              const id = (event_id && event_id.toString && event_id.toString()) || event_id;
+              if (id) categoryByEventId[id] = seat_category;
+            }
+          }
+          toolParams.events = extractionResult.raw.selected_events.map(eventId => {
+            const id = (eventId && eventId.toString && eventId.toString()) || eventId;
+            return {
+              event_id: eventId,
+              selected_seats: [],
+              preferred_seat_category: categoryByEventId[id] || null,
+            };
+          });
+          toolParams.manual_event_selection = true;
+        }
+
         console.log('[BOT] [COE_CREATION_DEBUG] Tool params prepared:', {
           start_date: toolParams.start_date,
           end_date: toolParams.end_date,
           city: toolParams.preferences.city,
           budget_max: toolParams.preferences.budget_range.max,
           party_size: toolParams.preferences.party_size,
-          fullPreferences: JSON.stringify(toolParams.preferences, null, 2)
+          fullPreferences: JSON.stringify(toolParams.preferences, null, 2),
+          providedEventsCount: toolParams.events?.length || 0
         });
         
         // Add client_id if user is admin (required for admin)

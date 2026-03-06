@@ -255,7 +255,9 @@ function extractPreferencesFromFormSubmission(message) {
     budget: /Budget:\s*\$?(\d+(?:\.\d+)?)\s*(USD)?/i,
     party_size: /Number of people:\s*(\d+)/i,
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
-    specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i
+    specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
+    selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
+    selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i
   };
 
   // Extract client_id (for admin COE creation flow)
@@ -356,6 +358,35 @@ function extractPreferencesFromFormSubmission(message) {
     preferences.specific_preferences = '';
   }
 
+  // Extract selected event IDs (optional)
+  const selectedEventsMatch = message.match(patterns.selected_event_ids);
+  if (selectedEventsMatch && selectedEventsMatch[1]) {
+    preferences.selected_events = selectedEventsMatch[1]
+      .split(',')
+      .map(id => id.trim())
+      .filter(Boolean);
+  } else {
+    preferences.selected_events = [];
+  }
+
+  // Extract selected seat categories per event (optional): "eventId1:Category A, eventId2:Category B"
+  let selected_seat_categories = [];
+  const seatCategoriesMatch = message.match(patterns.selected_seat_categories);
+  if (seatCategoriesMatch && seatCategoriesMatch[1]) {
+    const parts = seatCategoriesMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      const colonIdx = part.indexOf(':');
+      if (colonIdx > 0) {
+        const event_id = part.slice(0, colonIdx).trim();
+        const seat_category = part.slice(colonIdx + 1).trim();
+        if (event_id && seat_category) {
+          selected_seat_categories.push({ event_id, seat_category });
+        }
+      }
+    }
+  }
+  preferences.selected_seat_categories = selected_seat_categories;
+
   // Convert to format compatible with existing preference storage
   const formattedPreferences = {
     city: preferences.city,
@@ -387,7 +418,9 @@ function extractPreferencesFromFormSubmission(message) {
       budget: preferences.budget,
       party_size: preferences.party_size,
       seat_preferences: preferences.seat_preferences,
-      specific_preferences: preferences.specific_preferences
+      specific_preferences: preferences.specific_preferences,
+      selected_events: preferences.selected_events,
+      selected_seat_categories: preferences.selected_seat_categories
     }
   };
 

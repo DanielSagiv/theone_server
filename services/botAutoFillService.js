@@ -426,13 +426,15 @@ IMPORTANT:
  * @returns {Array} Selected seats
  */
 /**
- * Select seats by budget and capacity with diagnostic information
+ * Select seats by budget and capacity with diagnostic information.
+ * If preferredCategory is provided, only seats in that category (seat.category || 'General') are considered.
  * @param {Object} event - Event object with seats
  * @param {Object} preferences - User preferences
  * @param {number} remainingBudget - Remaining budget
+ * @param {string} [preferredCategory] - Optional seat category/tier to restrict selection (e.g. "VIP Table")
  * @returns {Object} { seats: Array, diagnostics: Object }
  */
-async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remainingBudget = null) {
+async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remainingBudget = null, preferredCategory = null) {
   const finalBudget = remainingBudget || preferences.budget?.max || preferences.budget_range?.max || Infinity;
   
   console.log('[BOT] [COE_CREATION_DEBUG] selectSeatsByBudgetAndCapacity called:', {
@@ -465,6 +467,7 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
     filtering_stages: {
       initial_count: event.seats?.length || 0,
       after_status_filter: 0,
+      after_category_filter: 0,
       after_capacity_filter: 0,
       after_budget_filter: 0,
       after_exclusion_filter: 0,
@@ -525,6 +528,25 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   // Stage 1: Filter by status (available only)
   let availableSeats = event.seats.filter(seat => seat.status === 'available');
   diagnostics.filtering_stages.after_status_filter = availableSeats.length;
+
+  // Stage 1b: Filter by preferred category/tier if user chose one (e.g. from COE event selection)
+  if (preferredCategory && typeof preferredCategory === 'string' && preferredCategory.trim()) {
+    const categoryFilter = preferredCategory.trim();
+    const beforeCategory = availableSeats.length;
+    availableSeats = availableSeats.filter(seat => (seat.category || 'General') === categoryFilter);
+    diagnostics.filtering_stages.after_category_filter = availableSeats.length;
+    if (availableSeats.length === 0 && beforeCategory > 0) {
+      diagnostics.primary_reason = 'NO_SEATS_IN_PREFERRED_CATEGORY';
+      diagnostics.details.preferred_category = {
+        requested_category: categoryFilter,
+        available_seats_before_filter: beforeCategory,
+        event_categories: [...new Set(event.seats.map(s => s.category || 'General'))],
+      };
+      return { seats: [], diagnostics };
+    }
+  } else {
+    diagnostics.filtering_stages.after_category_filter = availableSeats.length;
+  }
 
   if (availableSeats.length === 0) {
     const statusCounts = {

@@ -380,7 +380,9 @@ async function formatCOEResponse(type, coe, message, actions = [], budget = null
           } : null,
           // Flag indicating if same-day alternatives exist (for Replace button visibility)
           has_same_day_alternatives: hasSameDayAlternatives,
-          ...(runner_assignment ? { runner_assignment } : {})
+          ...(runner_assignment ? { runner_assignment } : {}),
+          // For review step: client-side estimate (event base_price) vs server total (seat prices)
+          base_price: event.event_id?.base_price ?? event.base_price ?? 0,
         };
       })),
       selected_seats: enhancedSeats, // Use enhanced seats with media
@@ -409,6 +411,13 @@ async function formatCOEResponse(type, coe, message, actions = [], budget = null
       } : null,
       created_at: coe.created_at,
       updated_at: coe.updated_at,
+      // For review step: budget from request so client can show Total vs Budget
+      original_request_data: coe.original_request_data || null,
+      preferences: coe.preferences ? {
+        ...coe.preferences,
+        budget: coe.preferences.budget || null,
+        budget_range: coe.preferences.budget_range || null,
+      } : null,
       // Include seat upgrade offers if available, with normalized event_id
       seat_upgrade_offers: (coe.seat_upgrade_offers || []).map(offer => ({
         ...offer.toObject ? offer.toObject() : offer,
