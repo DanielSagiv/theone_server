@@ -21,6 +21,12 @@ const refundSchema = Joi.object({
   reason: Joi.string().required()
 });
 
+const updateSavedCardSchema = Joi.object({
+  nickname: Joi.string().allow('', null),
+  expiry_month: Joi.string().pattern(/^\d{2}$/).optional(),
+  expiry_year: Joi.string().pattern(/^\d{2}$/).optional()
+}).min(1);
+
 /**
  * POST /v1/payments/coe/:coeId/intent
  * Create payment intent for COE
@@ -245,6 +251,47 @@ router.get('/my', authenticateToken, async (req, res) => {
       error: {
         code: 'GET_PAYMENT_HISTORY_FAILED',
         message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * PUT /v1/payments/saved-cards/:tokenId
+ * Update saved card metadata (expiry, nickname)
+ */
+router.put('/saved-cards/:tokenId', authenticateToken, async (req, res) => {
+  try {
+    const { error, value } = updateSavedCardSchema.validate(req.body || {});
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    await paymentService.updateSavedCard(req.user._id, req.params.tokenId, value);
+
+    res.json({
+      success: true,
+      message: 'Saved card updated successfully'
+    });
+  } catch (err) {
+    console.error('Update saved card error:', {
+      user_id: req.user._id,
+      token_id: req.params.tokenId,
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'UPDATE_SAVED_CARD_FAILED',
+        message: err.message
       }
     });
   }

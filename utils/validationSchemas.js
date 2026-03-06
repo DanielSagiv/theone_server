@@ -422,11 +422,14 @@ const signupSchema = Joi.object({
     'date.max': 'Date of birth must be in the past',
     'any.required': 'Date of birth is required'
   }),
-  industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech').required(),
+  industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other').required(),
+  industryCustom: Joi.string().allow('', null),
   role: Joi.string().valid('admin', 'client', 'runner').default('client'),
   entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval').default('pendingApproval'),
   visibilityStatus: Joi.string().valid('public', 'private').default('public'),
-  userTier: Joi.string().valid('member', 'vip', 'elite').default('member')
+  userTier: Joi.string()
+    .valid('member', 'vip', 'elite', 'silver', 'gold', 'platinum')
+    .default('silver')
 });
 
 /**
@@ -468,6 +471,9 @@ const updateProfileSchema = Joi.object({
   lastName: Joi.string().min(2),
   email: Joi.string().email(),
   phone: Joi.string().min(10),
+  dateOfBirth: Joi.date().max('now'),
+  industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other'),
+  industryCustom: Joi.string().allow('', null),
   socialMedia: Joi.object({
     facebook: Joi.string().uri().allow(''),
     linkedin: Joi.string().uri().allow(''),
@@ -498,7 +504,9 @@ const updateVisibilityStatusSchema = Joi.object({
  * User tier update validation schema
  */
 const updateUserTierSchema = Joi.object({
-  userTier: Joi.string().valid('member', 'vip', 'elite').required()
+  userTier: Joi.string()
+    .valid('member', 'vip', 'elite', 'silver', 'gold', 'platinum')
+    .required()
 });
 
 /**

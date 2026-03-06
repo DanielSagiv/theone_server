@@ -1008,7 +1008,15 @@ function formatProfileResponse(user, message) {
       avatarUrl: user.avatarUrl || null,
       dateOfBirth: user.dateOfBirth || null,
       industry: user.industry || null,
-      userTier: user.userTier || 'member',
+      // Normalize legacy tiers (member/vip/elite) into new silver/gold/platinum naming
+      userTier: (() => {
+        const raw = user.userTier;
+        if (!raw) return 'silver';
+        if (raw === 'member' || raw === 'silver') return 'silver';
+        if (raw === 'vip' || raw === 'gold') return 'gold';
+        if (raw === 'elite' || raw === 'platinum') return 'platinum';
+        return raw;
+      })(),
       entity_status: user.entity_status || null,
       visibilityStatus: user.visibilityStatus || 'public',
       socialMedia: user.socialMedia || {},

@@ -47,8 +47,13 @@ const userSchema = new mongoose.Schema({
   industry: {
     type: String,
     required: false,
-    enum: ['fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech'],
+    enum: ['fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other'],
     index: true
+  },
+  industryCustom: {
+    type: String,
+    required: false,
+    trim: true
   },
   role: {
     type: String,
@@ -68,8 +73,11 @@ const userSchema = new mongoose.Schema({
   },
   userTier: {
     type: String,
-    enum: ['member', 'vip', 'elite'],
-    default: 'member',
+    enum: ['member', 'vip', 'elite', 'silver', 'gold', 'platinum'],
+    default: function() {
+      // Default all non-admins to silver; admins to platinum
+      return this.role === 'admin' ? 'platinum' : 'silver';
+    },
     index: true
   },
   isActive: {

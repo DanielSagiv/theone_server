@@ -1226,6 +1226,57 @@ async function setDefaultPaymentMethod(userId, tokenId) {
   }
 }
 
+/**
+ * Update saved card metadata (expiry, nickname)
+ * @param {string} userId
+ * @param {string} tokenId
+ * @param {{nickname?: string, expiry_month?: string, expiry_year?: string}} updates
+ */
+async function updateSavedCard(userId, tokenId, updates = {}) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const method = user.saved_payment_methods.find(m => m.token_id === tokenId);
+    if (!method) {
+      throw new Error('Payment method not found');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'nickname')) {
+      method.nickname = updates.nickname;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'expiry_month')) {
+      method.expiry_month = updates.expiry_month;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'expiry_year')) {
+      method.expiry_year = updates.expiry_year;
+    }
+
+    await user.save();
+
+    console.log('Saved card updated:', {
+      user_id: userId,
+      token_id: tokenId,
+      has_nickname: Object.prototype.hasOwnProperty.call(updates, 'nickname'),
+      has_expiry_month: Object.prototype.hasOwnProperty.call(updates, 'expiry_month'),
+      has_expiry_year: Object.prototype.hasOwnProperty.call(updates, 'expiry_year'),
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Update saved card failed:', {
+      user_id: userId,
+      token_id: tokenId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
 module.exports = {
   createPaymentIntent,
   processRefund,
@@ -1240,6 +1291,7 @@ module.exports = {
   tokenizeAndSaveCard,
   chargeSavedCard,
   removeSavedCard,
-  setDefaultPaymentMethod
+  setDefaultPaymentMethod,
+  updateSavedCard
 };
 
