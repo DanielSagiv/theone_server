@@ -249,6 +249,7 @@ function extractPreferencesFromFormSubmission(message) {
   // Support both newline-delimited and space-delimited fields (admin flow)
   const patterns = {
     client_id: /Client ID:\s*([a-fA-F0-9]{24})(?:\s+City:|\s+Start date:|\s|\n|$)/i,
+    request_coe_id: /Request COE ID:\s*([a-fA-F0-9]{24})(?:\s+City:|\s+Start date:|\s|\n|$)/i,
     city: /City:\s*([^\n]+?)(?:\s+Start date:|\n|$)/i,
     start_date: /Start date:\s*([^\n]+?)(?:\s+End date:|\n|$)/i,
     end_date: /End date:\s*([^\n]+?)(?:\s+Budget:|\n|$)/i,
@@ -273,6 +274,13 @@ function extractPreferencesFromFormSubmission(message) {
     console.log('[PREFERENCE SERVICE] Extracted client_id:', preferences.client_id);
   } else {
     console.warn('[PREFERENCE SERVICE] Failed to extract client_id from message:', message.substring(0, 200));
+  }
+
+  // Extract request_coe_id (for Flow A: build experience from existing request-only COE)
+  const requestCoeMatch = message.match(patterns.request_coe_id);
+  if (requestCoeMatch && requestCoeMatch[1]) {
+    preferences.request_coe_id = requestCoeMatch[1].trim();
+    console.log('[PREFERENCE SERVICE] Extracted request_coe_id:', preferences.request_coe_id);
   }
 
   // Extract city (optional for admin flow)
@@ -412,6 +420,7 @@ function extractPreferencesFromFormSubmission(message) {
     formatted: formattedPreferences,
     raw: {
       client_id: preferences.client_id,
+      request_coe_id: preferences.request_coe_id,
       city: preferences.city,
       start_date: preferences.start_date,
       end_date: preferences.end_date,

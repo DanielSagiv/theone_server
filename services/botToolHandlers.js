@@ -390,7 +390,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       events = [],
       client_id,
       preferences = {},
-      manual_event_selection = false
+      manual_event_selection = false,
+      request_coe_id = null
     } = params;
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Params destructured:', {
@@ -404,7 +405,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       client_id: client_id,
       client_idType: typeof client_id,
       preferencesKeys: Object.keys(preferences),
-      preferencesFull: JSON.stringify(preferences, null, 2)
+      preferencesFull: JSON.stringify(preferences, null, 2),
+      request_coe_id: request_coe_id
     });
 
     // Check feature flag for client COE creation
@@ -1708,7 +1710,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     }
 
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== COE CREATION PHASE ==========');
-    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Calling coeService.createCOE:', {
+    console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE data prepared for persistence:', {
       coeDataKeys: Object.keys(coeData),
       createdBy: user._id.toString(),
       userRole: user.role,
@@ -1719,11 +1721,28 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         seatsCount: coeData.selected_seats?.length || 0,
         subtotal: coeData.subtotal,
         total: coeData.total
-      }
+      },
+      request_coe_id: request_coe_id
     });
     
-    // Create COE
-    const coe = await coeService.createCOE(coeData, user._id);
+    let coe;
+    if (request_coe_id) {
+      // Flow A: upgrade an existing request-only COE into a draft instead of creating a new one.
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Flow A detected - updating existing request COE:', {
+        request_coe_id: request_coe_id
+      });
+      
+      // Use updateCOE so that seat hold/release logic is respected.
+      // We intentionally DO NOT overwrite original_request_data here; updateCOE
+      // only touches fields present in coeData.
+      coe = await coeService.updateCOE(request_coe_id, {
+        ...coeData,
+        status: coeData.status || 'draft'
+      });
+    } else {
+      // Default behaviour: create a new draft/request COE as before.
+      coe = await coeService.createCOE(coeData, user._id);
+    }
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE created successfully:', {
       coeId: coe._id?.toString(),

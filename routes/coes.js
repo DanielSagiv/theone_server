@@ -933,20 +933,31 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
       return res.status(400).json({ success: false, error: message });
     }
 
+    // Enrich the coe_create_form payload with the originating request COE ID (Flow A).
+    // This allows the admin's form submission to "upgrade" the existing request-only COE
+    // instead of creating a second draft COE.
+    const enrichedData = {
+      ...toolResult.data,
+      defaults: {
+        ...(toolResult.data.defaults || {}),
+        request_coe_id: coeId.toString(),
+      },
+    };
+
     // Append a new assistant message with the coe_create_form structured_data
     // to the admin's bot conversation so it appears in the Bot screen.
     const conversation = await getOrCreateConversation(user._id || user.id);
     conversation.messages.push({
       role: 'assistant',
-      content: toolResult.data.message || 'Create a new COE draft for this client.',
-      structured_data: toolResult.data,
+      content: enrichedData.message || toolResult.data.message || 'Create a new COE draft for this client.',
+      structured_data: enrichedData,
       timestamp: new Date().toISOString(),
     });
     await conversation.save();
 
     res.json({
       success: true,
-      data: toolResult.data,
+      data: enrichedData,
     });
   } catch (error) {
     console.error('[POST /coes/:coeId/build-experience-form] Unexpected error:', error);

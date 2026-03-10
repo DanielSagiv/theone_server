@@ -1045,10 +1045,29 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
               preferred_seat_category: categoryByEventId[id] || null,
             };
           });
-          // Treat manual event selection differently for clients vs admins:
+          // Treat manual event selection differently for clients vs admins by default:
           // - Clients: manual_event_selection=true → if no seats are available, surface a clear error.
           // - Admins: manual_event_selection=false → allow fallback/alternative search logic to run.
           toolParams.manual_event_selection = user.role === 'client';
+        }
+
+        // If this form submission comes from the Flow A "Build experience" path,
+        // a request_coe_id will be present. In that case:
+        // - Pass request_coe_id through to create_coe_draft so it can upgrade the
+        //   existing request-only COE instead of creating a new one.
+        // - Force manual_event_selection=true when explicit events were chosen,
+        //   so that if any selected event has no seats, we surface a clear error
+        //   instead of silently dropping it (fixing the "one event with no seats" issue).
+        if (extractionResult.raw.request_coe_id) {
+          toolParams.request_coe_id = extractionResult.raw.request_coe_id;
+          console.log('[BOT] [COE_CREATION_DEBUG] Flow A detected - using request_coe_id for draft upgrade:', {
+            request_coe_id: toolParams.request_coe_id
+          });
+
+          if (toolParams.events && Array.isArray(toolParams.events) && toolParams.events.length > 0) {
+            toolParams.manual_event_selection = true;
+            console.log('[BOT] [COE_CREATION_DEBUG] Flow A manual selection - forcing manual_event_selection=true');
+          }
         }
 
         console.log('[BOT] [COE_CREATION_DEBUG] Tool params prepared:', {
