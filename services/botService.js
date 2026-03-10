@@ -1045,7 +1045,10 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
               preferred_seat_category: categoryByEventId[id] || null,
             };
           });
-          toolParams.manual_event_selection = true;
+          // Treat manual event selection differently for clients vs admins:
+          // - Clients: manual_event_selection=true → if no seats are available, surface a clear error.
+          // - Admins: manual_event_selection=false → allow fallback/alternative search logic to run.
+          toolParams.manual_event_selection = user.role === 'client';
         }
 
         console.log('[BOT] [COE_CREATION_DEBUG] Tool params prepared:', {
