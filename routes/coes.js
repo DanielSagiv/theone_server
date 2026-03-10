@@ -5,6 +5,7 @@ const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
 const mergeService = require('../services/mergeService');
+const { executeTool, getOrCreateConversation } = require('../services/botService');
 const {
   createCOESchema,
   updateCOESchema,
@@ -888,6 +889,70 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       success: false,
       error: 'Failed to fetch COE',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:coeId/build-experience-form
+ * Create a "Create COE for client" form (coe_create_form) for an existing request-only COE.
+ * Admin only. This does NOT modify the COE; it just returns structured data
+ * so the mobile app can render the existing Create Experience flow.
+ */
+router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { coeId } = req.params;
+    const user = req.user;
+
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      return res.status(404).json({ success: false, error: 'COE not found' });
+    }
+
+    if (coe.status !== 'request') {
+      return res.status(400).json({
+        success: false,
+        error: 'Build experience is only available for request status experiences',
+      });
+    }
+
+    if (!coe.client_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'COE is missing client information',
+      });
+    }
+
+    const correlationId = `build-experience-form-${coeId}-${Date.now()}`;
+    const toolParams = { client_id: coe.client_id.toString() };
+
+    const toolResult = await executeTool('open_create_coe_for_client', toolParams, user, correlationId);
+
+    if (!toolResult.success || !toolResult.data) {
+      const message = toolResult.error?.message || 'Failed to open Create COE form for client';
+      return res.status(400).json({ success: false, error: message });
+    }
+
+    // Append a new assistant message with the coe_create_form structured_data
+    // to the admin's bot conversation so it appears in the Bot screen.
+    const conversation = await getOrCreateConversation(user._id || user.id);
+    conversation.messages.push({
+      role: 'assistant',
+      content: toolResult.data.message || 'Create a new COE draft for this client.',
+      structured_data: toolResult.data,
+      timestamp: new Date().toISOString(),
+    });
+    await conversation.save();
+
+    res.json({
+      success: true,
+      data: toolResult.data,
+    });
+  } catch (error) {
+    console.error('[POST /coes/:coeId/build-experience-form] Unexpected error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to build experience form',
     });
   }
 });

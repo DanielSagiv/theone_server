@@ -3,6 +3,9 @@ const crypto = require('crypto');
 const BotConversation = require('../models/BotConversation');
 const BotUsageLog = require('../models/BotUsageLog');
 const BotAuditLog = require('../models/BotAuditLog');
+const User = require('../models/User');
+const coeService = require('./coeService');
+const { formatDateRange } = require('../utils/dateParser');
 const { getOpenAIFunctions, getTool, hasPermission } = require('./botTools');
 const { toolHandlers } = require('./botToolHandlers');
 const {
@@ -801,6 +804,130 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     // CRITICAL FIX: Check for admin without client_id even when extractionResult.valid is false
     // The client_id extraction can succeed even if other fields have validation errors
     if (isFormSubmission && extractionResult) {
+      // If this is a CLIENT request with NO manually selected events, create a request-only COE
+      // (no auto-selected events) and skip the create_coe_draft tool.
+      const clientNoManualEvents =
+        user.role === 'client' &&
+        !(
+          extractionResult.raw &&
+          extractionResult.raw.selected_events &&
+          Array.isArray(extractionResult.raw.selected_events) &&
+          extractionResult.raw.selected_events.length > 0
+        );
+
+      if (clientNoManualEvents) {
+        try {
+          console.log('[BOT] Phase 2.4: Creating request-only COE (no manual events, client flow)');
+
+          const raw = extractionResult.raw || {};
+
+          // Build original_request_data from extracted preferences
+          const requestStartDate = raw.start_date ? new Date(raw.start_date) : null;
+          const requestEndDate = raw.end_date ? new Date(raw.end_date) : requestStartDate;
+
+          // Normalize budget into { max, currency } shape used by COEOriginalRequestCard and admin flows
+          let normalizedBudget = null;
+          if (raw.budget) {
+            const amount =
+              typeof raw.budget === 'number'
+                ? raw.budget
+                : raw.budget.max ??
+                  raw.budget.amount ??
+                  null;
+            if (amount != null && !Number.isNaN(Number(amount))) {
+              normalizedBudget = {
+                max: Number(amount),
+                min:
+                  raw.budget.min != null
+                    ? Number(raw.budget.min)
+                    : Number(amount),
+                currency: raw.budget.currency || 'USD',
+              };
+            }
+          }
+
+          const originalRequestData = {
+            original_request_text: prompt,
+            budget: normalizedBudget,
+            requested_dates: {
+              start_date: requestStartDate,
+              end_date: requestEndDate,
+            },
+            party_size: raw.party_size || null,
+            seat_preferences: raw.seat_preferences || '',
+            general_preferences: raw.specific_preferences || '',
+            city: raw.city || null,
+            requested_at: new Date(),
+          };
+
+          // Determine admin for this request (first active admin, fallback to any admin)
+          let admin = await User.findOne({ role: 'admin', isActive: true });
+          if (!admin) {
+            admin = await User.findOne({ role: 'admin' });
+          }
+          if (!admin) {
+            throw new Error('No active admin found to assign to COE request.');
+          }
+
+          const client = user;
+          const start = requestStartDate || new Date();
+          const end = requestEndDate || start;
+          const dateStr = formatDateRange(start, end || start);
+
+          const clientFullName =
+            (client.firstName && client.lastName
+              ? `${client.firstName} ${client.lastName}`
+              : client.firstName) ||
+            client.email ||
+            'Client';
+
+          const coeName = `${clientFullName} experience, ${dateStr}`;
+
+          const requestCoeData = {
+            name: coeName,
+            description: coeName,
+            status: 'request',
+            client_id: client._id,
+            admin_id: admin._id,
+            currency: normalizedBudget?.currency || 'USD',
+            subtotal: 0,
+            taxes: 0,
+            fees: 0,
+            total: 0,
+            events: [],
+            selected_seats: [],
+            start_date: start,
+            end_date: end,
+            original_request_data: originalRequestData,
+          };
+
+          const coe = await coeService.createCOE(requestCoeData, user._id);
+
+          console.log('[BOT] Phase 2.4: Request-only COE created:', {
+            coeId: coe._id?.toString(),
+            status: coe.status,
+          });
+
+          // Link this COE to the conversation so later flows can find it
+          conversation.active_coe_id = coe._id.toString();
+
+          const confirmationMessage = {
+            role: 'assistant',
+            content:
+              'Your experience request has been submitted. Our team will now build the best experience for you and send you a draft to review.',
+            timestamp: new Date().toISOString(),
+          };
+
+          conversation.messages.push(confirmationMessage);
+          await conversation.save();
+
+          return conversation.messages;
+        } catch (err) {
+          console.error('[BOT] Phase 2.4: Error creating request-only COE:', err);
+          // Let the normal error handling continue (will surface a generic error to the user)
+          throw err;
+        }
+      }
       // CRITICAL: Check for admin without client_id BEFORE preparing tool params
       // This check must happen even if extractionResult.valid is false
       if (user.role === 'admin' && !extractionResult?.raw?.client_id) {
@@ -1498,6 +1625,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
 module.exports = {
   getConversationHistory,
   sendBotMessage,
-  executeTool
+  executeTool,
+  getOrCreateConversation
 };
 
