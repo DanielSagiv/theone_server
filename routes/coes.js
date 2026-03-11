@@ -669,7 +669,16 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
         const eventItem = coe.events.find(e => {
           const eventId = e.event_id?._id?.toString() || e.event_id?.toString() || e.event_id;
           const seatEventId = selectedSeat.event_id?.toString() || selectedSeat.event_id;
-          return eventId === seatEventId;
+          const isMatch = eventId === seatEventId;
+          if (!isMatch && seatEventId && eventId) {
+            console.log('[GET /coes/my/:id] Seat/event mismatch before enhancement:', {
+              coeId: coe._id?.toString() || id,
+              eventId,
+              seatEventId,
+              seatCode: selectedSeat.seat_code,
+            });
+          }
+          return isMatch;
         });
 
         if (eventItem && eventItem.event_id) {
@@ -933,14 +942,74 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
       return res.status(400).json({ success: false, error: message });
     }
 
+    // If this COE was created via Flow A (request-only), we have original_request_data
+    // that can be used to pre-populate the admin Create Experience form so the admin
+    // doesn't need to re-enter information the client already provided.
+    const originalRequest = coe.original_request_data || {};
+    const requestedDates = originalRequest.requested_dates || {};
+
+    // Normalize dates to YYYY-MM-DD strings expected by COECreateForm
+    const normalizeDateForForm = dateValue => {
+      if (!dateValue) return null;
+      try {
+        const d = dateValue instanceof Date ? dateValue : new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toISOString().split('T')[0];
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const startDateDefault = normalizeDateForForm(requestedDates.start_date);
+    const endDateDefault = normalizeDateForForm(requestedDates.end_date);
+
+    // Normalize budget to a single numeric amount used by the admin form
+    let budgetDefault = null;
+    if (originalRequest.budget) {
+      const b = originalRequest.budget;
+      const amount =
+        typeof b === 'number'
+          ? b
+          : (b.max != null && !Number.isNaN(Number(b.max))
+              ? Number(b.max)
+              : b.amount != null && !Number.isNaN(Number(b.amount))
+                ? Number(b.amount)
+                : null);
+      if (amount != null) {
+        budgetDefault = amount;
+      }
+    }
+
+    const partySizeDefault =
+      typeof originalRequest.party_size === 'number' && originalRequest.party_size > 0
+        ? originalRequest.party_size
+        : null;
+
+    const seatPreferencesDefault = originalRequest.seat_preferences || '';
+    const specificPreferencesDefault = originalRequest.general_preferences || '';
+    const cityDefault = originalRequest.city || null;
+
     // Enrich the coe_create_form payload with the originating request COE ID (Flow A).
+    // Also, when original_request_data is present, pre-populate the defaults for:
+    // - dates, city, budget, party size, seat/general preferences, and occasion/reason.
     // This allows the admin's form submission to "upgrade" the existing request-only COE
-    // instead of creating a second draft COE.
+    // instead of creating a second draft COE, and avoids re-typing data.
     const enrichedData = {
       ...toolResult.data,
       defaults: {
         ...(toolResult.data.defaults || {}),
         request_coe_id: coeId.toString(),
+        ...(startDateDefault ? { start_date: startDateDefault } : {}),
+        ...(endDateDefault ? { end_date: endDateDefault } : {}),
+        ...(cityDefault ? { city: cityDefault } : {}),
+        ...(budgetDefault != null ? { budget: budgetDefault } : {}),
+        ...(partySizeDefault != null ? { party_size: partySizeDefault } : {}),
+        ...(seatPreferencesDefault
+          ? { seat_preferences: seatPreferencesDefault }
+          : {}),
+        ...(specificPreferencesDefault
+          ? { specific_preferences: specificPreferencesDefault }
+          : {}),
       },
     };
 

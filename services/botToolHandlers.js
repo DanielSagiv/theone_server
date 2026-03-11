@@ -1182,9 +1182,23 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           totalSelectedSeatsSoFar: selectedSeats.length
         });
       } else {
+        // No seats were selected for this event (but other events may still have seats).
+        // Log detailed diagnostics so we can understand why this specific event ended up
+        // without seats while others succeeded.
+        const diagnosticsForEvent = eventData.seat_diagnostics || null;
         console.log('[BOT] [COE_CREATION_FULL_DEBUG] No seats selected for event:', {
           eventId: eventId.toString(),
-          eventName: event.name
+          eventName: event.name,
+          eventStatus: event.status,
+          eventSeatsCount: event.seats?.length || 0,
+          locationId: event.location_id?._id?.toString() || event.location_id?.toString(),
+          locationSeatsCount: event.location_id?.seats?.length || 0,
+          manual_event_selection: !!manual_event_selection,
+          party_size: conversationPreferences.party_size,
+          budget_max: conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null,
+          city: cityToUse || conversationPreferences.city || null,
+          hasDiagnostics: !!diagnosticsForEvent,
+          diagnostics: diagnosticsForEvent || undefined
         });
       }
     }
