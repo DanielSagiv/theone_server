@@ -436,7 +436,11 @@ IMPORTANT:
  */
 async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remainingBudget = null, preferredCategory = null) {
   const finalBudget = remainingBudget || preferences.budget?.max || preferences.budget_range?.max || Infinity;
-  
+  // #region agent log
+  try {
+    fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botAutoFillService.js:selectSeatsEntry',message:'selectSeatsByBudgetAndCapacity entry',data:{eventId:event?._id?.toString(),eventSeatsCount:event?.seats?.length||0,finalBudget,preferredCategory,party_size:preferences?.party_size},timestamp:Date.now(),hypothesisId:'H1,H3,H4'})}).catch(()=>{});
+  } catch (_) {}
+  // #endregion
   console.log('[BOT] [COE_CREATION_DEBUG] selectSeatsByBudgetAndCapacity called:', {
     eventId: event._id?.toString() || null,
     eventName: event.name || 'Unknown Event',
@@ -504,12 +508,20 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
   const structuredPreferences = preferences.structuredPreferences || null;
   
   // Get user's exclusion preference text (from seat_preferences or exclusion_intent)
-  // CRITICAL: Only perform exclusion filtering if user has provided exclusion preference text
-  // Priority: seat_preferences > exclusion_intent > notes
-  const userExclusionText = (typeof preferences.seat_preferences === 'string' && preferences.seat_preferences.trim()) ||
-                            (typeof structuredPreferences?.exclusion_intent === 'string' && structuredPreferences.exclusion_intent.trim()) ||
-                            (typeof preferences.notes === 'string' && preferences.notes.trim()) ||
-                            null;
+  // CRITICAL: When user has explicitly selected a seat category (e.g. "upper_dance"), do NOT use
+  // the generic "Seat and general preferences" free text as exclusion input—that field is for
+  // notes and positive preferences. Using it as exclusion causes vague text (e.g. "This and that")
+  // to be interpreted by AI as something to avoid, excluding the only matching seat and causing
+  // "No available seats/tables". Use only explicit exclusion_intent when preferredCategory is set.
+  const hasExplicitCategory = preferredCategory && typeof preferredCategory === 'string' && preferredCategory.trim();
+  const userExclusionText = hasExplicitCategory
+    ? (typeof structuredPreferences?.exclusion_intent === 'string' && structuredPreferences.exclusion_intent.trim())
+        ? structuredPreferences.exclusion_intent.trim()
+        : null
+    : ((typeof preferences.seat_preferences === 'string' && preferences.seat_preferences.trim()) ||
+       (typeof structuredPreferences?.exclusion_intent === 'string' && structuredPreferences.exclusion_intent.trim()) ||
+       (typeof preferences.notes === 'string' && preferences.notes.trim()) ||
+       null);
   
   // Get exclusions array for diagnostics/error messages (populate matchingKeywords for error messages)
   const exclusions = structuredPreferences?.exclusions || 
@@ -542,6 +554,11 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
         available_seats_before_filter: beforeCategory,
         event_categories: [...new Set(event.seats.map(s => s.category || 'General'))],
       };
+      // #region agent log
+      try {
+        fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botAutoFillService.js:returnNoSeatsCategory',message:'Returning no seats: NO_SEATS_IN_PREFERRED_CATEGORY',data:diagnostics.details.preferred_category,timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+      } catch (_) {}
+      // #endregion
       return { seats: [], diagnostics };
     }
   } else {
@@ -575,6 +592,11 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
       seats_with_sufficient_capacity: 0
     };
     diagnostics.secondary_reasons.push('NO_AVAILABLE_SEATS'); // Also no available seats
+    // #region agent log
+    try {
+      fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botAutoFillService.js:returnNoSeatsCapacity',message:'Returning no seats: CAPACITY_TOO_SMALL',data:diagnostics.details.capacity_too_small,timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+    } catch (_) {}
+    // #endregion
     return { seats: [], diagnostics };
   }
 
@@ -699,6 +721,11 @@ async function selectSeatsByBudgetAndCapacity(event, preferences = {}, remaining
       seats_within_relaxed_budget: seatsWithinRelaxedBudget
     };
     diagnostics.secondary_reasons.push('NO_AVAILABLE_SEATS'); // Also no available seats
+    // #region agent log
+    try {
+      fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botAutoFillService.js:returnNoSeatsBudget',message:'Returning no seats: BUDGET_TOO_LOW',data:diagnostics.details.budget_too_low,timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    } catch (_) {}
+    // #endregion
     return { seats: [], diagnostics };
   }
 

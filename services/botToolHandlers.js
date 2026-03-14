@@ -1071,13 +1071,24 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         });
         
         const preferredCategory = eventData.preferred_seat_category || null;
+        // #region agent log
+        try {
+          fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botToolHandlers.js:beforeSelectSeats',message:'Before selectSeatsByBudgetAndCapacity',data:{eventId:eventId?.toString(),eventName:event?.name,eventSeatsCount:event?.seats?.length||0,preferredCategory,budgetForSelection,party_size:preferencesWithStructured?.party_size},timestamp:Date.now(),hypothesisId:'H1,H2,H3'})}).catch(()=>{});
+        } catch (_) {}
+        // #endregion
         const seatResult = await selectSeatsByBudgetAndCapacity(
           event,
           preferencesWithStructured,
           budgetForSelection,
           preferredCategory
         );
-        
+        // #region agent log
+        try {
+          const resSeats = Array.isArray(seatResult) ? seatResult : (seatResult?.seats || []);
+          const resDiag = Array.isArray(seatResult) ? null : (seatResult?.diagnostics || null);
+          fetch('http://127.0.0.1:7243/ingest/48279e3e-9368-4b19-b1f9-b96a74363f47',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5f9384'},body:JSON.stringify({sessionId:'5f9384',location:'botToolHandlers.js:afterSelectSeats',message:'After selectSeatsByBudgetAndCapacity',data:{eventId:eventId?.toString(),seatsCount:resSeats.length,primary_reason:resDiag?.primary_reason,filtering_stages:resDiag?.filtering_stages},timestamp:Date.now(),hypothesisId:'H1,H2,H3,H4,H5'})}).catch(()=>{});
+        } catch (_) {}
+        // #endregion
         console.log('[BOT] [COE_CREATION_DEBUG] Seat selection result:', {
           eventId: eventId.toString(),
           eventName: event.name,
