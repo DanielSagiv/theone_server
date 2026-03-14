@@ -136,6 +136,12 @@ function generateNotificationContent(type, data) {
     runner_updated: {
       title: 'Runner Updated',
       body: `Runner assignment updated for '${coeName}'`
+    },
+    seat_section_unavailable: {
+      title: 'Seat section no longer available',
+      body: data.message || (data.previous_total != null && data.new_total != null
+        ? `No available tables in the selected section for some events. Amount reduced. Contact The1 for a different section. Total updated from $${Number(data.previous_total).toFixed(2)} to $${Number(data.new_total).toFixed(2)}. You can complete payment with the new amount.`
+        : `Selected section is no longer available for some events in '${coeName}'. Amount was reduced. Contact The1 for a different seat section.`)
     }
   };
 
@@ -178,6 +184,8 @@ function generateDeepLink(type, data) {
         if (data.payment_id) {
           return `${baseUrl}payment-detail?paymentId=${data.payment_id}`;
         }
+        return `${baseUrl}coe-detail?coeId=${coeId}`;
+      case 'seat_section_unavailable':
         return `${baseUrl}coe-detail?coeId=${coeId}`;
       default:
         return `${baseUrl}coe-detail?coeId=${coeId}`;

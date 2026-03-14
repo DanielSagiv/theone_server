@@ -588,11 +588,11 @@ async function executeMerge(params) {
   );
 
   const eventSeatId = targetSeat._id;
+  // Link seat to primary COE; status set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
   const updateResult = await Event.updateOne(
     { _id: new mongoose.Types.ObjectId(eventIdStr) },
     {
       $set: {
-        'seats.$[seat].status': 'held',
         'seats.$[seat].booking_reference': primaryCoeIdStr,
         'seats.$[seat].booked_at': new Date(),
         'seats.$[seat].merged_coe_ids': mergedCoeIdsArray,
@@ -766,12 +766,7 @@ async function unmergeSingle(params) {
       }
     );
 
-    await coeService.updateSelectedSeatsStatus(
-      [{ event_id: eventDoc._id, seat_id: newSeat._id }],
-      mergedIdStr,
-      'held'
-    );
-
+    // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     console.log('[MERGE_SERVICE] unmergeSingle completed with reassignment', {
       primary_coe_id: primaryIdStr,
       merged_coe_id: mergedIdStr,

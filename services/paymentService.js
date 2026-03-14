@@ -112,15 +112,30 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
     if (!['approved', 'pending_pay'].includes(coe.status)) {
       throw new Error(`Cannot pay for COE in status: ${coe.status}`);
     }
-    
+
+    // Pre-payment: check seat availability and same-section fallback. If any event has no seats in section,
+    // reduce COE, notify user (no tables, contact The1, total updated from X to Y), and return so client
+    // can show the message and let user complete payment with the new amount on next attempt.
+    const coeService = require('./coeService');
+    const prepared = await coeService.preparePaymentForCOE(coeId);
+    if (prepared && prepared.coe_updated) {
+      return {
+        coe_updated: true,
+        previous_total: prepared.previous_total,
+        new_total: prepared.new_total,
+        total_zero: prepared.new_total === 0,
+        unavailable_event_names: prepared.unavailable_event_names,
+        message: prepared.message
+      };
+    }
+
     // Update status to pending_pay if currently approved
     if (coe.status === 'approved') {
-      const coeService = require('./coeService');
       await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
       // Reload coe after status update
       coe = await COE.findById(coeId).populate('client_id');
     }
-    
+
     // Calculate amount based on payment type (total = subtotal + taxes + fees)
     let amount;
     if (paymentType === 'deposit') {
@@ -458,7 +473,8 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       console.error('COE not found:', coeId);
       return;
     }
-    
+    const previousPaymentStatus = coe.payment_status;
+
     // Get all completed payments for this COE
     const payments = await Payment.find({ 
       coe_id: coeId, 
@@ -526,7 +542,22 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     
     // Save payment status first
     await coe.save();
-    
+
+    // Hold seats only when transitioning to paid; release when reverting to unpaid (per HOLD-SEATS-ON-PAYMENT plan)
+    if (coe.payment_status === 'unpaid') {
+      try {
+        await coeService.releaseSelectedSeats(coeId);
+      } catch (releaseErr) {
+        console.error('[PaymentService] Error releasing seats on revert to unpaid:', releaseErr);
+      }
+    } else if (previousPaymentStatus === 'unpaid' && (coe.payment_status === 'deposit_paid' || coe.payment_status === 'paid')) {
+      try {
+        await coeService.holdSeatsForCOE(coeId);
+      } catch (holdErr) {
+        console.error('[PaymentService] Error holding seats on payment:', holdErr);
+      }
+    }
+
     // Update COE status if needed (use coeService to ensure proper side effects: seat booking, date fields)
     if (shouldUpdateStatus && statusToUpdate) {
       await coeService.updateCOEStatus(coeId, statusToUpdate, null);

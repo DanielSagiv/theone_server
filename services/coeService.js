@@ -288,6 +288,235 @@ async function releaseSelectedSeats(coeId) {
 }
 
 /**
+ * Resolve which seat to hold for a COE entry: original if available, else same-section alternative.
+ * @param {Object} event - Event document with seats
+ * @param {Object} seatEntry - COE selected_seats entry (event_id, seat_id, seat_code, event_price, ...)
+ * @returns {{ holdSeat: Object, updatedEntry: Object | null }} Event seat to hold and optional updated COE entry (if alternative used)
+ */
+function resolveSeatForHold(event, seatEntry) {
+  const seatIdStr = (seatEntry.seat_id && seatEntry.seat_id.toString()) || '';
+  const seat = event.seats.find(s => s._id && s._id.toString() === seatIdStr);
+  if (seat && seat.status === 'available') {
+    return { holdSeat: { event_id: seatEntry.event_id, seat_id: seat._id }, updatedEntry: null };
+  }
+  const category = (seat && (seat.category || seat.section)) || '';
+  const sectionKey = (category || '').trim();
+  const alternative = event.seats.find(
+    s => s.status === 'available' && (s.category || s.section || '').trim() === sectionKey
+  );
+  if (alternative) {
+    const updatedEntry = {
+      ...seatEntry,
+      seat_id: alternative._id,
+      seat_code: alternative.code,
+      event_price: alternative.event_price != null ? alternative.event_price : seatEntry.event_price
+    };
+    return { holdSeat: { event_id: seatEntry.event_id, seat_id: alternative._id }, updatedEntry };
+  }
+  return { holdSeat: null, updatedEntry: null };
+}
+
+/**
+ * Run availability check and same-section resolution without holding. If any event has no seats in section,
+ * update COE (reduce amount), notify user (no tables in section, contact The1, total updated from X to Y),
+ * and return payload so caller can let user complete payment with new amount. Call before creating payment intent.
+ * @param {string} coeId - COE ID
+ * @returns {Promise<{ coe_updated: boolean, previous_total?: number, new_total?: number, unavailable_event_names?: string[], message?: string }>}
+ */
+async function preparePaymentForCOE(coeId) {
+  try {
+    const coe = await COE.findById(coeId).lean();
+    if (!coe || !coe.selected_seats || coe.selected_seats.length === 0) {
+      return { coe_updated: false };
+    }
+    const selectedSeats = coe.selected_seats;
+    const eventIds = [...new Set(selectedSeats.map(s => (s.event_id && s.event_id.toString()) || '').filter(Boolean))];
+    const eventsMap = new Map();
+    for (const eid of eventIds) {
+      const ev = await Event.findById(eid).lean();
+      if (ev) eventsMap.set(eid, ev);
+    }
+    const finalSeatEntries = [];
+    const unavailableEventIds = new Set();
+    for (const entry of selectedSeats) {
+      const eid = (entry.event_id && entry.event_id.toString()) || '';
+      const event = eventsMap.get(eid);
+      if (!event || !event.seats) {
+        unavailableEventIds.add(eid);
+        continue;
+      }
+      const { holdSeat, updatedEntry } = resolveSeatForHold(event, entry);
+      if (holdSeat) {
+        finalSeatEntries.push(updatedEntry || entry);
+      } else {
+        unavailableEventIds.add(eid);
+      }
+    }
+    if (unavailableEventIds.size === 0) {
+      return { coe_updated: false };
+    }
+    const coeDoc = await COE.findById(coeId);
+    if (!coeDoc) return { coe_updated: false };
+    const previousTotal = coeDoc.total != null ? Number(coeDoc.total) : 0;
+    const unavailableIdsArr = Array.from(unavailableEventIds);
+    coeDoc.selected_seats = finalSeatEntries;
+    for (const evId of unavailableIdsArr) {
+      const idx = coeDoc.events.findIndex(
+        ev => (ev.event_id && ev.event_id.toString()) === evId
+      );
+      if (idx !== -1) coeDoc.events[idx].total_price = 0;
+    }
+    const newSubtotal = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
+    coeDoc.subtotal = newSubtotal;
+    // Recalculate taxes from new subtotal (30% default, same as botAutoFillService)
+    const taxRate = 0.30;
+    coeDoc.taxes = Math.round((newSubtotal || 0) * taxRate * 100) / 100;
+    coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
+    await coeDoc.save();
+    const newTotal = coeDoc.total != null ? Number(coeDoc.total) : 0;
+    const eventNames = (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
+      .map(e => e.name).filter(Boolean);
+    const messageParts = newTotal === 0
+      ? [
+          'There are no available tables in the selected section for some events.',
+          eventNames.length ? `Affected events: ${eventNames.join(', ')}.` : '',
+          'The event amount has been reduced. There is no amount to pay. Contact The1 if you want to be in the event in a different seat section.'
+        ].filter(Boolean).join(' ')
+      : [
+          'There are no available tables in the selected section for some events.',
+          eventNames.length ? `Affected events: ${eventNames.join(', ')}.` : '',
+          'The event amount has been reduced.',
+          'Contact The1 if you want to be in the event in a different seat section.',
+          `Total amount has been updated from ${previousTotal.toFixed(2)} to ${newTotal.toFixed(2)}. You can complete payment with the new amount.`
+        ].filter(Boolean).join(' ');
+    if (coeDoc.client_id) {
+      try {
+        const notificationService = require('./notificationService');
+        await notificationService.createAndSendNotification(
+          coeDoc.client_id.toString(),
+          'seat_section_unavailable',
+          {
+            coe_id: coeId,
+            coe: { name: coeDoc.name },
+            event_names: eventNames,
+            previous_total: previousTotal,
+            new_total: newTotal,
+            message: messageParts
+          }
+        );
+      } catch (notifErr) {
+        console.error('[COE_SERVICE] Error sending seat_section_unavailable notification:', notifErr);
+      }
+    }
+    return {
+      coe_updated: true,
+      previous_total: previousTotal,
+      new_total: newTotal,
+      total_zero: newTotal === 0,
+      unavailable_event_names: eventNames,
+      message: messageParts
+    };
+  } catch (error) {
+    console.error('Error in preparePaymentForCOE:', error);
+    throw error;
+  }
+}
+
+/**
+ * Hold seats for a COE when payment is recorded. Checks availability, tries same-section fallback,
+ * reduces COE amount and notifies if a section has no available seats. Call only when transitioning to paid.
+ * @param {string} coeId - COE ID
+ */
+async function holdSeatsForCOE(coeId) {
+  try {
+    const coe = await COE.findById(coeId).lean();
+    if (!coe || !coe.selected_seats || coe.selected_seats.length === 0) {
+      return;
+    }
+    const selectedSeats = coe.selected_seats;
+    const eventIds = [...new Set(selectedSeats.map(s => (s.event_id && s.event_id.toString()) || '').filter(Boolean))];
+    const eventsMap = new Map();
+    for (const eid of eventIds) {
+      const ev = await Event.findById(eid).lean();
+      if (ev) eventsMap.set(eid, ev);
+    }
+    const seatsToHold = [];
+    const finalSeatEntries = [];
+    const unavailableEventIds = new Set();
+    for (const entry of selectedSeats) {
+      const eid = (entry.event_id && entry.event_id.toString()) || '';
+      const event = eventsMap.get(eid);
+      if (!event || !event.seats) {
+        unavailableEventIds.add(eid);
+        continue;
+      }
+      const { holdSeat, updatedEntry } = resolveSeatForHold(event, entry);
+      if (holdSeat) {
+        seatsToHold.push(holdSeat);
+        finalSeatEntries.push(updatedEntry || entry);
+      } else {
+        unavailableEventIds.add(eid);
+      }
+    }
+    const coeDoc = await COE.findById(coeId);
+    if (!coeDoc) return;
+    const hadUnavailable = unavailableEventIds.size > 0;
+    if (finalSeatEntries.length !== selectedSeats.length || hadUnavailable) {
+      coeDoc.selected_seats = finalSeatEntries;
+      const unavailableIdsArr = Array.from(unavailableEventIds);
+      for (const evId of unavailableIdsArr) {
+        const idx = coeDoc.events.findIndex(
+          ev => (ev.event_id && ev.event_id.toString()) === evId
+        );
+        if (idx !== -1) coeDoc.events[idx].total_price = 0;
+      }
+      const newSubtotalUnavail = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
+      coeDoc.subtotal = newSubtotalUnavail;
+      const taxRate = 0.30;
+      coeDoc.taxes = Math.round((newSubtotalUnavail || 0) * taxRate * 100) / 100;
+      coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
+      await coeDoc.save();
+      if (hadUnavailable) {
+        try {
+          const notificationService = require('./notificationService');
+          const eventNames = (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
+            .map(e => e.name).filter(Boolean);
+          if (coeDoc.client_id) {
+            await notificationService.createAndSendNotification(
+              coeDoc.client_id.toString(),
+              'seat_section_unavailable',
+              {
+                coe_id: coeId,
+                coe: { name: coeDoc.name },
+                event_names: eventNames,
+                message: 'Selected section no longer available for some events. Amount was reduced. Contact The1 for a different seat section.'
+              }
+            );
+          }
+        } catch (notifErr) {
+          console.error('[COE_SERVICE] Error sending seat_section_unavailable notification:', notifErr);
+        }
+      }
+    } else if (finalSeatEntries.some((e, i) => (e.seat_id && e.seat_id.toString()) !== (selectedSeats[i].seat_id && selectedSeats[i].seat_id.toString()))) {
+      // Alternatives were used; persist updated seat refs and recalc subtotal, taxes, total
+      coeDoc.selected_seats = finalSeatEntries;
+      const newSubtotalAlt = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
+      coeDoc.subtotal = newSubtotalAlt;
+      const taxRate = 0.30;
+      coeDoc.taxes = Math.round((newSubtotalAlt || 0) * taxRate * 100) / 100;
+      coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
+      await coeDoc.save();
+    }
+    if (seatsToHold.length > 0) {
+      await updateSelectedSeatsStatus(seatsToHold, coeId, 'held');
+    }
+  } catch (error) {
+    console.error('Error in holdSeatsForCOE:', error);
+    throw error;
+  }
+}
+
+/**
  * Create a new COE
  * @param {Object} coeData - COE data
  * @param {string} createdBy - ID of user creating the COE
@@ -376,11 +605,7 @@ async function createCOE(coeData, createdBy) {
       }))
     });
     
-    // Update seat statuses to 'held' after COE is created
-    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
-      await updateSelectedSeatsStatus(coeData.selected_seats, coe._id, 'held');
-    }
-    
+    // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     // Populate references
     await coe.populate([
       { path: 'client_id', select: 'firstName lastName email' },
@@ -644,14 +869,11 @@ async function updateCOE(coeId, updateData) {
 
     // Handle seat status updates if selected_seats are being updated
     if (updateData.selected_seats) {
-      // Release old seats back to available
+      // Release old seats back to available (in case they were held from a prior payment)
       await releaseSelectedSeats(coeId);
-      
       // Validate new seat availability
       await validateSelectedSeats(updateData.selected_seats);
-      
-      // Hold new seats
-      await updateSelectedSeatsStatus(updateData.selected_seats, coeId, 'held');
+      // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     }
 
     const coe = await COE.findByIdAndUpdate(
@@ -1478,17 +1700,7 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
 
       await coe.save();
 
-      // Hold the new seat for this COE in event inventory
-      try {
-        await updateSelectedSeatsStatus(
-          [{ event_id: event._id, seat_id: newSeat._id }],
-          coeId,
-          'held'
-        );
-      } catch (holdError) {
-        console.error('[COE_SERVICE] Error holding new seat during adminReplaceSeat (single):', holdError);
-      }
-
+      // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
       return await getCOEById(coeId);
     }
 
@@ -1529,7 +1741,6 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
             filter: { _id: event._id, 'seats._id': newSeat._id },
             update: {
               $set: {
-                'seats.$.status': 'held',
                 'seats.$.booking_reference': primaryIdStr,
                 'seats.$.booked_at': new Date(),
                 'seats.$.booked_by': oldEventSeat.booked_by,
@@ -2646,14 +2857,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         totalPrice: newSeats.reduce((sum, s) => sum + (s.event_price || s.base_price || 0), 0)
       });
       
-      // Hold new seats using existing updateSelectedSeatsStatus function
-      try {
-        await updateSelectedSeatsStatus(newSeats, coeId, 'held');
-        console.log('[COE_SERVICE] Held', newSeats.length, 'new seats for replaced event');
-      } catch (holdError) {
-        console.error('[COE_SERVICE] Error holding new seats:', holdError);
-        // Don't fail the replacement, but log the error
-      }
+      // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     }
 
     // CRITICAL: Reload COE from database after all MongoDB operations (especially after multiple replacements)
@@ -3502,7 +3706,7 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
     coe.total = newSubtotal + (coe.taxes || 0) + (coe.fees || 0);
     await coe.save();
 
-    await updateSelectedSeatsStatus([{ event_id: event._id, seat_id: seat._id }], coeId, 'held');
+    // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     return await getCOEById(coeId);
   } catch (error) {
     console.error('[COE_SERVICE] Error addEventToCOEWithSeat:', error);
@@ -3651,5 +3855,7 @@ module.exports = {
   findAlternativeEvents,
   findEventsAvailableToAdd,
   addEventToCOEWithSeat,
-  hasAlternativeEventsSameDay
+  hasAlternativeEventsSameDay,
+  holdSeatsForCOE,
+  preparePaymentForCOE
 };
