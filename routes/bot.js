@@ -17,7 +17,7 @@ const sendMessageSchema = Joi.object({
  */
 router.get('/conversation', authenticateToken, async (req, res) => {
   try {
-    const history = await getConversationHistory(req.user._id);
+    const history = await getConversationHistory(req.user._id, { role: req.user.role });
     res.json({
       success: true,
       data: history

@@ -5,6 +5,7 @@ const BotUsageLog = require('../models/BotUsageLog');
 const BotAuditLog = require('../models/BotAuditLog');
 const User = require('../models/User');
 const coeService = require('./coeService');
+const notificationService = require('./notificationService');
 const { formatDateRange } = require('../utils/dateParser');
 const { getOpenAIFunctions, getTool, hasPermission } = require('./botTools');
 const { toolHandlers } = require('./botToolHandlers');
@@ -35,38 +36,70 @@ const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const MAX_MESSAGES = 20; // Limit context size to keep requests lightweight
 
 /**
- * Ensure a conversation document exists for the given user
+ * Ensure a conversation document exists for the given user.
+ * For clients, initial messages include the greeting "Ready to plan your experience?"; for admin/runner, no greeting.
  * @param {string} userId
+ * @param {Object} [options]
+ * @param {string} [options.role] - User role; when 'admin' or 'runner', no initial greeting is added.
  * @returns {Promise<BotConversation>}
  */
-async function getOrCreateConversation(userId) {
+async function getOrCreateConversation(userId, options = {}) {
   let conversation = await BotConversation.findOne({ user_id: userId });
   if (!conversation) {
+    const role = options.role;
+    const skipGreeting = role === 'admin' || role === 'runner';
+    const initialMessages = [
+      {
+        role: 'system',
+        content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to search for events in a city, at a venue/club, or with a specific performer (e.g., "What are the events in Las Vegas?", "Show me events at XS Nightclub in December", "What are the events with Drake anywhere?"), you MUST use the search_events tool. This tool intelligently extracts search parameters from natural language queries.\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nWhen users ask to view a profile, show account details, or see user information (e.g., "show me my profile", "view profile of user X", "show John\'s profile"), use the get_user_profile tool. For clients, only return their own profile. For admins and runners, you can return any user\'s profile by providing the user_id parameter.\n\nWhen admins or runners ask to search for clients, find a client, show client list, or look for a client by name or email (e.g., "show me client john", "im looking for a client profile", "find client with email john@example.com", "show me clients"), use the get_clients tool. This tool supports search by name or email and pagination. Only admins and runners can use this tool.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
+      }
+    ];
+    if (!skipGreeting) {
+      initialMessages.push({
+        role: 'assistant',
+        content: 'Ready to plan your experience?'
+      });
+    }
     conversation = await BotConversation.create({
       user_id: userId,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are THE1 assistant helping users plan their experiences. You MUST use the available tools to interact with the system - do not just respond with text when tools are available.\n\nWhen users ask about locations, venues, restaurants, hotels, or clubs (e.g., "show me all locations", "list venues", "show me restaurants", "show me hotels", "show me clubs"), you MUST use the get_locations tool.\n\nWhen users ask about events, upcoming events, future events, or events in a date range (e.g., "next 10 days", "next week", "upcoming events", "show me all future events"), you MUST use the get_events_by_date tool. Convert natural language dates to ISO 8601 format (e.g., "next 10 days" means start_date = today, end_date = today + 10 days in ISO format like "2025-11-12T00:00:00Z").\n\nWhen users ask to search for events in a city, at a venue/club, or with a specific performer (e.g., "What are the events in Las Vegas?", "Show me events at XS Nightclub in December", "What are the events with Drake anywhere?"), you MUST use the search_events tool. This tool intelligently extracts search parameters from natural language queries.\n\nWhen users ask to create or manage COEs (Curated One Experiences), use the create_coe_draft, update_coe, get_my_coes, get_coe_details, or delete_coe tools as appropriate.\n\nWhen users ask to view a profile, show account details, or see user information (e.g., "show me my profile", "view profile of user X", "show John\'s profile"), use the get_user_profile tool. For clients, only return their own profile. For admins and runners, you can return any user\'s profile by providing the user_id parameter.\n\nWhen admins or runners ask to search for clients, find a client, show client list, or look for a client by name or email (e.g., "show me client john", "im looking for a client profile", "find client with email john@example.com", "show me clients"), use the get_clients tool. This tool supports search by name or email and pagination. Only admins and runners can use this tool.\n\nAlways use tools when they are available rather than just responding with text. Only provide text responses for general questions that don\'t require system data.'
-        },
-        {
-          role: 'assistant',
-          content: 'Ready to plan your experience?'
-        }
-      ]
+      messages: initialMessages
     });
   }
   return conversation;
 }
 
+const CLIENT_GREETING_CONTENT = 'Ready to plan your experience?';
+
+/** Pattern: open_create_coe_for_client prompt (hide from UI when returning history) */
+function isOpenCreateFormPromptContent(content) {
+  if (!content || typeof content !== 'string') return false;
+  const n = content.toLowerCase();
+  return (n.includes('open the create experience form') || n.includes('open_create_coe_for_client')) && n.includes('client');
+}
+
 /**
- * Fetch conversation history for a user
+ * Fetch conversation history for a user. For admin/runner, the client-only greeting message is omitted and open_create prompts are sanitized for display.
  * @param {string} userId
+ * @param {Object} [options]
+ * @param {string} [options.role] - User role; when 'admin' or 'runner', the greeting message is filtered out and open_create prompts shown as friendly text.
  * @returns {Promise<Array>}
  */
-async function getConversationHistory(userId) {
-  const conversation = await getOrCreateConversation(userId);
-  return conversation.messages;
+async function getConversationHistory(userId, options = {}) {
+  const conversation = await getOrCreateConversation(userId, options);
+  let messages = conversation.messages || [];
+  const role = options.role;
+  if (role === 'admin' || role === 'runner') {
+    messages = messages.filter(
+      msg => !(msg.role === 'assistant' && String(msg.content || '').trim() === CLIENT_GREETING_CONTENT)
+    );
+    messages = messages.map(msg => {
+      if (msg.role === 'user' && isOpenCreateFormPromptContent(msg.content)) {
+        return { ...msg, content: 'Create experience for client' };
+      }
+      return msg;
+    });
+  }
+  return messages;
 }
 
 /**
@@ -430,6 +463,24 @@ async function executeTool(toolName, toolParams, user, correlationId) {
 }
 
 /**
+ * Return display-safe content for the user message: hide raw client id and tool name for open_create_coe_for_client.
+ * Full prompt is still used for processing; this is only what we store and show in the UI.
+ * @param {string} prompt
+ * @returns {{ content: string, isOpenCreate: boolean }}
+ */
+function getDisplayContentForUserMessage(prompt) {
+  const normalized = (prompt || '').toLowerCase();
+  const isOpenCreate =
+    (normalized.includes('open the create experience form') || normalized.includes('open the create coe form') ||
+     normalized.includes('open_create_coe_for_client')) &&
+    normalized.includes('client');
+  if (isOpenCreate) {
+    return { content: 'Create experience for client', isOpenCreate: true };
+  }
+  return { content: prompt, isOpenCreate: false };
+}
+
+/**
  * Process a user prompt and return updated conversation
  * @param {string} userId
  * @param {string} prompt
@@ -447,7 +498,12 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     correlationId = generateCorrelationId();
   }
 
-  let conversation = await getOrCreateConversation(userId);
+  const { content: displayContent, isOpenCreate } = getDisplayContentForUserMessage(prompt);
+  if (isOpenCreate) {
+    console.log('[BOT] open_create_coe_for_client prompt (logs only, not shown in UI):', prompt);
+  }
+
+  let conversation = await getOrCreateConversation(userId, { role: user.role });
   const timestampMessage = {
     role: 'system',
     content: `Today's date is ${new Date().toISOString()}.`
@@ -660,10 +716,10 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   // Note: Requests for other users' profiles will be handled by OpenAI via get_user_profile tool
   // This allows flexible language like "show me John's profile" or "view profile of user X"
 
-  // Add user message (only if rules didn't match)
+  // Add user message (only if rules didn't match). Use displayContent so UI shows friendly text for open_create_coe_for_client.
   conversation.messages.push({
     role: 'user',
-    content: prompt
+    content: displayContent
   });
 
   // Preference collection: Extract preferences from user message
@@ -907,6 +963,32 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
             coeId: coe._id?.toString(),
             status: coe.status,
           });
+
+          // Notify admin of new request (same as create_coe_draft path when status is request)
+          if (coe.status === 'request' && coe.admin_id) {
+            try {
+              const adminId = coe.admin_id?._id
+                ? coe.admin_id._id.toString()
+                : (coe.admin_id?.toString ? coe.admin_id.toString() : String(coe.admin_id));
+              await notificationService.createAndSendNotification(
+                adminId,
+                'coe_requested',
+                {
+                  coe_id: coe._id,
+                  coe: { name: coeName },
+                  sender_name: clientFullName,
+                  sender_id: client._id
+                }
+              );
+              console.log('[BOT] Sent COE request notification to admin (request-only flow):', {
+                adminId,
+                coeId: coe._id?.toString(),
+                coeName
+              });
+            } catch (notificationError) {
+              console.error('[BOT] Failed to send COE request notification (request-only flow):', notificationError);
+            }
+          }
 
           // Link this COE to the conversation so later flows can find it
           conversation.active_coe_id = coe._id.toString();
@@ -1274,13 +1356,13 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     
     // CRITICAL: Re-add the user message after refresh, as it might have been lost
     const hasCurrentMessage = conversation.messages.some(
-      msg => msg.role === 'user' && msg.content === prompt
+      msg => msg.role === 'user' && (msg.content === prompt || msg.content === displayContent)
     );
     if (!hasCurrentMessage) {
       console.log('[BOT] Re-adding user message after conversation refresh');
       conversation.messages.push({
         role: 'user',
-        content: prompt
+        content: displayContent
       });
     }
   } catch (error) {

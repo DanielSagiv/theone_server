@@ -1015,7 +1015,7 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
 
     // Append a new assistant message with the coe_create_form structured_data
     // to the admin's bot conversation so it appears in the Bot screen.
-    const conversation = await getOrCreateConversation(user._id || user.id);
+    const conversation = await getOrCreateConversation(user._id || user.id, { role: user.role });
     conversation.messages.push({
       role: 'assistant',
       content: enrichedData.message || toolResult.data.message || 'Create a new COE draft for this client.',
