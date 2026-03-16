@@ -1312,7 +1312,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Validate request data
+    // Validate request data (status plus optional deposit_percent)
     const { error, value } = updateCOEStatusSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
@@ -1322,7 +1322,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Fetch COE for authorization check
+    // Fetch COE for authorization check and optional deposit update
     const coe = await COE.findById(id).populate('client_id', '_id');
     if (!coe) {
       return res.status(404).json({
@@ -1355,12 +1355,22 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
+    // If admin is proposing/approving and provided a valid deposit_percent, persist it
+    if (
+      isAdmin &&
+      typeof value.deposit_percent === 'number' &&
+      (value.status === 'approved' || value.status === 'proposal')
+    ) {
+      coe.deposit_percent = value.deposit_percent;
+      await coe.save();
+    }
+
     const updatedCoe = await coeService.updateCOEStatus(id, value.status, req.user.id);
 
     res.json({
       success: true,
       message: 'COE status updated successfully',
-      data: coe
+      data: updatedCoe
     });
   } catch (error) {
     console.error('Error updating COE status:', error);

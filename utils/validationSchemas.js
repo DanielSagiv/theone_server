@@ -389,7 +389,22 @@ const addEventToCOEWithSeatSchema = Joi.object({
 // Update COE status validation schema
 const updateCOEStatusSchema = Joi.object({
   // Accept 'proposal' as an alias for 'approved' (normalized server-side)
-  status: Joi.string().valid('draft', 'request', 'approved', 'proposal', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').required()
+  status: Joi.string()
+    .valid(
+      'draft',
+      'request',
+      'approved',
+      'proposal',
+      'pending_pay',
+      'paid',
+      'rejected',
+      'expired',
+      'completed',
+      'cancelled'
+    )
+    .required(),
+  // Optional deposit percentage (10–100) when proposing an experience
+  deposit_percent: Joi.number().min(10).max(100)
 });
 
 // Assign runner to COE validation schema
