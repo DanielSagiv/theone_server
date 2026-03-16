@@ -463,24 +463,6 @@ async function executeTool(toolName, toolParams, user, correlationId) {
 }
 
 /**
- * Return display-safe content for the user message: hide raw client id and tool name for open_create_coe_for_client.
- * Full prompt is still used for processing; this is only what we store and show in the UI.
- * @param {string} prompt
- * @returns {{ content: string, isOpenCreate: boolean }}
- */
-function getDisplayContentForUserMessage(prompt) {
-  const normalized = (prompt || '').toLowerCase();
-  const isOpenCreate =
-    (normalized.includes('open the create experience form') || normalized.includes('open the create coe form') ||
-     normalized.includes('open_create_coe_for_client')) &&
-    normalized.includes('client');
-  if (isOpenCreate) {
-    return { content: 'Create experience for client', isOpenCreate: true };
-  }
-  return { content: prompt, isOpenCreate: false };
-}
-
-/**
  * Process a user prompt and return updated conversation
  * @param {string} userId
  * @param {string} prompt
@@ -498,7 +480,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     correlationId = generateCorrelationId();
   }
 
-  const { content: displayContent, isOpenCreate } = getDisplayContentForUserMessage(prompt);
+  const isOpenCreate = isOpenCreateFormPromptContent(prompt);
   if (isOpenCreate) {
     console.log('[BOT] open_create_coe_for_client prompt (logs only, not shown in UI):', prompt);
   }
@@ -716,10 +698,10 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
   // Note: Requests for other users' profiles will be handled by OpenAI via get_user_profile tool
   // This allows flexible language like "show me John's profile" or "view profile of user X"
 
-  // Add user message (only if rules didn't match). Use displayContent so UI shows friendly text for open_create_coe_for_client.
+  // Add user message (only if rules didn't match). Store the full technical prompt so tools have complete context.
   conversation.messages.push({
     role: 'user',
-    content: displayContent
+    content: prompt
   });
 
   // Preference collection: Extract preferences from user message
@@ -1356,7 +1338,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     
     // CRITICAL: Re-add the user message after refresh, as it might have been lost
     const hasCurrentMessage = conversation.messages.some(
-      msg => msg.role === 'user' && (msg.content === prompt || msg.content === displayContent)
+      msg => msg.role === 'user' && msg.content === prompt
     );
     if (!hasCurrentMessage) {
       console.log('[BOT] Re-adding user message after conversation refresh');
