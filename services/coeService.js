@@ -317,11 +317,14 @@ function resolveSeatForHold(event, seatEntry) {
 }
 
 /**
- * Run availability check and same-section resolution without holding. If any event has no seats in section,
- * update COE (reduce amount), notify user (no tables in section, contact The1, total updated from X to Y),
- * and return payload so caller can let user complete payment with new amount. Call before creating payment intent.
+ * Pre-payment availability check.
+ * New behavior (NO-SEATS-IN-SECTION-PAYMENT-HANDLING):
+ * - Do NOT remove events or reduce COE totals when a section has no available tables.
+ * - Allow payment to proceed with the original cost.
+ * - Optionally detect and report which events have no tables in the selected section, but
+ *   do not block or mutate pricing here.
  * @param {string} coeId - COE ID
- * @returns {Promise<{ coe_updated: boolean, previous_total?: number, new_total?: number, unavailable_event_names?: string[], message?: string }>}
+ * @returns {Promise<{ coe_updated: boolean, has_unavailable_section_events?: boolean, unavailable_event_names?: string[], message?: string }>}
  */
 async function preparePaymentForCOE(coeId) {
   try {
@@ -329,15 +332,18 @@ async function preparePaymentForCOE(coeId) {
     if (!coe || !coe.selected_seats || coe.selected_seats.length === 0) {
       return { coe_updated: false };
     }
+
     const selectedSeats = coe.selected_seats;
     const eventIds = [...new Set(selectedSeats.map(s => (s.event_id && s.event_id.toString()) || '').filter(Boolean))];
     const eventsMap = new Map();
+
     for (const eid of eventIds) {
       const ev = await Event.findById(eid).lean();
       if (ev) eventsMap.set(eid, ev);
     }
-    const finalSeatEntries = [];
+
     const unavailableEventIds = new Set();
+
     for (const entry of selectedSeats) {
       const eid = (entry.event_id && entry.event_id.toString()) || '';
       const event = eventsMap.get(eid);
@@ -345,76 +351,40 @@ async function preparePaymentForCOE(coeId) {
         unavailableEventIds.add(eid);
         continue;
       }
-      const { holdSeat, updatedEntry } = resolveSeatForHold(event, entry);
-      if (holdSeat) {
-        finalSeatEntries.push(updatedEntry || entry);
-      } else {
+      const { holdSeat } = resolveSeatForHold(event, entry);
+      if (!holdSeat) {
+        // No table available in the selected section for this event
         unavailableEventIds.add(eid);
       }
     }
+
     if (unavailableEventIds.size === 0) {
+      // Everything is fine; proceed with payment as usual.
       return { coe_updated: false };
     }
-    const coeDoc = await COE.findById(coeId);
-    if (!coeDoc) return { coe_updated: false };
-    const previousTotal = coeDoc.total != null ? Number(coeDoc.total) : 0;
-    const unavailableIdsArr = Array.from(unavailableEventIds);
-    coeDoc.selected_seats = finalSeatEntries;
-    for (const evId of unavailableIdsArr) {
-      const idx = coeDoc.events.findIndex(
-        ev => (ev.event_id && ev.event_id.toString()) === evId
-      );
-      if (idx !== -1) coeDoc.events[idx].total_price = 0;
-    }
-    const newSubtotal = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
-    coeDoc.subtotal = newSubtotal;
-    // Recalculate taxes from new subtotal (30% default, same as botAutoFillService)
-    const taxRate = 0.30;
-    coeDoc.taxes = Math.round((newSubtotal || 0) * taxRate * 100) / 100;
-    coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
-    await coeDoc.save();
-    const newTotal = coeDoc.total != null ? Number(coeDoc.total) : 0;
-    const eventNames = (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
-      .map(e => e.name).filter(Boolean);
-    const messageParts = newTotal === 0
-      ? [
-          'There are no available tables in the selected section for some events.',
-          eventNames.length ? `Affected events: ${eventNames.join(', ')}.` : '',
-          'The event amount has been reduced. There is no amount to pay. Contact The1 if you want to be in the event in a different seat section.'
-        ].filter(Boolean).join(' ')
-      : [
-          'There are no available tables in the selected section for some events.',
-          eventNames.length ? `Affected events: ${eventNames.join(', ')}.` : '',
-          'The event amount has been reduced.',
-          'Contact The1 if you want to be in the event in a different seat section.',
-          `Total amount has been updated from ${previousTotal.toFixed(2)} to ${newTotal.toFixed(2)}. You can complete payment with the new amount.`
-        ].filter(Boolean).join(' ');
-    if (coeDoc.client_id) {
-      try {
-        const notificationService = require('./notificationService');
-        await notificationService.createAndSendNotification(
-          coeDoc.client_id.toString(),
-          'seat_section_unavailable',
-          {
-            coe_id: coeId,
-            coe: { name: coeDoc.name },
-            event_names: eventNames,
-            previous_total: previousTotal,
-            new_total: newTotal,
-            message: messageParts
-          }
-        );
-      } catch (notifErr) {
-        console.error('[COE_SERVICE] Error sending seat_section_unavailable notification:', notifErr);
-      }
-    }
+
+    // We intentionally do NOT modify pricing or selected_seats here.
+    // Just surface which events are affected for logging/diagnostics.
+    const unavailableIdsArr = Array.from(unavailableEventIds).filter(Boolean);
+    const eventNames = unavailableIdsArr.length
+      ? (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
+          .map(e => e.name)
+          .filter(Boolean)
+      : [];
+
+    const message = [
+      'There are no available tables in the selected section for some events.',
+      eventNames.length ? `Affected events: ${eventNames.join(', ')}.` : '',
+      'Payment will proceed with the original cost. The1 team will handle seating for those events.'
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     return {
-      coe_updated: true,
-      previous_total: previousTotal,
-      new_total: newTotal,
-      total_zero: newTotal === 0,
+      coe_updated: false,
+      has_unavailable_section_events: true,
       unavailable_event_names: eventNames,
-      message: messageParts
+      message
     };
   } catch (error) {
     console.error('Error in preparePaymentForCOE:', error);
@@ -443,6 +413,7 @@ async function holdSeatsForCOE(coeId) {
     const seatsToHold = [];
     const finalSeatEntries = [];
     const unavailableEventIds = new Set();
+    let hasAlternativeChanges = false;
     for (const entry of selectedSeats) {
       const eid = (entry.event_id && entry.event_id.toString()) || '';
       const event = eventsMap.get(eid);
@@ -453,60 +424,105 @@ async function holdSeatsForCOE(coeId) {
       const { holdSeat, updatedEntry } = resolveSeatForHold(event, entry);
       if (holdSeat) {
         seatsToHold.push(holdSeat);
-        finalSeatEntries.push(updatedEntry || entry);
+        if (updatedEntry) {
+          finalSeatEntries.push(updatedEntry);
+          // Track that we changed seat selection (e.g., alternative seat in same section)
+          if (
+            updatedEntry.seat_id &&
+            entry.seat_id &&
+            updatedEntry.seat_id.toString() !== entry.seat_id.toString()
+          ) {
+            hasAlternativeChanges = true;
+          }
+        } else {
+          finalSeatEntries.push(entry);
+        }
       } else {
+        // No table available in the selected section for this event.
+        // Keep the original entry to preserve intent, but we won't hold a seat for it.
+        finalSeatEntries.push(entry);
         unavailableEventIds.add(eid);
       }
     }
+
     const coeDoc = await COE.findById(coeId);
     if (!coeDoc) return;
+
     const hadUnavailable = unavailableEventIds.size > 0;
-    if (finalSeatEntries.length !== selectedSeats.length || hadUnavailable) {
+    const unavailableIdsArr = Array.from(unavailableEventIds).filter(Boolean);
+
+    // Persist any alternative seat choices (same-section replacements) and keep pricing consistent.
+    if (hasAlternativeChanges) {
       coeDoc.selected_seats = finalSeatEntries;
-      const unavailableIdsArr = Array.from(unavailableEventIds);
+      const newSubtotalAlt = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
+      const taxRate = 0.30;
+      coeDoc.subtotal = newSubtotalAlt;
+      coeDoc.taxes = Math.round((newSubtotalAlt || 0) * taxRate * 100) / 100;
+      coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
+    } else {
+      // Even if there are no alternative changes, keep selected_seats aligned with finalSeatEntries
+      // (they are equal in structure when no changes occur).
+      coeDoc.selected_seats = finalSeatEntries;
+    }
+
+    // New behavior: Do NOT remove events or reduce pricing when no seats are available in section.
+    // Instead, flag affected events and notify admin for manual resolution.
+    if (hadUnavailable) {
+      // Mark events on the COE as having section unavailability after payment
       for (const evId of unavailableIdsArr) {
         const idx = coeDoc.events.findIndex(
           ev => (ev.event_id && ev.event_id.toString()) === evId
         );
-        if (idx !== -1) coeDoc.events[idx].total_price = 0;
-      }
-      const newSubtotalUnavail = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
-      coeDoc.subtotal = newSubtotalUnavail;
-      const taxRate = 0.30;
-      coeDoc.taxes = Math.round((newSubtotalUnavail || 0) * taxRate * 100) / 100;
-      coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
-      await coeDoc.save();
-      if (hadUnavailable) {
-        try {
-          const notificationService = require('./notificationService');
-          const eventNames = (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
-            .map(e => e.name).filter(Boolean);
-          if (coeDoc.client_id) {
-            await notificationService.createAndSendNotification(
-              coeDoc.client_id.toString(),
-              'seat_section_unavailable',
-              {
-                coe_id: coeId,
-                coe: { name: coeDoc.name },
-                event_names: eventNames,
-                message: 'Selected section no longer available for some events. Amount was reduced. Contact The1 for a different seat section.'
-              }
-            );
-          }
-        } catch (notifErr) {
-          console.error('[COE_SERVICE] Error sending seat_section_unavailable notification:', notifErr);
+        if (idx !== -1) {
+          coeDoc.events[idx].section_unavailable_after_payment = true;
         }
       }
-    } else if (finalSeatEntries.some((e, i) => (e.seat_id && e.seat_id.toString()) !== (selectedSeats[i].seat_id && selectedSeats[i].seat_id.toString()))) {
-      // Alternatives were used; persist updated seat refs and recalc subtotal, taxes, total
-      coeDoc.selected_seats = finalSeatEntries;
-      const newSubtotalAlt = finalSeatEntries.reduce((s, seat) => s + (seat.event_price || 0), 0);
-      coeDoc.subtotal = newSubtotalAlt;
-      const taxRate = 0.30;
-      coeDoc.taxes = Math.round((newSubtotalAlt || 0) * taxRate * 100) / 100;
-      coeDoc.total = (coeDoc.subtotal || 0) + (coeDoc.taxes || 0) + (coeDoc.fees || 0);
-      await coeDoc.save();
+
+      try {
+        const notificationService = require('./notificationService');
+        const eventNames = unavailableIdsArr.length
+          ? (await Event.find({ _id: { $in: unavailableIdsArr } }).select('name').lean())
+              .map(e => e.name)
+              .filter(Boolean)
+          : [];
+
+        // Notify client: section unavailable but payment completed; The1 is working on a solution.
+        if (coeDoc.client_id) {
+          await notificationService.createAndSendNotification(
+            coeDoc.client_id.toString(),
+            'seat_section_unavailable',
+            {
+              coe_id: coeId,
+              coe: { name: coeDoc.name },
+              event_names: eventNames,
+              message:
+                'There are no available tables in the selected section for one or more events in your experience. The1 team is working on a solution and will update your seating as soon as possible.',
+            }
+          );
+        }
+
+        // Notify admin: high-visibility, action-required notification.
+        if (coeDoc.admin_id) {
+          await notificationService.createAndSendNotification(
+            coeDoc.admin_id.toString(),
+            'seat_section_unavailable',
+            {
+              coe_id: coeId,
+              coe: { name: coeDoc.name },
+              event_names: eventNames,
+              message:
+                'Action required: one or more events in this experience have no available tables in the selected section after payment. The client has already paid; please resolve seating and update the COE.',
+              is_admin: true,
+              severity: 'critical',
+            }
+          );
+        }
+      } catch (notifErr) {
+        console.error('[COE_SERVICE] Error sending seat_section_unavailable notifications:', notifErr);
+      }
     }
+
+    await coeDoc.save();
     if (seatsToHold.length > 0) {
       await updateSelectedSeatsStatus(seatsToHold, coeId, 'held');
     }

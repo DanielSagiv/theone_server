@@ -36,6 +36,12 @@ const COEItemSchema = new mongoose.Schema({
     enum: ['pending', 'confirmed', 'completed', 'cancelled'],
     default: 'pending'
   },
+
+  // Section availability flags (post-payment diagnostics)
+  section_unavailable_after_payment: {
+    type: Boolean,
+    default: false
+  },
   
   // Notes
   notes: { type: String, trim: true },

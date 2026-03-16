@@ -31,7 +31,9 @@ const notificationSchema = new mongoose.Schema({
       'payment_failed',
       // Runner Notifications
       'runner_assigned',
-      'runner_updated'
+      'runner_updated',
+      // Seat / section availability Notifications
+      'seat_section_unavailable'
     ],
     required: true,
     index: true
