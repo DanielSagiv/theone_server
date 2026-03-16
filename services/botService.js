@@ -704,6 +704,44 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
     content: prompt
   });
 
+  // SPECIAL CASE: Directly handle open_create_coe_for_client requests without relying on OpenAI tool selection.
+  // This makes the admin "Search client → Create experience" flow deterministic.
+  if (isOpenCreateFormRequest) {
+    try {
+      // Try to extract client_id from the prompt text
+      // Examples:
+      // "Open the create Experience form for client with id 69b704854bb1546737638122. Use the open_create_coe_for_client tool with this client_id."
+      const idMatch = prompt.match(/client\s+with\s+id\s+([0-9a-fA-F]{24})/i)
+        || prompt.match(/client_id['"]?\s*[:=]\s*['"]?([0-9a-fA-F]{24})['"]?/i);
+      const clientId = idMatch ? idMatch[1] : null;
+
+      if (!clientId) {
+        console.warn('[BOT] open_create_coe_for_client shortcut: client_id not found in prompt, falling back to normal flow');
+      } else {
+        console.log('[BOT] open_create_coe_for_client shortcut: calling tool directly with client_id:', clientId);
+        const toolResult = await executeTool('open_create_coe_for_client', { client_id: clientId }, user, correlationId);
+
+        if (toolResult && toolResult.success && toolResult.data) {
+          const structured = toolResult.data;
+          const assistantMessage = {
+            role: 'assistant',
+            content: structured.message || 'Opening create experience form for client.',
+            structured_data: structured,
+          };
+          conversation.messages.push(assistantMessage);
+          await conversation.save();
+          console.log('[BOT] open_create_coe_for_client shortcut: tool executed successfully, returning conversation');
+          return conversation.messages;
+        } else {
+          console.error('[BOT] open_create_coe_for_client shortcut: tool failed:', toolResult?.error || 'unknown error');
+        }
+      }
+    } catch (shortcutError) {
+      console.error('[BOT] open_create_coe_for_client shortcut: error executing tool directly:', shortcutError);
+      // Fall through to normal flow if shortcut fails
+    }
+  }
+
   // Preference collection: Extract preferences from user message
   // BUT FIRST: Check rule again before preference extraction (defensive check)
   const recheckBeforePrefs = whoAreYouPatterns.some(pattern => 
