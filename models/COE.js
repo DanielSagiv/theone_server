@@ -303,6 +303,15 @@ const coeSchema = new mongoose.Schema({
     type: String,
     default: '20% deposit required, balance due 48 hours before event'
   },
+  // Optional payment time limit for proposals
+  payment_deadline_hours: {
+    type: Number,
+    min: 0,
+    default: null
+  },
+  payment_deadline_at: {
+    type: Date
+  },
   // Refund Information
   refund_status: {
     type: String,

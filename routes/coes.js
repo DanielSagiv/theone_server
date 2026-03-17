@@ -1312,7 +1312,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Validate request data (status plus optional deposit_percent)
+    // Validate request data (status plus optional deposit_percent and payment_deadline_hours)
     const { error, value } = updateCOEStatusSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
@@ -1322,7 +1322,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Fetch COE for authorization check and optional deposit update
+    // Fetch COE for authorization check and optional deposit / deadline update
     const coe = await COE.findById(id).populate('client_id', '_id');
     if (!coe) {
       return res.status(404).json({
@@ -1362,8 +1362,27 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       (value.status === 'approved' || value.status === 'proposal')
     ) {
       coe.deposit_percent = value.deposit_percent;
-      await coe.save();
     }
+
+    // If admin is proposing/approving and provided a payment_deadline_hours, compute deadline
+    if (
+      isAdmin &&
+      typeof value.payment_deadline_hours === 'number' &&
+      (value.status === 'approved' || value.status === 'proposal')
+    ) {
+      coe.payment_deadline_hours = value.payment_deadline_hours;
+      if (value.payment_deadline_hours > 0) {
+        const now = new Date();
+        const deadlineMs = now.getTime() + value.payment_deadline_hours * 60 * 60 * 1000;
+        coe.payment_deadline_at = new Date(deadlineMs);
+      } else {
+        // 0 or negative treated as no limit
+        coe.payment_deadline_at = undefined;
+      }
+    }
+
+    // Persist any admin-configured proposal metadata before status transition
+    await coe.save();
 
     const updatedCoe = await coeService.updateCOEStatus(id, value.status, req.user.id);
 

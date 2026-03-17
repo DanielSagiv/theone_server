@@ -1325,6 +1325,43 @@ async function updateCOEStatus(coeId, status, updatedBy) {
 }
 
 /**
+ * Expire COEs that have passed their payment deadline
+ * @returns {Promise<number>} Number of COEs expired
+ */
+async function expireCOEsPastDeadline() {
+  try {
+    const now = new Date();
+    // Find COEs that are still payable but have crossed their deadline
+    const coesToExpire = await COE.find({
+      status: { $in: ['approved', 'pending_pay'] },
+      payment_deadline_at: { $lte: now }
+    }).select('_id status payment_deadline_at');
+
+    if (!coesToExpire.length) {
+      return 0;
+    }
+
+    console.log('[COE Service] Expiring COEs past payment deadline:', {
+      count: coesToExpire.length,
+      coeIds: coesToExpire.map(c => c._id.toString())
+    });
+
+    for (const coe of coesToExpire) {
+      try {
+        await updateCOEStatus(coe._id.toString(), 'expired', null);
+      } catch (err) {
+        console.error('[COE Service] Failed to expire COE', coe._id.toString(), err.message);
+      }
+    }
+
+    return coesToExpire.length;
+  } catch (error) {
+    console.error('[COE Service] Error in expireCOEsPastDeadline:', error);
+    return 0;
+  }
+}
+
+/**
  * Assign runner to COE
  * @param {string} coeId - COE ID
  * @param {Object} runnerData - Runner assignment data
@@ -1663,7 +1700,7 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
         const releaseOps = [
           {
             updateOne: {
-              filter: { '_id': existingSeat.event_id, 'seats._id': existingSeat.seat_id },
+              filter: { _id: existingSeat.event_id, 'seats._id': existingSeat.seat_id },
               update: {
                 $set: {
                   'seats.$.status': 'available',
@@ -3873,5 +3910,6 @@ module.exports = {
   addEventToCOEWithSeat,
   hasAlternativeEventsSameDay,
   holdSeatsForCOE,
-  preparePaymentForCOE
+  preparePaymentForCOE,
+  expireCOEsPastDeadline
 };

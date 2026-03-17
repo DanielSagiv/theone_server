@@ -113,6 +113,21 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       throw new Error(`Cannot pay for COE in status: ${coe.status}`);
     }
 
+    // Enforce payment deadline if configured
+    if (coe.payment_deadline_at) {
+      const now = new Date();
+      if (coe.payment_deadline_at <= now) {
+        // Optionally sync status to expired (defensive, cron should also handle this)
+        try {
+          const coeService = require('./coeService');
+          await coeService.updateCOEStatus(coeId, 'expired', null);
+        } catch (deadlineErr) {
+          console.error('[PaymentService] Failed to update COE to expired after deadline:', deadlineErr.message);
+        }
+        throw new Error('Payment window expired for this experience');
+      }
+    }
+
     // Pre-payment: check seat availability and same-section fallback. If any event has no seats in section,
     // reduce COE, notify user (no tables, contact The1, total updated from X to Y), and return so client
     // can show the message and let user complete payment with the new amount on next attempt.

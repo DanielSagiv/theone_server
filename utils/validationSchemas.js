@@ -404,7 +404,9 @@ const updateCOEStatusSchema = Joi.object({
     )
     .required(),
   // Optional deposit percentage (10–100) when proposing an experience
-  deposit_percent: Joi.number().min(10).max(100)
+  deposit_percent: Joi.number().min(10).max(100),
+  // Optional payment time limit in hours; 0 or undefined means no limit
+  payment_deadline_hours: Joi.number().min(0).max(720)
 });
 
 // Assign runner to COE validation schema

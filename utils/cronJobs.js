@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
+const coeService = require('../services/coeService');
 
 /**
  * Cron Jobs for Automated Subscription Billing
@@ -173,12 +174,37 @@ function startSubscriptionExpirationCron() {
 }
 
 /**
+ * Expire COEs that passed their payment deadline
+ * Runs every 5 minutes
+ */
+function startCOEPaymentDeadlineCron() {
+  // Every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    const startedAt = new Date();
+    console.log('🔄 Running COE payment deadline cron job:', startedAt.toISOString());
+
+    try {
+      const expiredCount = await coeService.expireCOEsPastDeadline();
+      console.log('✅ COE payment deadline cron job completed:', {
+        expired: expiredCount,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ COE payment deadline cron job failed:', error);
+    }
+  });
+
+  console.log('✅ COE payment deadline cron job scheduled (every 5 minutes)');
+}
+
+/**
  * Start all cron jobs
  */
 function startAllCronJobs() {
   startRecurringPaymentsCron();
   startFailedPaymentRetryCron();
   startSubscriptionExpirationCron();
+  startCOEPaymentDeadlineCron();
   console.log('🚀 All payment cron jobs started successfully');
 }
 
@@ -186,6 +212,7 @@ module.exports = {
   startAllCronJobs,
   startRecurringPaymentsCron,
   startFailedPaymentRetryCron,
-  startSubscriptionExpirationCron
+  startSubscriptionExpirationCron,
+  startCOEPaymentDeadlineCron
 };
 
