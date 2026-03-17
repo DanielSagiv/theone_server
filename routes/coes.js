@@ -6,6 +6,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
 const mergeService = require('../services/mergeService');
 const { executeTool, getOrCreateConversation } = require('../services/botService');
+const notificationService = require('../services/notificationService');
 const {
   createCOESchema,
   updateCOESchema,
@@ -1410,6 +1411,116 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to update COE status',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:id/repropose
+ * Allow admin to adjust deposit percentage and/or payment time limit
+ * for an already proposed (approved) COE without changing its status.
+ */
+router.post('/:id/repropose', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format'
+      });
+    }
+
+    // Only admins can re-propose
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Permission denied. Only admins can re-propose Experiences.'
+      });
+    }
+
+    const coe = await COE.findById(id).populate('client_id', '_id');
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found'
+      });
+    }
+
+    // Only allow re-propose on already approved (proposal) COEs
+    if (coe.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Re-propose is only allowed for Experiences in PROPOSAL status.'
+      });
+    }
+
+    const { deposit_percent, payment_deadline_hours } = req.body || {};
+
+    // Validate and apply deposit percentage if provided
+    if (typeof deposit_percent === 'number') {
+      if (deposit_percent < 10 || deposit_percent > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Deposit percentage must be between 10 and 100.'
+        });
+      }
+      coe.deposit_percent = deposit_percent;
+    }
+
+    // Validate and apply time limit if provided
+    if (typeof payment_deadline_hours === 'number') {
+      if (payment_deadline_hours < 0 || payment_deadline_hours > 720) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment time limit must be between 0 and 720 hours.'
+        });
+      }
+
+      coe.payment_deadline_hours = payment_deadline_hours;
+      if (payment_deadline_hours > 0) {
+        const now = new Date();
+        const deadlineMs = now.getTime() + payment_deadline_hours * 60 * 60 * 1000;
+        coe.payment_deadline_at = new Date(deadlineMs);
+      } else {
+        // 0 treated as no limit
+        coe.payment_deadline_at = undefined;
+      }
+    }
+
+    await coe.save();
+
+    // Notify client that the Experience has been updated / re-proposed
+    if (coe.client_id?._id) {
+      try {
+        await notificationService.createAndSendNotification(
+          coe.client_id._id,
+          'coe_approved',
+          {
+            coe_id: coe._id,
+            coe: { name: coe.name },
+            sender_name: req.user.firstName || 'The1'
+          }
+        );
+      } catch (notifyErr) {
+        console.error('Error sending re-propose notification:', notifyErr);
+      }
+    }
+
+    // Return fresh COE details
+    const updatedCoe = await coeService.getCOEById(id);
+
+    return res.json({
+      success: true,
+      message: 'Experience re-proposed successfully',
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('Error re-proposing COE:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to re-propose Experience',
       error: error.message
     });
   }
