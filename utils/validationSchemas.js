@@ -394,6 +394,7 @@ const updateCOEStatusSchema = Joi.object({
       'draft',
       'request',
       'approved',
+      'accepted_not_paid',
       'proposal',
       'pending_pay',
       'paid',

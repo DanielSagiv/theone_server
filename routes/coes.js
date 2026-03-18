@@ -1434,7 +1434,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     const clientCancelAllowed = !isAdmin && 
                                 isClientOwner &&
                                 value.status === 'cancelled' &&
-                                ['request', 'draft', 'approved', 'pending_pay'].includes(coe.status);
+                                ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status);
     
     if (!isAdmin && !clientCancelAllowed) {
       return res.status(403).json({
@@ -1658,6 +1658,97 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
       success: false,
       message: 'Failed to re-propose Experience',
       error: error.message
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/:id/accept
+ * Client accept-only (deposit_percent === 100) or admin accept-on-behalf (any deposit_percent).
+ * Moves the COE into `accepted_not_paid` without triggering payment.
+ */
+router.post('/:id/accept', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format',
+      });
+    }
+
+    const coe = await COE.findById(id);
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found',
+      });
+    }
+
+    // Guard: only accepted steps happen from an approved, unpaid proposal
+    if (coe.status !== 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'COE must be in approved status to be accepted',
+      });
+    }
+
+    if (coe.payment_status !== 'unpaid') {
+      return res.status(400).json({
+        success: false,
+        message: 'COE payment must be unpaid to be accepted',
+      });
+    }
+
+    const depositPercent = typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+    const isAdmin = req.user.role === 'admin';
+    const isClient = req.user.role === 'client';
+    const isClientOwner = coe.client_id?.toString() === req.user.id?.toString();
+
+    // Client accept-only: only when deposit_percent === 100
+    if (isClient) {
+      if (!isClientOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'Permission denied',
+        });
+      }
+      if (depositPercent !== 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Client can accept only when deposit is 100%',
+        });
+      }
+
+      const updatedCoe = await coeService.updateCOEStatus(id, 'accepted_not_paid', req.user.id);
+      return res.json({
+        success: true,
+        message: 'Experience accepted',
+        data: updatedCoe,
+      });
+    }
+
+    // Admin accept-on-behalf: allowed regardless of deposit_percent
+    if (isAdmin) {
+      const updatedCoe = await coeService.updateCOEStatus(id, 'accepted_not_paid', req.user.id);
+      return res.json({
+        success: true,
+        message: 'Experience accepted on behalf of the client',
+        data: updatedCoe,
+      });
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Permission denied',
+    });
+  } catch (error) {
+    console.error('[COES] Failed to accept Experience:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to accept Experience',
+      error: error.message,
     });
   }
 });

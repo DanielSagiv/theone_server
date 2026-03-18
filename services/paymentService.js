@@ -108,8 +108,8 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       throw new Error('Unauthorized: You can only pay for your own COEs');
     }
     
-    // Check COE status (allow approved or pending_pay)
-    if (!['approved', 'pending_pay'].includes(coe.status)) {
+    // Check COE status (allow approved, accepted_not_paid, or pending_pay)
+    if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
       throw new Error(`Cannot pay for COE in status: ${coe.status}`);
     }
 
@@ -144,8 +144,8 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       };
     }
 
-    // Update status to pending_pay if currently approved
-    if (coe.status === 'approved') {
+    // Update status to pending_pay if currently approved or accepted_not_paid
+    if (coe.status === 'approved' || coe.status === 'accepted_not_paid') {
       await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
       // Reload coe after status update
       coe = await COE.findById(coeId).populate('client_id');
@@ -515,8 +515,12 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       // Check if also fully paid (can happen with full_payment)
       if (totalPaid >= coe.total) {
         coe.payment_status = 'paid';
-        // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
-        if (coe.status === 'approved' || coe.status === 'pending_pay') {
+        // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
           shouldUpdateStatus = true;
           statusToUpdate = 'paid';
         }
@@ -526,8 +530,12 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
         coe.payment_status = 'paid';
         coe.final_paid_at = new Date();
         coe.final_payment_id = completedPayment._id;
-        // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
-        if (coe.status === 'approved' || coe.status === 'pending_pay') {
+        // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
           shouldUpdateStatus = true;
           statusToUpdate = 'paid';
         }
@@ -539,15 +547,23 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       coe.deposit_paid = completedPayment.amount;
       coe.deposit_paid_at = new Date();
       coe.deposit_payment_id = completedPayment._id;
-      // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
-      if (coe.status === 'approved' || coe.status === 'pending_pay') {
+      // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+      if (
+        coe.status === 'approved' ||
+        coe.status === 'accepted_not_paid' ||
+        coe.status === 'pending_pay'
+      ) {
         shouldUpdateStatus = true;
         statusToUpdate = 'paid';
       }
     } else if (totalPaid >= coe.total) {
       coe.payment_status = 'paid';
-      // Update status to 'paid' if currently in 'approved' or 'pending_pay' status
-      if (coe.status === 'approved' || coe.status === 'pending_pay') {
+      // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+      if (
+        coe.status === 'approved' ||
+        coe.status === 'accepted_not_paid' ||
+        coe.status === 'pending_pay'
+      ) {
         shouldUpdateStatus = true;
         statusToUpdate = 'paid';
       }

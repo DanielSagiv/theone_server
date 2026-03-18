@@ -841,7 +841,7 @@ function createCOEActions(coe, userRole) {
   // Cancel - available for clients on their own COEs (request, draft, approved, pending_pay)
   // Admin can cancel any COE (except completed)
   const isClientOwner = coe.client_id?.toString() === (userRole === 'client' ? coe.client_id?.toString() : null);
-  const cancelableStatusesForClient = ['request', 'draft', 'approved', 'pending_pay'];
+  const cancelableStatusesForClient = ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'];
   if ((userRole === 'admin' && status !== 'completed') ||
       (userRole === 'client' && cancelableStatusesForClient.includes(status))) {
     actions.push({

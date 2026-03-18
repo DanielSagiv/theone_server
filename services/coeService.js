@@ -1248,7 +1248,8 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     const validTransitions = {
       'draft': ['approved', 'cancelled'],
       'request': ['approved', 'cancelled'],
-      'approved': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
+      'approved': ['accepted_not_paid', 'pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
+      'accepted_not_paid': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
       'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
       'paid': ['completed', 'cancelled'],
       'rejected': ['draft', 'request'],
@@ -1369,6 +1370,20 @@ async function updateCOEStatus(coeId, status, updatedBy) {
           });
           break;
           
+        case 'accepted_not_paid':
+          // Notify admin that the client accepted the proposal but has not paid yet
+          notifications.push({
+            userId: adminId,
+            type: 'coe_accepted',
+            data: {
+              coe_id: coeId,
+              coe: { name: updatedCoe.name },
+              sender_name: client ? `${client.firstName} ${client.lastName}`.trim() : 'Client',
+              is_admin: true
+            }
+          });
+          break;
+
         case 'accepted':
           // Notify admin
           notifications.push({
@@ -1558,7 +1573,7 @@ async function expireCOEsPastDeadline() {
     const now = new Date();
     // Find COEs that are still payable but have crossed their deadline
     const coesToExpire = await COE.find({
-      status: { $in: ['approved', 'pending_pay'] },
+      status: { $in: ['approved', 'accepted_not_paid', 'pending_pay'] },
       payment_deadline_at: { $lte: now }
     }).select('_id status payment_deadline_at');
 
@@ -2170,10 +2185,10 @@ async function removeEventsFromCOE(coeId, eventIds) {
       throw new Error('Cannot remove events from a paid experience');
     }
 
-    // Allow removal only for unpaid COEs (draft, request, approved, pending_pay)
-    const allowedStatuses = ['draft', 'request', 'approved', 'pending_pay'];
+    // Allow removal only for unpaid COEs (draft, request, approved, accepted_not_paid, pending_pay)
+    const allowedStatuses = ['draft', 'request', 'approved', 'accepted_not_paid', 'pending_pay'];
     if (!allowedStatuses.includes(coe.status)) {
-      throw new Error('Can only remove events from draft, request, approved, or pending_pay COEs');
+      throw new Error('Can only remove events from draft, request, approved, accepted_not_paid, or pending_pay COEs');
     }
 
     // Normalize event IDs to strings for comparison
