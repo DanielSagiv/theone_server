@@ -578,6 +578,38 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       await coeService.updateCOEStatus(coeId, statusToUpdate, null);
     }
     
+    // Best-effort history logging for payment status changes
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      const paymentType = completedPayment.payment_type;
+      const amount = completedPayment.amount;
+
+      const changes = [
+        {
+          field: 'payment_status',
+          label: 'Payment status',
+          from: previousPaymentStatus || 'unpaid',
+          to: coe.payment_status,
+          message: `Payment status changed from ${previousPaymentStatus || 'unpaid'} to ${coe.payment_status}`
+        }
+      ];
+
+      await logIncident({
+        coe,
+        coeId,
+        userId: completedPayment.user_id,
+        userRole: 'client',
+        title: 'Payment updated',
+        changes,
+        metadata: {
+          payment_type: paymentType,
+          amount
+        }
+      });
+    } catch (historyErr) {
+      console.error('[PaymentService] Failed to log payment history incident:', historyErr.message);
+    }
+
     // Send payment notification
     try {
       const notificationService = require('./notificationService');

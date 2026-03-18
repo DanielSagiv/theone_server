@@ -624,10 +624,148 @@ async function createCOE(coeData, createdBy) {
     // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     // Populate references
     await coe.populate([
-      { path: 'client_id', select: 'firstName lastName email' },
-      { path: 'admin_id', select: 'firstName lastName email' },
-      { path: 'created_by', select: 'firstName lastName email' }
+      { path: 'client_id', select: 'firstName lastName email role' },
+      { path: 'admin_id', select: 'firstName lastName email role' },
+      { path: 'created_by', select: 'firstName lastName email role' }
     ]);
+
+    // Best-effort history logging for COE creation
+    try {
+      const { logIncident } = require('./coeHistoryService');
+
+      let userRole = 'system';
+      if (createdBy) {
+        try {
+          const creator = await User.findById(createdBy).select('role');
+          if (creator && creator.role) {
+            userRole = creator.role;
+          }
+        } catch (creatorErr) {
+          console.error('[createCOE] Failed to resolve creator role for history:', creatorErr.message);
+        }
+      }
+
+      const initialStatus = coe.status;
+      const title =
+        initialStatus === 'request'
+          ? 'Experience request submitted'
+          : 'Experience created';
+
+      const changes = [];
+
+      // Core status
+      changes.push({
+        field: 'status',
+        label: 'Experience status',
+        from: null,
+        to: initialStatus,
+        message: `Experience created with status ${initialStatus}`
+      });
+
+      // Original request data (client flow)
+      const reqData = coe.original_request_data || {};
+      if (reqData.city) {
+        changes.push({
+          field: 'city',
+          label: 'City',
+          from: null,
+          to: reqData.city,
+          message: `Requested city: ${reqData.city}`
+        });
+      }
+      if (reqData.requested_dates?.start_date || reqData.requested_dates?.end_date) {
+        changes.push({
+          field: 'dates',
+          label: 'Requested dates',
+          from: null,
+          to: {
+            start: reqData.requested_dates.start_date,
+            end: reqData.requested_dates.end_date
+          },
+          message: `Requested dates: ${reqData.requested_dates.start_date?.toISOString?.() || ''} → ${reqData.requested_dates.end_date?.toISOString?.() || ''}`
+        });
+      }
+      if (reqData.budget?.max) {
+        changes.push({
+          field: 'budget',
+          label: 'Budget (max)',
+          from: null,
+          to: reqData.budget.max,
+          message: `Requested budget (max): ${reqData.budget.max} ${reqData.budget.currency || 'USD'}`
+        });
+      }
+      if (reqData.party_size) {
+        changes.push({
+          field: 'party_size',
+          label: 'Number of people',
+          from: null,
+          to: reqData.party_size,
+          message: `Requested party size: ${reqData.party_size}`
+        });
+      }
+      if (reqData.seat_preferences) {
+        changes.push({
+          field: 'seat_preferences',
+          label: 'Seat/Table preferences',
+          from: null,
+          to: reqData.seat_preferences,
+          message: `Seat/table preferences: ${reqData.seat_preferences}`
+        });
+      }
+      if (reqData.general_preferences) {
+        changes.push({
+          field: 'specific_preferences',
+          label: 'Specific preferences',
+          from: null,
+          to: reqData.general_preferences,
+          message: `Specific preferences: ${reqData.general_preferences}`
+        });
+      }
+
+      // Financial snapshot
+      changes.push({
+        field: 'subtotal',
+        label: 'Subtotal',
+        from: null,
+        to: coe.subtotal,
+        message: `Initial subtotal: ${coe.subtotal}`
+      });
+      changes.push({
+        field: 'taxes',
+        label: 'Taxes',
+        from: null,
+        to: coe.taxes,
+        message: `Initial taxes: ${coe.taxes}`
+      });
+      changes.push({
+        field: 'fees',
+        label: 'Fees',
+        from: null,
+        to: coe.fees,
+        message: `Initial fees: ${coe.fees}`
+      });
+      changes.push({
+        field: 'total',
+        label: 'Total',
+        from: null,
+        to: coe.total,
+        message: `Initial total: ${coe.total}`
+      });
+
+      await logIncident({
+        coe,
+        coeId: coe._id,
+        userId: createdBy,
+        userRole,
+        title,
+        changes,
+        metadata: {
+          snapshot: coe.toObject()
+        }
+      });
+    } catch (historyErr) {
+      console.error('[createCOE] Failed to log history incident:', historyErr.message);
+    }
 
     return coe;
   } catch (error) {
@@ -987,6 +1125,31 @@ async function addEventToCOE(coeId, eventData) {
       $inc: { coe_count: 1 }
     });
 
+    // Best-effort history logging for event addition
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      const coeWithBasic = await COE.findById(coeId).select('status');
+
+      await logIncident({
+        coe: coeWithBasic,
+        coeId,
+        userId: eventData.added_by,
+        userRole: eventData.user_role || 'admin',
+        title: 'Event added to experience',
+        changes: [
+          {
+            field: 'event',
+            label: 'Event',
+            from: null,
+            to: event.name || eventData.event_name || event._id?.toString(),
+            message: `Event "${event.name || eventData.event_name || event._id?.toString()}" added to experience`
+          }
+        ]
+      });
+    } catch (historyErr) {
+      console.error('[addEventToCOE] Failed to log history incident:', historyErr.message);
+    }
+
     return await getCOEById(coeId);
   } catch (error) {
     console.error('Error adding event to COE:', error);
@@ -1028,6 +1191,32 @@ async function removeEventFromCOE(coeId, eventId) {
     await Event.findByIdAndUpdate(eventId, {
       $inc: { coe_count: -1 }
     });
+
+    // Best-effort history logging for event removal
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      const event = await Event.findById(eventId).select('name start_datetime');
+      const coeWithBasic = await COE.findById(coeId).select('status');
+
+      await logIncident({
+        coe: coeWithBasic,
+        coeId,
+        userId: coe.updated_by,
+        userRole: 'admin',
+        title: 'Event removed from experience',
+        changes: [
+          {
+            field: 'event',
+            label: 'Event',
+            from: event?.name || removedEvent?.event_name || eventId,
+            to: null,
+            message: `Event "${event?.name || removedEvent?.event_name || eventId}" removed from experience`
+          }
+        ]
+      });
+    } catch (historyErr) {
+      console.error('[removeEventFromCOE] Failed to log history incident:', historyErr.message);
+    }
 
     return await getCOEById(coeId);
   } catch (error) {
@@ -1316,7 +1505,43 @@ async function updateCOEStatus(coeId, status, updatedBy) {
       // Log but don't fail the status update if notifications fail
       console.error('[COEService] Error sending notifications:', error);
     }
-    
+
+    // Best-effort history logging
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      let userRole = 'system';
+      if (updatedBy) {
+        try {
+          const User = require('../models/User');
+          const userDoc = await User.findById(updatedBy).select('role');
+          if (userDoc && userDoc.role) {
+            userRole = userDoc.role;
+          }
+        } catch (userErr) {
+          console.error('[updateCOEStatus] Failed to resolve user role for history:', userErr.message);
+        }
+      }
+
+      await logIncident({
+        coe,
+        coeId,
+        userId: updatedBy,
+        userRole,
+        title: 'Experience status updated',
+        changes: [
+          {
+            field: 'status',
+            label: 'Experience status',
+            from: oldStatus,
+            to: normalizedStatus,
+            message: `Experience status changed from ${oldStatus} to ${normalizedStatus}`
+          }
+        ]
+      });
+    } catch (historyErr) {
+      console.error('[updateCOEStatus] Failed to log history incident:', historyErr.message);
+    }
+
     return await getCOEById(coeId);
   } catch (error) {
     console.error('Error updating COE status:', error);
@@ -1753,6 +1978,29 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
 
       await coe.save();
 
+      // History logging for single-COE seat update
+      try {
+        const { logIncident } = require('./coeHistoryService');
+        await logIncident({
+          coe,
+          coeId,
+          userId: null,
+          userRole: 'admin',
+          title: 'Table updated for experience',
+          changes: [
+            {
+              field: 'seat',
+              label: 'Table',
+              from: oldEventSeat.code || existingSeat.seat_code,
+              to: newSeat.code,
+              message: `Table updated from ${oldEventSeat.code || existingSeat.seat_code} to ${newSeat.code}`
+            }
+          ]
+        });
+      } catch (historyErr) {
+        console.error('[adminReplaceSeat] Failed to log history incident (single):', historyErr.message);
+      }
+
       // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
       return await getCOEById(coeId);
     }
@@ -1868,6 +2116,29 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
       groupCoe.total = groupSubtotal + (groupCoe.taxes || 0) + (groupCoe.fees || 0);
 
       await groupCoe.save();
+
+      // History logging for each COE in merged group
+      try {
+        const { logIncident } = require('./coeHistoryService');
+        await logIncident({
+          coe: groupCoe,
+          coeId: groupCoe._id,
+          userId: null,
+          userRole: 'admin',
+          title: 'Table updated for experience (merged group)',
+          changes: [
+            {
+              field: 'seat',
+              label: 'Table',
+              from: oldEventSeat.code || groupExistingSeat.seat_code,
+              to: newSeat.code,
+              message: `Table updated from ${oldEventSeat.code || groupExistingSeat.seat_code} to ${newSeat.code} for merged group`
+            }
+          ]
+        });
+      } catch (historyErr) {
+        console.error('[adminReplaceSeat] Failed to log history incident (merged):', historyErr.message);
+      }
     }
 
     // Return fully populated COE for the one that triggered the upgrade

@@ -7,6 +7,7 @@ const { requireAdmin } = require('../middleware/auth');
 const mergeService = require('../services/mergeService');
 const { executeTool, getOrCreateConversation } = require('../services/botService');
 const notificationService = require('../services/notificationService');
+const { getHistoryForCOE } = require('../services/coeHistoryService');
 const {
   createCOESchema,
   updateCOESchema,
@@ -193,7 +194,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       : new mongoose.Types.ObjectId(userId);
     
     // Get COEs where user is admin, client, runner, or participant
-    const coes = await COE.find({
+    let coes = await COE.find({
       $or: [
         { admin_id: userIdObj },
         { client_id: userIdObj },
@@ -260,6 +261,11 @@ router.get('/my', authenticateToken, async (req, res) => {
       // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
       // This prevents incorrect cost breakdown calculation on client side
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
+    }
+
+    // Business rule: clients should not see draft Experiences
+    if (req.user.role === 'client') {
+      coes = coes.filter(coe => coe.status !== 'draft');
     }
 
     res.json({
@@ -531,9 +537,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
         { 'runner_assignment.runner_id': userIdObj },
         { 'participants.user_id': userIdObj }
       ]
-    }).select('_id admin_id client_id runner_assignment.runner_id');
+    }).select('_id admin_id client_id runner_assignment.runner_id status');
     
-    if (!coeCheck) {
+    if (!coeCheck || (req.user.role === 'client' && coeCheck.status === 'draft')) {
       // Log for debugging
       const coeExists = await COE.findById(id).select('admin_id client_id runner_assignment.runner_id').lean();
       console.log('[GET /coes/my/:id] Access denied:', {
@@ -1078,6 +1084,94 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /v1/coes/:id/history
+ * Get COE change history incidents
+ * @access Admin, client owner, or assigned runner
+ */
+router.get('/:id/history', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format'
+      });
+    }
+
+    const coe = await COE.findById(id)
+      .select('name client_id admin_id runner_assignment events');
+
+    if (!coe) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found'
+      });
+    }
+
+    const userId = req.user.id.toString();
+    const isAdmin = req.user.role === 'admin';
+    const isClientOwner = coe.client_id?.toString() === userId;
+    const isRunner =
+      coe.runner_assignment &&
+      coe.runner_assignment.runner_id &&
+      coe.runner_assignment.runner_id.toString() === userId;
+
+    if (!isAdmin && !isClientOwner && !isRunner) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view this Experience history.'
+      });
+    }
+
+    const { limit, offset } = req.query;
+    const parsedLimit = limit ? Math.min(parseInt(limit, 10) || 100, 200) : 100;
+    const parsedOffset = offset ? parseInt(offset, 10) || 0 : 0;
+
+    const incidents = await getHistoryForCOE(id, {
+      limit: parsedLimit,
+      offset: parsedOffset
+    });
+
+    // Derive simple date range from events if available
+    let dateRange = null;
+    if (coe.events && coe.events.length > 0) {
+      const dates = coe.events
+        .map(e => e.event_date)
+        .filter(Boolean)
+        .map(d => new Date(d));
+      if (dates.length > 0) {
+        const min = new Date(Math.min.apply(null, dates));
+        const max = new Date(Math.max.apply(null, dates));
+        dateRange = {
+          start: min,
+          end: max
+        };
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        coe: {
+          id: coe._id.toString(),
+          name: coe.name,
+          dateRange
+        },
+        incidents
+      }
+    });
+  } catch (error) {
+    console.error('Error getting COE history:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get COE history',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /v1/coes
  * Create new COE
  * @access Admin only
@@ -1460,10 +1554,10 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
 
     // Validate and apply deposit percentage if provided
     if (typeof deposit_percent === 'number') {
-      if (deposit_percent < 10 || deposit_percent > 100) {
+      if (deposit_percent < 1 || deposit_percent > 100) {
         return res.status(400).json({
           success: false,
-          message: 'Deposit percentage must be between 10 and 100.'
+          message: 'Deposit percentage must be between 1 and 100.'
         });
       }
       coe.deposit_percent = deposit_percent;
@@ -1489,7 +1583,49 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
       }
     }
 
+    const previousDepositPercent = coe.deposit_percent;
+    const previousDeadlineHours = coe.payment_deadline_hours;
+
     await coe.save();
+
+    // History logging for re-propose (deposit / time limit adjustments)
+    try {
+      const { logIncident } = require('../services/coeHistoryService');
+      const changes = [];
+
+      if (typeof deposit_percent === 'number' && deposit_percent !== previousDepositPercent) {
+        changes.push({
+          field: 'deposit_percent',
+          label: 'Deposit percentage',
+          from: previousDepositPercent != null ? `${previousDepositPercent}%` : null,
+          to: `${deposit_percent}%`,
+          message: `Deposit percentage changed from ${previousDepositPercent != null ? previousDepositPercent : 'unset'}% to ${deposit_percent}%`
+        });
+      }
+
+      if (typeof payment_deadline_hours === 'number' && payment_deadline_hours !== previousDeadlineHours) {
+        changes.push({
+          field: 'payment_deadline_hours',
+          label: 'Payment time limit',
+          from: previousDeadlineHours != null ? `${previousDeadlineHours}h` : null,
+          to: `${payment_deadline_hours}h`,
+          message: `Payment time limit changed from ${previousDeadlineHours != null ? previousDeadlineHours : 'no limit'} to ${payment_deadline_hours} hours`
+        });
+      }
+
+      if (changes.length > 0) {
+        await logIncident({
+          coe,
+          coeId: coe._id,
+          userId: req.user.id,
+          userRole: req.user.role || 'admin',
+          title: 'Proposal settings updated',
+          changes
+        });
+      }
+    } catch (historyErr) {
+      console.error('[COES] Failed to log re-propose history incident:', historyErr.message);
+    }
 
     // Notify client that the Experience has been updated / re-proposed
     if (coe.client_id?._id) {

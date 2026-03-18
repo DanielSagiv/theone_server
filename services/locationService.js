@@ -55,7 +55,72 @@ async function getAllCitiesWithLocations(options = {}) {
   }
 }
 
+/**
+ * Get all unique (city, state) pairs that have locations
+ * @param {Object} options - Query options
+ * @param {string} options.status - Filter by location status ('active', 'draft', 'archived', or null for all)
+ * @returns {Promise<Array<{city: string, state: string|null, display: string}>>}
+ */
+async function getAllCityStatePairsWithLocations(options = {}) {
+  try {
+    const { status = 'active' } = options;
+
+    const match = {};
+    if (status) {
+      match.status = status;
+    }
+    match['address.city'] = { $exists: true, $ne: null, $ne: '' };
+
+    const results = await Location.aggregate([
+      { $match: match },
+      {
+        $project: {
+          city: { $trim: { input: '$address.city' } },
+          state: {
+            $cond: [
+              { $and: [{ $ne: ['$address.state', null] }, { $ne: ['$address.state', ''] }] },
+              { $trim: { input: '$address.state' } },
+              null
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: { city: '$city', state: '$state' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          city: '$_id.city',
+          state: '$_id.state'
+        }
+      }
+    ]);
+
+    const normalized = (results || [])
+      .filter(r => r.city && typeof r.city === 'string' && r.city.trim().length > 0)
+      .map(r => {
+        const city = r.city.trim();
+        const state = typeof r.state === 'string' && r.state.trim().length > 0 ? r.state.trim() : null;
+        return {
+          city,
+          state,
+          display: state ? `${city}, ${state}` : city
+        };
+      })
+      .sort((a, b) => a.display.localeCompare(b.display, undefined, { sensitivity: 'base' }));
+
+    return normalized;
+  } catch (error) {
+    console.error('Error in getAllCityStatePairsWithLocations:', error);
+    return [];
+  }
+}
+
 module.exports = {
-  getAllCitiesWithLocations
+  getAllCitiesWithLocations,
+  getAllCityStatePairsWithLocations
 };
 

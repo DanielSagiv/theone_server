@@ -9,7 +9,7 @@ const {
   getLocationAnalytics,
   validateLocationCapacity 
 } = require('../services/locationEventService');
-const { getAllCitiesWithLocations } = require('../services/locationService');
+const { getAllCitiesWithLocations, getAllCityStatePairsWithLocations } = require('../services/locationService');
 const multer = require('multer');
 const { uploadBufferToS3, extFromMime } = require('../utils/s3');
 const crypto = require('crypto');
@@ -88,6 +88,35 @@ router.get('/cities', authenticateToken, async (req, res) => {
         code: 'CITIES_LIST_FAILED', 
         message: 'Failed to retrieve cities' 
       } 
+    });
+  }
+});
+
+/**
+ * GET /v1/locations/cities-with-state
+ * Get all unique city/state pairs that have locations
+ */
+router.get('/cities-with-state', authenticateToken, async (req, res) => {
+  try {
+    const { status = 'active' } = req.query;
+    const cities = await getAllCityStatePairsWithLocations({
+      status: status || 'active'
+    });
+
+    return res.json({
+      success: true,
+      data: cities,
+      count: cities.length,
+      message: 'Cities retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get cities-with-state error:', { error: error.message, stack: error.stack, timestamp: new Date().toISOString() });
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'CITIES_LIST_FAILED',
+        message: 'Failed to retrieve cities'
+      }
     });
   }
 });
