@@ -1245,6 +1245,18 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
           // Client creates COE for themselves
           toolParams.client_id = user._id.toString();
         }
+
+        // Admin-only: skip draft and publish as approved (proposal) with deposit + payment window — same outcome as manual Propose (not used when upgrading a request COE).
+        if (
+          user.role === 'admin' &&
+          !extractionResult.raw.request_coe_id &&
+          extractionResult.raw.admin_create_mode === 'proposal'
+        ) {
+          toolParams.admin_create_as_proposal = true;
+          if (typeof extractionResult.raw.proposal_deposit_percent === 'number') {
+            toolParams.proposal_deposit_percent = extractionResult.raw.proposal_deposit_percent;
+          }
+        }
         
         // ADDITIONAL SAFETY CHECK: Don't proceed if admin and no client_id
         if (user.role === 'admin' && !toolParams.client_id) {

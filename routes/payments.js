@@ -11,7 +11,13 @@ const Joi = require('joi');
 
 // Validation schemas
 const createPaymentSchema = Joi.object({
-  paymentType: Joi.string().valid('deposit', 'final_payment', 'full_payment').required(),
+  paymentType: Joi.string().valid(
+    'deposit',
+    'deposit_diff',
+    'final_payment',
+    'full_payment',
+    'full_diff'
+  ).required(),
   saveCard: Joi.boolean().optional(),
   tokenId: Joi.string().optional()
 });

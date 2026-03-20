@@ -198,6 +198,29 @@ function startCOEPaymentDeadlineCron() {
 }
 
 /**
+ * Expire revision payment windows and revert COEs back to their base snapshots.
+ * Runs every 5 minutes
+ */
+function startRevisionExpiryCron() {
+  cron.schedule('*/5 * * * *', async () => {
+    const startedAt = new Date();
+    console.log('🔄 Running COE revision expiry cron job:', startedAt.toISOString());
+
+    try {
+      const revertedCount = await coeService.expireRevisionPaymentsAndRevert();
+      console.log('✅ COE revision expiry cron job completed:', {
+        reverted: revertedCount,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('❌ COE revision expiry cron job failed:', error);
+    }
+  });
+
+  console.log('✅ COE revision expiry cron job scheduled (every 5 minutes)');
+}
+
+/**
  * Start all cron jobs
  */
 function startAllCronJobs() {
@@ -205,6 +228,7 @@ function startAllCronJobs() {
   startFailedPaymentRetryCron();
   startSubscriptionExpirationCron();
   startCOEPaymentDeadlineCron();
+  startRevisionExpiryCron();
   console.log('🚀 All payment cron jobs started successfully');
 }
 
@@ -213,6 +237,7 @@ module.exports = {
   startRecurringPaymentsCron,
   startFailedPaymentRetryCron,
   startSubscriptionExpirationCron,
-  startCOEPaymentDeadlineCron
+  startCOEPaymentDeadlineCron,
+  startRevisionExpiryCron
 };
 

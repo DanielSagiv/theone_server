@@ -258,7 +258,10 @@ function extractPreferencesFromFormSubmission(message) {
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
-    selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i
+    selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
+    admin_create_mode: /Admin create mode:\s*(draft|proposal)/i,
+    proposal_deposit_percent: /Deposit percent:\s*(\d+)/i,
+    proposal_payment_deadline_hours: /Payment deadline hours:\s*(\d+)/i
   };
 
   // Extract client_id (for admin COE creation flow)
@@ -395,6 +398,27 @@ function extractPreferencesFromFormSubmission(message) {
   }
   preferences.selected_seat_categories = selected_seat_categories;
 
+  const adminModeMatch = message.match(patterns.admin_create_mode);
+  if (adminModeMatch && adminModeMatch[1]) {
+    preferences.admin_create_mode = String(adminModeMatch[1]).trim().toLowerCase();
+  }
+
+  const depPctMatch = message.match(patterns.proposal_deposit_percent);
+  if (depPctMatch && depPctMatch[1]) {
+    const n = parseInt(depPctMatch[1], 10);
+    if (!Number.isNaN(n) && n >= 1 && n <= 100) {
+      preferences.proposal_deposit_percent = n;
+    }
+  }
+
+  const pdhMatch = message.match(patterns.proposal_payment_deadline_hours);
+  if (pdhMatch && pdhMatch[1]) {
+    const h = parseInt(pdhMatch[1], 10);
+    if (!Number.isNaN(h) && h >= 0) {
+      preferences.proposal_payment_deadline_hours = h;
+    }
+  }
+
   // Convert to format compatible with existing preference storage
   const formattedPreferences = {
     city: preferences.city,
@@ -429,7 +453,10 @@ function extractPreferencesFromFormSubmission(message) {
       seat_preferences: preferences.seat_preferences,
       specific_preferences: preferences.specific_preferences,
       selected_events: preferences.selected_events,
-      selected_seat_categories: preferences.selected_seat_categories
+      selected_seat_categories: preferences.selected_seat_categories,
+      admin_create_mode: preferences.admin_create_mode,
+      proposal_deposit_percent: preferences.proposal_deposit_percent,
+      proposal_payment_deadline_hours: preferences.proposal_payment_deadline_hours
     }
   };
 

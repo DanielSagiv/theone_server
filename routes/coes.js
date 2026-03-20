@@ -1367,7 +1367,7 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
       });
     }
 
-    const coe = await coeService.removeEventFromCOE(id, eventId);
+    const coe = await coeService.removeEventsFromCOE(id, [eventId]);
 
     res.json({
       success: true,
@@ -1380,6 +1380,18 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
       return res.status(404).json({
         success: false,
         message: error.message
+      });
+    }
+    const msg = error.message || '';
+    if (
+      msg.includes('Cannot remove') ||
+      msg.includes('Cannot change events') ||
+      msg.includes('revision') ||
+      msg.includes('Can only remove events from')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: msg
       });
     }
 
@@ -1542,6 +1554,266 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
       });
     }
 
+    const { deposit_percent, payment_deadline_hours } = req.body || {};
+    const isPaidOrDepositPaid = ['deposit_paid', 'paid'].includes(coe.payment_status);
+
+    // Paid/deposit-paid revision flow: compute revision case + pending_accept.
+    if (isPaidOrDepositPaid) {
+      // Guard: do not allow revisions for experiences already in the past
+      const now = new Date();
+      // Prefer experience-level dates (end_date) since `events.event_date` is often start date.
+      const endDate = coe?.end_date ? new Date(coe.end_date) : null;
+      const isPastExperience =
+        endDate && !Number.isNaN(endDate.getTime())
+          ? endDate.getTime() < now.getTime()
+          : (Array.isArray(coe.events)
+              ? coe.events.some(e => {
+                  if (!e?.event_date) return false;
+                  const d = new Date(e.event_date);
+                  // Strictly less-than so same-day doesn't block revisions.
+                  return d.getTime() < now.getTime();
+                })
+              : false);
+
+      if (isPastExperience) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot re-propose a past experience'
+        });
+      }
+
+      // Legacy COEs paid before revision snapshots existed: backfill baseline from current document.
+      await coeService.ensureRevisionBaseSnapshotForPaidCOE(coe);
+
+      // For revisions after payment, admin must provide a revision timer (forced).
+      // Mobile should send a number, but accept numeric strings too.
+      const normalizedPaymentDeadlineHours =
+        typeof payment_deadline_hours === 'number'
+          ? payment_deadline_hours
+          : (typeof payment_deadline_hours === 'string' && payment_deadline_hours.trim().length > 0
+              ? Number(payment_deadline_hours)
+              : payment_deadline_hours);
+
+      // Fallback: if payload missed it, reuse existing payment_deadline_hours (when valid).
+      const fallbackPaymentDeadlineHours =
+        typeof coe.payment_deadline_hours === 'number' && coe.payment_deadline_hours > 0
+          ? coe.payment_deadline_hours
+          : undefined;
+
+      const effectivePaymentDeadlineHours =
+        typeof normalizedPaymentDeadlineHours === 'number' && normalizedPaymentDeadlineHours > 0
+          ? normalizedPaymentDeadlineHours
+          : fallbackPaymentDeadlineHours;
+
+      if (typeof effectivePaymentDeadlineHours !== 'number' || effectivePaymentDeadlineHours <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Revision requires a valid payment_deadline_hours (hours > 0)'
+        });
+      }
+
+      if (effectivePaymentDeadlineHours < 0 || effectivePaymentDeadlineHours > 720) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment time limit must be between 0 and 720 hours.'
+        });
+      }
+
+      // Base snapshot must exist (persisted when deposit/full payment happened).
+      const baseSnapshot = coe.revision_base_snapshot;
+      const coerceToNumber = (v) => {
+        if (typeof v === 'number') return v;
+        if (v == null) return undefined;
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          if (!trimmed) return undefined;
+          const n = Number(trimmed);
+          return Number.isNaN(n) ? undefined : n;
+        }
+
+        // Handles Decimal128 and other types that can be cast to number.
+        const n = Number(v);
+        if (!Number.isNaN(n)) return n;
+        if (typeof v?.toString === 'function') {
+          const n2 = Number(v.toString());
+          return Number.isNaN(n2) ? undefined : n2;
+        }
+        return undefined;
+      };
+
+      const baseTotal =
+        coerceToNumber(baseSnapshot?.total) ??
+        coerceToNumber(baseSnapshot?.total_price) ??
+        coerceToNumber(baseSnapshot?.totalPrice) ??
+        (coerceToNumber(baseSnapshot?.subtotal) != null ||
+          coerceToNumber(baseSnapshot?.taxes) != null ||
+          coerceToNumber(baseSnapshot?.fees) != null
+          ? (coerceToNumber(baseSnapshot?.subtotal) || 0) +
+            (coerceToNumber(baseSnapshot?.taxes) || 0) +
+            (coerceToNumber(baseSnapshot?.fees) || 0)
+          : undefined) ??
+        coerceToNumber(baseSnapshot?.pricing_breakdown?.total) ??
+        coerceToNumber(baseSnapshot?.pricing_breakdown?.total_price);
+
+      if (typeof baseTotal !== 'number' || Number.isNaN(baseTotal) || baseTotal < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing revision base snapshot. Please ensure deposit/full payment was completed normally.'
+        });
+      }
+
+      const currentTotal = typeof coe.total === 'number' ? coe.total : 0;
+      // Freeze deposit percent to the last paid value (prefer the stored base snapshot).
+      const baseDepositPercent = coerceToNumber(baseSnapshot?.deposit_percent);
+      const depositPercentFrozen =
+        typeof coe.revision_deposit_percent_frozen === 'number'
+          ? coe.revision_deposit_percent_frozen
+          : (baseDepositPercent != null
+              ? baseDepositPercent
+              : coerceToNumber(coe.deposit_percent) ?? 20);
+
+      // Compute revision case + due amounts/credit based on base snapshot totals.
+      let revisionCase = null;
+      let dueDepositDiff = 0;
+      let dueFullDiff = 0;
+      let creditBalance = 0;
+
+      if (coe.payment_status === 'deposit_paid') {
+        const baseDepositAmount = baseTotal * (depositPercentFrozen / 100);
+        if (currentTotal > baseTotal) {
+          revisionCase = 'deposit_increased';
+          const currentDepositAmount = currentTotal * (depositPercentFrozen / 100);
+          dueDepositDiff = Math.max(0, currentDepositAmount - baseDepositAmount);
+          dueFullDiff = Math.max(0, currentTotal - baseDepositAmount);
+        } else if (currentTotal < baseTotal) {
+          revisionCase = 'deposit_decreased';
+          dueDepositDiff = 0;
+          // Deposit is not changed, only the remaining amount becomes lower (or 0).
+          dueFullDiff = Math.max(0, currentTotal - baseDepositAmount);
+        } else {
+          revisionCase = 'deposit_decreased';
+          dueDepositDiff = 0;
+          dueFullDiff = 0;
+        }
+      } else if (coe.payment_status === 'paid') {
+        if (currentTotal > baseTotal) {
+          revisionCase = 'full_increased';
+          dueFullDiff = Math.max(0, currentTotal - baseTotal);
+        } else if (currentTotal < baseTotal) {
+          revisionCase = 'full_decreased';
+          creditBalance = Math.max(0, baseTotal - currentTotal);
+        } else {
+          revisionCase = 'full_decreased';
+          creditBalance = 0;
+          dueFullDiff = 0;
+        }
+      }
+
+      // Enforce deposit percent freeze: ignore payload deposit_percent for revisions after payment.
+      coe.revision_state = 'pending_accept';
+      coe.revision_case = revisionCase;
+      coe.revision_deposit_percent_frozen = depositPercentFrozen;
+      coe.revision_deadline_hours = effectivePaymentDeadlineHours;
+      coe.revision_deadline_at = new Date(
+        now.getTime() + effectivePaymentDeadlineHours * 60 * 60 * 1000
+      );
+      coe.revision_due_deposit_diff_amount = dueDepositDiff;
+      coe.revision_due_full_diff_amount = dueFullDiff;
+      coe.client_credit_balance = creditBalance;
+
+      await coe.save();
+
+      // History logging for revision submission
+      try {
+        await require('../services/coeHistoryService').logIncident({
+          coe,
+          coeId: coe._id,
+          userId: req.user.id,
+          userRole: req.user.role || 'admin',
+          title: 'Experience revision submitted',
+          changes: [
+            {
+              field: 'revision_state',
+              label: 'Revision state',
+              from: 'none',
+              to: 'pending_accept',
+              message: 'Revision submitted; client must accept'
+            },
+            {
+              field: 'revision_case',
+              label: 'Revision case',
+              from: null,
+              to: revisionCase,
+              message: `Revision case computed as ${revisionCase}`
+            },
+            {
+              field: 'total',
+              label: 'Experience total',
+              from: baseTotal,
+              to: currentTotal,
+              message: `Total updated from $${baseTotal.toFixed(2)} to $${currentTotal.toFixed(2)}`
+            },
+            {
+              field: 'revision_due_deposit_diff_amount',
+              label: 'Deposit difference due',
+              from: 0,
+              to: dueDepositDiff,
+              message: `Deposit diff due: $${dueDepositDiff.toFixed(2)}`
+            },
+            {
+              field: 'revision_due_full_diff_amount',
+              label: 'Extra difference due',
+              from: 0,
+              to: dueFullDiff,
+              message: `Full diff due: $${dueFullDiff.toFixed(2)}`
+            },
+            {
+              field: 'client_credit_balance',
+              label: 'Credit balance',
+              from: 0,
+              to: creditBalance,
+              message: `Credit balance: $${creditBalance.toFixed(2)}`
+            }
+          ],
+          metadata: {
+            revision_deadline_at: coe.revision_deadline_at,
+            base_total: baseTotal,
+            current_total: currentTotal,
+            deposit_percent_frozen: depositPercentFrozen
+          }
+        });
+      } catch (historyErr) {
+        console.error('[COES] Failed to log revision submission incident:', historyErr.message);
+      }
+
+      // Notify client about revision submission (push)
+      try {
+        if (coe.client_id?._id) {
+          await notificationService.createAndSendNotification(
+            coe.client_id._id,
+            'coe_revision_submitted',
+            {
+              coe_id: coe._id,
+              revision_case: revisionCase,
+              credit_amount: creditBalance,
+              revision_deadline_hours: payment_deadline_hours,
+              coe: { name: coe.name }
+            }
+          );
+        }
+      } catch (notifyErr) {
+        console.error('[COES] Failed to send revision notification:', notifyErr);
+      }
+
+      const updatedCoe = await coeService.getCOEById(id);
+      return res.json({
+        success: true,
+        message: 'Experience revised successfully; client acceptance required',
+        data: updatedCoe
+      });
+    }
+
+    // Proposal re-propose flow (unpaid / approved)
     // Only allow re-propose on already approved (proposal) COEs
     if (coe.status !== 'approved') {
       return res.status(400).json({
@@ -1549,8 +1821,6 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
         message: 'Re-propose is only allowed for Experiences in PROPOSAL status.'
       });
     }
-
-    const { deposit_percent, payment_deadline_hours } = req.body || {};
 
     // Validate and apply deposit percentage if provided
     if (typeof deposit_percent === 'number') {
@@ -1683,6 +1953,90 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'COE not found',
+      });
+    }
+
+    // Revision accept flow: allow accept even when COE isn't in the "approved + unpaid" step.
+    if (coe.revision_state === 'pending_accept') {
+      const role = req.user.role;
+      const isAdmin = role === 'admin';
+      const isClient = role === 'client';
+      const isClientOwner = coe.client_id?.toString() === req.user.id?.toString();
+
+      if (!isAdmin && !isClient) {
+        return res.status(403).json({
+          success: false,
+          message: 'Permission denied',
+        });
+      }
+
+      if (isClient && !isClientOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'Permission denied',
+        });
+      }
+
+      const dueDepositDiff =
+        typeof coe.revision_due_deposit_diff_amount === 'number' ? coe.revision_due_deposit_diff_amount : 0;
+      const dueFullDiff =
+        typeof coe.revision_due_full_diff_amount === 'number' ? coe.revision_due_full_diff_amount : 0;
+
+      // If nothing is due, accepting the revision fully resolves it (e.g., full_decreased credit-only case).
+      const autoResolve = dueDepositDiff <= 0 && dueFullDiff <= 0;
+      coe.revision_state = autoResolve ? 'resolved' : 'accepted';
+
+      if (autoResolve) {
+        coe.revision_deadline_at = undefined;
+        coe.revision_deadline_hours = null;
+      }
+
+      await coe.save();
+
+      // Log revision acceptance incident
+      try {
+        const creditBalance = typeof coe.client_credit_balance === 'number' ? coe.client_credit_balance : 0;
+        await require('../services/coeHistoryService').logIncident({
+          coe,
+          coeId: coe._id,
+          userId: req.user.id,
+          userRole: role,
+          title: 'Experience revision accepted',
+          changes: [
+            {
+              field: 'revision_state',
+              label: 'Revision state',
+              from: 'pending_accept',
+              to: coe.revision_state,
+              message: autoResolve
+                ? 'Client/admin accepted the revision (no payment required)'
+                : 'Client/admin accepted the revision'
+            },
+            ...(coe.revision_case === 'full_decreased' && creditBalance > 0
+              ? [
+                  {
+                    field: 'client_credit_balance',
+                    label: 'Client credit balance',
+                    from: 0,
+                    to: creditBalance,
+                    message: `Credit assigned: $${creditBalance.toFixed(2)}`
+                  }
+                ]
+              : [])
+          ],
+          metadata: {
+            revision_case: coe.revision_case
+          }
+        });
+      } catch (historyErr) {
+        console.error('[COES] Failed to log revision acceptance incident:', historyErr.message);
+      }
+
+      const updatedCoe = await coeService.getCOEById(id);
+      return res.json({
+        success: true,
+        message: 'Experience revision accepted',
+        data: updatedCoe,
       });
     }
 
@@ -2438,13 +2792,18 @@ router.delete('/:coeId/events', authenticateToken, requireAdmin, async (req, res
       });
     }
 
-    // Reject removal for paid COEs
-    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+    if (coeService.isRevisionStructurallyLocked(coe)) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot remove events from a paid experience'
+        error:
+          'Cannot change events while a revision is awaiting client acceptance or payment. Resolve that revision first.'
       });
     }
+
+    const isPaidLike =
+      coe.payment_status === 'paid' ||
+      coe.payment_status === 'deposit_paid' ||
+      coe.status === 'paid';
 
     // Build set of event IDs currently in COE (from events array)
     const currentEventIds = new Set();
@@ -2456,8 +2815,15 @@ router.delete('/:coeId/events', authenticateToken, requireAdmin, async (req, res
     const eventIdsToRemove = event_ids.map(id => id.toString());
     const remainingEventIds = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
 
-    // When removing last event: delete COE, notify admin and user
     if (remainingEventIds.length === 0) {
+      if (isPaidLike) {
+        return res.status(400).json({
+          success: false,
+          error:
+            'Cannot remove the last event from a paid experience. At least one event must remain before you submit a revision.'
+        });
+      }
+
       const coeName = coe.name || 'Experience';
       await coeService.deleteCOE(coeId);
 
@@ -2526,13 +2892,18 @@ router.post('/:coeId/events/remove', authenticateToken, requireAdmin, async (req
       });
     }
 
-    // Reject removal for paid COEs
-    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+    if (coeService.isRevisionStructurallyLocked(coe)) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot remove events from a paid experience'
+        error:
+          'Cannot change events while a revision is awaiting client acceptance or payment. Resolve that revision first.'
       });
     }
+
+    const isPaidLike =
+      coe.payment_status === 'paid' ||
+      coe.payment_status === 'deposit_paid' ||
+      coe.status === 'paid';
 
     // Build set of event IDs currently in COE (from events array)
     const currentEventIds = new Set();
@@ -2544,8 +2915,15 @@ router.post('/:coeId/events/remove', authenticateToken, requireAdmin, async (req
     const eventIdsToRemove = event_ids.map(id => id.toString());
     const remainingEventIds = Array.from(currentEventIds).filter(id => !eventIdsToRemove.includes(id));
 
-    // When removing last event: delete COE, notify admin and user
     if (remainingEventIds.length === 0) {
+      if (isPaidLike) {
+        return res.status(400).json({
+          success: false,
+          error:
+            'Cannot remove the last event from a paid experience. At least one event must remain before you submit a revision.'
+        });
+      }
+
       const coeName = coe.name || 'Experience';
       await coeService.deleteCOE(coeId);
 
@@ -2688,10 +3066,11 @@ router.get('/:coeId/events/available-to-add', authenticateToken, requireAdmin, a
     if (!coe) {
       return res.status(404).json({ success: false, error: 'COE not found' });
     }
-    if (coe.payment_status === 'paid' || coe.status === 'paid') {
+    if (coeService.isRevisionStructurallyLocked(coe)) {
       return res.status(400).json({
         success: false,
-        error: 'Cannot add event to a paid experience'
+        error:
+          'Cannot change events while a revision is awaiting client acceptance or payment. Resolve that revision first.'
       });
     }
     const events = await coeService.findEventsAvailableToAdd(coeId);

@@ -89,7 +89,7 @@ async function createGPClient() {
  * Create payment intent
  * @param {string} coeId - COE ID
  * @param {string} userId - User ID
- * @param {string} paymentType - 'deposit', 'final_payment', or 'full_payment'
+ * @param {string} paymentType - 'deposit', 'final_payment', 'full_payment', plus revision diffs ('deposit_diff', 'full_diff')
  * @param {Object} options - { saveCard: boolean, cardDetails: Object, tokenId: string }
  * @returns {Promise<Object>} Payment intent with payment_url
  */
@@ -107,45 +107,62 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
     if (coe.client_id._id.toString() !== userId.toString()) {
       throw new Error('Unauthorized: You can only pay for your own COEs');
     }
-    
+
+    const isRevisionDiffPayment = paymentType === 'deposit_diff' || paymentType === 'full_diff';
+
     // Check COE status (allow approved, accepted_not_paid, or pending_pay)
-    if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
-      throw new Error(`Cannot pay for COE in status: ${coe.status}`);
+    // For revision payments we gate by `revision_state` instead.
+    if (!isRevisionDiffPayment) {
+      if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
+        throw new Error(`Cannot pay for COE in status: ${coe.status}`);
+      }
+    } else {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying diff amounts');
+      }
     }
 
     // Enforce payment deadline if configured
-    if (coe.payment_deadline_at) {
+    const deadlineAt = isRevisionDiffPayment ? coe.revision_deadline_at : coe.payment_deadline_at;
+    if (deadlineAt) {
       const now = new Date();
-      if (coe.payment_deadline_at <= now) {
-        // Optionally sync status to expired (defensive, cron should also handle this)
-        try {
-          const coeService = require('./coeService');
-          await coeService.updateCOEStatus(coeId, 'expired', null);
-        } catch (deadlineErr) {
-          console.error('[PaymentService] Failed to update COE to expired after deadline:', deadlineErr.message);
+      if (deadlineAt <= now) {
+        if (!isRevisionDiffPayment) {
+          // Optionally sync status to expired (defensive, cron should also handle this)
+          try {
+            const coeService = require('./coeService');
+            await coeService.updateCOEStatus(coeId, 'expired', null);
+          } catch (deadlineErr) {
+            console.error('[PaymentService] Failed to update COE to expired after deadline:', deadlineErr.message);
+          }
+          throw new Error('Payment window expired for this experience');
         }
-        throw new Error('Payment window expired for this experience');
+
+        throw new Error('Revision payment window expired for this experience');
       }
     }
 
     // Pre-payment: check seat availability and same-section fallback. If any event has no seats in section,
     // reduce COE, notify user (no tables, contact The1, total updated from X to Y), and return so client
     // can show the message and let user complete payment with the new amount on next attempt.
-    const coeService = require('./coeService');
-    const prepared = await coeService.preparePaymentForCOE(coeId);
-    if (prepared && prepared.coe_updated) {
-      return {
-        coe_updated: true,
-        previous_total: prepared.previous_total,
-        new_total: prepared.new_total,
-        total_zero: prepared.new_total === 0,
-        unavailable_event_names: prepared.unavailable_event_names,
-        message: prepared.message
-      };
+    if (!isRevisionDiffPayment) {
+      const coeService = require('./coeService');
+      const prepared = await coeService.preparePaymentForCOE(coeId);
+      if (prepared && prepared.coe_updated) {
+        return {
+          coe_updated: true,
+          previous_total: prepared.previous_total,
+          new_total: prepared.new_total,
+          total_zero: prepared.new_total === 0,
+          unavailable_event_names: prepared.unavailable_event_names,
+          message: prepared.message
+        };
+      }
     }
 
     // Update status to pending_pay if currently approved or accepted_not_paid
-    if (coe.status === 'approved' || coe.status === 'accepted_not_paid') {
+    if (!isRevisionDiffPayment && (coe.status === 'approved' || coe.status === 'accepted_not_paid')) {
+      const coeService = require('./coeService');
       await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
       // Reload coe after status update
       coe = await COE.findById(coeId).populate('client_id');
@@ -172,6 +189,36 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
         throw new Error('Payment already processed');
       }
       amount = coe.total;
+    } else if (paymentType === 'deposit_diff') {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying deposit diff');
+      }
+
+      if (coe.payment_status !== 'deposit_paid') {
+        throw new Error('Deposit diff can only be paid while COE is deposit_paid');
+      }
+
+      const depositPercentFrozen =
+        typeof coe.revision_deposit_percent_frozen === 'number'
+          ? coe.revision_deposit_percent_frozen
+          : (coe.deposit_percent || 20);
+
+      const currentDepositAmount = (coe.total || 0) * (depositPercentFrozen / 100);
+      amount = Math.max(0, currentDepositAmount - (coe.total_paid || 0));
+      coe.deposit_amount = amount;
+
+      if (amount <= 0) {
+        throw new Error('No deposit difference is currently due for this revision');
+      }
+    } else if (paymentType === 'full_diff') {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying full diff');
+      }
+
+      amount = Math.max(0, (coe.total || 0) - (coe.total_paid || 0));
+      if (amount <= 0) {
+        throw new Error('No remaining amount is currently due for this revision');
+      }
     } else {
       throw new Error('Invalid payment type');
     }
@@ -404,6 +451,14 @@ async function processPaymentWebhook(webhookData) {
         
       case 'PAYMENT_CAPTURED':
       case 'PAYMENT_COMPLETED':
+        // Idempotent: direct card charge + webhook, or CAPTURED + COMPLETED, must not re-run COE updates / notifications
+        if (payment.status === 'completed') {
+          console.log('[PaymentService] Duplicate completion webhook ignored (idempotent)', {
+            payment_id: payment._id?.toString(),
+            event_type: type
+          });
+          return { processed: true, duplicate: true, payment_id: payment._id };
+        }
         payment.status = 'completed';
         payment.completed_at = new Date();
         payment.card_brand = webhookData.payment_method?.card?.brand;
@@ -489,6 +544,7 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       return;
     }
     const previousPaymentStatus = coe.payment_status;
+    const previousRevisionState = coe.revision_state;
 
     // Get all completed payments for this COE
     const payments = await Payment.find({ 
@@ -525,6 +581,25 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
           statusToUpdate = 'paid';
         }
       }
+    } else if (completedPayment.payment_type === 'deposit_diff') {
+      // Deposit difference after revision acceptance:
+      // keep the COE in `deposit_paid` until it reaches full `paid`.
+      coe.payment_status = 'deposit_paid';
+      coe.deposit_paid = totalPaid;
+      coe.deposit_paid_at = new Date();
+      coe.deposit_payment_id = completedPayment._id;
+
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      }
     } else if (completedPayment.payment_type === 'final_payment') {
       if (totalPaid >= coe.total) {
         coe.payment_status = 'paid';
@@ -541,6 +616,30 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
         }
       } else {
         coe.payment_status = 'unpaid';
+      }
+    } else if (completedPayment.payment_type === 'full_diff') {
+      // Full diff after revision acceptance:
+      // it should bring the COE to the updated `total`, therefore resolve the revision.
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        coe.deposit_paid = totalPaid;
+        coe.deposit_paid_at = new Date();
+        coe.deposit_payment_id = completedPayment._id;
+
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      } else {
+        // Defensive fallback: if full_diff didn't complete the full amount for some reason
+        coe.payment_status = 'deposit_paid';
+        coe.deposit_paid = totalPaid;
+        coe.deposit_paid_at = new Date();
+        coe.deposit_payment_id = completedPayment._id;
       }
     } else if (completedPayment.payment_type === 'full_payment') {
       coe.payment_status = 'paid';
@@ -570,6 +669,21 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     } else {
       coe.payment_status = 'unpaid';
     }
+
+    // Revision state resolution:
+    // Once the revision is accepted and the COE becomes fully paid for the updated total,
+    // mark the revision as resolved.
+    if (coe.revision_state === 'accepted' && coe.payment_status === 'paid') {
+      coe.revision_state = 'resolved';
+    }
+
+    // Revision base snapshot persistence:
+    // - when we transition to `deposit_paid` for the first time after unpaid
+    // - when we transition to `paid` (either directly or after deposit)
+    const transitionedToDepositPaid =
+      previousPaymentStatus === 'unpaid' && coe.payment_status === 'deposit_paid';
+    const transitionedToPaid =
+      previousPaymentStatus !== 'paid' && coe.payment_status === 'paid';
     
     // Save payment status first
     await coe.save();
@@ -592,6 +706,43 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     // Update COE status if needed (use coeService to ensure proper side effects: seat booking, date fields)
     if (shouldUpdateStatus && statusToUpdate) {
       await coeService.updateCOEStatus(coeId, statusToUpdate, null);
+    }
+
+    // Persist base snapshot for revision flow once per transition.
+    // Stored after seat hold / status updates so selected seat statuses are consistent with payment.
+    if (transitionedToDepositPaid || transitionedToPaid) {
+      try {
+        const coeFresh = await COE.findById(coeId);
+        if (coeFresh) {
+          coeFresh.revision_state = 'none';
+          coeFresh.revision_case = null;
+          coeFresh.revision_deadline_hours = null;
+          coeFresh.revision_deadline_at = undefined;
+          coeFresh.revision_due_deposit_diff_amount = 0;
+          coeFresh.revision_due_full_diff_amount = 0;
+          coeFresh.client_credit_balance = 0;
+          coeFresh.revision_deposit_percent_frozen =
+            typeof coeFresh.deposit_percent === 'number' ? coeFresh.deposit_percent : null;
+
+          coeFresh.revision_base_snapshot = {
+            payment_phase: coeFresh.payment_status === 'paid' ? 'full' : 'deposit',
+            payment_status: coeFresh.payment_status,
+            total_paid: coeFresh.total_paid,
+            subtotal: coeFresh.subtotal,
+            taxes: coeFresh.taxes,
+            fees: coeFresh.fees,
+            total: coeFresh.total,
+            deposit_percent: coeFresh.deposit_percent,
+            pricing_breakdown: coeFresh.pricing_breakdown,
+            events: coeFresh.events,
+            selected_seats: coeFresh.selected_seats
+          };
+
+          await coeFresh.save();
+        }
+      } catch (snapshotErr) {
+        console.error('[PaymentService] Failed to persist revision base snapshot:', snapshotErr.message);
+      }
     }
     
     // Best-effort history logging for payment status changes
@@ -622,46 +773,74 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
           amount
         }
       });
+
+      if (previousRevisionState === 'accepted' && coe.revision_state === 'resolved') {
+        await logIncident({
+          coe,
+          coeId,
+          userId: completedPayment.user_id,
+          userRole: 'client',
+          title: 'Revision payment resolved',
+          changes: [
+            {
+              field: 'revision_state',
+              label: 'Revision state',
+              from: 'accepted',
+              to: 'resolved',
+              message: 'Revision diff amounts fully paid'
+            }
+          ],
+          metadata: {
+            revision_case: coe.revision_case,
+            payment_type: paymentType,
+            payment_amount: amount,
+            total_paid: coe.total_paid,
+            total: coe.total
+          }
+        });
+      }
     } catch (historyErr) {
       console.error('[PaymentService] Failed to log payment history incident:', historyErr.message);
     }
 
-    // Send payment notification
-    try {
-      const notificationService = require('./notificationService');
-      const User = require('../models/User');
-      
-      // Notify user who made the payment
-      if (completedPayment.user_id) {
-        await notificationService.createAndSendNotification(
-          completedPayment.user_id.toString(),
-          'payment_received',
-          {
-            coe_id: coeId,
-            payment_id: completedPayment._id,
-            amount: completedPayment.amount,
-            coe: { name: coe.name }
-          }
-        );
+    // Send payment_received only when COE experience status will NOT transition to `paid` here.
+    // If it will, updateCOEStatus('paid') sends coe_paid to client + admin (avoids duplicate "Payment received" alerts).
+    const skipPaymentReceivedForCoePaid =
+      shouldUpdateStatus && statusToUpdate === 'paid';
+
+    if (!skipPaymentReceivedForCoePaid) {
+      try {
+        const notificationService = require('./notificationService');
+
+        if (completedPayment.user_id) {
+          await notificationService.createAndSendNotification(
+            completedPayment.user_id.toString(),
+            'payment_received',
+            {
+              coe_id: coeId,
+              payment_id: completedPayment._id,
+              amount: completedPayment.amount,
+              coe: { name: coe.name }
+            }
+          );
+        }
+
+        if (coe.admin_id && coe.admin_id.toString() !== completedPayment.user_id?.toString()) {
+          await notificationService.createAndSendNotification(
+            coe.admin_id.toString(),
+            'payment_received',
+            {
+              coe_id: coeId,
+              payment_id: completedPayment._id,
+              amount: completedPayment.amount,
+              coe: { name: coe.name },
+              is_admin: true
+            }
+          );
+        }
+      } catch (error) {
+        console.error('[PaymentService] Error sending payment notification:', error);
       }
-      
-      // Also notify admin
-      if (coe.admin_id && coe.admin_id.toString() !== completedPayment.user_id?.toString()) {
-        await notificationService.createAndSendNotification(
-          coe.admin_id.toString(),
-          'payment_received',
-          {
-            coe_id: coeId,
-            payment_id: completedPayment._id,
-            amount: completedPayment.amount,
-            coe: { name: coe.name },
-            is_admin: true
-          }
-        );
-      }
-    } catch (error) {
-      // Log but don't fail payment update if notification fails
-      console.error('[PaymentService] Error sending payment notification:', error);
     }
     
     console.log('COE payment status updated:', {

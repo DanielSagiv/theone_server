@@ -30,7 +30,15 @@ const paymentSchema = new mongoose.Schema({
   },
   payment_type: {
     type: String,
-    enum: ['deposit', 'final_payment', 'full_payment', 'subscription', 'refund'],
+    enum: [
+      'deposit',
+      'deposit_diff',
+      'final_payment',
+      'full_payment',
+      'full_diff',
+      'subscription',
+      'refund'
+    ],
     required: true
   },
   

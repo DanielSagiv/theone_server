@@ -128,6 +128,15 @@ const toolRegistry = {
           type: 'string',
           description: 'Client ID (admin only - defaults to current user for clients)'
         },
+        admin_create_as_proposal: {
+          type: 'boolean',
+          description:
+            'Admin only, set by structured create form: after building the draft, approve immediately as a client-visible proposal (coe_approved). Ignored when upgrading a request COE.'
+        },
+        proposal_deposit_percent: {
+          type: 'number',
+          description: 'Optional deposit percent (1-100) when admin_create_as_proposal is true; default 20. Payment timer is not set on this path.'
+        },
         preferences: {
           type: 'object',
           description: 'User preferences for AI selection (optional)',

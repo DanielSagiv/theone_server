@@ -71,6 +71,11 @@ function generateNotificationContent(type, data) {
   const senderName = data.sender_name || 'Someone';
   const amount = data.amount ? `$${data.amount.toFixed(2)}` : '';
   const messagePreview = data.message_preview || '';
+  const revisionCase = data.revision_case || data.case_type || null;
+  const revisionDeadlineHours =
+    typeof data.revision_deadline_hours === 'number' ? data.revision_deadline_hours : null;
+  const creditAmount =
+    typeof data.credit_amount === 'number' ? data.credit_amount : null;
 
   const templates = {
     coe_sent: {
@@ -112,6 +117,36 @@ function generateNotificationContent(type, data) {
     coe_expired: {
       title: 'Experience Expired',
       body: `Experience '${coeName}' has expired`
+    },
+    coe_revision_submitted: {
+      title: revisionCase === 'full_decreased'
+        ? 'Credit Available'
+        : 'Experience Updated',
+      body: (() => {
+        const timerText =
+          revisionDeadlineHours != null && revisionDeadlineHours > 0
+            ? `You have ${revisionDeadlineHours} hours to accept.`
+            : '';
+
+        switch (revisionCase) {
+          case 'deposit_increased':
+            return `Your experience '${coeName}' cost increased. Please accept and pay the required deposit difference. ${timerText}`.trim();
+          case 'deposit_decreased':
+            return `Good news: your experience '${coeName}' is now cheaper. Please accept the updated changes. ${timerText}`.trim();
+          case 'full_increased':
+            return `Your experience '${coeName}' cost increased. Please accept and pay the required difference. ${timerText}`.trim();
+          case 'full_decreased': {
+            const creditText = creditAmount != null ? `$${creditAmount.toFixed(2)}` : 'a credit';
+            return `Good news: your experience '${coeName}' is now cheaper. You have ${creditText} available as credit. Please accept to apply it. ${timerText}`.trim();
+          }
+          default:
+            return `Your experience '${coeName}' has been updated. Please accept the changes.${timerText ? ' ' + timerText : ''}`.trim();
+        }
+      })()
+    },
+    coe_revision_reverted: {
+      title: 'Revision Expired',
+      body: `Your experience '${coeName}' revision window expired and was reverted to the last paid version.`
     },
     coe_message: {
       title: 'New Message',
@@ -186,6 +221,10 @@ function generateDeepLink(type, data) {
         }
         return `${baseUrl}coe-detail?coeId=${coeId}`;
       case 'seat_section_unavailable':
+        return `${baseUrl}coe-detail?coeId=${coeId}`;
+      case 'coe_revision_submitted':
+        return `${baseUrl}coe-detail?coeId=${coeId}`;
+      case 'coe_revision_reverted':
         return `${baseUrl}coe-detail?coeId=${coeId}`;
       default:
         return `${baseUrl}coe-detail?coeId=${coeId}`;

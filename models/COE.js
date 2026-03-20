@@ -323,6 +323,61 @@ const coeSchema = new mongoose.Schema({
   payment_deadline_at: {
     type: Date
   },
+
+  // Revision flow (post-payment COE revisions)
+  revision_state: {
+    type: String,
+    enum: ['none', 'pending_accept', 'accepted', 'resolved', 'reverted'],
+    default: 'none',
+    index: true
+  },
+  revision_deadline_hours: {
+    type: Number,
+    min: 0,
+    default: null
+  },
+  revision_deadline_at: {
+    type: Date
+  },
+  revision_case: {
+    type: String,
+    enum: [
+      'deposit_increased',
+      'deposit_decreased',
+      'full_increased',
+      'full_decreased'
+    ],
+    default: null
+  },
+  // Snapshot representing the "base" state the client already paid for.
+  // Stored as a flexible object to avoid coupling to internal breakdown structure.
+  revision_base_snapshot: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  },
+  revision_due_deposit_diff_amount: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  revision_due_full_diff_amount: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  // Credit owed to the client when the revised experience becomes cheaper.
+  client_credit_balance: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
+  // Deposit % frozen to the last paid deposit percent used for the base snapshot.
+  revision_deposit_percent_frozen: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: null
+  },
   // Refund Information
   refund_status: {
     type: String,

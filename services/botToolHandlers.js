@@ -12,6 +12,7 @@
 
 const Event = require('../models/Event');
 const Location = require('../models/Location');
+const COE = require('../models/COE');
 const User = require('../models/User');
 const BotConversation = require('../models/BotConversation');
 const IdempotencyCache = require('../models/IdempotencyCache');
@@ -391,7 +392,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       client_id,
       preferences = {},
       manual_event_selection = false,
-      request_coe_id = null
+      request_coe_id = null,
+      admin_create_as_proposal = false,
+      proposal_deposit_percent: proposalDepositPercent
     } = params;
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Params destructured:', {
@@ -1866,6 +1869,41 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     }
 
+    /**
+     * Admin "Create proposal" from mobile form: after draft is built (and optional upgrade offers),
+     * set deposit then transition to approved so the client sees it and receives coe_approved.
+     * Does not set payment_deadline_at / payment_deadline_hours (admin can set a timer later via Propose / re-propose on draft or approved flow).
+     * Not applied when upgrading a request-only COE (request_coe_id) or for non-admins.
+     */
+    if (
+      user.role === 'admin' &&
+      admin_create_as_proposal === true &&
+      !request_coe_id &&
+      populatedCOE.status === 'draft'
+    ) {
+      const depPct =
+        typeof proposalDepositPercent === 'number' &&
+        proposalDepositPercent > 0 &&
+        proposalDepositPercent <= 100
+          ? Math.round(proposalDepositPercent)
+          : 20;
+      try {
+        const coeDoc = await COE.findById(populatedCOE._id);
+        if (!coeDoc || coeDoc.status !== 'draft') {
+          console.warn('[BOT] admin_create_as_proposal: COE missing or not draft, skipping auto-approve');
+        } else {
+          coeDoc.deposit_percent = depPct;
+          coeDoc.deposit_required = Math.round((coeDoc.total || 0) * (depPct / 100));
+          await coeDoc.save();
+          await coeService.updateCOEStatus(populatedCOE._id.toString(), 'approved', user._id);
+          populatedCOE = await coeService.getCOEById(populatedCOE._id);
+          console.log('[BOT] Admin create-as-proposal: COE approved; deposit %', depPct, '(no payment timer set)');
+        }
+      } catch (proposalErr) {
+        console.error('[BOT] Admin create-as-proposal failed:', proposalErr);
+      }
+    }
+
     // Create actions
     const actions = createCOEActions(populatedCOE, user.role);
 
@@ -1882,6 +1920,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     } else if (populatedCOE.status === 'draft' && user.role === 'client') {
       // Client-created draft (edge case, but handle it)
       creationMessage = 'Your experience request has been submitted! THE1 will review it and update you soon. Review the details below.';
+    } else if (populatedCOE.status === 'approved' && user.role === 'admin') {
+      creationMessage =
+        'The experience has been sent to the client as a proposal. They have been notified to review and respond.';
     } else {
       // Admin-created draft
       creationMessage = 'Your experience draft has been created! Review the selected events and details below.';

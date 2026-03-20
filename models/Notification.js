@@ -24,6 +24,9 @@ const notificationSchema = new mongoose.Schema({
       'coe_completed',
       'coe_cancelled',
       'coe_expired',
+      // COE revision flow
+      'coe_revision_submitted',
+      'coe_revision_reverted',
       // Messaging Notifications
       'coe_message',
       // Payment Notifications

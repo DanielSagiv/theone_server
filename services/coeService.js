@@ -1565,6 +1565,103 @@ async function updateCOEStatus(coeId, status, updatedBy) {
 }
 
 /**
+ * Coerce a value to a number for revision snapshot / pricing (parity with POST repropose).
+ * @param {*} v - Raw value
+ * @returns {number|undefined}
+ */
+function coerceRevisionPricingNumber(v) {
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  if (v == null) return undefined;
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (!trimmed) return undefined;
+    const n = Number(trimmed);
+    return Number.isNaN(n) ? undefined : n;
+  }
+  const n = Number(v);
+  if (!Number.isNaN(n)) return n;
+  if (typeof v?.toString === 'function') {
+    const n2 = Number(v.toString());
+    return Number.isNaN(n2) ? undefined : n2;
+  }
+  return undefined;
+}
+
+/**
+ * Extract baseline total from revision_base_snapshot (same priority as POST /coes/:id/repropose).
+ * @param {Object|null|undefined} snapshot - Stored snapshot
+ * @returns {number|undefined}
+ */
+function getRevisionBaselineTotalFromSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return undefined;
+  const c = coerceRevisionPricingNumber;
+  const total =
+    c(snapshot.total) ??
+    c(snapshot.total_price) ??
+    c(snapshot.totalPrice) ??
+    (c(snapshot.subtotal) != null ||
+    c(snapshot.taxes) != null ||
+    c(snapshot.fees) != null
+      ? (c(snapshot.subtotal) || 0) + (c(snapshot.taxes) || 0) + (c(snapshot.fees) || 0)
+      : undefined) ??
+    c(snapshot.pricing_breakdown?.total) ??
+    c(snapshot.pricing_breakdown?.total_price);
+  return total;
+}
+
+/**
+ * Persist revision_base_snapshot from current COE when missing or unusable (legacy deposit_paid/paid records).
+ * @param {import('mongoose').Document} coe - Mutable COE document
+ * @returns {Promise<boolean>} True if the document was saved with a new snapshot
+ */
+async function ensureRevisionBaseSnapshotForPaidCOE(coe) {
+  try {
+    if (!coe || !['deposit_paid', 'paid'].includes(coe.payment_status)) {
+      return false;
+    }
+
+    const baseline = getRevisionBaselineTotalFromSnapshot(coe.revision_base_snapshot);
+    if (typeof baseline === 'number' && !Number.isNaN(baseline) && baseline >= 0) {
+      return false;
+    }
+
+    const currentTotal = coerceRevisionPricingNumber(coe.total);
+    if (currentTotal == null || Number.isNaN(currentTotal) || currentTotal < 0) {
+      console.warn('[COE Service] ensureRevisionBaseSnapshotForPaidCOE: skip backfill, invalid total', {
+        coeId: coe._id?.toString(),
+        rawTotal: coe.total
+      });
+      return false;
+    }
+
+    coe.revision_base_snapshot = {
+      payment_phase: coe.payment_status === 'paid' ? 'full' : 'deposit',
+      payment_status: coe.payment_status,
+      total_paid: coe.total_paid,
+      subtotal: coe.subtotal,
+      taxes: coe.taxes,
+      fees: coe.fees,
+      total: currentTotal,
+      deposit_percent: coe.deposit_percent,
+      pricing_breakdown: coe.pricing_breakdown,
+      events: coe.events,
+      selected_seats: coe.selected_seats
+    };
+
+    if (coe.revision_deposit_percent_frozen == null && typeof coe.deposit_percent === 'number') {
+      coe.revision_deposit_percent_frozen = coe.deposit_percent;
+    }
+
+    await coe.save();
+    console.log('[COE Service] Backfilled revision_base_snapshot for paid COE', coe._id?.toString());
+    return true;
+  } catch (err) {
+    console.error('[COE Service] ensureRevisionBaseSnapshotForPaidCOE failed:', err.message);
+    return false;
+  }
+}
+
+/**
  * Expire COEs that have passed their payment deadline
  * @returns {Promise<number>} Number of COEs expired
  */
@@ -1597,6 +1694,216 @@ async function expireCOEsPastDeadline() {
     return coesToExpire.length;
   } catch (error) {
     console.error('[COE Service] Error in expireCOEsPastDeadline:', error);
+    return 0;
+  }
+}
+
+/**
+ * Expire revision payment windows and revert the COE back to the base snapshot.
+ * Important: this does NOT use COE status='expired' to avoid unintended seat release paths.
+ * After revert, revision_state is set to 'none' so admins can submit a new revision.
+ * @returns {Promise<number>} Number of COEs reverted
+ */
+async function expireRevisionPaymentsAndRevert() {
+  try {
+    const now = new Date();
+
+    const coesToRevert = await COE.find({
+      revision_state: 'accepted',
+      revision_deadline_at: { $lte: now }
+    });
+
+    if (!coesToRevert.length) {
+      return 0;
+    }
+
+    for (const coe of coesToRevert) {
+      try {
+        const snapshot = coe.revision_base_snapshot;
+        if (!snapshot || typeof snapshot.total !== 'number' || !snapshot.events || !snapshot.selected_seats) {
+          // Cannot restore events/seats from snapshot; clear revision flags so admin can start again.
+          coe.revision_state = 'none';
+          coe.revision_case = null;
+          coe.revision_deadline_at = undefined;
+          coe.revision_deadline_hours = null;
+          coe.revision_due_deposit_diff_amount = 0;
+          coe.revision_due_full_diff_amount = 0;
+          coe.client_credit_balance = 0;
+          await coe.save();
+          try {
+            const { logIncident } = require('./coeHistoryService');
+            await logIncident({
+              coe,
+              coeId: coe._id,
+              userId: null,
+              userRole: 'system',
+              title: 'Revision timer expired (no safe snapshot)',
+              changes: [
+                {
+                  field: 'revision_state',
+                  label: 'Revision state',
+                  from: 'accepted',
+                  to: 'none',
+                  message: 'Revision window expired; snapshot incomplete — revision cleared for a new submission'
+                }
+              ],
+              metadata: { reason: 'invalid_revision_base_snapshot' }
+            });
+          } catch (historyErr) {
+            console.error('[COE Service] Failed to log incomplete-snapshot revision expiry:', historyErr.message);
+          }
+          continue;
+        }
+
+        const fromPaymentStatus = coe.payment_status;
+        const fromTotalPaid = coe.total_paid || 0;
+        const fromTotal = coe.total || 0;
+        const fromDueDepositDiff = coe.revision_due_deposit_diff_amount || 0;
+        const fromDueFullDiff = coe.revision_due_full_diff_amount || 0;
+        const fromCreditBalance = coe.client_credit_balance || 0;
+
+        // Preserve current seat statuses (booked/held) while reverting selection back to base.
+        const currentSeatStatusBySeatId = new Map();
+        for (const seat of coe.selected_seats || []) {
+          if (!seat?.seat_id) continue;
+          currentSeatStatusBySeatId.set(seat.seat_id.toString(), seat.status);
+        }
+
+        coe.events = snapshot.events;
+
+        if (snapshot.pricing_breakdown) {
+          coe.pricing_breakdown = snapshot.pricing_breakdown;
+        }
+
+        if (typeof snapshot.subtotal === 'number') coe.subtotal = snapshot.subtotal;
+        if (typeof snapshot.taxes === 'number') coe.taxes = snapshot.taxes;
+        if (typeof snapshot.fees === 'number') coe.fees = snapshot.fees;
+        if (typeof snapshot.total === 'number') coe.total = snapshot.total;
+
+        if (Array.isArray(snapshot.selected_seats)) {
+          coe.selected_seats = snapshot.selected_seats.map(s => {
+            const seatIdStr = s?.seat_id ? s.seat_id.toString() : null;
+            const preservedStatus =
+              seatIdStr && currentSeatStatusBySeatId.has(seatIdStr)
+                ? currentSeatStatusBySeatId.get(seatIdStr)
+                : null;
+
+            return {
+              ...s,
+              status: preservedStatus || s.status || 'booked'
+            };
+          });
+        }
+
+        // Revert payment-related fields to the base snapshot values.
+        if (snapshot.payment_status) {
+          coe.payment_status = snapshot.payment_status;
+        }
+        if (typeof snapshot.total_paid === 'number') {
+          coe.total_paid = snapshot.total_paid;
+          // Deposit field is used for remaining/deposit displays; treat it as total_paid for revision revert.
+          coe.deposit_paid = snapshot.total_paid;
+        }
+
+        // Clear revision workflow so admin can submit a new revision; history records the revert.
+        coe.revision_state = 'none';
+        coe.revision_case = null;
+        coe.revision_deadline_at = undefined;
+        coe.revision_deadline_hours = null;
+        coe.revision_due_deposit_diff_amount = 0;
+        coe.revision_due_full_diff_amount = 0;
+        coe.client_credit_balance = 0;
+
+        await coe.save();
+
+        // History logging
+        try {
+          const { logIncident } = require('./coeHistoryService');
+          await logIncident({
+            coe,
+            coeId: coe._id,
+            userId: null,
+            userRole: 'system',
+            title: 'Revision expired and reverted',
+            changes: [
+              {
+                field: 'revision_state',
+                label: 'Revision state',
+                from: 'accepted',
+                to: 'none',
+                message: 'Revision timer expired; COE reverted to base snapshot — ready for a new revision if needed'
+              },
+              {
+                field: 'payment_status',
+                label: 'Payment status',
+                from: fromPaymentStatus,
+                to: snapshot.payment_status || coe.payment_status,
+                message: `Payment status reverted: ${fromPaymentStatus} -> ${snapshot.payment_status || coe.payment_status}`
+              },
+              {
+                field: 'total_paid',
+                label: 'Total paid',
+                from: fromTotalPaid,
+                to: snapshot.total_paid || coe.total_paid,
+                message: `Total paid reverted to base: $${fromTotalPaid.toFixed(2)} -> $${(snapshot.total_paid || coe.total_paid).toFixed(2)}`
+              },
+              {
+                field: 'revision_due_deposit_diff_amount',
+                label: 'Deposit difference due',
+                from: fromDueDepositDiff,
+                to: 0,
+                message: `Cleared deposit diff due ($${fromDueDepositDiff.toFixed(2)})`
+              },
+              {
+                field: 'revision_due_full_diff_amount',
+                label: 'Full difference due',
+                from: fromDueFullDiff,
+                to: 0,
+                message: `Cleared full diff due ($${fromDueFullDiff.toFixed(2)})`
+              },
+              {
+                field: 'client_credit_balance',
+                label: 'Client credit balance',
+                from: fromCreditBalance,
+                to: 0,
+                message: `Cleared credit balance ($${fromCreditBalance.toFixed(2)})`
+              }
+            ],
+            metadata: {
+              revision_deadline_at: coe.revision_deadline_at,
+              base_total: snapshot.total,
+              restored_total: coe.total
+            }
+          });
+        } catch (historyErr) {
+          console.error('[COE Service] Failed to log revision revert incident:', historyErr.message);
+        }
+
+        // Best-effort client notification
+        try {
+          const notificationService = require('./notificationService');
+          if (coe.client_id) {
+            await notificationService.createAndSendNotification(
+              coe.client_id.toString(),
+              'coe_revision_reverted',
+              {
+                coe_id: coe._id,
+                revision_case: coe.revision_case,
+                coe: { name: coe.name }
+              }
+            );
+          }
+        } catch (notifyErr) {
+          console.error('[COE Service] Failed to notify revision revert:', notifyErr.message);
+        }
+      } catch (coeErr) {
+        console.error('[COE Service] Failed to revert revision for COE:', coe?._id?.toString(), coeErr.message);
+      }
+    }
+
+    return coesToRevert.length;
+  } catch (error) {
+    console.error('[COE Service] Error in expireRevisionPaymentsAndRevert:', error);
     return 0;
   }
 }
@@ -1691,6 +1998,16 @@ async function updateSeatAssignments(coeId, selectedSeats) {
       ...seat,
       status: seat.status || 'selected'
     }));
+
+    // Recalculate totals based on remaining selected seats.
+    // This keeps `total`, `subtotal` consistent after seat removals/edits.
+    const newSubtotal = (coe.selected_seats || []).reduce(
+      (sum, s) => sum + (s.event_price || 0),
+      0
+    );
+    coe.subtotal = newSubtotal;
+    coe.total = newSubtotal + (coe.taxes || 0) + (coe.fees || 0);
+
     await coe.save();
 
     return await getCOEById(coeId);
@@ -2180,19 +2497,34 @@ async function removeEventsFromCOE(coeId, eventIds) {
       throw new Error('COE not found');
     }
 
-    // Reject removal for paid COEs
-    if (coe.payment_status === 'paid' || coe.status === 'paid') {
-      throw new Error('Cannot remove events from a paid experience');
-    }
+    assertRevisionNotStructurallyLocked(coe);
 
-    // Allow removal only for unpaid COEs (draft, request, approved, accepted_not_paid, pending_pay)
-    const allowedStatuses = ['draft', 'request', 'approved', 'accepted_not_paid', 'pending_pay'];
-    if (!allowedStatuses.includes(coe.status)) {
-      throw new Error('Can only remove events from draft, request, approved, accepted_not_paid, or pending_pay COEs');
+    const isPaidLike =
+      coe.payment_status === 'paid' ||
+      coe.payment_status === 'deposit_paid' ||
+      coe.status === 'paid';
+
+    if (!isPaidLike) {
+      const allowedStatuses = ['draft', 'request', 'approved', 'accepted_not_paid', 'pending_pay'];
+      if (!allowedStatuses.includes(coe.status)) {
+        throw new Error('Can only remove events from draft, request, approved, accepted_not_paid, or pending_pay COEs');
+      }
     }
 
     // Normalize event IDs to strings for comparison
     const eventIdStrings = eventIds.map(id => id.toString());
+
+    const currentEventIdSet = new Set();
+    (coe.events || []).forEach(e => {
+      const idStr = e.event_id?.toString() || e.event_id;
+      if (idStr) currentEventIdSet.add(idStr);
+    });
+    const remainingAfterRemove = Array.from(currentEventIdSet).filter(id => !eventIdStrings.includes(id));
+    if (isPaidLike && remainingAfterRemove.length === 0) {
+      throw new Error(
+        'Cannot remove the last event from a paid experience. At least one event must remain before you submit a revision.'
+      );
+    }
 
     // Get seats for removed events BEFORE filtering (for seat release)
     const seatsToRelease = (coe.selected_seats || []).filter(seat => {
@@ -3969,6 +4301,30 @@ async function findEventsAvailableToAdd(coeId) {
 }
 
 /**
+ * True when revision workflow blocks structural edits (e.g. admin add-event).
+ * Paid-revision plan: structural edits are allowed while `none`/`reverted`/`resolved`;
+ * blocked during `pending_accept` or `accepted` so due amounts stay consistent.
+ * @param {import('mongoose').Document|Object|null} coe - COE document or plain object
+ * @returns {boolean}
+ */
+function isRevisionStructurallyLocked(coe) {
+  const state = coe?.revision_state || 'none';
+  return state === 'pending_accept' || state === 'accepted';
+}
+
+/**
+ * Throw if COE must not receive structural event changes (revision in flight).
+ * @param {import('mongoose').Document|Object|null} coe
+ */
+function assertRevisionNotStructurallyLocked(coe) {
+  if (isRevisionStructurallyLocked(coe)) {
+    throw new Error(
+      'Cannot change events while a revision is awaiting client acceptance or payment. Resolve that revision first.'
+    );
+  }
+}
+
+/**
  * Add event with selected seat to COE (admin add-event flow)
  * Updates COE first, then holds seat in Event model
  * @param {string} coeId - COE ID
@@ -3980,9 +4336,7 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
   try {
     const coe = await COE.findById(coeId);
     if (!coe) throw new Error('COE not found');
-    if (coe.payment_status === 'paid' || coe.status === 'paid') {
-      throw new Error('Cannot add event to a paid experience');
-    }
+    assertRevisionNotStructurallyLocked(coe);
 
     const event = await Event.findById(eventData.event_id);
     if (!event) throw new Error('Event not found');
@@ -4197,5 +4551,8 @@ module.exports = {
   hasAlternativeEventsSameDay,
   holdSeatsForCOE,
   preparePaymentForCOE,
-  expireCOEsPastDeadline
+  expireCOEsPastDeadline,
+  expireRevisionPaymentsAndRevert,
+  ensureRevisionBaseSnapshotForPaidCOE,
+  isRevisionStructurallyLocked
 };
