@@ -4688,6 +4688,9 @@
                 <a href="#" class="nav-item" data-section="payments">
                     Payments
                 </a>
+                <a href="#" class="nav-item" data-section="tools" id="toolsNav" style="display: none;">
+                    Tools
+                </a>
                 <a href="#" class="nav-item" data-section="settings">
                     Settings
                 </a>
@@ -5021,7 +5024,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
 
                 <!-- Payments Section -->
                 <div class="content-section" id="paymentsSection">
@@ -5108,6 +5110,41 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tools Section (admin only) -->
+                <div class="content-section" id="toolsSection">
+                    <div class="section-header">
+                        <h1>Tools</h1>
+                        <p>Development utilities. Destructive operations for test data only.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-body" style="max-width: 720px;">
+                            <p style="color:#c0392b;font-weight:600;margin-bottom:12px;">
+                                Warning: CLEAN permanently deletes data. Payments removal does not update COE references.
+                                COEs uses the same delete logic as the COE table trash button (releases seats; some statuses cannot be deleted).
+                            </p>
+                            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;">
+                                <div class="form-group" style="margin:0;">
+                                    <label for="toolsCleanCollection">Collection</label>
+                                    <select id="toolsCleanCollection" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:220px;">
+                                        <option value="">Select...</option>
+                                        <option value="botconversations">botconversations</option>
+                                        <option value="messages">messages (COE threads)</option>
+                                        <option value="notifications">notifications</option>
+                                        <option value="payments">payments</option>
+                                        <option value="coes">coes (per-item delete)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin:0;">
+                                    <label for="toolsPassword">Tools password</label>
+                                    <input type="password" id="toolsPassword" autocomplete="off" class="form-control" style="min-width:200px;" placeholder="Required for CLEAN">
+                                </div>
+                                <button type="button" class="btn" style="padding:10px 20px;border-radius:8px;font-weight:600;background:#c0392b;color:#fff;border:none;" onclick="executeToolsClean()">CLEAN</button>
+                            </div>
+                            <pre id="toolsCleanResult" style="display:none;background:#f8f9fa;padding:12px;border-radius:8px;font-size:12px;overflow:auto;max-height:240px;"></pre>
                         </div>
                     </div>
                 </div>
@@ -6257,13 +6294,20 @@
         function setupRoleBasedNavigation() {
             const usersNav = document.getElementById('usersNav');
             
-            // Show users section only for admin users
+            // Show users and Tools only for admin users
+            const toolsNav = document.getElementById('toolsNav');
             if (currentUser && currentUser.role === 'admin') {
                 usersNav.style.display = 'block';
+                if (toolsNav) toolsNav.style.display = 'block';
             } else {
                 usersNav.style.display = 'none';
+                if (toolsNav) toolsNav.style.display = 'none';
                 // If user is not admin and users section is active, switch to locations
-                if (document.querySelector('.nav-item.active').dataset.section === 'users') {
+                const activeNav = document.querySelector('.nav-item.active');
+                if (activeNav && activeNav.dataset.section === 'users') {
+                    switchSection('locations');
+                }
+                if (activeNav && activeNav.dataset.section === 'tools') {
                     switchSection('locations');
                 }
             }
@@ -6287,17 +6331,39 @@
          * Switch between content sections
          */
         function switchSection(sectionName) {
+            if (sectionName === 'tools' && currentUser?.role !== 'admin') {
+                switchSection('locations');
+                return;
+            }
+
+            const navTarget = document.querySelector(`[data-section="${sectionName}"]`);
+            if (!navTarget) {
+                console.warn('switchSection: unknown section', sectionName);
+                return;
+            }
+
             // Update active nav item
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.classList.remove('active');
             });
-            document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+            navTarget.classList.add('active');
 
             // Update active content section
+            const sectionEl = document.getElementById(`${sectionName}Section`);
+            if (!sectionEl) {
+                console.warn('switchSection: missing content section', sectionName);
+                return;
+            }
             document.querySelectorAll('.content-section').forEach(section => {
                 section.classList.remove('active');
             });
-            document.getElementById(`${sectionName}Section`).classList.add('active');
+            sectionEl.classList.add('active');
+
+            // Reset scroll so short sections (e.g. Tools) are not stuck below prior long-page scroll position
+            const contentAreaEl = document.querySelector('.content-area');
+            if (contentAreaEl) {
+                contentAreaEl.scrollTop = 0;
+            }
 
             // Load section-specific data
             if (sectionName === 'users' && currentUser?.role === 'admin') {
@@ -6317,6 +6383,13 @@
             }
             if (sectionName === 'bot') {
                 loadBotConversation();
+            }
+            if (sectionName === 'tools' && currentUser?.role === 'admin') {
+                const pre = document.getElementById('toolsCleanResult');
+                if (pre) {
+                    pre.style.display = 'none';
+                    pre.textContent = '';
+                }
             }
         }
 
@@ -10685,6 +10758,57 @@
             } catch (error) {
                 console.error('API request error:', error);
                 return { success: false, data: { error: error.message }, status: 0 };
+            }
+        }
+
+        /**
+         * Admin Tools: CLEAN selected collection (requires tools password on server).
+         */
+        async function executeToolsClean() {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Tools are available to administrators only.', 'error');
+                return;
+            }
+            const collectionEl = document.getElementById('toolsCleanCollection');
+            const passwordEl = document.getElementById('toolsPassword');
+            const collection = collectionEl ? collectionEl.value : '';
+            const toolsPassword = passwordEl ? passwordEl.value : '';
+            if (!collection) {
+                showAlert('Select a collection from the list.', 'error');
+                return;
+            }
+            if (!toolsPassword) {
+                showAlert('Enter the tools password.', 'error');
+                return;
+            }
+            const opt = collectionEl && collectionEl.options[collectionEl.selectedIndex];
+            const label = opt ? opt.textContent : collection;
+            if (!confirm('CLEAN will permanently remove data for: ' + label + '\n\nThis cannot be undone. Continue?')) {
+                return;
+            }
+            showAlert('Running CLEAN...', 'info');
+            const result = await makeApiRequest('/admin/tools/clean', 'POST', { toolsPassword, collection });
+            const payload = result.data || {};
+            const pre = document.getElementById('toolsCleanResult');
+            if (result.success && payload.success) {
+                let msg = payload.message || 'CLEAN completed.';
+                if (payload.failedCount > 0) {
+                    msg += ' Some items failed (see details below).';
+                }
+                showAlert(msg, payload.failedCount > 0 ? 'error' : 'success');
+                if (pre) {
+                    pre.style.display = 'block';
+                    pre.textContent = JSON.stringify(payload, null, 2);
+                }
+                if (collection === 'coes' && typeof loadCOEs === 'function') {
+                    loadCOEs();
+                }
+            } else {
+                showAlert(payload.message || payload.error || 'CLEAN failed', 'error');
+                if (pre) {
+                    pre.style.display = 'block';
+                    pre.textContent = JSON.stringify(payload, null, 2);
+                }
             }
         }
 

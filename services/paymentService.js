@@ -677,6 +677,12 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       coe.revision_state = 'resolved';
     }
 
+    // Initial proposal timer no longer applies after full payment; revision flow uses revision_deadline_* only.
+    if (coe.payment_status === 'paid') {
+      coe.payment_deadline_at = undefined;
+      coe.payment_deadline_hours = null;
+    }
+
     // Revision base snapshot persistence:
     // - when we transition to `deposit_paid` for the first time after unpaid
     // - when we transition to `paid` (either directly or after deposit)
