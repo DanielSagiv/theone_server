@@ -176,7 +176,7 @@ const coeSchema = new mongoose.Schema({
     updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   },
   
-  // Original Request Data (only for client-created COEs with status 'request')
+  // Original request snapshot (client `request` COEs and admin `draft` builds from the form/bot)
   original_request_data: {
     // Original user request text/message
     original_request_text: { type: String, trim: true },
@@ -203,6 +203,13 @@ const coeSchema = new mongoose.Schema({
     
     // When this request was made
     requested_at: { type: Date, default: Date.now }
+  },
+
+  // Bot / mobile flows may store party_size, budget, budget_range, city, etc. (legacy + active paths).
+  // Mixed so existing DB documents serialize to API clients; does not affect COEs without this field.
+  preferences: {
+    type: mongoose.Schema.Types.Mixed,
+    default: undefined
   },
   
   // Detailed pricing breakdown (event-specific pricing)

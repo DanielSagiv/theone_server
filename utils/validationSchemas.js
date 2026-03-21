@@ -352,11 +352,112 @@ const createCOESchema = Joi.object({
   tags: Joi.array().items(Joi.string()).optional()
 });
 
-// Update COE validation schema
-const updateCOESchema = createCOESchema.fork(
-  ['name', 'description', 'client_id', 'admin_id', 'start_date', 'end_date'],
-  (schema) => schema.optional()
-);
+// Partial update for COE.original_request_data (admin PUT); merged server-side so other request fields are preserved.
+const updateCOEOriginalRequestPartialSchema = Joi.object({
+  party_size: Joi.number().integer().min(1),
+  budget: Joi.object({
+    max: Joi.number().min(0).required(),
+    currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD')
+  })
+})
+  .min(1)
+  .messages({
+    'object.min': 'original_request_data must include at least one of party_size or budget'
+  });
+
+/**
+ * PUT /coes/:id — partial update only.
+ * MUST NOT reuse createCOESchema with .default() on pricing: Joi would inject subtotal/total/deposit 0 etc.
+ * on bodies like `{ original_request_data: {...} }`, wiping the COE and breaking persisted edits.
+ */
+const updateCOESchema = Joi.object({
+  name: Joi.string().min(2).max(200),
+  description: Joi.string().max(1000).allow(''),
+  status: Joi.string().valid(
+    'draft',
+    'request',
+    'approved',
+    'pending_pay',
+    'paid',
+    'rejected',
+    'expired',
+    'completed',
+    'cancelled'
+  ),
+  created_method: Joi.string().valid('manual', 'automated'),
+  creation_notes: Joi.string().max(500).allow(''),
+  client_id: Joi.string().hex().length(24),
+  admin_id: Joi.string().hex().length(24),
+  participants: Joi.array().items(
+    Joi.object({
+      user_id: Joi.string().hex().length(24).required(),
+      role: Joi.string().valid('owner', 'participant').default('participant'),
+      status: Joi.string().valid('pending', 'accepted', 'rejected').default('pending'),
+      added_by: Joi.string().hex().length(24)
+    })
+  ),
+  runner_assignment: Joi.object({
+    type: Joi.string().valid('coe', 'event').default('coe'),
+    runner_id: Joi.string().hex().length(24),
+    assigned_by: Joi.string().hex().length(24),
+    assigned_at: Joi.date(),
+    status: Joi.string()
+      .valid('assigned', 'confirmed', 'active', 'completed', 'cancelled')
+      .default('assigned'),
+    notes: Joi.string().allow('')
+  }),
+  currency: Joi.string().valid('USD', 'EUR', 'GBP'),
+  subtotal: Joi.number().min(0),
+  taxes: Joi.number().min(0),
+  fees: Joi.number().min(0),
+  total: Joi.number().min(0),
+  deposit_required: Joi.number().min(0),
+  deposit_paid: Joi.number().min(0),
+  covered_by_t1: Joi.object({
+    amount: Joi.number().min(0),
+    date: Joi.date(),
+    updated_by: Joi.string().hex().length(24)
+  }),
+  pricing_breakdown: Joi.object({
+    events: Joi.array().items(
+      Joi.object({
+        event_id: Joi.string().hex().length(24).required(),
+        event_name: Joi.string().required(),
+        event_date: Joi.date().required(),
+        tables: Joi.array()
+          .items(
+            Joi.object({
+              table_id: Joi.string().hex().length(24).required(),
+              table_code: Joi.string().required(),
+              base_price: Joi.number().min(0).required(),
+              event_price: Joi.number().min(0).required(),
+              price_difference: Joi.number().default(0)
+            })
+          )
+          .optional(),
+        event_subtotal: Joi.number().min(0).required()
+      })
+    ).optional(),
+    subtotal: Joi.number().min(0),
+    taxes: Joi.number().min(0),
+    fees: Joi.number().min(0),
+    total: Joi.number().min(0)
+  }),
+  start_date: Joi.date(),
+  end_date: Joi.date(),
+  events: Joi.array().items(coeItemSchema),
+  selected_seats: Joi.array().items(coeSelectedSeatSchema),
+  policies: Joi.string().max(2000).allow(''),
+  notes: Joi.string().max(1000).allow(''),
+  client_notes: Joi.string().max(1000).allow(''),
+  sharable: Joi.boolean(),
+  tags: Joi.array().items(Joi.string()),
+  original_request_data: updateCOEOriginalRequestPartialSchema.optional()
+})
+  .min(1)
+  .messages({
+    'object.min': 'At least one field is required to update a COE'
+  });
 
 // Add event to COE validation schema
 const addEventToCOESchema = Joi.object({

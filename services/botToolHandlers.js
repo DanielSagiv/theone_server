@@ -1677,8 +1677,10 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }))
     });
 
-    // Capture original request data for client-created COEs (status 'request')
-    if (initialStatus === 'request') {
+    // Capture original request data for client requests AND admin drafts (form party/budget).
+    // Previously only `request` status was filled, so admin-created drafts had no original_request_data
+    // and the mobile admin card fell back to table capacity (wrong) for group size.
+    if (initialStatus === 'request' || initialStatus === 'draft') {
       try {
         // Get conversation to extract original request text
         const conversation = await BotConversation.findOne({ user_id: user._id });
@@ -1698,21 +1700,36 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           }
         }
         
+        const budgetMaxRaw =
+          conversationPreferences.budget_range?.max ?? conversationPreferences.budget?.max;
+        const budgetMaxNum =
+          budgetMaxRaw != null && budgetMaxRaw !== '' ? Number(budgetMaxRaw) : NaN;
+        const budgetSubdoc =
+          !Number.isNaN(budgetMaxNum) && budgetMaxNum > 0
+            ? {
+                max: budgetMaxNum,
+                currency:
+                  conversationPreferences.budget_range?.currency ||
+                  conversationPreferences.budget?.currency ||
+                  'USD',
+              }
+            : undefined;
+
+        const partyRaw = conversationPreferences.party_size;
+        const partyNum =
+          partyRaw != null && partyRaw !== '' ? Number(partyRaw) : NaN;
+        const partySizeVal =
+          !Number.isNaN(partyNum) && partyNum >= 1 ? Math.floor(partyNum) : undefined;
+
         // Build original request data
         const originalRequestData = {
           original_request_text: originalRequestText,
-          budget: conversationPreferences.budget_range ? {
-            max: conversationPreferences.budget_range.max,
-            currency: conversationPreferences.budget_range.currency || 'USD'
-          } : (conversationPreferences.budget ? {
-            max: conversationPreferences.budget.max,
-            currency: conversationPreferences.budget.currency || 'USD'
-          } : undefined),
+          budget: budgetSubdoc,
           requested_dates: {
             start_date: startDate,
             end_date: endDate
           },
-          party_size: conversationPreferences.party_size,
+          party_size: partySizeVal,
           seat_preferences: conversationPreferences.seat_preferences,
           general_preferences: conversationPreferences.specific_preferences,
           city: cityToUse || conversationPreferences.city,
@@ -1720,7 +1737,13 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         };
         
         // Only add if we have meaningful data
-        if (originalRequestText || originalRequestData.budget || originalRequestData.party_size) {
+        if (
+          originalRequestText ||
+          originalRequestData.budget ||
+          originalRequestData.party_size != null ||
+          originalRequestData.seat_preferences ||
+          originalRequestData.general_preferences
+        ) {
           coeData.original_request_data = originalRequestData;
           console.log('[BOT] Original request data captured:', {
             hasOriginalText: !!originalRequestText,
@@ -1728,7 +1751,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             budget: originalRequestData.budget,
             partySize: originalRequestData.party_size,
             hasSeatPreferences: !!originalRequestData.seat_preferences,
-            city: originalRequestData.city
+            city: originalRequestData.city,
+            initialStatus
           });
         }
       } catch (error) {

@@ -1008,6 +1008,49 @@ async function getCOEs(filters = {}, pagination = {}) {
 }
 
 /**
+ * Build merged original_request_data: clone existing subdoc, apply admin patch (party_size, budget).
+ * Uses full subdocument replace so Mongoose persists reliably (dot-path-only updates can drop nested budget).
+ * @param {Object|undefined|null} existingSubdoc - current COE.original_request_data
+ * @param {Object} patch - validated partial from API
+ * @returns {Object} Plain object safe to assign to original_request_data
+ */
+function mergeOriginalRequestDataForUpdate(existingSubdoc, patch) {
+  let prev = {};
+  if (existingSubdoc != null && typeof existingSubdoc === 'object') {
+    try {
+      prev =
+        typeof existingSubdoc.toObject === 'function'
+          ? existingSubdoc.toObject()
+          : { ...existingSubdoc };
+    } catch (e) {
+      prev = { ...existingSubdoc };
+    }
+    if (prev.budget != null && typeof prev.budget === 'object') {
+      prev = { ...prev, budget: { ...prev.budget } };
+    }
+  }
+  if (patch.party_size != null && patch.party_size !== '') {
+    const ps = Number(patch.party_size);
+    if (!Number.isNaN(ps) && ps >= 1) {
+      prev.party_size = Math.floor(ps);
+    }
+  }
+  if (patch.budget && typeof patch.budget === 'object') {
+    prev.budget = { ...(prev.budget || {}) };
+    if (patch.budget.max != null && patch.budget.max !== '') {
+      const bm = Number(patch.budget.max);
+      if (!Number.isNaN(bm) && bm >= 0) {
+        prev.budget.max = bm;
+      }
+    }
+    if (patch.budget.currency != null && patch.budget.currency !== '') {
+      prev.budget.currency = patch.budget.currency;
+    }
+  }
+  return prev;
+}
+
+/**
  * Update COE
  * @param {string} coeId - COE ID
  * @param {Object} updateData - Update data
@@ -1021,18 +1064,33 @@ async function updateCOE(coeId, updateData) {
       throw new Error('COE not found');
     }
 
+    const payload = { ...updateData };
+    let originalRequestPatch = null;
+    if (payload.original_request_data != null) {
+      originalRequestPatch = payload.original_request_data;
+      delete payload.original_request_data;
+    }
+
     // Handle seat status updates if selected_seats are being updated
-    if (updateData.selected_seats) {
+    if (payload.selected_seats) {
       // Release old seats back to available (in case they were held from a prior payment)
       await releaseSelectedSeats(coeId);
       // Validate new seat availability
-      await validateSelectedSeats(updateData.selected_seats);
+      await validateSelectedSeats(payload.selected_seats);
       // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
+    }
+
+    const flatUpdate = { ...payload, updated_at: new Date() };
+    if (originalRequestPatch && typeof originalRequestPatch === 'object') {
+      flatUpdate.original_request_data = mergeOriginalRequestDataForUpdate(
+        existingCOE.original_request_data,
+        originalRequestPatch
+      );
     }
 
     const coe = await COE.findByIdAndUpdate(
       coeId,
-      { ...updateData, updated_at: new Date() },
+      { $set: flatUpdate },
       { new: true, runValidators: true }
     )
     .populate('client_id', 'firstName lastName email')
