@@ -1662,6 +1662,14 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
         });
       }
 
+      // Align subtotal/taxes/total with selected_seats before revision due math (paid / deposit_paid repropose).
+      try {
+        coeService.applyPricingFromSelectedSeats(coe);
+        await coe.save();
+      } catch (recalcErr) {
+        console.error('[COES] repropose: pricing recalc failed:', recalcErr.message);
+      }
+
       const currentTotal = typeof coe.total === 'number' ? coe.total : 0;
       // Freeze deposit percent to the last paid value (prefer the stored base snapshot).
       const baseDepositPercent = coerceToNumber(baseSnapshot?.deposit_percent);
@@ -1698,7 +1706,21 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
       } else if (coe.payment_status === 'paid') {
         if (currentTotal > baseTotal) {
           revisionCase = 'full_increased';
-          dueFullDiff = Math.max(0, currentTotal - baseTotal);
+          // Client may have paid "full" old total while new total implies a higher deposit cap (frozen %).
+          // Expose both deposit remainder and balance remainder (Flow 3 hybrid).
+          let totalPaidNow =
+            coerceToNumber(coe.total_paid) ??
+            coerceToNumber(baseSnapshot?.total_paid) ??
+            baseTotal;
+          if (typeof totalPaidNow !== 'number' || Number.isNaN(totalPaidNow) || totalPaidNow < 0) {
+            totalPaidNow = 0;
+          }
+          const newDepositCap = currentTotal * (depositPercentFrozen / 100);
+          dueDepositDiff = Math.max(
+            0,
+            newDepositCap - Math.min(totalPaidNow, newDepositCap)
+          );
+          dueFullDiff = Math.max(0, currentTotal - totalPaidNow);
         } else if (currentTotal < baseTotal) {
           revisionCase = 'full_decreased';
           creditBalance = Math.max(0, baseTotal - currentTotal);

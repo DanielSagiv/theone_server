@@ -194,8 +194,9 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
         throw new Error('Revision must be accepted before paying deposit diff');
       }
 
-      if (coe.payment_status !== 'deposit_paid') {
-        throw new Error('Deposit diff can only be paid while COE is deposit_paid');
+      // Allow after full pay (Flow 3 hybrid): new total may require more than total_paid toward deposit cap.
+      if (coe.payment_status !== 'deposit_paid' && coe.payment_status !== 'paid') {
+        throw new Error('Deposit diff is only available for deposit_paid or paid experiences in revision');
       }
 
       const depositPercentFrozen =
@@ -204,7 +205,8 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
           : (coe.deposit_percent || 20);
 
       const currentDepositAmount = (coe.total || 0) * (depositPercentFrozen / 100);
-      amount = Math.max(0, currentDepositAmount - (coe.total_paid || 0));
+      const paid = coe.total_paid || 0;
+      amount = Math.max(0, currentDepositAmount - Math.min(paid, currentDepositAmount));
       coe.deposit_amount = amount;
 
       if (amount <= 0) {
@@ -670,11 +672,32 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
       coe.payment_status = 'unpaid';
     }
 
+    // After revision diff payments, recompute stored dues so list/detail badges match reality.
+    const isRevisionDiffPayment =
+      completedPayment.payment_type === 'deposit_diff' ||
+      completedPayment.payment_type === 'full_diff';
+    if (isRevisionDiffPayment && coe.revision_state === 'accepted') {
+      const pct =
+        typeof coe.revision_deposit_percent_frozen === 'number'
+          ? coe.revision_deposit_percent_frozen
+          : coe.deposit_percent || 20;
+      const totalNum = coe.total || 0;
+      const depositCap = totalNum * (pct / 100);
+      const paidNum = coe.total_paid || 0;
+      coe.revision_due_deposit_diff_amount = Math.max(
+        0,
+        depositCap - Math.min(paidNum, depositCap)
+      );
+      coe.revision_due_full_diff_amount = Math.max(0, totalNum - paidNum);
+    }
+
     // Revision state resolution:
     // Once the revision is accepted and the COE becomes fully paid for the updated total,
     // mark the revision as resolved.
     if (coe.revision_state === 'accepted' && coe.payment_status === 'paid') {
       coe.revision_state = 'resolved';
+      coe.revision_due_deposit_diff_amount = 0;
+      coe.revision_due_full_diff_amount = 0;
     }
 
     // Initial proposal timer no longer applies after full payment; revision flow uses revision_deadline_* only.
