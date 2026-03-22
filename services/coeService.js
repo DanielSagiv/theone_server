@@ -1782,6 +1782,209 @@ async function expireCOEsPastDeadline() {
 }
 
 /**
+ * Revert an in-flight revision to revision_base_snapshot and clear revision fields.
+ * Shared by revision timer cron and admin "Expire revision". Does not set COE status=expired.
+ * @param {import('mongoose').Document} coe - Loaded COE document (mutated and saved)
+ * @param {{ trigger: 'cron'|'admin', adminUserId?: string|null }} opts
+ * @returns {Promise<void>}
+ */
+async function applyRevisionRevertFromSnapshot(coe, opts = {}) {
+  const trigger = opts.trigger || 'cron';
+  const adminUserId = opts.adminUserId || null;
+  const historyUserId = trigger === 'admin' ? adminUserId : null;
+  const historyUserRole = trigger === 'admin' ? 'admin' : 'system';
+
+  const fromState = coe.revision_state;
+  const revisionCaseForNotify = coe.revision_case;
+  const deadlineForMeta = coe.revision_deadline_at;
+
+  const snapshot = coe.revision_base_snapshot;
+  if (!snapshot || typeof snapshot.total !== 'number' || !snapshot.events || !snapshot.selected_seats) {
+    coe.revision_state = 'none';
+    coe.revision_case = null;
+    coe.revision_deadline_at = undefined;
+    coe.revision_deadline_hours = null;
+    coe.revision_due_deposit_diff_amount = 0;
+    coe.revision_due_full_diff_amount = 0;
+    coe.client_credit_balance = 0;
+    await coe.save();
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      const titleIncomplete =
+        trigger === 'admin'
+          ? 'Revision expired by admin (no safe snapshot)'
+          : 'Revision timer expired (no safe snapshot)';
+      const msgIncomplete =
+        trigger === 'admin'
+          ? 'Admin expired the revision; snapshot incomplete — revision cleared for a new submission'
+          : 'Revision window expired; snapshot incomplete — revision cleared for a new submission';
+      await logIncident({
+        coe,
+        coeId: coe._id,
+        userId: historyUserId,
+        userRole: historyUserRole,
+        title: titleIncomplete,
+        changes: [
+          {
+            field: 'revision_state',
+            label: 'Revision state',
+            from: fromState,
+            to: 'none',
+            message: msgIncomplete
+          }
+        ],
+        metadata: { reason: 'invalid_revision_base_snapshot', trigger, revision_deadline_at: deadlineForMeta }
+      });
+    } catch (historyErr) {
+      console.error('[COE Service] Failed to log incomplete-snapshot revision revert:', historyErr.message);
+    }
+    return;
+  }
+
+  const fromPaymentStatus = coe.payment_status;
+  const fromTotalPaid = coe.total_paid || 0;
+  const fromDueDepositDiff = coe.revision_due_deposit_diff_amount || 0;
+  const fromDueFullDiff = coe.revision_due_full_diff_amount || 0;
+  const fromCreditBalance = coe.client_credit_balance || 0;
+
+  const currentSeatStatusBySeatId = new Map();
+  for (const seat of coe.selected_seats || []) {
+    if (!seat?.seat_id) continue;
+    currentSeatStatusBySeatId.set(seat.seat_id.toString(), seat.status);
+  }
+
+  coe.events = snapshot.events;
+
+  if (snapshot.pricing_breakdown) {
+    coe.pricing_breakdown = snapshot.pricing_breakdown;
+  }
+
+  if (typeof snapshot.subtotal === 'number') coe.subtotal = snapshot.subtotal;
+  if (typeof snapshot.taxes === 'number') coe.taxes = snapshot.taxes;
+  if (typeof snapshot.fees === 'number') coe.fees = snapshot.fees;
+  if (typeof snapshot.total === 'number') coe.total = snapshot.total;
+
+  if (Array.isArray(snapshot.selected_seats)) {
+    coe.selected_seats = snapshot.selected_seats.map(s => {
+      const seatIdStr = s?.seat_id ? s.seat_id.toString() : null;
+      const preservedStatus =
+        seatIdStr && currentSeatStatusBySeatId.has(seatIdStr)
+          ? currentSeatStatusBySeatId.get(seatIdStr)
+          : null;
+
+      return {
+        ...s,
+        status: preservedStatus || s.status || 'booked'
+      };
+    });
+  }
+
+  if (snapshot.payment_status) {
+    coe.payment_status = snapshot.payment_status;
+  }
+  if (typeof snapshot.total_paid === 'number') {
+    coe.total_paid = snapshot.total_paid;
+    coe.deposit_paid = snapshot.total_paid;
+  }
+
+  coe.revision_state = 'none';
+  coe.revision_case = null;
+  coe.revision_deadline_at = undefined;
+  coe.revision_deadline_hours = null;
+  coe.revision_due_deposit_diff_amount = 0;
+  coe.revision_due_full_diff_amount = 0;
+  coe.client_credit_balance = 0;
+
+  await coe.save();
+
+  try {
+    const { logIncident } = require('./coeHistoryService');
+    const titleFull =
+      trigger === 'admin' ? 'Revision expired by admin' : 'Revision expired and reverted';
+    const msgFull =
+      trigger === 'admin'
+        ? 'Admin expired the revision; COE reverted to base snapshot — ready for a new revision if needed'
+        : 'Revision timer expired; COE reverted to base snapshot — ready for a new revision if needed';
+    await logIncident({
+      coe,
+      coeId: coe._id,
+      userId: historyUserId,
+      userRole: historyUserRole,
+      title: titleFull,
+      changes: [
+        {
+          field: 'revision_state',
+          label: 'Revision state',
+          from: fromState,
+          to: 'none',
+          message: msgFull
+        },
+        {
+          field: 'payment_status',
+          label: 'Payment status',
+          from: fromPaymentStatus,
+          to: snapshot.payment_status || coe.payment_status,
+          message: `Payment status reverted: ${fromPaymentStatus} -> ${snapshot.payment_status || coe.payment_status}`
+        },
+        {
+          field: 'total_paid',
+          label: 'Total paid',
+          from: fromTotalPaid,
+          to: snapshot.total_paid || coe.total_paid,
+          message: `Total paid reverted to base: $${fromTotalPaid.toFixed(2)} -> $${(snapshot.total_paid || coe.total_paid).toFixed(2)}`
+        },
+        {
+          field: 'revision_due_deposit_diff_amount',
+          label: 'Deposit difference due',
+          from: fromDueDepositDiff,
+          to: 0,
+          message: `Cleared deposit diff due ($${fromDueDepositDiff.toFixed(2)})`
+        },
+        {
+          field: 'revision_due_full_diff_amount',
+          label: 'Full difference due',
+          from: fromDueFullDiff,
+          to: 0,
+          message: `Cleared full diff due ($${fromDueFullDiff.toFixed(2)})`
+        },
+        {
+          field: 'client_credit_balance',
+          label: 'Client credit balance',
+          from: fromCreditBalance,
+          to: 0,
+          message: `Cleared credit balance ($${fromCreditBalance.toFixed(2)})`
+        }
+      ],
+      metadata: {
+        trigger,
+        revision_deadline_at: deadlineForMeta,
+        base_total: snapshot.total,
+        restored_total: coe.total
+      }
+    });
+  } catch (historyErr) {
+    console.error('[COE Service] Failed to log revision revert incident:', historyErr.message);
+  }
+
+  try {
+    const notificationService = require('./notificationService');
+    if (coe.client_id) {
+      await notificationService.createAndSendNotification(
+        coe.client_id.toString(),
+        'coe_revision_reverted',
+        {
+          coe_id: coe._id,
+          revision_case: revisionCaseForNotify,
+          coe: { name: coe.name }
+        }
+      );
+    }
+  } catch (notifyErr) {
+    console.error('[COE Service] Failed to notify revision revert:', notifyErr.message);
+  }
+}
+
+/**
  * Expire revision payment windows and revert the COE back to the base snapshot.
  * Important: this does NOT use COE status='expired' to avoid unintended seat release paths.
  * After revert, revision_state is set to 'none' so admins can submit a new revision.
@@ -1802,183 +2005,7 @@ async function expireRevisionPaymentsAndRevert() {
 
     for (const coe of coesToRevert) {
       try {
-        const snapshot = coe.revision_base_snapshot;
-        if (!snapshot || typeof snapshot.total !== 'number' || !snapshot.events || !snapshot.selected_seats) {
-          // Cannot restore events/seats from snapshot; clear revision flags so admin can start again.
-          coe.revision_state = 'none';
-          coe.revision_case = null;
-          coe.revision_deadline_at = undefined;
-          coe.revision_deadline_hours = null;
-          coe.revision_due_deposit_diff_amount = 0;
-          coe.revision_due_full_diff_amount = 0;
-          coe.client_credit_balance = 0;
-          await coe.save();
-          try {
-            const { logIncident } = require('./coeHistoryService');
-            await logIncident({
-              coe,
-              coeId: coe._id,
-              userId: null,
-              userRole: 'system',
-              title: 'Revision timer expired (no safe snapshot)',
-              changes: [
-                {
-                  field: 'revision_state',
-                  label: 'Revision state',
-                  from: 'accepted',
-                  to: 'none',
-                  message: 'Revision window expired; snapshot incomplete — revision cleared for a new submission'
-                }
-              ],
-              metadata: { reason: 'invalid_revision_base_snapshot' }
-            });
-          } catch (historyErr) {
-            console.error('[COE Service] Failed to log incomplete-snapshot revision expiry:', historyErr.message);
-          }
-          continue;
-        }
-
-        const fromPaymentStatus = coe.payment_status;
-        const fromTotalPaid = coe.total_paid || 0;
-        const fromTotal = coe.total || 0;
-        const fromDueDepositDiff = coe.revision_due_deposit_diff_amount || 0;
-        const fromDueFullDiff = coe.revision_due_full_diff_amount || 0;
-        const fromCreditBalance = coe.client_credit_balance || 0;
-
-        // Preserve current seat statuses (booked/held) while reverting selection back to base.
-        const currentSeatStatusBySeatId = new Map();
-        for (const seat of coe.selected_seats || []) {
-          if (!seat?.seat_id) continue;
-          currentSeatStatusBySeatId.set(seat.seat_id.toString(), seat.status);
-        }
-
-        coe.events = snapshot.events;
-
-        if (snapshot.pricing_breakdown) {
-          coe.pricing_breakdown = snapshot.pricing_breakdown;
-        }
-
-        if (typeof snapshot.subtotal === 'number') coe.subtotal = snapshot.subtotal;
-        if (typeof snapshot.taxes === 'number') coe.taxes = snapshot.taxes;
-        if (typeof snapshot.fees === 'number') coe.fees = snapshot.fees;
-        if (typeof snapshot.total === 'number') coe.total = snapshot.total;
-
-        if (Array.isArray(snapshot.selected_seats)) {
-          coe.selected_seats = snapshot.selected_seats.map(s => {
-            const seatIdStr = s?.seat_id ? s.seat_id.toString() : null;
-            const preservedStatus =
-              seatIdStr && currentSeatStatusBySeatId.has(seatIdStr)
-                ? currentSeatStatusBySeatId.get(seatIdStr)
-                : null;
-
-            return {
-              ...s,
-              status: preservedStatus || s.status || 'booked'
-            };
-          });
-        }
-
-        // Revert payment-related fields to the base snapshot values.
-        if (snapshot.payment_status) {
-          coe.payment_status = snapshot.payment_status;
-        }
-        if (typeof snapshot.total_paid === 'number') {
-          coe.total_paid = snapshot.total_paid;
-          // Deposit field is used for remaining/deposit displays; treat it as total_paid for revision revert.
-          coe.deposit_paid = snapshot.total_paid;
-        }
-
-        // Clear revision workflow so admin can submit a new revision; history records the revert.
-        coe.revision_state = 'none';
-        coe.revision_case = null;
-        coe.revision_deadline_at = undefined;
-        coe.revision_deadline_hours = null;
-        coe.revision_due_deposit_diff_amount = 0;
-        coe.revision_due_full_diff_amount = 0;
-        coe.client_credit_balance = 0;
-
-        await coe.save();
-
-        // History logging
-        try {
-          const { logIncident } = require('./coeHistoryService');
-          await logIncident({
-            coe,
-            coeId: coe._id,
-            userId: null,
-            userRole: 'system',
-            title: 'Revision expired and reverted',
-            changes: [
-              {
-                field: 'revision_state',
-                label: 'Revision state',
-                from: 'accepted',
-                to: 'none',
-                message: 'Revision timer expired; COE reverted to base snapshot — ready for a new revision if needed'
-              },
-              {
-                field: 'payment_status',
-                label: 'Payment status',
-                from: fromPaymentStatus,
-                to: snapshot.payment_status || coe.payment_status,
-                message: `Payment status reverted: ${fromPaymentStatus} -> ${snapshot.payment_status || coe.payment_status}`
-              },
-              {
-                field: 'total_paid',
-                label: 'Total paid',
-                from: fromTotalPaid,
-                to: snapshot.total_paid || coe.total_paid,
-                message: `Total paid reverted to base: $${fromTotalPaid.toFixed(2)} -> $${(snapshot.total_paid || coe.total_paid).toFixed(2)}`
-              },
-              {
-                field: 'revision_due_deposit_diff_amount',
-                label: 'Deposit difference due',
-                from: fromDueDepositDiff,
-                to: 0,
-                message: `Cleared deposit diff due ($${fromDueDepositDiff.toFixed(2)})`
-              },
-              {
-                field: 'revision_due_full_diff_amount',
-                label: 'Full difference due',
-                from: fromDueFullDiff,
-                to: 0,
-                message: `Cleared full diff due ($${fromDueFullDiff.toFixed(2)})`
-              },
-              {
-                field: 'client_credit_balance',
-                label: 'Client credit balance',
-                from: fromCreditBalance,
-                to: 0,
-                message: `Cleared credit balance ($${fromCreditBalance.toFixed(2)})`
-              }
-            ],
-            metadata: {
-              revision_deadline_at: coe.revision_deadline_at,
-              base_total: snapshot.total,
-              restored_total: coe.total
-            }
-          });
-        } catch (historyErr) {
-          console.error('[COE Service] Failed to log revision revert incident:', historyErr.message);
-        }
-
-        // Best-effort client notification
-        try {
-          const notificationService = require('./notificationService');
-          if (coe.client_id) {
-            await notificationService.createAndSendNotification(
-              coe.client_id.toString(),
-              'coe_revision_reverted',
-              {
-                coe_id: coe._id,
-                revision_case: coe.revision_case,
-                coe: { name: coe.name }
-              }
-            );
-          }
-        } catch (notifyErr) {
-          console.error('[COE Service] Failed to notify revision revert:', notifyErr.message);
-        }
+        await applyRevisionRevertFromSnapshot(coe, { trigger: 'cron' });
       } catch (coeErr) {
         console.error('[COE Service] Failed to revert revision for COE:', coe?._id?.toString(), coeErr.message);
       }
@@ -1988,6 +2015,33 @@ async function expireRevisionPaymentsAndRevert() {
   } catch (error) {
     console.error('[COE Service] Error in expireRevisionPaymentsAndRevert:', error);
     return 0;
+  }
+}
+
+/**
+ * Admin: immediately expire an active revision (pending_accept or accepted) and revert to base snapshot.
+ * @param {string} coeId - COE ObjectId string
+ * @param {string} adminUserId - Admin user id for history attribution
+ * @returns {Promise<{ success: boolean, message?: string }>}
+ */
+async function adminExpireRevisionNow(coeId, adminUserId) {
+  try {
+    if (!adminUserId) {
+      return { success: false, message: 'Admin user id required' };
+    }
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      return { success: false, message: 'COE not found' };
+    }
+    const rs = coe.revision_state;
+    if (rs !== 'pending_accept' && rs !== 'accepted') {
+      return { success: false, message: 'No active revision to expire.' };
+    }
+    await applyRevisionRevertFromSnapshot(coe, { trigger: 'admin', adminUserId });
+    return { success: true };
+  } catch (error) {
+    console.error('[COE_SERVICE] adminExpireRevisionNow:', error.message);
+    return { success: false, message: error.message || 'Failed to expire revision' };
   }
 }
 
@@ -4637,6 +4691,7 @@ module.exports = {
   preparePaymentForCOE,
   expireCOEsPastDeadline,
   expireRevisionPaymentsAndRevert,
+  adminExpireRevisionNow,
   ensureRevisionBaseSnapshotForPaidCOE,
   isRevisionStructurallyLocked
 };

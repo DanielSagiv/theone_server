@@ -1955,6 +1955,57 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /v1/coes/:id/revision/expire
+ * Admin only: immediately expire an active revision (pending_accept or accepted), revert to revision_base_snapshot,
+ * clear revision dues — same outcome as revision timer cron (no COE status=expired path).
+ */
+router.post('/:id/revision/expire', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format'
+      });
+    }
+
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Permission denied. Only admins can expire a revision.'
+      });
+    }
+
+    const result = await coeService.adminExpireRevisionNow(id, req.user.id);
+    if (!result.success) {
+      const status =
+        result.message === 'COE not found'
+          ? 404
+          : 400;
+      return res.status(status).json({
+        success: false,
+        message: result.message || 'Failed to expire revision'
+      });
+    }
+
+    const updatedCoe = await coeService.getCOEById(id);
+    return res.json({
+      success: true,
+      message: 'Revision expired. Experience reverted to the last paid version.',
+      data: updatedCoe
+    });
+  } catch (error) {
+    console.error('[COES] Error expiring revision:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to expire revision',
+      error: error.message
+    });
+  }
+});
+
+/**
  * POST /v1/coes/:id/accept
  * Client accept-only (deposit_percent === 100) or admin accept-on-behalf (any deposit_percent).
  * Moves the COE into `accepted_not_paid` without triggering payment.
