@@ -60,6 +60,62 @@ async function validateSelectedSeats(selectedSeats) {
 }
 
 /**
+ * Set selected_seats[].category from Event embedded seat (section / tier label) when missing.
+ * Mutates rows in place. Used when saving COEs so clients can show "selected section" after reload.
+ * @param {Array<Object>} selectedSeats COE selected_seats rows (event_id, seat_id)
+ * @returns {Promise<void>}
+ */
+async function enrichSelectedSeatsWithSectionCategory(selectedSeats) {
+  if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) return;
+  for (const row of selectedSeats) {
+    const existing =
+      (row.category && String(row.category).trim()) ||
+      (row.seat_category && String(row.seat_category).trim());
+    if (existing) continue;
+    if (!row.event_id || !row.seat_id) continue;
+    const event = await Event.findById(row.event_id).select('seats').lean();
+    if (!event?.seats?.length) continue;
+    const sid = row.seat_id.toString();
+    const evSeat = event.seats.find(s => s._id && s._id.toString() === sid);
+    if (evSeat) {
+      const label = evSeat.category || evSeat.section;
+      if (label) row.category = label;
+    }
+  }
+}
+
+/**
+ * Fill missing selected_seats[].category using populated events[].event_id.seats (API response enrich).
+ * Mutates coe.selected_seats. No DB round-trip.
+ * @param {Object} coe COE plain object with events populated (event_id includes seats)
+ */
+function enrichSelectedSeatsCategoryFromPopulatedEvents(coe) {
+  if (!coe?.selected_seats?.length || !coe?.events?.length) return;
+  for (const row of coe.selected_seats) {
+    if (row.category && String(row.category).trim()) continue;
+    const eid =
+      row.event_id?._id?.toString?.() ||
+      row.event_id?.toString?.() ||
+      row.event_id;
+    const eventItem = coe.events.find(e => {
+      const id =
+        e.event_id?._id?.toString?.() ||
+        e.event_id?.toString?.() ||
+        e.event_id;
+      return String(id) === String(eid);
+    });
+    const event = eventItem?.event_id;
+    if (!event?.seats?.length) continue;
+    const sid = row.seat_id?.toString?.() || row.seat_id;
+    const evSeat =
+      event.seats.find(s => (s._id?.toString?.() || s._id) === sid) ||
+      event.seats.find(s => s.code === row.seat_code);
+    const label = evSeat?.category || evSeat?.section;
+    if (label) row.category = label;
+  }
+}
+
+/**
  * Filter selected_seats to only include seats matching events currently in the COE
  * This ensures seats from replaced events (if not fully cleaned from DB) are not returned
  * @param {Object} coe - COE object with events and selected_seats arrays
@@ -353,7 +409,13 @@ function resolveSeatForHold(event, seatEntry) {
       ...seatEntry,
       seat_id: alternative._id,
       seat_code: alternative.code,
-      event_price: alternative.event_price != null ? alternative.event_price : seatEntry.event_price
+      event_price: alternative.event_price != null ? alternative.event_price : seatEntry.event_price,
+      category:
+        seatEntry.category ||
+        alternative.category ||
+        alternative.section ||
+        seat?.category ||
+        seat?.section
     };
     return { holdSeat: { event_id: seatEntry.event_id, seat_id: alternative._id }, updatedEntry };
   }
@@ -581,6 +643,7 @@ async function createCOE(coeData, createdBy) {
     // Validate selected seats before creating COE
     if (coeData.selected_seats && coeData.selected_seats.length > 0) {
       await validateSelectedSeats(coeData.selected_seats);
+      await enrichSelectedSeatsWithSectionCategory(coeData.selected_seats);
     }
 
     // Set creation details
@@ -2283,16 +2346,30 @@ async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
       throw new Error('Current seat not found in COE');
     }
 
+    const prevRow = coe.selected_seats[seatIndex];
+    let upgradeCategory = prevRow.category;
+    try {
+      const evForCat = await Event.findById(eventId).select('seats').lean();
+      const sid = upgradeSeat.seat_id?.toString();
+      const es = evForCat?.seats?.find(s => s._id?.toString() === sid);
+      if (es) {
+        upgradeCategory = es.category || es.section || upgradeCategory;
+      }
+    } catch {
+      // best-effort section label only
+    }
+
     // Replace with upgraded seat
     coe.selected_seats[seatIndex] = {
-      event_id: coe.selected_seats[seatIndex].event_id,
+      event_id: prevRow.event_id,
       seat_id: upgradeSeat.seat_id,
       seat_code: upgradeSeat.seat_code,
-      capacity: upgradeSeat.capacity || coe.selected_seats[seatIndex].capacity,
+      category: upgradeCategory,
+      capacity: upgradeSeat.capacity || prevRow.capacity,
       base_price: upgradeSeat.base_price || upgradeSeat.event_price,
       event_price: upgradeSeat.event_price,
-      available_from: coe.selected_seats[seatIndex].available_from,
-      available_until: coe.selected_seats[seatIndex].available_until,
+      available_from: prevRow.available_from,
+      available_until: prevRow.available_until,
       status: 'selected'
     };
 
@@ -2412,6 +2489,10 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
         event_id: existingSeat.event_id,
         seat_id: newSeat._id,
         seat_code: newSeat.code,
+        category:
+          newSeat.category ||
+          newSeat.section ||
+          existingSeat.category,
         capacity: newSeat.capacity || existingSeat.capacity,
         base_price: newBasePrice || existingSeat.base_price,
         event_price: newEventPrice || existingSeat.event_price,
@@ -2549,6 +2630,10 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
         event_id: groupExistingSeat.event_id,
         seat_id: newSeat._id,
         seat_code: newSeat.code,
+        category:
+          newSeat.category ||
+          newSeat.section ||
+          groupExistingSeat.category,
         capacity: newSeat.capacity || groupExistingSeat.capacity,
         base_price: newBasePrice || groupExistingSeat.base_price,
         event_price: newEventPrice || groupExistingSeat.event_price,
@@ -3364,6 +3449,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
             event_id: newEventId,
             seat_id: matchingSeat._id,
             seat_code: matchingSeat.code,
+            category: matchingSeat.category || matchingSeat.section,
             capacity: matchingSeat.capacity || oldSeat.capacity,
             base_price: matchingSeat.base_price || oldSeat.base_price,
             event_price: matchingSeat.event_price || matchingSeat.base_price || oldSeat.event_price,
@@ -3386,6 +3472,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
           event_id: newEventId,
           seat_id: seat._id,
           seat_code: seat.code,
+          category: seat.category || seat.section,
           capacity: seat.capacity,
           base_price: seat.base_price,
           event_price: seat.event_price || seat.base_price,
@@ -3511,6 +3598,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
               event_id: newEventId,
               seat_id: seat.seat_id || seat._id,
               seat_code: seat.seat_code || seat.code,
+              category: seat.category || seat.section,
               capacity: seat.capacity,
               base_price: seat.base_price,
               event_price: seat.event_price || seat.base_price,
@@ -3571,6 +3659,7 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
             event_id: newEventId,
             seat_id: seat._id,
             seat_code: seat.code,
+            category: seat.category || seat.section,
             capacity: seatCapacity,
             base_price: seat.base_price || 0,
             event_price: seat.event_price || seat.base_price || 0,
@@ -4521,6 +4610,7 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
       event_id: event._id,
       seat_id: seat._id,
       seat_code: seat.code || eventData.seat_code,
+      category: seat.category || seat.section || undefined,
       capacity: seat.capacity ?? eventData.capacity ?? 1,
       base_price: basePrice,
       event_price: seatPrice,
@@ -4659,6 +4749,7 @@ async function hasAlternativeEventsSameDay(coeId, eventId) {
 
 module.exports = {
   validateSelectedSeats,
+  enrichSelectedSeatsCategoryFromPopulatedEvents,
   filterSelectedSeatsByEvents,
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,

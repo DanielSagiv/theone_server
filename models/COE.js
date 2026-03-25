@@ -420,6 +420,8 @@ const coeSchema = new mongoose.Schema({
     event_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
     seat_id: { type: mongoose.Schema.Types.ObjectId, required: true },
     seat_code: { type: String, required: true, trim: true },
+    /** Section / tier label from Event.seats (e.g. dance_floor); used by clients to show "selected section". */
+    category: { type: String, trim: true },
     capacity: { type: Number, min: 1, required: true },
     base_price: { type: Number, min: 0, required: true },
     event_price: { type: Number, min: 0, required: true },

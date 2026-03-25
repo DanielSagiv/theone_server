@@ -277,6 +277,7 @@ const coeSelectedSeatSchema = Joi.object({
   event_id: Joi.string().hex().length(24).required(),
   seat_id: Joi.string().hex().length(24).required(),
   seat_code: Joi.string().required(),
+  category: Joi.string().allow('').optional(),
   capacity: Joi.number().min(1).required(),
   base_price: Joi.number().min(0).required(),
   event_price: Joi.number().min(0).required(),

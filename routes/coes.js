@@ -835,6 +835,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
         
         return selectedSeat;
       });
+
+      // Section label for Manage Events / clients: fill category from Event.seats when missing on COE row
+      coeService.enrichSelectedSeatsCategoryFromPopulatedEvents(coe);
       
       // Log final result
       const seatsWithMedia = coe.selected_seats.filter(s => s.media && s.media.length > 0);
