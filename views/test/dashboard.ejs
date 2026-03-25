@@ -5125,12 +5125,14 @@
                             <p style="color:#c0392b;font-weight:600;margin-bottom:12px;">
                                 Warning: CLEAN permanently deletes data. Payments removal does not update COE references.
                                 COEs uses the same delete logic as the COE table trash button (releases seats; some statuses cannot be deleted).
+                                <strong>ALL</strong> runs the same CLEAN as choosing each collection in list order (botconversations → messages → notifications → payments → coes).
                             </p>
                             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;">
                                 <div class="form-group" style="margin:0;">
                                     <label for="toolsCleanCollection">Collection</label>
                                     <select id="toolsCleanCollection" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:220px;">
                                         <option value="">Select...</option>
+                                        <option value="all">ALL (clean every collection in order)</option>
                                         <option value="botconversations">botconversations</option>
                                         <option value="messages">messages (COE threads)</option>
                                         <option value="notifications">notifications</option>
@@ -10783,10 +10785,13 @@
             }
             const opt = collectionEl && collectionEl.options[collectionEl.selectedIndex];
             const label = opt ? opt.textContent : collection;
-            if (!confirm('CLEAN will permanently remove data for: ' + label + '\n\nThis cannot be undone. Continue?')) {
+            const confirmMsg = collection === 'all'
+                ? 'CLEAN ALL will permanently remove data from EVERY tools collection (in order: botconversations, messages, notifications, payments, coes).\n\nCOEs use per-item delete (releases seats). This cannot be undone. Continue?'
+                : ('CLEAN will permanently remove data for: ' + label + '\n\nThis cannot be undone. Continue?');
+            if (!confirm(confirmMsg)) {
                 return;
             }
-            showAlert('Running CLEAN...', 'info');
+            showAlert(collection === 'all' ? 'Running CLEAN ALL (this may take a while)...' : 'Running CLEAN...', 'info');
             const result = await makeApiRequest('/admin/tools/clean', 'POST', { toolsPassword, collection });
             const payload = result.data || {};
             const pre = document.getElementById('toolsCleanResult');
@@ -10795,12 +10800,21 @@
                 if (payload.failedCount > 0) {
                     msg += ' Some items failed (see details below).';
                 }
-                showAlert(msg, payload.failedCount > 0 ? 'error' : 'success');
+                if (payload.all && Array.isArray(payload.results)) {
+                    const anyCoeFails = payload.results.some(function (r) {
+                        return r.collection === 'coes' && r.failedCount > 0;
+                    });
+                    if (anyCoeFails) {
+                        msg += ' Some COEs could not be deleted (see results).';
+                    }
+                }
+                const alertType = (payload.failedCount > 0 || (payload.all && payload.success === false)) ? 'error' : 'success';
+                showAlert(msg, alertType);
                 if (pre) {
                     pre.style.display = 'block';
                     pre.textContent = JSON.stringify(payload, null, 2);
                 }
-                if (collection === 'coes' && typeof loadCOEs === 'function') {
+                if ((collection === 'coes' || collection === 'all') && typeof loadCOEs === 'function') {
                     loadCOEs();
                 }
             } else {
