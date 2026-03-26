@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Session = require('../models/Session');
 const User = require('../models/User');
-
+//
 /**
  * Authentication middleware for protected routes
  * @description Validates JWT token and checks session validity
