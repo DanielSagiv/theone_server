@@ -137,6 +137,22 @@ const coeSchema = new mongoose.Schema({
     added_at: { type: Date, default: Date.now },
     added_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }],
+
+  /** Shared id for multi-proposal groups (ProposalGroup doc + member COEs). */
+  proposal_group_id: {
+    type: String,
+    trim: true,
+    default: null,
+    sparse: true,
+    index: true,
+  },
+  /** Optional display label for carousel (e.g. Standard / Premium). */
+  proposal_label: {
+    type: String,
+    trim: true,
+    maxlength: 80,
+    default: null,
+  },
   
   // Runner Assignment
   runner_assignment: {

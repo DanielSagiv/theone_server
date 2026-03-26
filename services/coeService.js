@@ -937,6 +937,18 @@ async function getCOEById(coeId) {
       }
     }
 
+    try {
+      if (
+        coe.proposal_group_id &&
+        (!coe.proposal_label || !String(coe.proposal_label).trim())
+      ) {
+        const proposalGroupService = require('./proposalGroupService');
+        await proposalGroupService.ensureProposalOptionLabelIfMissing(coe);
+      }
+    } catch (labelErr) {
+      console.warn('[getCOEById] ensureProposalOptionLabelIfMissing:', labelErr.message);
+    }
+
     return coe;
   } catch (error) {
     // If validation fails, try using lean() to bypass validation
@@ -1005,6 +1017,18 @@ async function getCOEById(coeId) {
               }
             }
           }
+        }
+
+        try {
+          if (
+            coe.proposal_group_id &&
+            (!coe.proposal_label || !String(coe.proposal_label).trim())
+          ) {
+            const proposalGroupService = require('./proposalGroupService');
+            await proposalGroupService.ensureProposalOptionLabelIfMissing(coe);
+          }
+        } catch (labelErr) {
+          console.warn('[getCOEById] ensureProposalOptionLabelIfMissing (lean):', labelErr.message);
         }
         
         return coe;
@@ -1375,11 +1399,17 @@ async function removeEventFromCOE(coeId, eventId) {
  * Update COE status
  * @param {string} coeId - COE ID
  * @param {string} status - New status
- * @param {string} updatedBy - User ID who updated
+ * @param {string|null} updatedBy - User ID who updated
+ * @param {Object} [options]
+ * @param {boolean} [options.skipMultiProposalResolution] - Skip open-group accept resolution (internal recursion)
+ * @param {boolean} [options.suppressNotifications] - Do not enqueue status-change notifications
  * @returns {Promise<Object>} Updated COE
  */
-async function updateCOEStatus(coeId, status, updatedBy) {
+async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
   try {
+    const skipMultiProposalResolution = options.skipMultiProposalResolution === true;
+    const suppressNotifications = options.suppressNotifications === true;
+
     const coe = await COE.findById(coeId);
     
     if (!coe) {
@@ -1389,6 +1419,19 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     // Normalize aliases (keep DB status values stable)
     // 'proposal' is treated as 'approved' internally
     const normalizedStatus = status === 'proposal' ? 'approved' : status;
+
+    if (
+      !skipMultiProposalResolution &&
+      normalizedStatus === 'accepted_not_paid' &&
+      coe.status === 'approved' &&
+      coe.proposal_group_id
+    ) {
+      const proposalGroupService = require('./proposalGroupService');
+      const resolved = await proposalGroupService.handleAcceptInOpenGroup(coe, updatedBy);
+      if (resolved) {
+        return resolved;
+      }
+    }
 
     // Validate status transition
     const validTransitions = {
@@ -1429,6 +1472,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     }
     
     // Send notifications for status changes
+    if (!suppressNotifications) {
     try {
       const notificationService = require('./notificationService');
       const updatedCoe = await getCOEById(coeId);
@@ -1665,6 +1709,7 @@ async function updateCOEStatus(coeId, status, updatedBy) {
     } catch (error) {
       // Log but don't fail the status update if notifications fail
       console.error('[COEService] Error sending notifications:', error);
+    }
     }
 
     // Best-effort history logging

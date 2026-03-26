@@ -36,7 +36,9 @@ const notificationSchema = new mongoose.Schema({
       'runner_assigned',
       'runner_updated',
       // Seat / section availability Notifications
-      'seat_section_unavailable'
+      'seat_section_unavailable',
+      // Multi-proposal group (client)
+      'proposal_group_ready'
     ],
     required: true,
     index: true
@@ -67,7 +69,9 @@ const notificationSchema = new mongoose.Schema({
       ref: 'User'
     },
     action: String,
-    action_url: String
+    action_url: String,
+    proposal_group_id: String,
+    proposal_count: Number
   },
   read: {
     type: Boolean,

@@ -17,6 +17,7 @@ const {
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema
 } = require('../utils/validationSchemas');
+const proposalGroupService = require('../services/proposalGroupService');
 
 /**
  * COE Routes
@@ -202,8 +203,8 @@ router.get('/my', authenticateToken, async (req, res) => {
         { 'participants.user_id': userIdObj }
       ]
     })
-    .populate('admin_id', 'name email')
-    .populate('client_id', 'name')
+    .populate('admin_id', 'firstName lastName email')
+    .populate('client_id', 'firstName lastName email avatarUrl')
     .populate({
       path: 'events.event_id',
       select: 'name description start_datetime end_datetime location_id media',
@@ -263,14 +264,65 @@ router.get('/my', authenticateToken, async (req, res) => {
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
     }
 
-    // Business rule: clients should not see draft Experiences
-    if (req.user.role === 'client') {
-      coes = coes.filter(coe => coe.status !== 'draft');
+    // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
+    if (coes.length > 0) {
+      const ids = coes.map((c) => c._id);
+      const rows = await COE.collection
+        .find({ _id: { $in: ids } }, { projection: { proposal_group_id: 1 } })
+        .toArray();
+      const gidById = new Map(rows.map((r) => [String(r._id), r.proposal_group_id]));
+      for (const coe of coes) {
+        const fromDb = gidById.get(String(coe._id));
+        if (
+          fromDb != null &&
+          String(fromDb).trim() !== '' &&
+          (coe.proposal_group_id == null || String(coe.proposal_group_id).trim() === '')
+        ) {
+          coe.set('proposal_group_id', String(fromDb));
+        }
+      }
     }
+
+    // Business rule: clients should not see draft or cancelled Experiences (losers after multi-proposal resolve)
+    if (req.user.role === 'client') {
+      coes = coes.filter((c) => c.status !== 'draft' && c.status !== 'cancelled');
+    }
+
+    if (req.user.role === 'client' && coes.length > 0) {
+      const proposalGroupService = require('../services/proposalGroupService');
+      for (const doc of coes) {
+        try {
+          if (
+            doc.proposal_group_id &&
+            (!doc.proposal_label || !String(doc.proposal_label).trim())
+          ) {
+            await proposalGroupService.ensureProposalOptionLabelIfMissing(doc);
+          }
+        } catch (labelErr) {
+          console.warn('[GET /coes/my] ensureProposalOptionLabelIfMissing:', labelErr.message);
+        }
+      }
+    }
+
+    // Plain JSON with explicit proposal_group_id so mobile can group (undefined keys are omitted by JSON)
+    const data = coes.map((doc) => {
+      const o = typeof doc.toObject === 'function' ? doc.toObject() : {...doc};
+      return {
+        ...o,
+        proposal_group_id:
+          o.proposal_group_id != null && String(o.proposal_group_id).trim() !== ''
+            ? String(o.proposal_group_id)
+            : null,
+        proposal_label:
+          o.proposal_label != null && String(o.proposal_label).trim() !== ''
+            ? String(o.proposal_label)
+            : null,
+      };
+    });
 
     res.json({
       success: true,
-      data: coes
+      data,
     });
   } catch (error) {
     console.error('Error fetching user COEs:', error);
@@ -386,7 +438,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
       ]
     })
     .lean()
-    .populate('client_id', 'firstName lastName email')
+    .populate('client_id', 'firstName lastName email avatarUrl')
     .populate('admin_id', 'firstName lastName email')
     .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .populate({
@@ -897,9 +949,31 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
+    let openMultiProposalClientAccept = false;
+    const proposalGroupService = require('../services/proposalGroupService');
+    if (req.user.role === 'client' && coe.proposal_group_id) {
+      try {
+        if (!coe.proposal_label || !String(coe.proposal_label).trim()) {
+          await proposalGroupService.ensureProposalOptionLabelIfMissing(coe);
+        }
+      } catch (labelErr) {
+        console.warn('[GET /coes/my/:id] ensureProposalOptionLabelIfMissing:', labelErr.message);
+      }
+    }
+    if (req.user.role === 'client' && coe.status === 'approved' && coe.proposal_group_id) {
+      try {
+        openMultiProposalClientAccept = await proposalGroupService.clientMayChooseWithoutFullDeposit(coe);
+      } catch (multiErr) {
+        console.warn('[GET /coes/my/:id] openMultiProposalClientAccept check failed:', multiErr.message);
+      }
+    }
+
     res.json({
       success: true,
-      data: coe
+      data: {
+        ...coe,
+        open_multi_proposal_client_accept: openMultiProposalClientAccept,
+      },
     });
   } catch (error) {
     console.error('[GET /coes/my/:id] Unexpected error:', error);
@@ -1043,6 +1117,104 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
     res.status(500).json({
       success: false,
       error: 'Failed to build experience form',
+    });
+  }
+});
+
+/**
+ * GET /v1/coes/proposal-groups/:proposalGroupId/members
+ * List COEs in a proposal group (client: own group; admin: must own a COE in the group)
+ */
+router.get('/proposal-groups/:proposalGroupId/members', authenticateToken, async (req, res) => {
+  try {
+    const { proposalGroupId } = req.params;
+    if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+      return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+    }
+    const list = await proposalGroupService.listMembersForUser(proposalGroupId, {
+      userId: req.user.id,
+      role: req.user.role,
+      clientId: req.query.client_id
+    });
+    const data = await Promise.all(
+      list.map((doc) => coeService.getCOEById(doc._id.toString()))
+    );
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('[COES] proposal-groups members:', error);
+    const status =
+      error.message === 'Proposal group not found'
+        ? 404
+        : error.message === 'Forbidden' || error.message === 'Client does not match proposal group'
+          ? 403
+          : 500;
+    res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to list proposal group members'
+    });
+  }
+});
+
+/**
+ * POST /v1/coes/proposal-groups/:proposalGroupId/publish
+ * Approve all draft/request COEs in the group; send one grouped client notification when N>=2 approved
+ * @access Admin (must own a COE in the group)
+ */
+router.post(
+  '/proposal-groups/:proposalGroupId/publish',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { proposalGroupId } = req.params;
+      if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+        return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+      }
+      const result = await proposalGroupService.publishProposalGroup(proposalGroupId, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      console.error('[COES] proposal-groups publish:', error);
+      const msg = error.message || '';
+      const status =
+        msg === 'Proposal group not found'
+          ? 404
+          : msg === 'Forbidden' || msg === 'Admin only'
+            ? 403
+            : msg === 'Proposal group is not open'
+              ? 400
+              : 400;
+      res.status(status).json({
+        success: false,
+        message: msg || 'Failed to publish proposal group'
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/add-proposal
+ * Duplicate COE as a sibling draft in the same proposal group (admin = COE admin)
+ */
+router.post('/:id/add-proposal', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'Invalid COE ID format' });
+    }
+    const coe = await proposalGroupService.duplicateCoeAsProposal(id, req.user.id);
+    res.json({ success: true, data: coe });
+  } catch (error) {
+    console.error('[COES] add-proposal:', error);
+    const msg = error.message || '';
+    const status =
+      msg === 'COE not found'
+        ? 404
+        : msg === 'Admin only' || msg === 'Forbidden'
+          ? 403
+          : 400;
+    res.status(status).json({
+      success: false,
+      message: msg || 'Failed to add proposal'
     });
   }
 });
@@ -2010,8 +2182,8 @@ router.post('/:id/revision/expire', authenticateToken, async (req, res) => {
 
 /**
  * POST /v1/coes/:id/accept
- * Client accept-only (deposit_percent === 100) or admin accept-on-behalf (any deposit_percent).
- * Moves the COE into `accepted_not_paid` without triggering payment.
+ * Client: accepted_not_paid when deposit is 100%, or when choosing among N>=2 approved options in an open proposal group.
+ * Admin: accept-on-behalf regardless of deposit_percent. Moves into accepted_not_paid without triggering payment.
  */
 router.post('/:id/accept', authenticateToken, async (req, res) => {
   try {
@@ -2136,7 +2308,7 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
     const isClient = req.user.role === 'client';
     const isClientOwner = coe.client_id?.toString() === req.user.id?.toString();
 
-    // Client accept-only: only when deposit_percent === 100
+    // Client accept: 100% deposit unless choosing among N>=2 approved options in an open proposal group
     if (isClient) {
       if (!isClientOwner) {
         return res.status(403).json({
@@ -2144,7 +2316,9 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
           message: 'Permission denied',
         });
       }
-      if (depositPercent !== 100) {
+      const proposalGroupService = require('../services/proposalGroupService');
+      const openMultiChoice = await proposalGroupService.clientMayChooseWithoutFullDeposit(coe);
+      if (!openMultiChoice && depositPercent !== 100) {
         return res.status(400).json({
           success: false,
           message: 'Client can accept only when deposit is 100%',

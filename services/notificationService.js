@@ -177,6 +177,14 @@ function generateNotificationContent(type, data) {
       body: data.message || (data.previous_total != null && data.new_total != null
         ? `No available tables in the selected section for some events. Amount reduced. Contact The1 for a different section. Total updated from $${Number(data.previous_total).toFixed(2)} to $${Number(data.new_total).toFixed(2)}. You can complete payment with the new amount.`
         : `Selected section is no longer available for some events in '${coeName}'. Amount was reduced. Contact The1 for a different seat section.`)
+    },
+    proposal_group_ready: {
+      title: (() => {
+        const n = Number(data.proposal_count);
+        if (!Number.isFinite(n) || n < 1) return 'New proposals ready';
+        return n === 1 ? '1 new proposal' : `${n} new proposals`;
+      })(),
+      body: 'Tap to review and choose your experience.'
     }
   };
 
@@ -194,6 +202,10 @@ function generateNotificationContent(type, data) {
  */
 function generateDeepLink(type, data) {
   const baseUrl = 'the1://';
+
+  if (type === 'proposal_group_ready' && data.proposal_group_id) {
+    return `${baseUrl}coes?proposalGroupId=${encodeURIComponent(String(data.proposal_group_id))}`;
+  }
   
   if (data.coe_id) {
     const coeId = data.coe_id.toString();
@@ -507,6 +519,15 @@ async function createNotification(userId, type, data) {
       }
     }
 
+    if (type === 'proposal_group_ready' && data.proposal_group_id) {
+      const gid = String(data.proposal_group_id);
+      await Notification.deleteMany({
+        user_id: userId,
+        type: 'proposal_group_ready',
+        'data.proposal_group_id': gid
+      });
+    }
+
     // For other notification types, use regular save
     const notification = new Notification({
       user_id: userId,
@@ -519,7 +540,9 @@ async function createNotification(userId, type, data) {
         payment_id: data.payment_id,
         sender_id: data.sender_id, // Store sender_id for avatar display
         action: type,
-        action_url: actionUrl
+        action_url: actionUrl,
+        proposal_group_id: data.proposal_group_id,
+        proposal_count: data.proposal_count
       },
       read: false,
       sent: false
@@ -595,6 +618,28 @@ async function createNotification(userId, type, data) {
 }
 
 /**
+ * Build Firebase / Expo push `data` payload from a persisted notification document.
+ * @param {import('mongoose').Document} notification - Notification mongoose doc
+ * @returns {Record<string, string>}
+ */
+function buildPushDataFromNotification(notification) {
+  const d = notification.data || {};
+  const out = {
+    type: String(notification.type),
+    notification_id: notification._id.toString()
+  };
+  if (d.action_url) out.action_url = d.action_url;
+  if (d.coe_id != null && d.coe_id !== '') out.coe_id = d.coe_id.toString();
+  if (d.message_id != null && d.message_id !== '') out.message_id = d.message_id.toString();
+  if (d.payment_id != null && d.payment_id !== '') out.payment_id = d.payment_id.toString();
+  if (d.proposal_group_id) out.proposal_group_id = String(d.proposal_group_id);
+  if (d.proposal_count != null && Number.isFinite(Number(d.proposal_count))) {
+    out.proposal_count = String(d.proposal_count);
+  }
+  return out;
+}
+
+/**
  * Send push notification to user via FCM
  * @param {string} userId - User ID
  * @param {Object} notification - Notification document
@@ -648,14 +693,7 @@ async function sendPushNotification(userId, notification) {
         title: notification.title,
         body: notification.body
       },
-      data: {
-        type: notification.type,
-        notification_id: notification._id.toString(),
-        ...(notification.data.action_url && { action_url: notification.data.action_url }),
-        ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
-        ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
-        ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
-      },
+      data: buildPushDataFromNotification(notification),
       android: {
         priority: 'high'
       },
@@ -735,14 +773,7 @@ async function sendPushNotification(userId, notification) {
             sound: 'default',
             title: notification.title,
             body: notification.body,
-            data: {
-              type: notification.type,
-              notification_id: notification._id.toString(),
-              ...(notification.data.action_url && { action_url: notification.data.action_url }),
-              ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
-              ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
-              ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
-            },
+            data: buildPushDataFromNotification(notification),
             badge: 1,
             priority: 'high',
             // Android-specific styling (THE1 branding)
@@ -863,14 +894,7 @@ async function sendPushNotification(userId, notification) {
                   sound: 'default',
                   title: notification.title,
                   body: notification.body,
-                  data: {
-                    type: notification.type,
-                    notification_id: notification._id.toString(),
-                    ...(notification.data.action_url && { action_url: notification.data.action_url }),
-                    ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
-                    ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
-                    ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
-                  },
+                  data: buildPushDataFromNotification(notification),
                   badge: 1,
                   priority: 'high',
                   android: {
@@ -936,14 +960,7 @@ async function sendPushNotification(userId, notification) {
                   sound: 'default',
                   title: notification.title,
                   body: notification.body,
-                  data: {
-                    type: notification.type,
-                    notification_id: notification._id.toString(),
-                    ...(notification.data.action_url && { action_url: notification.data.action_url }),
-                    ...(notification.data.coe_id && { coe_id: notification.data.coe_id.toString() }),
-                    ...(notification.data.message_id && { message_id: notification.data.message_id.toString() }),
-                    ...(notification.data.payment_id && { payment_id: notification.data.payment_id.toString() })
-                  },
+                  data: buildPushDataFromNotification(notification),
                   badge: 1,
                   priority: 'high',
                   android: {
