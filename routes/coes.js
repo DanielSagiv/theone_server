@@ -207,7 +207,7 @@ router.get('/my', authenticateToken, async (req, res) => {
     .populate('client_id', 'firstName lastName email avatarUrl')
     .populate({
       path: 'events.event_id',
-      select: 'name description start_datetime end_datetime location_id media',
+      select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
         select: 'name type media'
@@ -243,7 +243,7 @@ router.get('/my', authenticateToken, async (req, res) => {
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
                   .populate('location_id', 'name type media')
-                  .select('name description location_id start_datetime end_datetime media');
+                  .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
                   console.log('[GET /coes/my] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
@@ -443,7 +443,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
     .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .populate({
       path: 'events.event_id',
-      select: 'name description start_datetime end_datetime location_id media',
+      select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
         select: 'name type media'
@@ -479,7 +479,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
                   .populate('location_id', 'name type media')
-                  .select('name description location_id start_datetime end_datetime media');
+                  .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
                   console.log('[GET /coes/client/:clientId] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
@@ -657,7 +657,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
         .populate('runner_assignment.runner_id', 'firstName lastName email phone avatarUrl')
         .populate({
           path: 'events.event_id',
-          select: 'name description location_id start_datetime end_datetime base_price currency status media seats',
+          select: 'name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone',
           populate: [
             {
               path: 'location_id',
@@ -708,7 +708,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
             const populatedEvent = await Event.findById(eventItem.event_id)
               .lean()
               .populate('location_id', 'name type media seats')
-              .select('name description location_id start_datetime end_datetime base_price currency status media seats');
+              .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
             if (populatedEvent) {
               coe.events[i].event_id = populatedEvent;
             }

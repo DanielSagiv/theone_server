@@ -880,7 +880,7 @@ async function getCOEById(coeId) {
       .populate('runner_assignment.runner_id', 'firstName lastName email phone avatarUrl')
       .populate({
         path: 'events.event_id',
-        select: 'name description location_id start_datetime end_datetime base_price currency status media seats',
+        select: 'name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone',
         populate: [
           {
             path: 'location_id',
@@ -922,7 +922,7 @@ async function getCOEById(coeId) {
             try {
               const populatedEvent = await Event.findById(eventIdValue)
                 .populate('location_id', 'name type media seats')
-                .select('name description location_id start_datetime end_datetime base_price currency status media seats');
+                .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
               if (populatedEvent) {
                 eventItem.event_id = populatedEvent;
                 console.log('[getCOEById] Manually populated event:', populatedEvent.name, 'for event_id:', eventIdValue);
@@ -964,7 +964,7 @@ async function getCOEById(coeId) {
           .populate('runner_assignment.runner_id', 'firstName lastName email phone avatarUrl')
           .populate({
             path: 'events.event_id',
-            select: 'name description location_id start_datetime end_datetime base_price currency status media seats',
+            select: 'name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone',
             populate: [
               {
                 path: 'location_id',
@@ -1003,7 +1003,7 @@ async function getCOEById(coeId) {
                 try {
                   const populatedEvent = await Event.findById(eventIdValue)
                     .populate('location_id', 'name type media seats')
-                    .select('name description location_id start_datetime end_datetime base_price currency status media seats')
+                    .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone')
                     .lean();
                   if (populatedEvent) {
                     eventItem.event_id = populatedEvent;
