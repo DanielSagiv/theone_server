@@ -179,10 +179,18 @@ const EventSchema = new mongoose.Schema({
   gxnEventDate: { type: String, trim: true }, // GXN date key (e.g., D251101) for reference
   // Tao Group integration - external event id for import idempotency
   taoEventId: { type: String, trim: true },
-  performers: [{ // Performer information from GXN
+  performers: [{ // Performer information (GXN codes + optional display fields)
     perfcode: { type: String, trim: true }, // Performer code (e.g., PER1242)
     importance: { type: String, trim: true }, // Performer importance level
-    apprtime: { type: String, trim: true } // Appearance time
+    apprtime: { type: String, trim: true }, // Appearance time
+    name: { type: String, trim: true }, // Display name (manual or enriched)
+    description: { type: String, trim: true }, // Short bio or notes
+    links: [
+      {
+        url: { type: String, trim: true },
+        label: { type: String, trim: true }, // e.g. Instagram, Website
+      },
+    ],
   }],
   
   // Event Settings

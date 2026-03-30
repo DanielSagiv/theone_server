@@ -221,8 +221,18 @@ const createEventSchema = Joi.object({
   performers: Joi.array().items(Joi.object({
     perfcode: Joi.string().allow('').optional(),
     importance: Joi.string().allow('').optional(),
-    apprtime: Joi.string().allow('').optional()
-  })).optional()
+    apprtime: Joi.string().allow('').optional(),
+    name: Joi.string().allow('').optional(),
+    description: Joi.string().allow('').optional(),
+    links: Joi.array()
+      .items(
+        Joi.object({
+          url: Joi.string().allow('').optional(),
+          label: Joi.string().allow('').optional(),
+        })
+      )
+      .optional(),
+  })).optional(),
 });
 
 // Update event validation schema
