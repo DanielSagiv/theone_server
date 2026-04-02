@@ -3,6 +3,7 @@ const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const subscriptionService = require('../services/subscriptionService');
 const coeService = require('../services/coeService');
+const proposalGroupService = require('../services/proposalGroupService');
 
 /**
  * Cron Jobs for Automated Subscription Billing
@@ -221,6 +222,29 @@ function startRevisionExpiryCron() {
 }
 
 /**
+ * Expire payable COEs in open proposal groups whose canonical group timer has passed; clear group timer.
+ * Runs every 5 minutes (complements per-COE payment_deadline cron if mirror ever drifts).
+ */
+function startProposalGroupPaymentDeadlineCron() {
+  cron.schedule('*/5 * * * *', async () => {
+    const startedAt = new Date();
+    console.log('🔄 Running proposal group payment deadline cron job:', startedAt.toISOString());
+
+    try {
+      const processed = await proposalGroupService.expireOverdueProposalGroups();
+      console.log('✅ Proposal group payment deadline cron job completed:', {
+        groupsProcessed: processed,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('❌ Proposal group payment deadline cron job failed:', error);
+    }
+  });
+
+  console.log('✅ Proposal group payment deadline cron job scheduled (every 5 minutes)');
+}
+
+/**
  * Start all cron jobs
  */
 function startAllCronJobs() {
@@ -229,6 +253,7 @@ function startAllCronJobs() {
   startSubscriptionExpirationCron();
   startCOEPaymentDeadlineCron();
   startRevisionExpiryCron();
+  startProposalGroupPaymentDeadlineCron();
   console.log('🚀 All payment cron jobs started successfully');
 }
 
@@ -238,6 +263,7 @@ module.exports = {
   startFailedPaymentRetryCron,
   startSubscriptionExpirationCron,
   startCOEPaymentDeadlineCron,
-  startRevisionExpiryCron
+  startRevisionExpiryCron,
+  startProposalGroupPaymentDeadlineCron,
 };
 

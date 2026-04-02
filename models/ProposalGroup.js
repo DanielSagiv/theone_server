@@ -41,6 +41,9 @@ const proposalGroupSchema = new mongoose.Schema(
       default: null,
     },
     resolved_at: { type: Date, default: null },
+    /** Canonical payment window for multi-proposal sets; mirrored to each member COE.payment_deadline_*. */
+    proposal_payment_deadline_at: { type: Date, default: null, index: true },
+    proposal_payment_deadline_hours: { type: Number, default: null, min: 0, max: 720 },
   },
   { timestamps: true }
 );

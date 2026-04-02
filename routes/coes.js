@@ -1192,6 +1192,143 @@ router.post(
 );
 
 /**
+ * POST /v1/coes/proposal-groups/:proposalGroupId/timer/start
+ * Set shared payment deadline for all members (2+ COEs). Mirrors to each COE.
+ */
+router.post(
+  '/proposal-groups/:proposalGroupId/timer/start',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { proposalGroupId } = req.params;
+      const hours = req.body?.payment_deadline_hours;
+      if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+        return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+      }
+      const data = await proposalGroupService.startProposalGroupTimer(
+        proposalGroupId,
+        req.user.id,
+        hours,
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('[COES] proposal-groups timer/start:', error);
+      const msg = error.message || '';
+      const status =
+        msg === 'Proposal group not found'
+          ? 404
+          : msg === 'Forbidden' || msg === 'Admin only'
+            ? 403
+            : msg === 'Proposal group is not open' || msg.includes('payment_deadline_hours')
+              ? 400
+              : 400;
+      res.status(status).json({ success: false, message: msg || 'Failed to start group timer' });
+    }
+  },
+);
+
+/**
+ * POST /v1/coes/proposal-groups/:proposalGroupId/timer/cancel
+ * Clear group timer and mirrored payment deadlines on all members.
+ */
+router.post(
+  '/proposal-groups/:proposalGroupId/timer/cancel',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { proposalGroupId } = req.params;
+      if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+        return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+      }
+      await proposalGroupService.cancelProposalGroupTimer(proposalGroupId, req.user.id);
+      res.json({ success: true, message: 'Group payment timer cancelled' });
+    } catch (error) {
+      console.error('[COES] proposal-groups timer/cancel:', error);
+      const msg = error.message || '';
+      const status =
+        msg === 'Proposal group not found'
+          ? 404
+          : msg === 'Forbidden' || msg === 'Admin only'
+            ? 403
+            : msg === 'Proposal group is not open'
+              ? 400
+              : 400;
+      res.status(status).json({ success: false, message: msg || 'Failed to cancel group timer' });
+    }
+  },
+);
+
+/**
+ * POST /v1/coes/proposal-groups/:proposalGroupId/timer/reset
+ * New payment window from now (same as start).
+ */
+router.post(
+  '/proposal-groups/:proposalGroupId/timer/reset',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { proposalGroupId } = req.params;
+      const hours = req.body?.payment_deadline_hours;
+      if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+        return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+      }
+      const data = await proposalGroupService.resetProposalGroupTimer(
+        proposalGroupId,
+        req.user.id,
+        hours,
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('[COES] proposal-groups timer/reset:', error);
+      const msg = error.message || '';
+      const status =
+        msg === 'Proposal group not found'
+          ? 404
+          : msg === 'Forbidden' || msg === 'Admin only'
+            ? 403
+            : 400;
+      res.status(status).json({ success: false, message: msg || 'Failed to reset group timer' });
+    }
+  },
+);
+
+/**
+ * POST /v1/coes/proposal-groups/:proposalGroupId/expire-proposals
+ * Expire all approved/pending_pay/accepted_not_paid members; drafts unchanged. Clears group timer.
+ */
+router.post(
+  '/proposal-groups/:proposalGroupId/expire-proposals',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { proposalGroupId } = req.params;
+      if (!proposalGroupId || String(proposalGroupId).trim() === '') {
+        return res.status(400).json({ success: false, message: 'proposalGroupId is required' });
+      }
+      const data = await proposalGroupService.expireAllProposalsInGroup(
+        proposalGroupId,
+        req.user.id,
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('[COES] proposal-groups expire-proposals:', error);
+      const msg = error.message || '';
+      const status =
+        msg === 'Proposal group not found'
+          ? 404
+          : msg === 'Forbidden' || msg === 'Admin only'
+            ? 403
+            : 400;
+      res.status(status).json({ success: false, message: msg || 'Failed to expire proposals' });
+    }
+  },
+);
+
+/**
  * POST /v1/coes/:id/add-proposal
  * Duplicate COE as a sibling draft in the same proposal group (admin = COE admin)
  */
@@ -1652,6 +1789,20 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       typeof value.payment_deadline_hours === 'number' &&
       (value.status === 'approved' || value.status === 'proposal')
     ) {
+      const pgid =
+        coe.proposal_group_id != null && String(coe.proposal_group_id).trim() !== ''
+          ? String(coe.proposal_group_id).trim()
+          : '';
+      if (pgid) {
+        const memberCount = await proposalGroupService.countMembersInGroup(pgid);
+        if (memberCount >= 2) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'This experience is part of a multi-proposal group. Set or change the payment timer from the group (proposal-groups timer endpoints), not per experience.',
+          });
+        }
+      }
       coe.payment_deadline_hours = value.payment_deadline_hours;
       if (value.payment_deadline_hours > 0) {
         const now = new Date();

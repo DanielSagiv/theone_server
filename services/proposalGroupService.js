@@ -3,6 +3,259 @@ const COE = require('../models/COE');
 const ProposalGroup = require('../models/ProposalGroup');
 const User = require('../models/User');
 
+/** COE statuses eligible for payment-window expiry (draft/request excluded). */
+const PAYABLE_FOR_PROPOSAL_TIMER = ['approved', 'accepted_not_paid', 'pending_pay'];
+
+const MAX_PROPOSAL_PAYMENT_DEADLINE_HOURS = 720;
+
+/**
+ * Count COEs in a proposal group (any client; same group id).
+ * @param {string} proposalGroupId
+ * @returns {Promise<number>}
+ */
+async function countMembersInGroup(proposalGroupId) {
+  const gid = String(proposalGroupId || '').trim();
+  if (!gid) return 0;
+  return COE.countDocuments({ proposal_group_id: gid });
+}
+
+/**
+ * Ensure admin owns at least one COE in the group; return ProposalGroup doc.
+ * @param {string} proposalGroupId
+ * @param {string} adminUserId
+ * @returns {Promise<import('mongoose').Document>}
+ */
+async function assertAdminOwnsOpenGroup(proposalGroupId, adminUserId) {
+  const gid = String(proposalGroupId || '').trim();
+  if (!gid) {
+    throw new Error('proposalGroupId is required');
+  }
+  const group = await ProposalGroup.findOne({ proposal_group_id: gid });
+  if (!group) {
+    throw new Error('Proposal group not found');
+  }
+  if (group.status !== 'open') {
+    throw new Error('Proposal group is not open');
+  }
+  const admin = await User.findById(adminUserId);
+  if (!admin || admin.role !== 'admin') {
+    throw new Error('Admin only');
+  }
+  const ownsGroupCoe = await COE.exists({
+    proposal_group_id: gid,
+    admin_id: adminUserId,
+  });
+  if (!ownsGroupCoe) {
+    throw new Error('Forbidden');
+  }
+  return group;
+}
+
+/**
+ * Mirror ProposalGroup payment timer onto every member COE (or clear all).
+ * @param {string} proposalGroupId
+ * @returns {Promise<void>}
+ */
+async function syncProposalGroupPaymentDeadlineToMembers(proposalGroupId) {
+  const gid = String(proposalGroupId || '').trim();
+  if (!gid) return;
+  const group = await ProposalGroup.findOne({ proposal_group_id: gid });
+  if (!group) return;
+
+  const at = group.proposal_payment_deadline_at;
+  const hours = group.proposal_payment_deadline_hours;
+
+  if (at != null && typeof hours === 'number' && hours > 0) {
+    await COE.updateMany(
+      { proposal_group_id: gid },
+      {
+        $set: {
+          payment_deadline_at: at,
+          payment_deadline_hours: hours,
+        },
+      },
+    );
+  } else {
+    await COE.updateMany(
+      { proposal_group_id: gid },
+      { $unset: { payment_deadline_at: 1, payment_deadline_hours: 1 } },
+    );
+  }
+}
+
+/**
+ * Validate hours for group proposal timer (must be 1..720).
+ * @param {unknown} hours
+ * @returns {number}
+ */
+function parseProposalTimerHours(hours) {
+  const n = typeof hours === 'number' ? hours : Number(hours);
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_PROPOSAL_PAYMENT_DEADLINE_HOURS) {
+    throw new Error(
+      `payment_deadline_hours must be between 1 and ${MAX_PROPOSAL_PAYMENT_DEADLINE_HOURS}`,
+    );
+  }
+  return n;
+}
+
+/**
+ * Start or reset group payment timer from now (multi-member groups only).
+ * @param {string} proposalGroupId
+ * @param {string} adminUserId
+ * @param {number} paymentDeadlineHours
+ * @returns {Promise<{ proposal_payment_deadline_at: Date, proposal_payment_deadline_hours: number }>}
+ */
+async function startProposalGroupTimer(proposalGroupId, adminUserId, paymentDeadlineHours) {
+  const hours = parseProposalTimerHours(paymentDeadlineHours);
+  const n = await countMembersInGroup(proposalGroupId);
+  if (n < 2) {
+    throw new Error('Proposal group timer requires at least two experiences in the group');
+  }
+  const group = await assertAdminOwnsOpenGroup(proposalGroupId, adminUserId);
+  const now = new Date();
+  const deadlineMs = now.getTime() + hours * 60 * 60 * 1000;
+  group.proposal_payment_deadline_hours = hours;
+  group.proposal_payment_deadline_at = new Date(deadlineMs);
+  await group.save();
+  await syncProposalGroupPaymentDeadlineToMembers(proposalGroupId);
+  return {
+    proposal_payment_deadline_at: group.proposal_payment_deadline_at,
+    proposal_payment_deadline_hours: group.proposal_payment_deadline_hours,
+  };
+}
+
+/**
+ * Clear canonical group timer and remove mirrored deadlines from all members.
+ * @param {string} proposalGroupId
+ * @param {string} adminUserId
+ * @returns {Promise<void>}
+ */
+async function cancelProposalGroupTimer(proposalGroupId, adminUserId) {
+  await assertAdminOwnsOpenGroup(proposalGroupId, adminUserId);
+  await ProposalGroup.updateOne(
+    { proposal_group_id: String(proposalGroupId).trim() },
+    {
+      $set: {
+        proposal_payment_deadline_at: null,
+        proposal_payment_deadline_hours: null,
+      },
+    },
+  );
+  await syncProposalGroupPaymentDeadlineToMembers(proposalGroupId);
+}
+
+/**
+ * Same as start (new window from now).
+ * @param {string} proposalGroupId
+ * @param {string} adminUserId
+ * @param {number} paymentDeadlineHours
+ */
+async function resetProposalGroupTimer(proposalGroupId, adminUserId, paymentDeadlineHours) {
+  return startProposalGroupTimer(proposalGroupId, adminUserId, paymentDeadlineHours);
+}
+
+/**
+ * Expire all payable members; skip draft/request. Then clear group timer + member deadlines.
+ * @param {string} proposalGroupId
+ * @param {string|null} adminUserId - null for system/cron
+ * @param {{ suppressNotifications?: boolean }} [opts]
+ * @returns {Promise<{ expired: number }>}
+ */
+async function expireAllProposalsInGroup(proposalGroupId, adminUserId, opts = {}) {
+  const gid = String(proposalGroupId || '').trim();
+  if (!gid) {
+    throw new Error('proposalGroupId is required');
+  }
+  const group = await ProposalGroup.findOne({ proposal_group_id: gid });
+  if (!group) {
+    throw new Error('Proposal group not found');
+  }
+  if (adminUserId) {
+    await assertAdminOwnsOpenGroup(gid, adminUserId);
+  }
+
+  const coeService = require('./coeService');
+  const suppressNotifications = opts.suppressNotifications === true;
+  const members = await COE.find({
+    proposal_group_id: gid,
+    status: { $in: PAYABLE_FOR_PROPOSAL_TIMER },
+  }).select('_id status');
+
+  let expired = 0;
+  for (const m of members) {
+    try {
+      await coeService.updateCOEStatus(m._id.toString(), 'expired', adminUserId, {
+        skipMultiProposalResolution: true,
+        suppressNotifications,
+      });
+      expired += 1;
+    } catch (e) {
+      console.error('[proposalGroupService] expire member failed:', m._id?.toString(), e.message);
+    }
+  }
+
+  await ProposalGroup.updateOne(
+    { proposal_group_id: gid },
+    {
+      $set: {
+        proposal_payment_deadline_at: null,
+        proposal_payment_deadline_hours: null,
+      },
+    },
+  );
+  await syncProposalGroupPaymentDeadlineToMembers(gid);
+
+  return { expired };
+}
+
+/**
+ * Cron: open groups whose canonical deadline passed — expire payable members and clear timer.
+ * @returns {Promise<number>} Groups processed
+ */
+async function expireOverdueProposalGroups() {
+  const now = new Date();
+  const groups = await ProposalGroup.find({
+    status: 'open',
+    proposal_payment_deadline_at: { $lte: now },
+  })
+    .select('proposal_group_id')
+    .lean();
+
+  let processed = 0;
+  for (const g of groups) {
+    if (!g.proposal_group_id) continue;
+    try {
+      await expireAllProposalsInGroup(g.proposal_group_id, null, { suppressNotifications: true });
+      processed += 1;
+    } catch (e) {
+      console.error('[proposalGroupService] expireOverdueProposalGroups:', g.proposal_group_id, e.message);
+    }
+  }
+  return processed;
+}
+
+/**
+ * Apply canonical group timer to a plain COE object (e.g. new draft), or clear inherited deadlines.
+ * @param {object} plain - Mutable plain object for new COE
+ * @param {string} proposalGroupId
+ */
+async function applyGroupProposalTimerToPlain(plain, proposalGroupId) {
+  const gid = String(proposalGroupId || '').trim();
+  if (!gid) return;
+  const group = await ProposalGroup.findOne({ proposal_group_id: gid }).lean();
+  plain.payment_deadline_at = undefined;
+  plain.payment_deadline_hours = undefined;
+  if (
+    group &&
+    group.proposal_payment_deadline_at &&
+    typeof group.proposal_payment_deadline_hours === 'number' &&
+    group.proposal_payment_deadline_hours > 0
+  ) {
+    plain.payment_deadline_at = new Date(group.proposal_payment_deadline_at);
+    plain.payment_deadline_hours = group.proposal_payment_deadline_hours;
+  }
+}
+
 /**
  * Count approved client-visible options in a proposal group (same client).
  * @param {string} proposalGroupId
@@ -291,6 +544,8 @@ async function duplicateCoeAsProposal(sourceCoeId, adminUserId) {
   plain.pending_pay_date = null;
   plain.created_by = adminUserId;
 
+  await applyGroupProposalTimerToPlain(plain, gid);
+
   const dup = new COE(plain);
   await dup.save();
 
@@ -364,6 +619,14 @@ module.exports = {
   duplicateCoeAsProposal,
   listMembersForUser,
   countApprovedMembers,
+  countMembersInGroup,
   clientMayChooseWithoutFullDeposit,
   ensureProposalOptionLabelIfMissing,
+  syncProposalGroupPaymentDeadlineToMembers,
+  startProposalGroupTimer,
+  cancelProposalGroupTimer,
+  resetProposalGroupTimer,
+  expireAllProposalsInGroup,
+  expireOverdueProposalGroups,
+  MAX_PROPOSAL_PAYMENT_DEADLINE_HOURS,
 };
