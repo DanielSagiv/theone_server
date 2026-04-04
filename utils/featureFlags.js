@@ -21,8 +21,17 @@ function isClientCOEEditingEnabled() {
   return process.env.ENABLE_CLIENT_COE_EDITING === 'true';
 }
 
+/**
+ * Admin joint-event / shared-table flow (mobile Search Events + API).
+ * @returns {boolean}
+ */
+function isJointEventAdminEnabled() {
+  return process.env.ENABLE_JOINT_EVENT_ADMIN === 'true';
+}
+
 module.exports = {
   isClientCOECreationEnabled,
-  isClientCOEEditingEnabled
+  isClientCOEEditingEnabled,
+  isJointEventAdminEnabled,
 };
 

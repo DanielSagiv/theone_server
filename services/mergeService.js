@@ -991,6 +991,54 @@ async function enrichCoeSelectedSeatsWithSharedWith(coe) {
       .map(id => coeIdToShared.get(id))
       .filter(Boolean);
   }
+
+  try {
+    await enrichJointPeersOnCoe(coe);
+  } catch (jointErr) {
+    console.warn('[mergeService] enrichJointPeersOnCoe:', jointErr.message);
+  }
+}
+
+/**
+ * Enrich seats with shared_with from other COEs in the same joint_event_group_id (admin joint flow).
+ * @param {Object} coe - COE plain or document with _id, selected_seats
+ */
+async function enrichJointPeersOnCoe(coe) {
+  if (!coe || !coe._id) return;
+  const gidRoot = coe.joint_event_group_id && String(coe.joint_event_group_id).trim();
+  const fromSeat = (coe.selected_seats || []).find((s) => s && s.joint_event_group_id);
+  const gidStr = gidRoot || (fromSeat && String(fromSeat.joint_event_group_id).trim()) || '';
+  if (!gidStr) return;
+
+  const others = await COE.find({
+    joint_event_group_id: gidStr,
+    _id: { $ne: coe._id },
+  })
+    .populate('client_id', 'firstName lastName avatarUrl')
+    .lean();
+
+  const peerShared = others.map((c) => {
+    const cl = c.client_id;
+    const name =
+      cl?.firstName || cl?.lastName
+        ? `${cl.firstName || ''} ${cl.lastName || ''}`.trim()
+        : 'Another guest';
+    return { client_name: name, client_avatar_url: cl?.avatarUrl || null };
+  });
+  if (!peerShared.length) return;
+
+  for (const seat of coe.selected_seats || []) {
+    if (!(seat.is_joint_allocation || seat.joint_event_group_id)) continue;
+    const existing = Array.isArray(seat.shared_with) ? [...seat.shared_with] : [];
+    const seen = new Set(existing.map((x) => x && x.client_name).filter(Boolean));
+    for (const p of peerShared) {
+      if (p.client_name && !seen.has(p.client_name)) {
+        existing.push(p);
+        seen.add(p.client_name);
+      }
+    }
+    seat.shared_with = existing;
+  }
 }
 
 module.exports = {

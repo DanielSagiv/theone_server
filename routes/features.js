@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { isClientCOECreationEnabled, isClientCOEEditingEnabled } = require('../utils/featureFlags');
+const { isClientCOECreationEnabled, isClientCOEEditingEnabled, isJointEventAdminEnabled } = require('../utils/featureFlags');
 
 /**
  * GET /v1/features/flags
@@ -13,7 +13,8 @@ router.get('/flags', (req, res) => {
       success: true,
       data: {
         enableClientCOECreation: isClientCOECreationEnabled(),
-        enableClientCOEEditing: isClientCOEEditingEnabled()
+        enableClientCOEEditing: isClientCOEEditingEnabled(),
+        enableJointEventAdmin: isJointEventAdminEnabled(),
       }
     });
   } catch (error) {

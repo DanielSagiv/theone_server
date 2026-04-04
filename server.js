@@ -112,6 +112,7 @@ const featuresRoutes = require('./routes/features');
 const notificationRoutes = require('./routes/notifications');
 const messagingRoutes = require('./routes/messaging');
 const adminToolsRoutes = require('./routes/adminTools');
+const jointEventsRoutes = require('./routes/jointEvents');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
@@ -128,6 +129,7 @@ app.use('/v1/features', featuresRoutes);
 app.use('/v1/notifications', notificationRoutes);
 app.use('/v1/messaging', messagingRoutes);
 app.use('/v1/admin/tools', adminToolsRoutes);
+app.use('/v1/admin', jointEventsRoutes);
 app.use('/webhooks', webhookRoutes);
 app.use('/website', websiteRoutes);
 app.use('/website2', website2Routes);

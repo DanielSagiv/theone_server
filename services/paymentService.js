@@ -5,11 +5,84 @@ const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const User = require('../models/User');
 const Event = require('../models/Event');
+const { getCoeTaxRate } = require('./coeService');
 
 /**
  * Payment Service - Global Payments Integration
  * @description Handles all payment processing with Global Payments API
  */
+
+/**
+ * Seat row is part of a joint / shared-table allocation (matches payment deposit rules).
+ * @param {object|undefined|null} s
+ * @returns {boolean}
+ */
+function isJointAllocationSeat(s) {
+  if (!s) return false;
+  if (s.is_joint_allocation === true) return true;
+  const gid = s.joint_event_group_id;
+  return gid != null && String(gid).trim() !== '';
+}
+
+/**
+ * Initial deposit due: 100% of joint line pre-tax amounts + deposit_percent% of non-joint seat pre-tax;
+ * then tax (and proportional fees) matching the COE breakdown.
+ * @param {object} coe - COE plain object or mongoose doc
+ * @returns {{ subtotalPreTax: number, tax: number, fees: number, total: number, usesSeatSplit: boolean }}
+ */
+function computeInitialDepositPricing(coe) {
+  if (!coe) {
+    return { subtotalPreTax: 0, tax: 0, fees: 0, total: 0, usesSeatSplit: false };
+  }
+  const depositPercent = coe.deposit_percent != null ? Number(coe.deposit_percent) : 20;
+  const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
+  const jointRows = seats.filter((s) => isJointAllocationSeat(s));
+  const nonJointRows = seats.filter((s) => s && !isJointAllocationSeat(s));
+  const usesSeatSplit =
+    seats.length > 0 && (jointRows.length > 0 || nonJointRows.length > 0);
+
+  let subtotalPreTax;
+  if (usesSeatSplit) {
+    const jointPart = jointRows.reduce(
+      (sum, r) => sum + (Number(r.event_price) || Number(r.base_price) || 0),
+      0,
+    );
+    const nonJointSubtotal = nonJointRows.reduce(
+      (sum, r) => sum + (Number(r.event_price) || Number(r.base_price) || 0),
+      0,
+    );
+    const nonJointDeposit = nonJointSubtotal * (depositPercent / 100);
+    subtotalPreTax = jointPart + nonJointDeposit;
+  } else {
+    const subtotalCoe = Number(coe.subtotal) || 0;
+    if (subtotalCoe > 0) {
+      subtotalPreTax = subtotalCoe * (depositPercent / 100);
+    } else {
+      subtotalPreTax = (Number(coe.total) || 0) * (depositPercent / 100);
+    }
+  }
+
+  const subtotalCoe = Number(coe.subtotal) || 0;
+  const taxField = Number(coe.taxes) || 0;
+  const effectiveRate =
+    subtotalCoe > 0 && taxField >= 0 ? taxField / subtotalCoe : getCoeTaxRate();
+  const tax = Math.round(subtotalPreTax * effectiveRate * 100) / 100;
+
+  let feesAlloc = 0;
+  if (subtotalCoe > 0 && typeof coe.fees === 'number' && coe.fees > 0) {
+    feesAlloc = Math.round((coe.fees * (subtotalPreTax / subtotalCoe)) * 100) / 100;
+  }
+
+  const total = Math.round((subtotalPreTax + tax + feesAlloc) * 100) / 100;
+
+  return {
+    subtotalPreTax,
+    tax,
+    fees: feesAlloc,
+    total,
+    usesSeatSplit,
+  };
+}
 
 // Global Payments Configuration
 const GP_CONFIG = {
@@ -174,9 +247,8 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       if (coe.payment_status && coe.payment_status !== 'unpaid') {
         throw new Error('Deposit already paid');
       }
-      // 20% of full total (subtotal + taxes + fees)
-      const depositPercent = coe.deposit_percent || 20;
-      amount = (coe.total || 0) * (depositPercent / 100);
+      const pricing = computeInitialDepositPricing(coe);
+      amount = pricing.total;
       coe.deposit_amount = amount;
     } else if (paymentType === 'final_payment') {
       if (coe.payment_status !== 'deposit_paid') {
@@ -204,7 +276,12 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
           ? coe.revision_deposit_percent_frozen
           : (coe.deposit_percent || 20);
 
-      const currentDepositAmount = (coe.total || 0) * (depositPercentFrozen / 100);
+      const plainCap =
+        typeof coe.toObject === 'function'
+          ? coe.toObject()
+          : { ...coe };
+      plainCap.deposit_percent = depositPercentFrozen;
+      const currentDepositAmount = computeInitialDepositPricing(plainCap).total;
       const paid = coe.total_paid || 0;
       amount = Math.max(0, currentDepositAmount - Math.min(paid, currentDepositAmount));
       coe.deposit_amount = amount;
@@ -682,7 +759,12 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
           ? coe.revision_deposit_percent_frozen
           : coe.deposit_percent || 20;
       const totalNum = coe.total || 0;
-      const depositCap = totalNum * (pct / 100);
+      const plainCap =
+        typeof coe.toObject === 'function'
+          ? coe.toObject()
+          : { ...coe };
+      plainCap.deposit_percent = pct;
+      const depositCap = computeInitialDepositPricing(plainCap).total;
       const paidNum = coe.total_paid || 0;
       coe.revision_due_deposit_diff_amount = Math.max(
         0,
@@ -1589,6 +1671,8 @@ module.exports = {
   getUserPaymentHistory,
   getInvoiceData,
   verifyWebhookSignature,
+  computeInitialDepositPricing,
+  isJointAllocationSeat,
   // Phase 2: Card Tokenization
   tokenizeAndSaveCard,
   chargeSavedCard,

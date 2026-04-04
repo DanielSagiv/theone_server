@@ -49,6 +49,11 @@ const COEItemSchema = new mongoose.Schema({
   
   // Ordering
   sequence: { type: Number, required: true }, // Order within COE
+
+  /** True when this line is a joint-table share (deposit uses full line amount, see paymentService). */
+  is_joint_allocation: { type: Boolean, default: false },
+  /** UUID linking all clients sharing the same physical table for this event line. */
+  joint_event_group_id: { type: String, trim: true, default: null },
   
   // Timestamps
   created_at: { type: Date, default: Date.now },
@@ -140,6 +145,17 @@ const coeSchema = new mongoose.Schema({
 
   /** Shared id for multi-proposal groups (ProposalGroup doc + member COEs). */
   proposal_group_id: {
+    type: String,
+    trim: true,
+    default: null,
+    sparse: true,
+    index: true,
+  },
+  /**
+   * Same as joint line item joint_event_group_id; duplicated on root for queries across COEs.
+   * Set when this COE includes at least one joint shared-table allocation.
+   */
+  joint_event_group_id: {
     type: String,
     trim: true,
     default: null,
@@ -453,7 +469,12 @@ const coeSchema = new mongoose.Schema({
     primary_coe_id: { type: mongoose.Schema.Types.ObjectId, ref: 'COE' },
     ai_recommendation: { type: String, trim: true, maxlength: 200 },
     recommendation_generated_at: { type: Date },
-    recommendation_version: { type: Number, default: 1 }
+    recommendation_version: { type: Number, default: 1 },
+    /** Joint shared table: full deposit of this row is due at initial deposit (not deposit_percent). */
+    is_joint_allocation: { type: Boolean, default: false },
+    joint_event_group_id: { type: String, trim: true, default: null },
+    /** Admin-set share of table price (0-100) for this client. */
+    joint_share_percent: { type: Number, min: 0, max: 100, default: null },
   }],
   // Seat upgrade offers (only for draft COEs)
   seat_upgrade_offers: [{
