@@ -1170,6 +1170,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             event_id: eventId, // Use validated event_id (from event._id or fallback to eventData.event_id)
             seat_id: seatData.seat_id,
             seat_code: seatData.seat_code || eventSeat.code,
+            category: eventSeat.category || eventSeat.section,
             capacity: seatData.capacity || eventSeat.capacity,
             base_price: eventSeat.min_spend || 0,
             event_price: eventSeat.event_price || eventSeat.min_spend || 0,
@@ -1177,6 +1178,25 @@ async function handleCreateCOEDraft(params, user, correlationId) {
             available_until: event.end_datetime || event.start_datetime,
             status: 'selected'
           };
+
+          const sjManual = eventData.simple_joint_manual_price;
+          if (
+            sjManual != null &&
+            sjManual !== '' &&
+            Number.isFinite(Number(sjManual))
+          ) {
+            const manual = Number(sjManual);
+            if (manual >= 0) {
+              const catalogEventPrice =
+                Number(eventSeat.event_price) ||
+                Number(eventSeat.min_spend) ||
+                0;
+              seatToAdd.is_simple_joint = true;
+              seatToAdd.simple_joint_original_price = catalogEventPrice;
+              seatToAdd.event_price = manual;
+              seatToAdd.base_price = manual;
+            }
+          }
           
           console.log('[BOT] [COE_CREATION_FULL_DEBUG] Adding seat to selection:', {
             seatId: seatToAdd.seat_id?.toString(),

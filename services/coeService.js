@@ -210,6 +210,60 @@ function sumSelectedSeatsSubtotal(seats) {
 }
 
 /**
+ * Normalize event_id on a selected_seats row for matching COE events[] lines.
+ * @param {Object} seat
+ * @returns {string|null}
+ */
+function normalizeSeatEventIdForLineSync(seat) {
+  const e = seat?.event_id;
+  if (e == null) return null;
+  if (typeof e === 'object' && e._id != null) return e._id.toString();
+  if (typeof e.toString === 'function') return e.toString();
+  return String(e);
+}
+
+/**
+ * Mirror each events[] line's base_price / total_price from selected_seats (simpleJoint, overrides).
+ * Proposals and APIs that read events[] stay aligned with seat rows; see simpleJoint plan.
+ * @param {Object} coe - Mongoose doc or plain object with events, selected_seats
+ */
+function syncCoeEventLineItemsFromSelectedSeats(coe) {
+  if (!coe || !Array.isArray(coe.events) || coe.events.length === 0) return;
+  const seats = coe.selected_seats;
+  if (!Array.isArray(seats) || seats.length === 0) return;
+
+  for (let i = 0; i < coe.events.length; i++) {
+    const line = coe.events[i];
+    const eid =
+      line.event_id?._id?.toString?.() ||
+      (line.event_id != null && line.event_id.toString?.()) ||
+      null;
+    if (!eid) continue;
+    const matching = seats.filter(
+      (s) => normalizeSeatEventIdForLineSync(s) === eid
+    );
+    if (matching.length === 0) continue;
+    const lineTotal = matching.reduce(
+      (sum, s) =>
+        sum + (Number(s.event_price) || Number(s.base_price) || 0),
+      0
+    );
+    const qty =
+      line.quantity != null && Number(line.quantity) > 0
+        ? Number(line.quantity)
+        : 1;
+    line.total_price = lineTotal;
+    line.base_price =
+      qty > 1
+        ? Math.round((lineTotal / qty) * 100) / 100
+        : lineTotal;
+  }
+  if (typeof coe.markModified === 'function') {
+    coe.markModified('events');
+  }
+}
+
+/**
  * Recompute subtotal, taxes, and total from selected_seats. Mutates coe. Preserves existing fees.
  * Use whenever seat lineup or seat prices change so revision/repropose math stays correct.
  * @param {Object} coe - COE mongoose document or plain object with selected_seats, fees
@@ -222,6 +276,56 @@ function applyPricingFromSelectedSeats(coe) {
   coe.taxes = Math.round((newSubtotal || 0) * rate * 100) / 100;
   const fees = typeof coe.fees === 'number' ? coe.fees : 0;
   coe.total = (newSubtotal || 0) + (coe.taxes || 0) + fees;
+  syncCoeEventLineItemsFromSelectedSeats(coe);
+}
+
+/**
+ * Reject invalid combinations of simpleJoint vs multi-client joint on the same selected_seats row.
+ * @param {Array<Object>|undefined} seats
+ * @throws {Error} when invariants fail
+ */
+function validateSelectedSeatsSimpleJointInvariants(seats) {
+  if (!Array.isArray(seats)) return;
+  for (const s of seats) {
+    if (!s) continue;
+    const simple =
+      s.is_simple_joint === true || s.is_simple_joint === 'true';
+    const alloc = s.is_joint_allocation === true;
+    const gid =
+      s.joint_event_group_id != null && String(s.joint_event_group_id).trim() !== '';
+    if (simple && (alloc || gid)) {
+      throw new Error(
+        'Simple joint pricing cannot be combined with shared-table joint allocation on the same seat row'
+      );
+    }
+    if (simple) {
+      const orig = Number(s.simple_joint_original_price);
+      if (!Number.isFinite(orig) || orig < 0) {
+        throw new Error(
+          'simple_joint_original_price is required and must be a non-negative number when is_simple_joint is true'
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Apply simpleJoint fields to a COE selected_seats row (catalog original + overridden prices).
+ * Mutates `row` in place.
+ * @param {Object} row - selected_seats subdocument-shaped object
+ * @param {{ event_price?: number, base_price?: number }} catalogSeat - event seat from Event model
+ * @param {number} manualPrice - admin override line price
+ */
+function applySimpleJointToSeatRow(row, catalogSeat, manualPrice) {
+  const catalogEventPrice =
+    Number(catalogSeat?.event_price) ||
+    Number(catalogSeat?.base_price) ||
+    0;
+  const catalogBase = Number(catalogSeat?.base_price) || catalogEventPrice;
+  row.is_simple_joint = true;
+  row.simple_joint_original_price = catalogEventPrice;
+  row.event_price = manualPrice;
+  row.base_price = manualPrice;
 }
 
 /**
@@ -644,6 +748,7 @@ async function createCOE(coeData, createdBy) {
     if (coeData.selected_seats && coeData.selected_seats.length > 0) {
       await validateSelectedSeats(coeData.selected_seats);
       await enrichSelectedSeatsWithSectionCategory(coeData.selected_seats);
+      validateSelectedSeatsSimpleJointInvariants(coeData.selected_seats);
     }
 
     // Set creation details
@@ -652,6 +757,10 @@ async function createCOE(coeData, createdBy) {
       created_by: createdBy,
       created_method: 'manual'
     });
+
+    if (coe.selected_seats && coe.selected_seats.length > 0) {
+      applyPricingFromSelectedSeats(coe);
+    }
 
     // Log pricing before save
     console.log('[COE_SERVICE] Pricing in COE before save:', {
@@ -1189,6 +1298,7 @@ async function updateCOE(coeId, updateData) {
       await releaseSelectedSeats(coeId);
       // Validate new seat availability
       await validateSelectedSeats(payload.selected_seats);
+      validateSelectedSeatsSimpleJointInvariants(payload.selected_seats);
       // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     }
 
@@ -1211,6 +1321,11 @@ async function updateCOE(coeId, updateData) {
 
     if (!coe) {
       throw new Error('COE not found');
+    }
+
+    if (payload.selected_seats) {
+      applyPricingFromSelectedSeats(coe);
+      await coe.save();
     }
 
     return coe;
@@ -2238,6 +2353,8 @@ async function updateSeatAssignments(coeId, selectedSeats) {
         throw new Error(`Seat ${seat.seat_id} not found in event ${seat.event_id}`);
       }
     }
+
+    validateSelectedSeatsSimpleJointInvariants(selectedSeats);
 
     coe.selected_seats = selectedSeats.map(seat => ({
       ...seat,
@@ -4631,8 +4748,8 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
 
     const eventDate = eventData.event_date ? new Date(eventData.event_date) : (event.start_datetime || new Date());
     const eventTime = eventData.event_time || (event.start_datetime ? new Date(event.start_datetime).toTimeString().slice(0, 5) : '00:00');
-    const seatPrice = eventData.event_price ?? seat.event_price ?? seat.base_price ?? 0;
-    const basePrice = eventData.base_price ?? seat.base_price ?? seatPrice;
+    let seatPrice = eventData.event_price ?? seat.event_price ?? seat.base_price ?? 0;
+    let basePrice = eventData.base_price ?? seat.base_price ?? seatPrice;
 
     const newSequence = (coe.events?.length || 0) + 1;
     const coeItem = {
@@ -4663,6 +4780,16 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
       available_until: availUntil, // COE schema requires this; fallback to start if end is null
       status: 'selected',
     };
+
+    const simpleJointPayload =
+      eventData.is_simple_joint === true ||
+      eventData.is_simple_joint === 'true';
+    if (simpleJointPayload) {
+      applySimpleJointToSeatRow(newSeat, seat, seatPrice);
+      coeItem.base_price = newSeat.base_price;
+      coeItem.total_price = newSeat.event_price * (eventData.quantity ?? 1);
+      validateSelectedSeatsSimpleJointInvariants([newSeat]);
+    }
 
     coe.events.push(coeItem);
     coe.selected_seats.push(newSeat);
@@ -4794,6 +4921,8 @@ async function hasAlternativeEventsSameDay(coeId, eventId) {
 
 module.exports = {
   validateSelectedSeats,
+  validateSelectedSeatsSimpleJointInvariants,
+  applySimpleJointToSeatRow,
   enrichSelectedSeatsCategoryFromPopulatedEvents,
   filterSelectedSeatsByEvents,
   getCoeTaxRate,

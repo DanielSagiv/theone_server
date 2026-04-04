@@ -1139,12 +1139,31 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
               if (id) categoryByEventId[id] = seat_category;
             }
           }
+          const jointByEventId = {};
+          if (
+            extractionResult.raw.selected_simple_joint_prices &&
+            Array.isArray(extractionResult.raw.selected_simple_joint_prices)
+          ) {
+            for (const row of extractionResult.raw.selected_simple_joint_prices) {
+              const jid =
+                (row.event_id &&
+                  row.event_id.toString &&
+                  row.event_id.toString()) ||
+                String(row.event_id || '');
+              if (jid) {
+                jointByEventId[jid] = Number(row.manual_price);
+              }
+            }
+          }
           toolParams.events = extractionResult.raw.selected_events.map(eventId => {
             const id = (eventId && eventId.toString && eventId.toString()) || eventId;
+            const jp = jointByEventId[id];
             return {
               event_id: eventId,
               selected_seats: [],
               preferred_seat_category: categoryByEventId[id] || null,
+              simple_joint_manual_price:
+                jp != null && Number.isFinite(jp) && jp >= 0 ? jp : null,
             };
           });
           // Treat manual event selection differently for clients vs admins by default:

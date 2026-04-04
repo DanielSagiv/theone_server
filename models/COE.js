@@ -475,6 +475,10 @@ const coeSchema = new mongoose.Schema({
     joint_event_group_id: { type: String, trim: true, default: null },
     /** Admin-set share of table price (0-100) for this client. */
     joint_share_percent: { type: Number, min: 0, max: 100, default: null },
+    /** Admin-only per-COE joint pricing override (no cross-client link; see simpleJoint plan). */
+    is_simple_joint: { type: Boolean, default: false },
+    /** Catalog line price before override; used for strikethrough UI when is_simple_joint. */
+    simple_joint_original_price: { type: Number, min: 0, default: null },
   }],
   // Seat upgrade offers (only for draft COEs)
   seat_upgrade_offers: [{

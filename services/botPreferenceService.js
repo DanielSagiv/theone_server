@@ -259,6 +259,8 @@ function extractPreferencesFromFormSubmission(message) {
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
+    selected_simple_joint_prices:
+      /Simple joint line prices:\s*([^\n]+?)(?:\n|$)/i,
     admin_create_mode: /Admin create mode:\s*(draft|proposal)/i,
     proposal_deposit_percent: /Deposit percent:\s*(\d+)/i,
     proposal_payment_deadline_hours: /Payment deadline hours:\s*(\d+)/i
@@ -398,6 +400,31 @@ function extractPreferencesFromFormSubmission(message) {
   }
   preferences.selected_seat_categories = selected_seat_categories;
 
+  let selected_simple_joint_prices = [];
+  const sjPricesMatch = message.match(patterns.selected_simple_joint_prices);
+  if (sjPricesMatch && sjPricesMatch[1]) {
+    const sjParts = sjPricesMatch[1]
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const part of sjParts) {
+      const colonIdx = part.indexOf(':');
+      if (colonIdx > 0) {
+        const event_id = part.slice(0, colonIdx).trim();
+        const priceStr = part.slice(colonIdx + 1).trim();
+        const manual_price = parseFloat(priceStr);
+        if (
+          event_id &&
+          !Number.isNaN(manual_price) &&
+          manual_price >= 0
+        ) {
+          selected_simple_joint_prices.push({ event_id, manual_price });
+        }
+      }
+    }
+  }
+  preferences.selected_simple_joint_prices = selected_simple_joint_prices;
+
   const adminModeMatch = message.match(patterns.admin_create_mode);
   if (adminModeMatch && adminModeMatch[1]) {
     preferences.admin_create_mode = String(adminModeMatch[1]).trim().toLowerCase();
@@ -454,6 +481,7 @@ function extractPreferencesFromFormSubmission(message) {
       specific_preferences: preferences.specific_preferences,
       selected_events: preferences.selected_events,
       selected_seat_categories: preferences.selected_seat_categories,
+      selected_simple_joint_prices: preferences.selected_simple_joint_prices,
       admin_create_mode: preferences.admin_create_mode,
       proposal_deposit_percent: preferences.proposal_deposit_percent,
       proposal_payment_deadline_hours: preferences.proposal_payment_deadline_hours

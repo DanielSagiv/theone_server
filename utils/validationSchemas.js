@@ -295,7 +295,12 @@ const coeSelectedSeatSchema = Joi.object({
   available_until: Joi.date().required(),
   status: Joi.string().valid('selected', 'held', 'booked', 'released', 'expired', 'rejected').default('selected'),
   is_merged_booking: Joi.boolean().default(false),
-  primary_coe_id: Joi.string().hex().length(24).optional()
+  primary_coe_id: Joi.string().hex().length(24).optional(),
+  is_joint_allocation: Joi.boolean().optional(),
+  joint_event_group_id: Joi.string().allow('', null).optional(),
+  joint_share_percent: Joi.number().min(0).max(100).allow(null).optional(),
+  is_simple_joint: Joi.boolean().optional(),
+  simple_joint_original_price: Joi.number().min(0).allow(null).optional()
 });
 
 // Create COE validation schema
@@ -495,7 +500,9 @@ const addEventToCOEWithSeatSchema = Joi.object({
   budget_override: Joi.boolean().default(false),
   party_size_override: Joi.boolean().default(false),
   notes: Joi.string().allow(''),
-  client_notes: Joi.string().allow('')
+  client_notes: Joi.string().allow(''),
+  /** When true, event_price is admin override; server stores catalog price in simple_joint_original_price. */
+  is_simple_joint: Joi.boolean().default(false)
 });
 
 // Update COE status validation schema

@@ -13,7 +13,7 @@ const { getCoeTaxRate } = require('./coeService');
  */
 
 /**
- * Seat row is part of a joint / shared-table allocation (matches payment deposit rules).
+ * Seat row is part of a joint / shared-table allocation (multi-client flow).
  * @param {object|undefined|null} s
  * @returns {boolean}
  */
@@ -25,7 +25,18 @@ function isJointAllocationSeat(s) {
 }
 
 /**
- * Initial deposit due: 100% of joint line pre-tax amounts + deposit_percent% of non-joint seat pre-tax;
+ * Seat row whose full line pre-tax amount counts toward initial deposit (joint allocation or simpleJoint).
+ * @param {object|undefined|null} s
+ * @returns {boolean}
+ */
+function isFullDepositSeatRow(s) {
+  if (!s) return false;
+  if (s.is_simple_joint === true || s.is_simple_joint === 'true') return true;
+  return isJointAllocationSeat(s);
+}
+
+/**
+ * Initial deposit due: 100% of joint/simpleJoint line pre-tax + deposit_percent% of other seat pre-tax;
  * then tax (and proportional fees) matching the COE breakdown.
  * @param {object} coe - COE plain object or mongoose doc
  * @returns {{ subtotalPreTax: number, tax: number, fees: number, total: number, usesSeatSplit: boolean }}
@@ -36,8 +47,8 @@ function computeInitialDepositPricing(coe) {
   }
   const depositPercent = coe.deposit_percent != null ? Number(coe.deposit_percent) : 20;
   const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
-  const jointRows = seats.filter((s) => isJointAllocationSeat(s));
-  const nonJointRows = seats.filter((s) => s && !isJointAllocationSeat(s));
+  const jointRows = seats.filter((s) => isFullDepositSeatRow(s));
+  const nonJointRows = seats.filter((s) => s && !isFullDepositSeatRow(s));
   const usesSeatSplit =
     seats.length > 0 && (jointRows.length > 0 || nonJointRows.length > 0);
 
@@ -1673,6 +1684,7 @@ module.exports = {
   verifyWebhookSignature,
   computeInitialDepositPricing,
   isJointAllocationSeat,
+  isFullDepositSeatRow,
   // Phase 2: Card Tokenization
   tokenizeAndSaveCard,
   chargeSavedCard,
