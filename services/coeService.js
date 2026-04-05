@@ -1535,17 +1535,15 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
     // 'proposal' is treated as 'approved' internally
     const normalizedStatus = status === 'proposal' ? 'approved' : status;
 
+    // Multi-proposal: cancel sibling options when committing from approved (accept, deposit, or full pay).
     if (
       !skipMultiProposalResolution &&
-      normalizedStatus === 'accepted_not_paid' &&
+      coe.proposal_group_id &&
       coe.status === 'approved' &&
-      coe.proposal_group_id
+      ['accepted_not_paid', 'pending_pay', 'paid'].includes(normalizedStatus)
     ) {
       const proposalGroupService = require('./proposalGroupService');
-      const resolved = await proposalGroupService.handleAcceptInOpenGroup(coe, updatedBy);
-      if (resolved) {
-        return resolved;
-      }
+      await proposalGroupService.prepareOpenProposalGroupForApprovedWinner(coe, updatedBy);
     }
 
     // Validate status transition

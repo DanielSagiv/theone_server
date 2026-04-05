@@ -325,17 +325,20 @@ async function ensureProposalOptionLabelIfMissing(coe) {
 }
 
 /**
- * Before normal approved→accepted_not_paid transition: resolve open multi-proposal groups.
- * @param {import('../models/COE')} coe - Mongoose COE document (pre-transition)
- * @param {string} actingUserId
- * @returns {Promise<object|null>} getCOEById result if this handler completed accept; null to continue normal path
+ * When the client (or admin) commits to one COE from approved — accept, pay deposit, or full pay —
+ * cancel other approved siblings, mark ProposalGroup resolved. Does not change the winner COE status;
+ * caller continues with a single updateCOEStatus for pending_pay / paid / accepted_not_paid.
+ * Idempotent if group already resolved with this COE as chosen.
+ * @param {import('../models/COE')} coe - Mongoose COE document (pre-transition, status approved)
+ * @param {string|null|undefined} actingUserId - Client/admin user; null for system (webhooks)
+ * @returns {Promise<void>}
  */
-async function handleAcceptInOpenGroup(coe, actingUserId) {
+async function prepareOpenProposalGroupForApprovedWinner(coe, actingUserId) {
   const proposalGroupId = coe.proposal_group_id;
-  if (!proposalGroupId) return null;
+  if (!proposalGroupId) return;
 
   const group = await ProposalGroup.findOne({ proposal_group_id: proposalGroupId });
-  if (!group) return null;
+  if (!group) return;
 
   if (group.status === 'resolved') {
     const chosen = group.chosen_coe_id?.toString();
@@ -343,7 +346,7 @@ async function handleAcceptInOpenGroup(coe, actingUserId) {
     if (chosen && chosen !== thisId) {
       throw new Error('Another option was already chosen for this proposal set');
     }
-    return null;
+    return;
   }
 
   const approvedCount = await countApprovedMembers(proposalGroupId, coe.client_id);
@@ -352,7 +355,7 @@ async function handleAcceptInOpenGroup(coe, actingUserId) {
     group.chosen_coe_id = coe._id;
     group.resolved_at = new Date();
     await group.save();
-    return null;
+    return;
   }
 
   await ensureProposalOptionLabelIfMissing(coe);
@@ -376,10 +379,17 @@ async function handleAcceptInOpenGroup(coe, actingUserId) {
   group.chosen_coe_id = coe._id;
   group.resolved_at = new Date();
   await group.save();
+}
 
-  return coeService.updateCOEStatus(coe._id.toString(), 'accepted_not_paid', actingUserId, {
-    skipMultiProposalResolution: true,
-  });
+/**
+ * Legacy hook: only prepares group; winner status is updated by the caller (coeService.updateCOEStatus).
+ * @param {import('../models/COE')} coe
+ * @param {string|null|undefined} actingUserId
+ * @returns {Promise<null>}
+ */
+async function handleAcceptInOpenGroup(coe, actingUserId) {
+  await prepareOpenProposalGroupForApprovedWinner(coe, actingUserId);
+  return null;
 }
 
 /**
@@ -602,10 +612,15 @@ async function listMembersForUser(proposalGroupId, opts) {
     throw new Error('Forbidden');
   }
 
-  const list = await COE.find({
+  const memberQuery = {
     proposal_group_id: proposalGroupId,
     client_id: group.client_id,
-  })
+  };
+  if (role !== 'admin') {
+    memberQuery.status = { $ne: 'cancelled' };
+  }
+
+  const list = await COE.find(memberQuery)
     .sort({ updated_at: -1 })
     .populate('client_id', 'firstName lastName email role')
     .populate('admin_id', 'firstName lastName email role');
@@ -614,6 +629,7 @@ async function listMembersForUser(proposalGroupId, opts) {
 }
 
 module.exports = {
+  prepareOpenProposalGroupForApprovedWinner,
   handleAcceptInOpenGroup,
   publishProposalGroup,
   duplicateCoeAsProposal,
