@@ -91,6 +91,12 @@ const LocationSchema = new mongoose.Schema({
   score: { type: Number, min: 0, max: 5, default: 0 },
   tags: [{ type: String, trim: true }],
   status: { type: String, enum: ['draft','active','archived'], default: 'active' },
+  /** Suggested gratuity / tip rate as percentage 0–100; optional for legacy venues. */
+  gratuityPercent: { type: Number, min: 0, max: 100 },
+  /** Venue admin fee as percentage 0–100; optional for legacy venues. */
+  adminFeePercent: { type: Number, min: 0, max: 100 },
+  /** Sales tax as percentage 0–100; optional for legacy venues. */
+  salesTaxPercent: { type: Number, min: 0, max: 100 },
   // GXN integration field
   gxnVenueCode: { type: String, trim: true }, // GXN venue code (e.g., VEN505115) - sparse index defined below
   // Tao Group integration - external venue id for import idempotency

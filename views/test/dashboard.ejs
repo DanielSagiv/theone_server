@@ -4787,6 +4787,9 @@
                                             <th>Type</th>
                                             <th>City</th>
                                             <th>Country</th>
+                                            <th>Gratuity %</th>
+                                            <th>Admin fees %</th>
+                                            <th>Sales tax %</th>
                                             <th>Score</th>
                                             <th>Status</th>
                                             <th>Created</th>
@@ -4794,7 +4797,7 @@
                                         </tr>
                                     </thead>
                                     <tbody id="locationsTableBody">
-                                        <tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No data loaded</td></tr>
+                                        <tr><td colspan="11" style="text-align:center;padding:20px;color:#7f8c8d;">No data loaded</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -5221,6 +5224,21 @@
                         <div class="profile-field">
                             <label>Country</label>
                             <input id="cl_country" type="text" placeholder="Country" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                        </div>
+                        <div class="profile-field">
+                            <label>Gratuity</label>
+                            <input id="cl_gratuityPercent" type="number" min="0" max="100" step="0.01" placeholder="Percent (optional)" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                            <small style="color:#7f8c8d;display:block;margin-top:4px;">Suggested tip / gratuity, % of subtotal</small>
+                        </div>
+                        <div class="profile-field">
+                            <label>Admin fees</label>
+                            <input id="cl_adminFeePercent" type="number" min="0" max="100" step="0.01" placeholder="Percent (optional)" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                            <small style="color:#7f8c8d;display:block;margin-top:4px;">Venue admin fee %</small>
+                        </div>
+                        <div class="profile-field">
+                            <label>Sales tax</label>
+                            <input id="cl_salesTaxPercent" type="number" min="0" max="100" step="0.01" placeholder="Percent (optional)" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                            <small style="color:#7f8c8d;display:block;margin-top:4px;">Sales tax %</small>
                         </div>
                     </div>
 
@@ -5859,6 +5877,18 @@
                             <div class="detail-item">
                                 <label>Status:</label>
                                 <span id="locationStatus">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Gratuity:</label>
+                                <span id="locationGratuityPercent">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Admin fees:</label>
+                                <span id="locationAdminFeePercent">-</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>Sales tax:</label>
+                                <span id="locationSalesTaxPercent">-</span>
                             </div>
                         </div>
                     </div>
@@ -10929,6 +10959,18 @@
         }
 
         /**
+         * Format a location percentage field for display (0–100 → "n%" or "-").
+         * @param {number|string|null|undefined} val
+         * @returns {string}
+         */
+        function formatLocationPercentLabel(val) {
+            if (val == null || val === '') return '-';
+            const n = Number(val);
+            if (!Number.isFinite(n)) return '-';
+            return `${n}%`;
+        }
+
+        /**
          * View location details
          */
         async function viewLocationDetails(locationId) {
@@ -10972,6 +11014,9 @@
             document.getElementById('locationDescription').textContent = location.description || '-';
             document.getElementById('locationScore').textContent = typeof location.score === 'number' ? location.score.toFixed(1) : '0.0';
             document.getElementById('locationStatus').textContent = location.status || '-';
+            document.getElementById('locationGratuityPercent').textContent = formatLocationPercentLabel(location.gratuityPercent);
+            document.getElementById('locationAdminFeePercent').textContent = formatLocationPercentLabel(location.adminFeePercent);
+            document.getElementById('locationSalesTaxPercent').textContent = formatLocationPercentLabel(location.salesTaxPercent);
             
             // Address & Contact
             const address = location.address || {};
@@ -12529,13 +12574,13 @@
         // Locations API
         async function loadLocations() {
             const tbody = document.getElementById('locationsTableBody');
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;"><div class="loading"><div class="spinner"></div><p>Loading locations...</p></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:20px;"><div class="loading"><div class="spinner"></div><p>Loading locations...</p></div></td></tr>';
             try {
                 const result = await makeApiRequest('/locations');
                 if (result.success && result.data) {
                     const list = Array.isArray(result.data) ? result.data : (result.data.data || []);
                     if (!list.length) {
-                        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#7f8c8d;">No locations found</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:20px;color:#7f8c8d;">No locations found</td></tr>';
                         return;
                     }
                     tbody.innerHTML = list.map(loc => `
@@ -12544,6 +12589,9 @@
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.type}</td>
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.address?.city || '-'}</td>
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.address?.country || '-'}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${formatLocationPercentLabel(loc.gratuityPercent)}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${formatLocationPercentLabel(loc.adminFeePercent)}</td>
+                            <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${formatLocationPercentLabel(loc.salesTaxPercent)}</td>
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${typeof loc.score === 'number' ? loc.score.toFixed(1) : '0.0'}</td>
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.status}</td>
                             <td style="cursor: pointer;" onclick="viewLocationDetails('${loc._id}')">${loc.createdAt ? new Date(loc.createdAt).toLocaleDateString() : '-'}</td>
@@ -12562,11 +12610,11 @@
                         </tr>
                     `).join('');
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#e74c3c;">Failed to load locations</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:20px;color:#e74c3c;">Failed to load locations</td></tr>';
                 }
             } catch (err) {
                 console.error('Load locations error:', err);
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#e74c3c;">Error loading locations</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:20px;color:#e74c3c;">Error loading locations</td></tr>';
             }
         }
 
@@ -12649,6 +12697,9 @@
             document.getElementById('cl_state').value = '';
             document.getElementById('cl_postalCode').value = '';
             document.getElementById('cl_country').value = '';
+            document.getElementById('cl_gratuityPercent').value = '';
+            document.getElementById('cl_adminFeePercent').value = '';
+            document.getElementById('cl_salesTaxPercent').value = '';
             document.getElementById('cl_desc').value = '';
             document.getElementById('cl_bottle').value = 'false';
             document.getElementById('cl_dress').value = '';
@@ -12722,6 +12773,9 @@
                 document.getElementById('cl_state').value = loc.address?.state || '';
                 document.getElementById('cl_postalCode').value = loc.address?.postalCode || '';
                 document.getElementById('cl_country').value = loc.address?.country || '';
+                document.getElementById('cl_gratuityPercent').value = loc.gratuityPercent != null && loc.gratuityPercent !== '' ? loc.gratuityPercent : '';
+                document.getElementById('cl_adminFeePercent').value = loc.adminFeePercent != null && loc.adminFeePercent !== '' ? loc.adminFeePercent : '';
+                document.getElementById('cl_salesTaxPercent').value = loc.salesTaxPercent != null && loc.salesTaxPercent !== '' ? loc.salesTaxPercent : '';
                 // Ensure type-specific sections visible
                 onClTypeChange();
                 // Load global THE1 categories, then enrich with location-specific ones
@@ -12891,6 +12945,19 @@
                 
                 const payload = { name, type };
                 if (Object.keys(address).length > 0) payload.address = address;
+                const parsePercentField = (elId) => {
+                    const raw = document.getElementById(elId)?.value?.trim?.() ?? '';
+                    if (raw === '') return undefined;
+                    const n = parseFloat(raw);
+                    if (!Number.isFinite(n) || n < 0 || n > 100) return undefined;
+                    return n;
+                };
+                const g = parsePercentField('cl_gratuityPercent');
+                const a = parsePercentField('cl_adminFeePercent');
+                const s = parsePercentField('cl_salesTaxPercent');
+                if (g !== undefined) payload.gratuityPercent = g;
+                if (a !== undefined) payload.adminFeePercent = a;
+                if (s !== undefined) payload.salesTaxPercent = s;
                 const result = await makeApiRequest('/locations', 'POST', payload);
                 if (result.success) {
                     closeCreateLocation();
@@ -13377,6 +13444,20 @@
             if (postalCode) address.postalCode = postalCode;
             if (country) address.country = country;
             if (Object.keys(address).length > 0) payload.address = address;
+
+            const parsePercent = (elId) => {
+                const raw = document.getElementById(elId)?.value?.trim?.() ?? '';
+                if (raw === '') return undefined;
+                const n = parseFloat(raw);
+                if (!Number.isFinite(n) || n < 0 || n > 100) return undefined;
+                return n;
+            };
+            const gratuityPercent = parsePercent('cl_gratuityPercent');
+            const adminFeePercent = parsePercent('cl_adminFeePercent');
+            const salesTaxPercent = parsePercent('cl_salesTaxPercent');
+            if (gratuityPercent !== undefined) payload.gratuityPercent = gratuityPercent;
+            if (adminFeePercent !== undefined) payload.adminFeePercent = adminFeePercent;
+            if (salesTaxPercent !== undefined) payload.salesTaxPercent = salesTaxPercent;
             
             // General media - include all from form
             const gmRows = Array.from(document.querySelectorAll('.cl_media_row'));
