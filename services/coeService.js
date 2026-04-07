@@ -278,8 +278,12 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
       salesTaxSum += B * getCoeTaxRate();
     }
 
+    // Product rule: always charge THE1 fee. If admin did not set %, default to 20.
     const fp = row.the1_fee_percent;
-    const fPct = fp != null && fp !== '' ? pctToFraction(fp) : 0;
+    const fPct =
+      fp != null && fp !== '' && Number.isFinite(Number(fp))
+        ? pctToFraction(fp)
+        : 20;
     the1Sum += B * (fPct / 100);
   }
 
@@ -4911,6 +4915,17 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
       eventData.is_simple_joint === 'true';
     if (simpleJointPayload) {
       applySimpleJointToSeatRow(newSeat, seat, seatPrice);
+      const t1Joint = eventData.the1_fee_percent;
+      if (
+        t1Joint != null &&
+        t1Joint !== '' &&
+        Number.isFinite(Number(t1Joint))
+      ) {
+        newSeat.the1_fee_percent = Math.min(
+          100,
+          Math.max(0, Number(t1Joint))
+        );
+      }
       coeItem.base_price = newSeat.base_price;
       coeItem.total_price = newSeat.event_price * (eventData.quantity ?? 1);
       validateSelectedSeatsSimpleJointInvariants([newSeat]);
@@ -5056,7 +5071,65 @@ async function hasAlternativeEventsSameDay(coeId, eventId) {
   }
 }
 
+/**
+ * Normalize COE status for ACL checks (trim + lowercase).
+ * @param {unknown} status
+ * @returns {string}
+ */
+function normalizeCoeStatusForAcl(status) {
+  return (status == null ? '' : String(status)).trim().toLowerCase();
+}
+
+/** Client Experiences list: open request, published proposals, and payment journey — not draft/admin work. */
+const CLIENT_HOME_LIST_STATUS_ALLOWLIST = [
+  'request',
+  'approved',
+  'accepted_not_paid',
+  'pending_pay',
+  'paid',
+  'completed',
+];
+
+/**
+ * Multi-proposal picker: only options the client may choose (no draft/request/cancelled siblings).
+ * @type {readonly string[]}
+ */
+const CLIENT_PROPOSAL_GROUP_MEMBER_STATUS_ALLOWLIST = [
+  'approved',
+  'accepted_not_paid',
+  'pending_pay',
+  'paid',
+  'completed',
+];
+
+/**
+ * True if COE may appear on GET /coes/my for role client.
+ * @param {unknown} status
+ * @returns {boolean}
+ */
+function isCoeHomeListVisibleToClient(status) {
+  return CLIENT_HOME_LIST_STATUS_ALLOWLIST.includes(
+    normalizeCoeStatusForAcl(status),
+  );
+}
+
+/**
+ * True if COE may appear in GET .../proposal-groups/:id/members for role client.
+ * @param {unknown} status
+ * @returns {boolean}
+ */
+function isCoeProposalGroupMemberVisibleToClient(status) {
+  return CLIENT_PROPOSAL_GROUP_MEMBER_STATUS_ALLOWLIST.includes(
+    normalizeCoeStatusForAcl(status),
+  );
+}
+
 module.exports = {
+  normalizeCoeStatusForAcl,
+  CLIENT_HOME_LIST_STATUS_ALLOWLIST,
+  CLIENT_PROPOSAL_GROUP_MEMBER_STATUS_ALLOWLIST,
+  isCoeHomeListVisibleToClient,
+  isCoeProposalGroupMemberVisibleToClient,
   validateSelectedSeats,
   validateSelectedSeatsSimpleJointInvariants,
   applySimpleJointToSeatRow,

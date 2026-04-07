@@ -1151,7 +1151,16 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
                   row.event_id.toString()) ||
                 String(row.event_id || '');
               if (jid) {
-                jointByEventId[jid] = Number(row.manual_price);
+                const mp = Number(row.manual_price);
+                const fp =
+                  row.the1_fee_percent != null &&
+                  Number.isFinite(Number(row.the1_fee_percent))
+                    ? Math.min(100, Math.max(0, Number(row.the1_fee_percent)))
+                    : null;
+                jointByEventId[jid] = {
+                  manual_price: mp,
+                  the1_fee_percent: fp
+                };
               }
             }
           }
@@ -1182,12 +1191,29 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
             const id = (eventId && eventId.toString && eventId.toString()) || eventId;
             const jp = jointByEventId[id];
             const t1 = the1ByEventId[id];
+            const jpManual =
+              jp && typeof jp === 'object'
+                ? jp.manual_price
+                : jp != null
+                  ? Number(jp)
+                  : null;
+            const jpFee =
+              jp && typeof jp === 'object' && jp.the1_fee_percent != null
+                ? jp.the1_fee_percent
+                : null;
             return {
               event_id: eventId,
               selected_seats: [],
               preferred_seat_category: categoryByEventId[id] || null,
               simple_joint_manual_price:
-                jp != null && Number.isFinite(jp) && jp >= 0 ? jp : null,
+                jpManual != null && Number.isFinite(jpManual) && jpManual >= 0
+                  ? jpManual
+                  : null,
+              /** When simple joint is set, optional THE1 fee % (defaults server-side if null). */
+              simple_joint_the1_fee_percent:
+                jpFee != null && Number.isFinite(Number(jpFee))
+                  ? Math.min(100, Number(jpFee))
+                  : null,
               the1_pricing:
                 t1 &&
                 t1.the1_base_price != null &&

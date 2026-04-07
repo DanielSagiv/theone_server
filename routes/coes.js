@@ -283,9 +283,9 @@ router.get('/my', authenticateToken, async (req, res) => {
       }
     }
 
-    // Business rule: clients should not see draft or cancelled Experiences (losers after multi-proposal resolve)
+    // Business rule: clients only see allowlisted statuses (no draft/admin work; no cancelled/rejected/expired noise)
     if (req.user.role === 'client') {
-      coes = coes.filter((c) => c.status !== 'draft' && c.status !== 'cancelled');
+      coes = coes.filter((c) => coeService.isCoeHomeListVisibleToClient(c.status));
     }
 
     if (req.user.role === 'client' && coes.length > 0) {
@@ -591,7 +591,11 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       ]
     }).select('_id admin_id client_id runner_assignment.runner_id status');
     
-    if (!coeCheck || (req.user.role === 'client' && coeCheck.status === 'draft')) {
+    if (
+      !coeCheck ||
+      (req.user.role === 'client' &&
+        !coeService.isCoeHomeListVisibleToClient(coeCheck.status))
+    ) {
       // Log for debugging
       const coeExists = await COE.findById(id).select('admin_id client_id runner_assignment.runner_id').lean();
       console.log('[GET /coes/my/:id] Access denied:', {

@@ -413,14 +413,31 @@ function extractPreferencesFromFormSubmission(message) {
       const colonIdx = part.indexOf(':');
       if (colonIdx > 0) {
         const event_id = part.slice(0, colonIdx).trim();
-        const priceStr = part.slice(colonIdx + 1).trim();
+        const rest = part.slice(colonIdx + 1).trim();
+        const pipeIdx = rest.indexOf('|');
+        const priceStr =
+          pipeIdx >= 0 ? rest.slice(0, pipeIdx).trim() : rest;
+        const feeStr = pipeIdx >= 0 ? rest.slice(pipeIdx + 1).trim() : '';
         const manual_price = parseFloat(priceStr);
+        let the1_fee_percent;
+        if (feeStr !== '') {
+          const fp = parseFloat(feeStr);
+          if (!Number.isNaN(fp) && fp >= 0) {
+            the1_fee_percent = Math.min(100, fp);
+          }
+        }
         if (
           event_id &&
           !Number.isNaN(manual_price) &&
           manual_price >= 0
         ) {
-          selected_simple_joint_prices.push({ event_id, manual_price });
+          selected_simple_joint_prices.push({
+            event_id,
+            manual_price,
+            ...(the1_fee_percent != null
+              ? { the1_fee_percent }
+              : {})
+          });
         }
       }
     }

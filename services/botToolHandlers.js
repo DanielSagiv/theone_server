@@ -1195,6 +1195,17 @@ async function handleCreateCOEDraft(params, user, correlationId) {
               seatToAdd.simple_joint_original_price = catalogEventPrice;
               seatToAdd.event_price = manual;
               seatToAdd.base_price = manual;
+              const sjT1 = eventData.simple_joint_the1_fee_percent;
+              if (
+                sjT1 != null &&
+                sjT1 !== '' &&
+                Number.isFinite(Number(sjT1))
+              ) {
+                seatToAdd.the1_fee_percent = Math.min(
+                  100,
+                  Math.max(0, Number(sjT1))
+                );
+              }
             }
           } else if (
             eventData.the1_pricing &&

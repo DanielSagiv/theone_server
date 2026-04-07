@@ -617,7 +617,10 @@ async function listMembersForUser(proposalGroupId, opts) {
     client_id: group.client_id,
   };
   if (role !== 'admin') {
-    memberQuery.status = { $ne: 'cancelled' };
+    const {
+      CLIENT_PROPOSAL_GROUP_MEMBER_STATUS_ALLOWLIST,
+    } = require('./coeService');
+    memberQuery.status = { $in: [...CLIENT_PROPOSAL_GROUP_MEMBER_STATUS_ALLOWLIST] };
   }
 
   const list = await COE.find(memberQuery)
