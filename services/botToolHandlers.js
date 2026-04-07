@@ -1196,8 +1196,30 @@ async function handleCreateCOEDraft(params, user, correlationId) {
               seatToAdd.event_price = manual;
               seatToAdd.base_price = manual;
             }
+          } else if (
+            eventData.the1_pricing &&
+            eventData.the1_pricing.the1_base_price != null &&
+            Number.isFinite(Number(eventData.the1_pricing.the1_base_price))
+          ) {
+            const t1 = eventData.the1_pricing;
+            const catalogFromVenue =
+              t1.venue_catalog_price != null &&
+              Number.isFinite(Number(t1.venue_catalog_price))
+                ? Number(t1.venue_catalog_price)
+                : Number(eventSeat.event_price) ||
+                  Number(eventSeat.min_spend) ||
+                  0;
+            seatToAdd.venue_catalog_price = catalogFromVenue;
+            const base = Number(t1.the1_base_price);
+            seatToAdd.event_price = base;
+            seatToAdd.base_price = base;
+            seatToAdd.the1_fee_percent =
+              t1.the1_fee_percent != null &&
+              Number.isFinite(Number(t1.the1_fee_percent))
+                ? Math.min(100, Math.max(0, Number(t1.the1_fee_percent)))
+                : 20;
           }
-          
+
           console.log('[BOT] [COE_CREATION_FULL_DEBUG] Adding seat to selection:', {
             seatId: seatToAdd.seat_id?.toString(),
             seatCode: seatToAdd.seat_code,

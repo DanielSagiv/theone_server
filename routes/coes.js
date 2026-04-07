@@ -1990,7 +1990,7 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
 
       // Align subtotal/taxes/total with selected_seats before revision due math (paid / deposit_paid repropose).
       try {
-        coeService.applyPricingFromSelectedSeats(coe);
+        await coeService.applyPricingFromSelectedSeats(coe);
         await coe.save();
       } catch (recalcErr) {
         console.error('[COES] repropose: pricing recalc failed:', recalcErr.message);

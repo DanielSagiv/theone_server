@@ -261,6 +261,8 @@ function extractPreferencesFromFormSubmission(message) {
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
     selected_simple_joint_prices:
       /Simple joint line prices:\s*([^\n]+?)(?:\n|$)/i,
+    selected_the1_negotiated_pricing:
+      /THE1 negotiated pricing:\s*([^\n]+?)(?:\n|$)/i,
     admin_create_mode: /Admin create mode:\s*(draft|proposal)/i,
     proposal_deposit_percent: /Deposit percent:\s*(\d+)/i,
     proposal_payment_deadline_hours: /Payment deadline hours:\s*(\d+)/i
@@ -425,6 +427,43 @@ function extractPreferencesFromFormSubmission(message) {
   }
   preferences.selected_simple_joint_prices = selected_simple_joint_prices;
 
+  let selected_the1_negotiated_pricing = [];
+  const the1Match = message.match(patterns.selected_the1_negotiated_pricing);
+  if (the1Match && the1Match[1]) {
+    const t1Parts = the1Match[1]
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    for (const part of t1Parts) {
+      const segs = part.split('|').map(s => s.trim());
+      if (segs.length >= 4) {
+        const [event_id, venueStr, baseStr, feeStr] = segs;
+        const the1_base_price = parseFloat(baseStr);
+        const the1_fee_percent = parseFloat(feeStr);
+        let venue_catalog_price = null;
+        if (venueStr !== '' && venueStr != null) {
+          const v = parseFloat(venueStr);
+          if (!Number.isNaN(v) && v >= 0) venue_catalog_price = v;
+        }
+        if (
+          event_id &&
+          !Number.isNaN(the1_base_price) &&
+          the1_base_price >= 0 &&
+          !Number.isNaN(the1_fee_percent) &&
+          the1_fee_percent >= 0
+        ) {
+          selected_the1_negotiated_pricing.push({
+            event_id: String(event_id).trim(),
+            venue_catalog_price,
+            the1_base_price,
+            the1_fee_percent: Math.min(100, the1_fee_percent)
+          });
+        }
+      }
+    }
+  }
+  preferences.selected_the1_negotiated_pricing = selected_the1_negotiated_pricing;
+
   const adminModeMatch = message.match(patterns.admin_create_mode);
   if (adminModeMatch && adminModeMatch[1]) {
     preferences.admin_create_mode = String(adminModeMatch[1]).trim().toLowerCase();
@@ -482,6 +521,7 @@ function extractPreferencesFromFormSubmission(message) {
       selected_events: preferences.selected_events,
       selected_seat_categories: preferences.selected_seat_categories,
       selected_simple_joint_prices: preferences.selected_simple_joint_prices,
+      selected_the1_negotiated_pricing: preferences.selected_the1_negotiated_pricing,
       admin_create_mode: preferences.admin_create_mode,
       proposal_deposit_percent: preferences.proposal_deposit_percent,
       proposal_payment_deadline_hours: preferences.proposal_payment_deadline_hours

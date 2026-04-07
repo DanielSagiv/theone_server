@@ -73,6 +73,7 @@ function computeInitialDepositPricing(coe) {
     }
   }
 
+  /** Prefer stored sales-tax-to-subtotal ratio (location-based THE1 pricing); else env COE_TAX_RATE. */
   const subtotalCoe = Number(coe.subtotal) || 0;
   const taxField = Number(coe.taxes) || 0;
   const effectiveRate =
@@ -854,6 +855,7 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
             taxes: coeFresh.taxes,
             fees: coeFresh.fees,
             total: coeFresh.total,
+            fee_breakdown: coeFresh.fee_breakdown,
             deposit_percent: coeFresh.deposit_percent,
             pricing_breakdown: coeFresh.pricing_breakdown,
             events: coeFresh.events,

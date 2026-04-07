@@ -197,6 +197,114 @@ function getCoeTaxRate() {
   return n;
 }
 
+/** Default THE1 fee % shown in admin UI when setting overrides; missing `the1_fee_percent` on a row uses 0 in math (legacy). */
+const DEFAULT_THE1_FEE_PERCENT_UI = 20;
+
+/**
+ * @param {unknown} n
+ * @returns {number}
+ */
+function pctToFraction(n) {
+  if (n == null || n === '') return 0;
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
+}
+
+/**
+ * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee), total, and fee_breakdown
+ * from selected_seats using per-event Location percents. Rows without a resolved Location use global getCoeTaxRate() on B for sales tax only.
+ * @param {Array<Object>} selectedSeats
+ * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
+ */
+async function computePricingTotalsFromSelectedSeats(selectedSeats) {
+  const emptyBreakdown = () => ({
+    gratuity_total: 0,
+    venue_admin_fee_total: 0,
+    sales_tax_total: 0,
+    the1_fee_total: 0
+  });
+  if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) {
+    return {
+      subtotal: 0,
+      taxes: 0,
+      fees: 0,
+      total: 0,
+      fee_breakdown: emptyBreakdown()
+    };
+  }
+
+  const idStr = (row) => {
+    const e = row?.event_id;
+    if (e == null) return null;
+    if (typeof e === 'object' && e._id != null) return e._id.toString();
+    if (typeof e.toString === 'function') return e.toString();
+    return String(e);
+  };
+
+  const uniqueIds = [...new Set(selectedSeats.map(idStr).filter(Boolean))];
+  const eventObjectIds = uniqueIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const events = eventObjectIds.length
+    ? await Event.find({ _id: { $in: eventObjectIds } })
+        .populate('location_id')
+        .lean()
+    : [];
+  const eventMap = new Map(events.map((ev) => [ev._id.toString(), ev]));
+
+  let subtotal = 0;
+  let gratuitySum = 0;
+  let adminSum = 0;
+  let salesTaxSum = 0;
+  let the1Sum = 0;
+
+  for (const row of selectedSeats) {
+    const B = Number(row.event_price) || Number(row.base_price) || 0;
+    subtotal += B;
+
+    const eid = idStr(row);
+    const ev = eid ? eventMap.get(eid) : null;
+    const loc =
+      ev && ev.location_id && typeof ev.location_id === 'object'
+        ? ev.location_id
+        : null;
+
+    if (loc) {
+      gratuitySum += B * (pctToFraction(loc.gratuityPercent) / 100);
+      adminSum += B * (pctToFraction(loc.adminFeePercent) / 100);
+      salesTaxSum += B * (pctToFraction(loc.salesTaxPercent) / 100);
+    } else {
+      salesTaxSum += B * getCoeTaxRate();
+    }
+
+    const fp = row.the1_fee_percent;
+    const fPct = fp != null && fp !== '' ? pctToFraction(fp) : 0;
+    the1Sum += B * (fPct / 100);
+  }
+
+  const gratuityR = Math.round(gratuitySum * 100) / 100;
+  const adminR = Math.round(adminSum * 100) / 100;
+  const taxes = Math.round(salesTaxSum * 100) / 100;
+  const the1R = Math.round(the1Sum * 100) / 100;
+  const fees = Math.round((gratuityR + adminR + the1R) * 100) / 100;
+  const subR = Math.round(subtotal * 100) / 100;
+  const total = Math.round((subR + taxes + fees) * 100) / 100;
+
+  return {
+    subtotal: subR,
+    taxes,
+    fees,
+    total,
+    fee_breakdown: {
+      gratuity_total: gratuityR,
+      venue_admin_fee_total: adminR,
+      sales_tax_total: taxes,
+      the1_fee_total: the1R
+    }
+  };
+}
+
 /**
  * Sum line prices from COE selected_seats (event_price preferred, else base_price).
  * @param {Array|undefined} seats
@@ -264,18 +372,36 @@ function syncCoeEventLineItemsFromSelectedSeats(coe) {
 }
 
 /**
- * Recompute subtotal, taxes, and total from selected_seats. Mutates coe. Preserves existing fees.
+ * Recompute subtotal, taxes, fees, total, and fee_breakdown from selected_seats (Location-based + THE1 fee %). Mutates coe.
  * Use whenever seat lineup or seat prices change so revision/repropose math stays correct.
- * @param {Object} coe - COE mongoose document or plain object with selected_seats, fees
+ * @param {Object} coe - COE mongoose document or plain object with selected_seats
+ * @returns {Promise<void>}
  */
-function applyPricingFromSelectedSeats(coe) {
+async function applyPricingFromSelectedSeats(coe) {
   if (!coe) return;
-  const newSubtotal = sumSelectedSeatsSubtotal(coe.selected_seats);
-  coe.subtotal = newSubtotal;
-  const rate = getCoeTaxRate();
-  coe.taxes = Math.round((newSubtotal || 0) * rate * 100) / 100;
-  const fees = typeof coe.fees === 'number' ? coe.fees : 0;
-  coe.total = (newSubtotal || 0) + (coe.taxes || 0) + fees;
+  const seats = coe.selected_seats;
+  if (!Array.isArray(seats) || seats.length === 0) {
+    coe.subtotal = 0;
+    coe.taxes = 0;
+    coe.fees = 0;
+    coe.total = 0;
+    coe.fee_breakdown = {
+      gratuity_total: 0,
+      venue_admin_fee_total: 0,
+      sales_tax_total: 0,
+      the1_fee_total: 0
+    };
+    if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
+    syncCoeEventLineItemsFromSelectedSeats(coe);
+    return;
+  }
+  const r = await computePricingTotalsFromSelectedSeats(seats);
+  coe.subtotal = r.subtotal;
+  coe.taxes = r.taxes;
+  coe.fees = r.fees;
+  coe.total = r.total;
+  coe.fee_breakdown = r.fee_breakdown;
+  if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
   syncCoeEventLineItemsFromSelectedSeats(coe);
 }
 
@@ -654,7 +780,7 @@ async function holdSeatsForCOE(coeId) {
 
     // Persist seat lineup and keep subtotal/taxes/total consistent (same rate as revision/repropose).
     coeDoc.selected_seats = finalSeatEntries;
-    applyPricingFromSelectedSeats(coeDoc);
+    await applyPricingFromSelectedSeats(coeDoc);
 
     // New behavior: Do NOT remove events or reduce pricing when no seats are available in section.
     // Instead, flag affected events and notify admin for manual resolution.
@@ -759,7 +885,7 @@ async function createCOE(coeData, createdBy) {
     });
 
     if (coe.selected_seats && coe.selected_seats.length > 0) {
-      applyPricingFromSelectedSeats(coe);
+      await applyPricingFromSelectedSeats(coe);
     }
 
     // Log pricing before save
@@ -1324,7 +1450,7 @@ async function updateCOE(coeId, updateData) {
     }
 
     if (payload.selected_seats) {
-      applyPricingFromSelectedSeats(coe);
+      await applyPricingFromSelectedSeats(coe);
       await coe.save();
     }
 
@@ -1946,6 +2072,7 @@ async function ensureRevisionBaseSnapshotForPaidCOE(coe) {
       taxes: coe.taxes,
       fees: coe.fees,
       total: currentTotal,
+      fee_breakdown: coe.fee_breakdown,
       deposit_percent: coe.deposit_percent,
       pricing_breakdown: coe.pricing_breakdown,
       events: coe.events,
@@ -2360,7 +2487,7 @@ async function updateSeatAssignments(coeId, selectedSeats) {
     }));
 
     // Recalculate subtotal, taxes, and total from selected seats after removals/edits.
-    applyPricingFromSelectedSeats(coe);
+    await applyPricingFromSelectedSeats(coe);
 
     await coe.save();
 
@@ -2536,7 +2663,7 @@ async function acceptSeatUpgrade(coeId, currentSeatId, upgradeSeatId, eventId) {
     // Mark offer as accepted
     coe.seat_upgrade_offers[offerIndex].alternatives[altIndex].status = 'accepted';
 
-    applyPricingFromSelectedSeats(coe);
+    await applyPricingFromSelectedSeats(coe);
 
     await coe.save();
     return await getCOEById(coeId);
@@ -2673,7 +2800,7 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
         );
       }
 
-      applyPricingFromSelectedSeats(coe);
+      await applyPricingFromSelectedSeats(coe);
 
       await coe.save();
 
@@ -2814,7 +2941,7 @@ async function adminReplaceSeat(coeId, currentSeatId, newSeatId, eventId) {
         );
       }
 
-      applyPricingFromSelectedSeats(groupCoe);
+      await applyPricingFromSelectedSeats(groupCoe);
 
       await groupCoe.save();
 
@@ -2953,7 +3080,7 @@ async function removeEventsFromCOE(coeId, eventIds) {
       return !eventIdStrings.includes(offerEventId);
     });
 
-    applyPricingFromSelectedSeats(coe);
+    await applyPricingFromSelectedSeats(coe);
 
     // Update event coe_count
     for (const eventId of eventIds) {
@@ -4047,22 +4174,20 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
       note: 'Cost calculation based on events array. Seats from replaced events (not in events array) are excluded.'
     });
     
-    // CRITICAL: Calculate subtotal ONLY from filtered seats (seats matching current events)
-    // This ensures we never accumulate costs from replaced events
-    const newSubtotal = allSeats.reduce((sum, s) => {
+    // CRITICAL: Totals from filtered seats only (same helper as hold/repropose/Flow3).
+    const pricing = await computePricingTotalsFromSelectedSeats(allSeats);
+    const newSubtotal = pricing.subtotal;
+    const newTaxes = pricing.taxes;
+    const feesNum = pricing.fees;
+    const newTotal = pricing.total;
+    allSeats.forEach((s) => {
       const price = s.event_price || s.base_price || 0;
-      console.log('[COE_SERVICE] Adding to subtotal:', {
+      console.log('[COE_SERVICE] Seat in pricing set:', {
         seat_code: s.seat_code,
         event_id: s.event_id?.toString() || s.event_id,
-        price,
-        runningSum: sum + price
+        price
       });
-      return sum + price;
-    }, 0);
-    const newTaxes = Math.round((newSubtotal || 0) * getCoeTaxRate() * 100) / 100;
-    const feesNum =
-      typeof coeForCostCalculation.fees === 'number' ? coeForCostCalculation.fees : 0;
-    const newTotal = (newSubtotal || 0) + newTaxes + feesNum;
+    });
     
     console.log('[COE_SERVICE] ===== FINAL COST CALCULATION SUMMARY =====');
     console.log('[COE_SERVICE] Final totals:', {
@@ -4127,7 +4252,9 @@ async function replaceEventInCOE(coeId, oldEventId, newEventId, options = {}) {
         $set: {
           subtotal: newSubtotal,
           taxes: newTaxes,
-          total: newTotal
+          fees: feesNum,
+          total: newTotal,
+          fee_breakdown: pricing.fee_breakdown
         }
       }
     );
@@ -4787,11 +4914,23 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
       coeItem.base_price = newSeat.base_price;
       coeItem.total_price = newSeat.event_price * (eventData.quantity ?? 1);
       validateSelectedSeatsSimpleJointInvariants([newSeat]);
+    } else {
+      const vcRaw = eventData.venue_catalog_price;
+      const t1Raw = eventData.the1_fee_percent;
+      if (vcRaw != null && vcRaw !== '' && Number.isFinite(Number(vcRaw))) {
+        newSeat.venue_catalog_price = Math.max(0, Number(vcRaw));
+      }
+      if (t1Raw != null && t1Raw !== '' && Number.isFinite(Number(t1Raw))) {
+        newSeat.the1_fee_percent = Math.min(
+          100,
+          Math.max(0, Number(t1Raw))
+        );
+      }
     }
 
     coe.events.push(coeItem);
     coe.selected_seats.push(newSeat);
-    applyPricingFromSelectedSeats(coe);
+    await applyPricingFromSelectedSeats(coe);
     await coe.save();
 
     // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
@@ -4925,6 +5064,8 @@ module.exports = {
   filterSelectedSeatsByEvents,
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,
+  computePricingTotalsFromSelectedSeats,
+  DEFAULT_THE1_FEE_PERCENT_UI,
   applyPricingFromSelectedSeats,
   updateSelectedSeatsStatus,
   updateSeatStatusesToBooked,

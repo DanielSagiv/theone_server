@@ -303,7 +303,11 @@ const coeSelectedSeatSchema = Joi.object({
   joint_event_group_id: Joi.string().allow('', null).optional(),
   joint_share_percent: Joi.number().min(0).max(100).allow(null).optional(),
   is_simple_joint: Joi.boolean().optional(),
-  simple_joint_original_price: Joi.number().min(0).allow(null).optional()
+  simple_joint_original_price: Joi.number().min(0).allow(null).optional(),
+  /** Venue list/catalog snapshot for strikethrough UI; optional. */
+  venue_catalog_price: Joi.number().min(0).allow(null).optional(),
+  /** THE1 fee % on negotiated base; optional — server math treats missing as 0. */
+  the1_fee_percent: Joi.number().min(0).max(100).allow(null).optional()
 });
 
 // Create COE validation schema
@@ -505,7 +509,11 @@ const addEventToCOEWithSeatSchema = Joi.object({
   notes: Joi.string().allow(''),
   client_notes: Joi.string().allow(''),
   /** When true, event_price is admin override; server stores catalog price in simple_joint_original_price. */
-  is_simple_joint: Joi.boolean().default(false)
+  is_simple_joint: Joi.boolean().default(false),
+  /** THE1 negotiated line: venue catalog snapshot for strikethrough UI (optional). */
+  venue_catalog_price: Joi.number().min(0).allow(null).optional(),
+  /** THE1 fee % on negotiated base (optional; server defaults missing to 0 in totals if absent). */
+  the1_fee_percent: Joi.number().min(0).max(100).allow(null).optional()
 });
 
 // Update COE status validation schema

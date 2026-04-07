@@ -1155,15 +1155,57 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
               }
             }
           }
+          const the1ByEventId = {};
+          if (
+            extractionResult.raw.selected_the1_negotiated_pricing &&
+            Array.isArray(extractionResult.raw.selected_the1_negotiated_pricing)
+          ) {
+            for (const row of extractionResult.raw.selected_the1_negotiated_pricing) {
+              const tid =
+                (row.event_id &&
+                  row.event_id.toString &&
+                  row.event_id.toString()) ||
+                String(row.event_id || '');
+              if (tid) {
+                the1ByEventId[tid] = {
+                  venue_catalog_price:
+                    row.venue_catalog_price != null
+                      ? Number(row.venue_catalog_price)
+                      : null,
+                  the1_base_price: Number(row.the1_base_price),
+                  the1_fee_percent: Number(row.the1_fee_percent)
+                };
+              }
+            }
+          }
           toolParams.events = extractionResult.raw.selected_events.map(eventId => {
             const id = (eventId && eventId.toString && eventId.toString()) || eventId;
             const jp = jointByEventId[id];
+            const t1 = the1ByEventId[id];
             return {
               event_id: eventId,
               selected_seats: [],
               preferred_seat_category: categoryByEventId[id] || null,
               simple_joint_manual_price:
                 jp != null && Number.isFinite(jp) && jp >= 0 ? jp : null,
+              the1_pricing:
+                t1 &&
+                t1.the1_base_price != null &&
+                Number.isFinite(Number(t1.the1_base_price))
+                  ? {
+                      venue_catalog_price:
+                        t1.venue_catalog_price != null &&
+                        Number.isFinite(Number(t1.venue_catalog_price))
+                          ? Number(t1.venue_catalog_price)
+                          : null,
+                      the1_base_price: Number(t1.the1_base_price),
+                      the1_fee_percent:
+                        t1.the1_fee_percent != null &&
+                        Number.isFinite(Number(t1.the1_fee_percent))
+                          ? Number(t1.the1_fee_percent)
+                          : 20
+                    }
+                  : null
             };
           });
           // Treat manual event selection differently for clients vs admins by default:

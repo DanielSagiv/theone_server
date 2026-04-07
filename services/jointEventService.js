@@ -297,7 +297,7 @@ async function createJointOnlyCoe({
     currency: 'USD',
   };
 
-  coeService.applyPricingFromSelectedSeats(plain);
+  await coeService.applyPricingFromSelectedSeats(plain);
   const coe = new COE(plain);
   await coe.save();
   if (coe.events?.length) coe.events.forEach((e) => { e.coe_id = coe._id; });
@@ -337,7 +337,7 @@ async function appendJointToCoeDoc(coeDoc, { event, targetSeat, shareDollars, sh
   coeDoc.events = [...(coeDoc.events || []), eventItem];
   coeDoc.selected_seats = [...(coeDoc.selected_seats || []), seatRow];
   coeDoc.joint_event_group_id = jointGroupId;
-  coeService.applyPricingFromSelectedSeats(coeDoc);
+  await coeService.applyPricingFromSelectedSeats(coeDoc);
   coeDoc.events.forEach((e) => { e.coe_id = coeDoc._id; });
   coeDoc.selected_seats.forEach((s) => {
     s.coe_id = coeDoc._id;

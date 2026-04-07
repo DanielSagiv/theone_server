@@ -197,6 +197,13 @@ const coeSchema = new mongoose.Schema({
   subtotal: { type: Number, min: 0, default: 0 },
   taxes: { type: Number, min: 0, default: 0 },
   fees: { type: Number, min: 0, default: 0 },
+  /** Aggregated fee lines (gratuity, venue admin, THE1 fee); sales tax is coe.taxes. */
+  fee_breakdown: {
+    gratuity_total: { type: Number, min: 0, default: 0 },
+    venue_admin_fee_total: { type: Number, min: 0, default: 0 },
+    sales_tax_total: { type: Number, min: 0, default: 0 },
+    the1_fee_total: { type: Number, min: 0, default: 0 }
+  },
   total: { type: Number, min: 0, default: 0 },
   deposit_required: { type: Number, min: 0, default: 0 },
   deposit_paid: { type: Number, min: 0, default: 0 },
@@ -479,6 +486,10 @@ const coeSchema = new mongoose.Schema({
     is_simple_joint: { type: Boolean, default: false },
     /** Catalog line price before override; used for strikethrough UI when is_simple_joint. */
     simple_joint_original_price: { type: Number, min: 0, default: null },
+    /** Venue catalog price for strikethrough vs THE1 negotiated line (optional). */
+    venue_catalog_price: { type: Number, min: 0, default: null },
+    /** THE1 platform fee % on negotiated base B (0–100); optional, 0 if unset. */
+    the1_fee_percent: { type: Number, min: 0, max: 100, default: null },
   }],
   // Seat upgrade offers (only for draft COEs)
   seat_upgrade_offers: [{
