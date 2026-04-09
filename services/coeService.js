@@ -199,6 +199,8 @@ function getCoeTaxRate() {
 
 /** Default THE1 fee % shown in admin UI when setting overrides; missing `the1_fee_percent` on a row uses 0 in math (legacy). */
 const DEFAULT_THE1_FEE_PERCENT_UI = 20;
+/** Product rule: hardcoded processing fee % on negotiated base, same base as THE1 fee. */
+const PROCESSING_FEE_PERCENT = 3;
 
 /**
  * @param {unknown} n
@@ -211,7 +213,7 @@ function pctToFraction(n) {
 }
 
 /**
- * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee), total, and fee_breakdown
+ * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
  * from selected_seats using per-event Location percents. Rows without a resolved Location use global getCoeTaxRate() on B for sales tax only.
  * @param {Array<Object>} selectedSeats
  * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
@@ -221,7 +223,8 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
     gratuity_total: 0,
     venue_admin_fee_total: 0,
     sales_tax_total: 0,
-    the1_fee_total: 0
+    the1_fee_total: 0,
+    processing_fee_total: 0
   });
   if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) {
     return {
@@ -258,6 +261,7 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
   let adminSum = 0;
   let salesTaxSum = 0;
   let the1Sum = 0;
+  let processingSum = 0;
 
   for (const row of selectedSeats) {
     const B = Number(row.event_price) || Number(row.base_price) || 0;
@@ -285,13 +289,15 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
         ? pctToFraction(fp)
         : 20;
     the1Sum += B * (fPct / 100);
+    processingSum += B * (PROCESSING_FEE_PERCENT / 100);
   }
 
   const gratuityR = Math.round(gratuitySum * 100) / 100;
   const adminR = Math.round(adminSum * 100) / 100;
   const taxes = Math.round(salesTaxSum * 100) / 100;
   const the1R = Math.round(the1Sum * 100) / 100;
-  const fees = Math.round((gratuityR + adminR + the1R) * 100) / 100;
+  const processingR = Math.round(processingSum * 100) / 100;
+  const fees = Math.round((gratuityR + adminR + the1R + processingR) * 100) / 100;
   const subR = Math.round(subtotal * 100) / 100;
   const total = Math.round((subR + taxes + fees) * 100) / 100;
 
@@ -304,7 +310,8 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
       gratuity_total: gratuityR,
       venue_admin_fee_total: adminR,
       sales_tax_total: taxes,
-      the1_fee_total: the1R
+      the1_fee_total: the1R,
+      processing_fee_total: processingR
     }
   };
 }
@@ -376,7 +383,7 @@ function syncCoeEventLineItemsFromSelectedSeats(coe) {
 }
 
 /**
- * Recompute subtotal, taxes, fees, total, and fee_breakdown from selected_seats (Location-based + THE1 fee %). Mutates coe.
+ * Recompute subtotal, taxes, fees, total, and fee_breakdown from selected_seats (Location-based + THE1 + processing fee). Mutates coe.
  * Use whenever seat lineup or seat prices change so revision/repropose math stays correct.
  * @param {Object} coe - COE mongoose document or plain object with selected_seats
  * @returns {Promise<void>}
@@ -393,7 +400,8 @@ async function applyPricingFromSelectedSeats(coe) {
       gratuity_total: 0,
       venue_admin_fee_total: 0,
       sales_tax_total: 0,
-      the1_fee_total: 0
+      the1_fee_total: 0,
+      processing_fee_total: 0
     };
     if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
     syncCoeEventLineItemsFromSelectedSeats(coe);

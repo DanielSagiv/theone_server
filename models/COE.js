@@ -197,12 +197,13 @@ const coeSchema = new mongoose.Schema({
   subtotal: { type: Number, min: 0, default: 0 },
   taxes: { type: Number, min: 0, default: 0 },
   fees: { type: Number, min: 0, default: 0 },
-  /** Aggregated fee lines (gratuity, venue admin, THE1 fee); sales tax is coe.taxes. */
+  /** Aggregated fee lines (gratuity, venue admin, THE1 fee, processing fee); sales tax is coe.taxes. */
   fee_breakdown: {
     gratuity_total: { type: Number, min: 0, default: 0 },
     venue_admin_fee_total: { type: Number, min: 0, default: 0 },
     sales_tax_total: { type: Number, min: 0, default: 0 },
-    the1_fee_total: { type: Number, min: 0, default: 0 }
+    the1_fee_total: { type: Number, min: 0, default: 0 },
+    processing_fee_total: { type: Number, min: 0, default: 0 }
   },
   total: { type: Number, min: 0, default: 0 },
   deposit_required: { type: Number, min: 0, default: 0 },
