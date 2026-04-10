@@ -1,14 +1,8 @@
 const mongoose = require('mongoose');
+const MediaAssetSchema = require('./schemas/MediaAssetSchema');
+const { LOCATION_SEAT_CATEGORY_VALUES } = require('../constants/locationSeatCategories');
 
-/**
- * Asset for media (image/video) stored in S3 or external URL
- */
-const AssetSchema = new mongoose.Schema({
-  type: { type: String, enum: ['image', 'video'], required: true },
-  url: { type: String, required: true, trim: true },
-  caption: { type: String, trim: true },
-  order: { type: Number, default: 0 }
-}, { _id: false });
+const AssetSchema = MediaAssetSchema;
 
 /**
  * Admin sentiment for venue/unit/seat
@@ -28,11 +22,7 @@ const SeatSchema = new mongoose.Schema({
   label: { type: String, trim: true },
   category: {
     type: String,
-    enum: [
-      'backwall', 'large_3rd_tier_couch', 'third_tier_couch',
-      'upper_dance', 'lower_dance', 'four_tops', 'stage_tables', 'owner_tables',
-      'prime', 'entry_level', 'dance_floor', 'standard', 'small_1st_tier_prime'
-    ],
+    enum: LOCATION_SEAT_CATEGORY_VALUES,
     index: true
   },
   // THE1 business-facing category (independent of GXN/structural category)

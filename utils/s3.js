@@ -2,14 +2,27 @@ const AWS = require('aws-sdk');
 const path = require('path');
 
 /**
+ * Build public object URL (virtual-hosted–style) for the configured bucket.
+ * Track B (optional): put CloudFront in front of this origin and store that host in env if needed.
+ * @param {string} bucket
+ * @param {string} region
+ * @param {string} key
+ * @returns {string}
+ */
+function buildPublicS3ObjectUrl(bucket, region, key) {
+  return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+}
+
+/**
  * S3 utility for uploading buffers
  * @description Uploads a buffer to S3 and returns the public URL
  * @param {Buffer} buffer - File content buffer
  * @param {string} key - Object key/path in bucket
  * @param {string} contentType - MIME type
+ * @param {{ cacheControl?: string }} [options]
  * @returns {Promise<string>} Public URL of uploaded object
  */
-async function uploadBufferToS3(buffer, key, contentType) {
+async function uploadBufferToS3(buffer, key, contentType, options = {}) {
   const bucket = process.env.S3_BUCKET;
   if (!bucket) {
     throw new Error('S3_BUCKET is not configured');
@@ -27,14 +40,13 @@ async function uploadBufferToS3(buffer, key, contentType) {
     Bucket: bucket,
     Key: key,
     Body: buffer,
-    ContentType: contentType
-    // Note: ACL removed - bucket should have public read policy
+    ContentType: contentType,
+    CacheControl: options.cacheControl || 'public, max-age=31536000, immutable'
   };
 
   const result = await s3.upload(params).promise();
-  // Construct URL without relying on ACLs (bucket should have public access via policy or presigned access elsewhere)
   const region = AWS.config.region || 'us-east-1';
-  const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  const url = buildPublicS3ObjectUrl(bucket, region, key);
   return result.Location || url;
 }
 
@@ -65,7 +77,7 @@ function extFromMime(mimeType) {
   return 'bin';
 }
 
-module.exports = { uploadBufferToS3, extFromMime };
+module.exports = { uploadBufferToS3, extFromMime, buildPublicS3ObjectUrl };
  
 /**
  * Create a presigned GET URL for an object key

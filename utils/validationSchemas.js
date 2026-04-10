@@ -1,10 +1,15 @@
 const Joi = require('joi');
+const { LOCATION_SEAT_CATEGORY_VALUES } = require('../constants/locationSeatCategories');
 // Location validation
 const assetSchema = Joi.object({
-  type: Joi.string().valid('image','video').required(),
+  type: Joi.string().valid('image', 'video').required(),
   url: Joi.string().uri().required(),
   caption: Joi.string().allow(''),
-  order: Joi.number().min(0)
+  order: Joi.number().min(0),
+  width: Joi.number().min(0).optional(),
+  height: Joi.number().min(0).optional(),
+  byte_size: Joi.number().min(0).optional(),
+  thumb_url: Joi.string().uri().allow('', null).optional()
 });
 
 const sentimentSchema = Joi.object({
@@ -17,11 +22,7 @@ const sentimentSchema = Joi.object({
 const seatSchema = Joi.object({
   code: Joi.string().required(),
   label: Joi.string().allow(''),
-  category: Joi.string().valid(
-    'backwall','large_3rd_tier_couch','third_tier_couch',
-    'upper_dance','lower_dance','four_tops','stage_tables','owner_tables',
-    'prime','entry_level','dance_floor','standard','small_1st_tier_prime'
-  ),
+  category: Joi.string().valid(...LOCATION_SEAT_CATEGORY_VALUES),
   the1Category: Joi.string().allow(''),
   section: Joi.string().allow(''),
   capacity: Joi.number().min(0),
@@ -627,7 +628,12 @@ const updateProfileSchema = Joi.object({
     linkedin: Joi.string().uri().allow(''),
     x: Joi.string().uri().allow(''),
     instagram: Joi.string().uri().allow('')
-  }).optional()
+  }).optional(),
+  avatarUrl: Joi.string().uri().allow('', null),
+  avatar_width: Joi.number().min(0),
+  avatar_height: Joi.number().min(0),
+  avatar_byte_size: Joi.number().min(0),
+  avatar_thumb_url: Joi.string().uri().allow('', null)
 });
 
 /**

@@ -13,8 +13,8 @@ const {
   updateAvailabilitySchema 
 } = require('../utils/validationSchemas');
 const multer = require('multer');
-const { uploadBufferToS3, extFromMime } = require('../utils/s3');
-const crypto = require('crypto');
+const { enrichEventImageFields } = require('../utils/ensureImageMetadata');
+const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
 
 const upload = multer({ 
   storage: multer.memoryStorage(), 
@@ -426,6 +426,17 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     console.log('✅ Event saved. Final media field:', event.media);
     console.log('=== END EVENT CREATION DEBUG ===');
 
+    try {
+      if (await enrichEventImageFields(event)) {
+        event.markModified('media');
+        event.markModified('seats');
+        event.markModified('units');
+        await event.save();
+      }
+    } catch (enrichErr) {
+      console.warn('[events] create enrich metadata:', enrichErr.message);
+    }
+
     // Populate the created event
     const populatedEvent = await Event.findById(event._id)
       .populate('location_id', 'name type address.city address.country')
@@ -496,23 +507,19 @@ router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) =
       });
     }
 
-    const ext = extFromMime(mime);
     const userId = req.user._id.toString();
-    const hash = crypto.createHash('sha256').update(userId + Date.now().toString()).digest('hex').slice(0, 16);
-    const key = `events/${userId}/${hash}.${ext}`;
-
-    const url = await uploadBufferToS3(req.file.buffer, key, mime);
+    const data = await uploadMediaWithMetadata(req.file, `events/${userId}`, userId);
 
     console.log('✅ Event media upload successful:', {
-      url: url,
-      type: type,
+      url: data.url,
+      type: data.type,
       detectedFromMime: mime
     });
     console.log('=== END EVENT MEDIA UPLOAD DEBUG ===');
 
     return res.json({
       success: true,
-      data: { url, type },
+      data,
       message: 'Event media uploaded successfully'
     });
   } catch (error) {
@@ -562,12 +569,27 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       updated_by: req.user?.id || '507f1f77bcf86cd799439011' // TODO: Get from auth middleware
     };
 
-    const event = await Event.findByIdAndUpdate(
-      id, 
-      updateData, 
+    let event = await Event.findByIdAndUpdate(
+      id,
+      updateData,
       { new: true, runValidators: true }
-    ).populate('location_id', 'name type address.city address.country')
-     .populate('updated_by', 'firstName lastName email');
+    )
+      .populate('location_id', 'name type address.city address.country')
+      .populate('updated_by', 'firstName lastName email');
+
+    try {
+      if (event && (await enrichEventImageFields(event))) {
+        event.markModified('media');
+        event.markModified('seats');
+        event.markModified('units');
+        await event.save();
+        event = await Event.findById(id)
+          .populate('location_id', 'name type address.city address.country')
+          .populate('updated_by', 'firstName lastName email');
+      }
+    } catch (enrichErr) {
+      console.warn('[events] update enrich metadata:', enrichErr.message);
+    }
 
     res.json({
       success: true,

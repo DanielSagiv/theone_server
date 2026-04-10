@@ -5,6 +5,7 @@ const Location = require('../models/Location');
 const User = require('../models/User');
 const { selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
 const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
+const { enrichCOESeatUpgradeMedia } = require('../utils/ensureImageMetadata');
 
 /**
  * COE Service
@@ -1120,7 +1121,7 @@ async function getCOEById(coeId) {
     
     // Load COE with population - schema now has defaults for base_price/total_price so validation should pass
     const coe = await COE.findById(coeId)
-      .populate('client_id', 'firstName lastName email phone')
+      .populate('client_id', 'firstName lastName email phone avatarUrl avatar_thumb_url')
       .populate('admin_id', 'firstName lastName email')
       .populate('created_by', 'firstName lastName email')
       .populate('participants.user_id', 'firstName lastName email phone')
@@ -1204,7 +1205,7 @@ async function getCOEById(coeId) {
       try {
         const coe = await COE.findById(coeId)
           .lean()
-          .populate('client_id', 'firstName lastName email phone')
+          .populate('client_id', 'firstName lastName email phone avatarUrl avatar_thumb_url')
           .populate('admin_id', 'firstName lastName email')
           .populate('created_by', 'firstName lastName email')
           .populate('participants.user_id', 'firstName lastName email phone')
@@ -1342,7 +1343,7 @@ async function getCOEs(filters = {}, pagination = {}) {
 
     const [coes, total] = await Promise.all([
       COE.find(query)
-        .populate('client_id', 'firstName lastName email')
+        .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
         .populate('admin_id', 'firstName lastName email')
         .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
         .sort(sort)
@@ -1453,7 +1454,7 @@ async function updateCOE(coeId, updateData) {
       { $set: flatUpdate },
       { new: true, runValidators: true }
     )
-    .populate('client_id', 'firstName lastName email')
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate('admin_id', 'firstName lastName email')
     .populate('created_by', 'firstName lastName email');
 
@@ -1464,6 +1465,17 @@ async function updateCOE(coeId, updateData) {
     if (payload.selected_seats) {
       await applyPricingFromSelectedSeats(coe);
       await coe.save();
+    }
+
+    if (coe.seat_upgrade_offers && coe.seat_upgrade_offers.length > 0) {
+      try {
+        if (await enrichCOESeatUpgradeMedia(coe)) {
+          coe.markModified('seat_upgrade_offers');
+          await coe.save();
+        }
+      } catch (enrichErr) {
+        console.warn('[coeService] updateCOE seat upgrade media enrich:', enrichErr.message);
+      }
     }
 
     return coe;
@@ -2523,7 +2535,7 @@ async function getCOEsByClient(clientId) {
         { 'participants.user_id': clientId }
       ]
     })
-    .populate('client_id', 'firstName lastName email')
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate('admin_id', 'firstName lastName email')
     .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .sort({ created_at: -1 });
@@ -2548,7 +2560,7 @@ async function getCOEsByRunner(runnerId) {
         { 'events.runner_assignment.runner_id': runnerId }
       ]
     })
-    .populate('client_id', 'firstName lastName email')
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate('admin_id', 'firstName lastName email')
     .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .sort({ created_at: -1 });

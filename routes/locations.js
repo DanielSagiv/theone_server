@@ -11,8 +11,8 @@ const {
 } = require('../services/locationEventService');
 const { getAllCitiesWithLocations, getAllCityStatePairsWithLocations } = require('../services/locationService');
 const multer = require('multer');
-const { uploadBufferToS3, extFromMime } = require('../utils/s3');
-const crypto = require('crypto');
+const { enrichLocationImageFields } = require('../utils/ensureImageMetadata');
+const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
 
 const router = express.Router();
 // Increased file size limit to 50MB for media uploads
@@ -187,6 +187,16 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     }
 
     const loc = await Location.create({ ...value, createdBy: req.user._id, updatedBy: req.user._id });
+    try {
+      if (await enrichLocationImageFields(loc)) {
+        loc.markModified('media');
+        loc.markModified('seats');
+        loc.markModified('units');
+        await loc.save();
+      }
+    } catch (enrichErr) {
+      console.warn('[locations] create enrich metadata:', enrichErr.message);
+    }
     res.status(201).json({ success: true, data: loc, message: 'Location created successfully' });
   } catch (error) {
     console.error('Create location error:', { error: error.message, timestamp: new Date().toISOString() });
@@ -229,9 +239,19 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       updateData.units = existingLocation.units;
     }
 
-    const loc = await Location.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    let loc = await Location.findByIdAndUpdate(req.params.id, updateData, { new: true });
     if (!loc) {
       return res.status(404).json({ success: false, error: { code: 'LOCATION_NOT_FOUND', message: 'Location not found' } });
+    }
+    try {
+      if (await enrichLocationImageFields(loc)) {
+        loc.markModified('media');
+        loc.markModified('seats');
+        loc.markModified('units');
+        await loc.save();
+      }
+    } catch (enrichErr) {
+      console.warn('[locations] update enrich metadata:', enrichErr.message);
     }
     res.json({ success: true, data: loc, message: 'Location updated successfully' });
   } catch (error) {
@@ -315,22 +335,14 @@ router.post('/media/upload', authenticateToken, requireAdmin, (req, res, next) =
       });
     }
 
-    const ext = extFromMime(mime);
     const userId = req.user._id.toString();
-    const hash = crypto.createHash('sha256').update(userId + Date.now().toString()).digest('hex').slice(0, 16);
-    const key = `locations/${userId}/${hash}.${ext}`; // Store under locations/userId/
+    const data = await uploadMediaWithMetadata(req.file, `locations/${userId}`, userId);
 
-    const url = await uploadBufferToS3(req.file.buffer, key, mime);
-
-    console.log('Upload response:', {
-      url: url,
-      type: type,
-      detectedFromMime: mime
-    });
+    console.log('Upload response:', { url: data.url, type: data.type, detectedFromMime: mime });
 
     return res.json({
       success: true,
-      data: { url, type },
+      data,
       message: 'Media uploaded successfully'
     });
   } catch (error) {

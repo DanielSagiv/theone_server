@@ -204,7 +204,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       ]
     })
     .populate('admin_id', 'firstName lastName email')
-    .populate('client_id', 'firstName lastName email avatarUrl')
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate({
       path: 'events.event_id',
       select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
@@ -438,7 +438,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
       ]
     })
     .lean()
-    .populate('client_id', 'firstName lastName email avatarUrl')
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate('admin_id', 'firstName lastName email')
     .populate('runner_assignment.runner_id', 'firstName lastName email avatarUrl')
     .populate({

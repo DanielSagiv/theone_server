@@ -3,8 +3,8 @@ const User = require('../models/User');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { updateProfileSchema, updateEntityStatusSchema, updateRoleSchema, updateVisibilityStatusSchema, updateUserTierSchema } = require('../utils/validationSchemas');
 const multer = require('multer');
-const { uploadBufferToS3, extFromMime } = require('../utils/s3');
-const crypto = require('crypto');
+const { enrichUserAvatarFields } = require('../utils/ensureImageMetadata');
+const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
@@ -82,12 +82,17 @@ router.put('/profile', authenticateToken, async (req, res) => {
       }
     }
 
-    // Update user
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user._id,
-      value,
-      { new: true, runValidators: true }
-    );
+    const patch = { ...value };
+    try {
+      await enrichUserAvatarFields(patch);
+    } catch (enrichErr) {
+      console.warn('[users] profile avatar enrich:', enrichErr.message);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(req.user._id, patch, {
+      new: true,
+      runValidators: true
+    });
 
     res.json({
       success: true,
@@ -148,19 +153,30 @@ router.post('/profile/avatar', authenticateToken, (req, res, next) => {
       });
     }
 
-    const ext = extFromMime(mime);
     const userId = req.user._id.toString();
-    const hash = crypto.createHash('sha256').update(userId + Date.now().toString()).digest('hex').slice(0, 16);
-    const key = `avatars/${userId}/${hash}.${ext}`;
+    const uploaded = await uploadMediaWithMetadata(req.file, `avatars/${userId}`, userId);
 
-    const url = await uploadBufferToS3(req.file.buffer, key, mime);
-
-    // Save the URL as-is; ensure your bucket/object can be read by clients.
-    const updated = await User.findByIdAndUpdate(userId, { avatarUrl: url }, { new: true });
+    const updated = await User.findByIdAndUpdate(
+      userId,
+      {
+        avatarUrl: uploaded.url,
+        avatar_width: uploaded.width,
+        avatar_height: uploaded.height,
+        avatar_byte_size: uploaded.byte_size,
+        avatar_thumb_url: uploaded.thumb_url
+      },
+      { new: true }
+    );
 
     return res.json({
       success: true,
-      data: { avatarUrl: updated.avatarUrl },
+      data: {
+        avatarUrl: updated.avatarUrl,
+        avatar_width: updated.avatar_width,
+        avatar_height: updated.avatar_height,
+        avatar_byte_size: updated.avatar_byte_size,
+        avatar_thumb_url: updated.avatar_thumb_url
+      },
       message: 'Avatar updated successfully'
     });
   } catch (error) {

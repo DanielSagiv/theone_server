@@ -125,6 +125,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  /** Pixel width of avatar image (optional; filled on upload/enrich). */
+  avatar_width: { type: Number, min: 0 },
+  /** Pixel height of avatar image (optional). */
+  avatar_height: { type: Number, min: 0 },
+  avatar_byte_size: { type: Number, min: 0 },
+  avatar_thumb_url: { type: String, trim: true },
   // Email Verification Fields
   emailVerified: {
     type: Boolean,

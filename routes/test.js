@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const path = require('path');
+const { LOCATION_SEAT_CATEGORY_OPTIONS } = require('../constants/locationSeatCategories');
 
 /**
  * GET /test/login
@@ -44,7 +45,8 @@ router.get('/dashboard', (req, res) => {
   res.render('test/dashboard', {
     title: 'The1 Platform - API Test Dashboard',
     user: null,
-    token: null
+    token: null,
+    seatCategoryOptions: LOCATION_SEAT_CATEGORY_OPTIONS
   });
 });
 

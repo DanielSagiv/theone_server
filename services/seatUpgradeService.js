@@ -9,6 +9,21 @@
 const Event = require('../models/Event');
 const Location = require('../models/Location');
 const { generateSeatRecommendation } = require('./seatRecommendationService');
+const { enrichSeatUpgradeOffersPayload } = require('../utils/ensureImageMetadata');
+
+/**
+ * Clone media entries so enrichment does not mutate location/event subdocuments in memory.
+ * @param {Array} arr
+ * @returns {Array}
+ */
+function cloneSeatMediaArray(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((m) => {
+    if (!m) return m;
+    const o = typeof m.toObject === 'function' ? m.toObject() : { ...m };
+    return { ...o };
+  });
+}
 
 /**
  * Find location seat by matching seat_id first (stable reference), then code as fallback
@@ -624,7 +639,7 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
               
               // Get media from location seat (where media is actually stored)
               // Event seats inherit from location but media might not be populated
-              const seatMedia = locationSeat?.media || seat.media || [];
+              const seatMedia = cloneSeatMediaArray(locationSeat?.media || seat.media || []);
               
               // Generate AI recommendation for upgrade alternative if sentiments available
               let aiRecommendation = null;
@@ -703,7 +718,13 @@ async function generateSeatUpgradeOffers(coe, totalBudget = null, userPreference
       totalOffers: offers.length,
       offersPerSeat: offers.map(o => ({ seat: o.current_seat_code, alternatives: o.alternatives?.length || 0 }))
     });
-    
+
+    try {
+      await enrichSeatUpgradeOffersPayload(offers);
+    } catch (enrichErr) {
+      console.warn('[SEAT_UPGRADE] enrich offer media metadata:', enrichErr.message);
+    }
+
     return offers;
   } catch (error) {
     console.error('[SEAT_UPGRADE] Error generating upgrade offers:', error);

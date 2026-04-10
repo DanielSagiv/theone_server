@@ -1,0 +1,61 @@
+/**
+ * Canonical keys for Location.seats[].category (night/day club table sections).
+ * Labels are for admin dashboard display; API persists `value` strings.
+ * Keep in sync with models/Location.js SeatSchema enum and Joi seatSchema.
+ */
+const LOCATION_SEAT_CATEGORY_OPTIONS = [
+  { value: 'second_row_balcony', label: '2nd Row Balcony' },
+  { value: 'second_row_premium_terrace', label: '2nd Row Premium Terrace' },
+  { value: 'third_tier_couch', label: '3rd Tier Couch' },
+  { value: 'third_tier_section', label: '3rd Tier Section' },
+  { value: 'four_tops', label: '4 Tops' },
+  { value: 'backwall', label: 'Backwall' },
+  { value: 'beach_cabana', label: 'Beach Cabana' },
+  { value: 'beach_couch', label: 'Beach Couch' },
+  { value: 'beach_villa', label: 'Beach Villa' },
+  { value: 'center_club', label: 'Center Club' },
+  { value: 'center_dance_floor', label: 'Center Dance Floor' },
+  { value: 'center_upper_dance_floor', label: 'Center Upper Dance Floor' },
+  { value: 'dance_floor', label: 'Dance Floor' },
+  { value: 'daybeds', label: 'Daybeds' },
+  { value: 'entry_level', label: 'Entry Level' },
+  { value: 'large_3rd_tier_couch', label: 'Large 3rd Tier Couch' },
+  { value: 'large_3rd_tier_section', label: 'Large 3rd Tier Section' },
+  { value: 'large_side_stage_patio', label: 'Large Side Stage Patio' },
+  { value: 'large_stage', label: 'Large Stage' },
+  { value: 'lower_cabana', label: 'Lower Cabana' },
+  { value: 'lower_club', label: 'Lower Club' },
+  { value: 'lower_dance', label: 'Lower Dance' },
+  { value: 'lower_dance_floor', label: 'Lower Dance Floor' },
+  { value: 'owner_tables', label: 'Owner Tables' },
+  { value: 'platform_section', label: 'Platform Section' },
+  { value: 'pool_couch', label: 'Pool Couch' },
+  { value: 'pool_deck_or_lawn', label: 'Pool Deck or Lawn' },
+  { value: 'poolside_section', label: 'Poolside Section' },
+  { value: 'premium_balcony', label: 'Premium Balcony' },
+  { value: 'premium_outside_section', label: 'Premium Outside Section' },
+  { value: 'premium_terrace_east', label: 'Premium Terrace East' },
+  { value: 'premium_terrace_west', label: 'Premium Terrace West' },
+  { value: 'premium_upper_club', label: 'Premium Upper Club' },
+  { value: 'prime', label: 'Prime' },
+  { value: 'small_1st_tier_prime', label: 'Small 1st Tier Prime' },
+  { value: 'small_side_stage_patio', label: 'Small Side Stage Patio' },
+  { value: 'small_stage', label: 'Small Stage' },
+  { value: 'stage', label: 'Stage' },
+  { value: 'stage_cabana', label: 'Stage Cabana' },
+  { value: 'stage_tables', label: 'Stage Tables' },
+  { value: 'standard', label: 'Standard' },
+  { value: 'terrace_daybed', label: 'Terrace Daybed' },
+  { value: 'terrace_reserve', label: 'Terrace Reserve' },
+  { value: 'terrace_tables', label: 'Terrace Tables' },
+  { value: 'upper_club', label: 'Upper Club' },
+  { value: 'upper_dance', label: 'Upper Dance' },
+  { value: 'upper_dance_floor', label: 'Upper Dance Floor' },
+];
+
+const LOCATION_SEAT_CATEGORY_VALUES = LOCATION_SEAT_CATEGORY_OPTIONS.map((o) => o.value);
+
+module.exports = {
+  LOCATION_SEAT_CATEGORY_OPTIONS,
+  LOCATION_SEAT_CATEGORY_VALUES,
+};

@@ -560,12 +560,17 @@ const coeSchema = new mongoose.Schema({
         type: String
       },
       media: [{
-        type: { 
-          type: String, 
-          enum: ['image', 'video'] 
+        type: {
+          type: String,
+          enum: ['image', 'video']
         },
         url: { type: String },
-        caption: { type: String }
+        caption: { type: String },
+        order: { type: Number, default: 0 },
+        width: { type: Number, min: 0 },
+        height: { type: Number, min: 0 },
+        byte_size: { type: Number, min: 0 },
+        thumb_url: { type: String, trim: true }
       }],
       offered_at: { 
         type: Date, 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const MediaAssetSchema = require('./schemas/MediaAssetSchema');
 
 /**
  * Event-specific seat booking (inherited from location seats)
@@ -41,12 +42,7 @@ const EventSeatSchema = new mongoose.Schema({
   polygon: [{ x: Number, y: Number }],
   
   // Event-specific media
-  media: [{
-    type: { type: String, enum: ['image', 'video'], required: true },
-    url: { type: String, required: true, trim: true },
-    caption: { type: String, trim: true },
-    order: { type: Number, default: 0 }
-  }]
+  media: [MediaAssetSchema]
 }, { _id: true });
 
 /**
@@ -81,12 +77,7 @@ const EventUnitSchema = new mongoose.Schema({
   booking_reference: { type: String, trim: true }, // COE or booking reference
   
   // Event-specific media
-  media: [{
-    type: { type: String, enum: ['image', 'video'], required: true },
-    url: { type: String, required: true, trim: true },
-    caption: { type: String, trim: true },
-    order: { type: Number, default: 0 }
-  }]
+  media: [MediaAssetSchema]
 }, { _id: true });
 
 /**
@@ -142,12 +133,7 @@ const EventSchema = new mongoose.Schema({
   policies: { type: String, trim: true },
   
   // Media & Assets
-  media: [{
-    type: { type: String, enum: ['image', 'video'], required: true },
-    url: { type: String, required: true, trim: true },
-    caption: { type: String, trim: true },
-    order: { type: Number, default: 0 }
-  }],
+  media: [MediaAssetSchema],
   
   // Seats & Units (inherited from location with event-specific pricing/status)
   seats: [EventSeatSchema],

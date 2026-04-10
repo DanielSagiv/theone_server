@@ -12738,6 +12738,19 @@
         let cl_editLocationId = null;
         let cl_originalLocationData = null; // Store original location data for preserving arrays
 
+        /** Seat category <option> HTML (must match Location.seats[].category enum) */
+        const SEAT_CATEGORY_OPTIONS = <%- JSON.stringify(typeof seatCategoryOptions !== 'undefined' ? seatCategoryOptions : []) %>;
+        function buildSeatCategorySelectHtml() {
+            if (!Array.isArray(SEAT_CATEGORY_OPTIONS) || SEAT_CATEGORY_OPTIONS.length === 0) {
+                return '<option value="dance_floor">Dance Floor</option>';
+            }
+            return SEAT_CATEGORY_OPTIONS.map(function (o) {
+                const v = String(o.value || '').replace(/"/g, '&quot;');
+                const lab = String(o.label || o.value || '').replace(/</g, '&lt;');
+                return '<option value="' + v + '">' + lab + '</option>';
+            }).join('');
+        }
+
         async function openEditLocationFromList(locationId) {
             console.log('openEditLocationFromList called with locationId:', locationId);
             // Visual debugging
@@ -13322,19 +13335,7 @@
                 <td><input class="cl_seat_code" style="width:90px"/></td>
                 <td>
                     <select class="cl_seat_cat">
-                        <option value="backwall">Backwall</option>
-                        <option value="large_3rd_tier_couch">Large 3rd Tier Couch</option>
-                        <option value="third_tier_couch">3rd Tier Couch</option>
-                        <option value="upper_dance">Upper Dance</option>
-                        <option value="lower_dance">Lower Dance</option>
-                        <option value="four_tops">4 Tops</option>
-                        <option value="stage_tables">Stage Tables</option>
-                        <option value="owner_tables">Owner Tables</option>
-                        <option value="prime">Prime</option>
-                        <option value="entry_level">Entry Level</option>
-                        <option value="dance_floor">Dance Floor</option>
-                        <option value="standard">Standard</option>
-                        <option value="small_1st_tier_prime">Small 1st Tier Prime</option>
+                        ${buildSeatCategorySelectHtml()}
                     </select>
                 </td>
                 <td><input class="cl_seat_the1cat" list="cl_the1cat_datalist" placeholder="THE1 category" style="width:140px"/></td>
