@@ -297,10 +297,13 @@ Make sure all required environment variables are set in your ECS Task Definition
 - `MONGODB_URI` - MongoDB connection string
 - `JWT_SECRET` - JWT signing secret
 - `OPENAI_API_KEY` - OpenAI API key for bot features
-- `GP_APP_NAME` - Global Payments app name
-- `GP_APP_KEY` - Global Payments app key
-- `GP_MERCHANT_ID` - Global Payments merchant ID
+- `GOAT_BASE_URL` (or `GOAT_PRODUCTION_BASE_URL` in prod) - GOAT API host, e.g. `https://api.goatpaymentsgateway.com`
+- `GOAT_SOURCE_KEY` - GOAT source key (HTTP Basic user)
+- `GOAT_PIN` - GOAT PIN if configured (Basic password; can be empty)
+- `GOAT_WEBHOOK_SIGNATURE` - Webhook signing secret from GOAT when you register `https://your-host/webhooks/goat`
 - Any other variables from your `.env` file
+
+**GOAT webhooks:** Register callback URL `POST /webhooks/goat` on your public API base (same path as mounted in `server.js`). Store the signature secret in `GOAT_WEBHOOK_SIGNATURE`. Legacy `POST /webhooks/global-payments` returns HTTP 410.
 
 **To update environment variables in ECS:**
 1. Go to AWS Console → ECS → Task Definitions

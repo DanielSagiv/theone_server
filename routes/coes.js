@@ -2958,10 +2958,9 @@ router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req,
 
     // Process refund using existing payment service
     const paymentService = require('../services/paymentService');
-    const refundPayment = await paymentService.processRefund(
+    const refundResult = await paymentService.processRefund(
       coe.payment_id,
       refund_amount,
-      `COE Refund - ${coe.name}`,
       reason
     );
 
@@ -2970,7 +2969,8 @@ router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req,
     coe.refund_amount = newTotalRefunded;
     coe.refund_date = new Date();
     coe.refund_reason = reason;
-    coe.refund_payment_id = refundPayment._id;
+    // Original COE payment document (refund metadata lives on that Payment row)
+    coe.refund_payment_id = coe.payment_id;
 
     if (newTotalRefunded >= maxRefundAmount) {
       coe.refund_status = 'full';

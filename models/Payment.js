@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * Payment schema for payment transaction tracking
- * @description Stores all payment transactions with Global Payments integration
+ * @description Stores all payment transactions (GOAT gateway; legacy field names gp_* hold processor ids)
  */
 const paymentSchema = new mongoose.Schema({
   // References

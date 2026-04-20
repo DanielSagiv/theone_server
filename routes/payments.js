@@ -5,7 +5,7 @@ const paymentService = require('../services/paymentService');
 const Joi = require('joi');
 
 /**
- * Payment Routes - Global Payments Integration
+ * Payment Routes - GOAT Payment Gateway integration
  * @description API endpoints for payment processing
  */
 

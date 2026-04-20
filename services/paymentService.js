@@ -1,15 +1,14 @@
 const crypto = require('crypto');
-const axios = require('axios');
-const { execSync } = require('child_process');
 const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const User = require('../models/User');
 const Event = require('../models/Event');
 const { getCoeTaxRate } = require('./coeService');
+const goatClient = require('./goatClient');
 
 /**
- * Payment Service - Global Payments Integration
- * @description Handles all payment processing with Global Payments API
+ * Payment Service - GOAT Payment Gateway integration
+ * @description Orchestrates COE payments, refunds, tokenized cards, and webhooks. Gateway transaction id is stored in `gp_transaction_id` (legacy field name).
  */
 
 /**
@@ -96,13 +95,8 @@ function computeInitialDepositPricing(coe) {
   };
 }
 
-// Global Payments Configuration
-const GP_CONFIG = {
-  appName: process.env.GP_APP_NAME,
-  appKey: process.env.GP_APP_KEY,
-  merchantId: process.env.GP_MERCHANT_ID,
-  serviceUrl: process.env.GP_SERVICE_URL || 'https://apis.sandbox.globalpay.com',
-  currency: process.env.PAYMENT_CURRENCY || 'USD'
+const PAYMENT_CONFIG = {
+  currency: process.env.PAYMENT_CURRENCY || 'USD',
 };
 
 /**
@@ -120,54 +114,6 @@ function detectCardBrand(cardNumber) {
   if (firstTwoDigits === '60' || firstTwoDigits === '65') return 'DISCOVER';
   
   return 'UNKNOWN';
-}
-
-/**
- * Get Global Payments access token
- * @returns {Promise<string>} Access token
- */
-async function getGPAccessToken() {
-  try {
-    const appId = process.env.GP_APP_ID || GP_CONFIG.appName;
-    
-    // Use the exact working curl command with hardcoded values
-    const curlCommand = `NONCE=\$(date -u +"%Y-%m-%dT%H:%M:%S.000Z") && SECRET=\$(echo -n "\${NONCE}VuaYoVKWTRlumYt2" | openssl dgst -sha512 | awk '{print \$2}') && curl --compressed -sS https://apis.sandbox.globalpay.com/ucp/accesstoken -H "Content-type: application/json" -H "X-GP-Version: 2021-03-22" -d "{\\\"app_id\\\": \\\"exOfDGENxfsdqgcq550x1gIcRDd1MBLr\\\",\\\"nonce\\\": \\\"\${NONCE}\\\",\\\"secret\\\": \\\"\${SECRET}\\\",\\\"grant_type\\\": \\\"client_credentials\\\"}"`;
-    
-    const result = execSync(curlCommand, { 
-      encoding: 'utf8',
-      shell: '/bin/zsh'
-    });
-    
-    const response = JSON.parse(result.trim());
-    
-    
-    if (!response.token) {
-      throw new Error('No token in response: ' + JSON.stringify(response));
-    }
-    
-    return response.token;
-  } catch (error) {
-    console.error('Failed to get GP access token:', error.message);
-    throw new Error('Failed to authenticate with Global Payments');
-  }
-}
-
-/**
- * Create Global Payments API client with access token
- * @returns {Promise<Object>} Axios instance configured for GP API
- */
-async function createGPClient() {
-  const accessToken = await getGPAccessToken();
-  
-  return axios.create({
-    baseURL: GP_CONFIG.serviceUrl,
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'x-gp-version': '2021-03-22'
-    },
-    timeout: 30000
-  });
 }
 
 /**
@@ -328,83 +274,15 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
         payment_id: payment._id,
         gp_transaction_id: payment.gp_transaction_id,
         amount,
-        currency: coe.currency || GP_CONFIG.currency,
+        currency: coe.currency || PAYMENT_CONFIG.currency,
         status: payment.status || 'completed'
       };
     }
-    
-    // Generate idempotency key for non-token flow
-    const idempotencyKey = crypto.randomBytes(16).toString('hex');
-    
-    // Create payment record (redirect/hosted flow only)
-    const payment = new Payment({
-      coe_id: coeId,
-      user_id: userId,
-      amount,
-      currency: coe.currency || GP_CONFIG.currency,
-      payment_type: paymentType,
-      status: 'pending',
-      idempotency_key: idempotencyKey,
-      description,
-      save_payment_method: saveCard,
-      payment_token_id: tokenId,
-      is_token_payment: !!tokenId
-    });
-    
-    await payment.save();
-    
-    // Create GP transaction
-    const gpClient = await createGPClient();
-    const gpRequest = {
-      account_name: GP_CONFIG.merchantId,
-      type: 'SALE',
-      channel: 'CNP',
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: coe.currency || 'USD',
-      reference: payment._id.toString(),
-      capture_mode: 'AUTO', // Auto-capture for simplicity
-      payment_method: {
-        entry_mode: 'ECOM'
-      },
-      order: {
-        description: `The1 Platform - ${coe.name}`
-      },
-      notifications: {
-        return_url: `${process.env.FRONTEND_URL}/payment/complete?payment_id=${payment._id}`,
-        status_url: `${process.env.BACKEND_URL}/webhooks/global-payments`
-      }
-    };
-    
-    // If saving card, add tokenization (Phase 2)
-    if (saveCard && cardDetails) {
-      gpRequest.payment_method.storage_mode = 'ON_FILE';
-      gpRequest.payment_method.card = cardDetails;
-    }
-    
-    const gpResponse = await gpClient.post('/ucp/transactions', gpRequest);
-    
-    // Update payment
-    payment.gp_transaction_id = gpResponse.data.id;
-    payment.status = 'processing';
-    await payment.save();
-    
-    console.log('Payment intent created:', {
-      payment_id: payment._id,
-      coe_id: coeId,
-      amount,
-      payment_type: paymentType,
-      gp_transaction_id: gpResponse.data.id,
-      timestamp: new Date().toISOString()
-    });
-    
-    return {
-      payment_id: payment._id,
-      gp_transaction_id: gpResponse.data.id,
-      payment_url: gpResponse.data.payment_url,
-      amount,
-      currency: coe.currency || 'USD',
-      status: 'processing'
-    };
+
+    // Hosted checkout was Global Payments ECOM; GOAT integration requires a saved card (token) for COE pay.
+    throw new Error(
+      'Payment requires a saved card. Add a card in the app and try again.'
+    );
     
   } catch (error) {
     console.error('Payment intent creation failed:', {
@@ -446,19 +324,32 @@ async function processRefund(paymentId, amount = null, reason = '') {
       throw new Error('Invalid refund amount');
     }
     
-    // Call GP refund API
-    const gpClient = await createGPClient();
-    const gpResponse = await gpClient.post(
-      `/ucp/transactions/${payment.gp_transaction_id}/refund`,
-      { amount: Math.round(refundAmount * 100) }
-    );
-    
+    const refRaw = payment.gp_transaction_id;
+    const referenceNumber = parseInt(String(refRaw).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(referenceNumber) || referenceNumber < 1) {
+      throw new Error('Invalid gateway transaction reference for refund');
+    }
+
+    const refundOpts = {
+      reference_number: referenceNumber,
+      description: reason || 'Refund',
+    };
+    if (refundAmount < payment.amount) {
+      refundOpts.amount = refundAmount;
+    }
+
+    const goatRefund = await goatClient.refundTransaction(refundOpts);
+    const newRefundRef =
+      goatRefund.reference_number != null
+        ? String(goatRefund.reference_number)
+        : String(goatRefund.refund_reference || '');
+
     // Update payment
     payment.status = 'refunded';
     payment.refunded_at = new Date();
     payment.refund_amount = refundAmount;
     payment.refund_reason = reason;
-    payment.refund_transaction_id = gpResponse.data.id;
+    payment.refund_transaction_id = newRefundRef;
     await payment.save();
     
     // Update COE
@@ -490,12 +381,12 @@ async function processRefund(paymentId, amount = null, reason = '') {
     console.log('Refund processed:', {
       payment_id: paymentId,
       refund_amount: refundAmount,
-      gp_refund_id: gpResponse.data.id,
+      goat_refund_reference: newRefundRef,
       timestamp: new Date().toISOString()
     });
-    
+
     return {
-      refund_id: gpResponse.data.id,
+      refund_id: newRefundRef,
       amount: refundAmount,
       status: 'completed'
     };
@@ -1216,31 +1107,123 @@ async function getInvoiceData(paymentId, userId) {
 }
 
 /**
- * Verify webhook signature
+ * Process GOAT gateway webhook (payload shape may vary; best-effort mapping).
+ * @param {Object} body - Parsed JSON body
+ * @returns {Promise<Object>}
+ */
+async function processGoatWebhook(body) {
+  try {
+    const ref =
+      body.reference ||
+      body.order_id ||
+      body.transaction_details?.order_number ||
+      body.transaction_details?.key ||
+      body.key;
+    let payment = null;
+
+    if (ref && /^[a-f0-9]{24}$/i.test(String(ref))) {
+      payment = await Payment.findById(ref);
+    }
+    if (!payment && body.reference_number != null) {
+      payment = await Payment.findOne({
+        gp_transaction_id: String(body.reference_number),
+      });
+    }
+
+    if (!payment) {
+      console.warn('[GOAT Webhook] Payment not found', {
+        snippet: JSON.stringify(body).slice(0, 400),
+      });
+      return { processed: false, reason: 'Payment not found' };
+    }
+
+    const typeStr = `${body.type || body.event_type || body.status || ''}`.toLowerCase();
+    const failed =
+      typeStr.includes('declin') ||
+      typeStr.includes('fail') ||
+      body.status_code === 'D' ||
+      body.status_code === 'E';
+
+    if (failed) {
+      if (payment.status === 'completed') {
+        return { processed: true, duplicate: true, payment_id: payment._id };
+      }
+      payment.status = 'failed';
+      payment.failed_at = new Date();
+      payment.failure_message =
+        body.error_message || body.message || 'Payment declined';
+      await payment.save();
+      return { processed: true, payment_id: payment._id };
+    }
+
+    const ok =
+      body.status_code === 'A' ||
+      (body.status && String(body.status).toLowerCase() === 'approved') ||
+      typeStr.includes('approv') ||
+      typeStr.includes('captur') ||
+      typeStr.includes('complet');
+
+    if (ok) {
+      if (payment.status === 'completed') {
+        return { processed: true, duplicate: true, payment_id: payment._id };
+      }
+      payment.status = 'completed';
+      payment.completed_at = new Date();
+      if (body.last_4 != null) payment.card_last_four = String(body.last_4);
+      if (body.card_type) payment.card_brand = String(body.card_type);
+      payment.gp_response_message = body.error_message || payment.gp_response_message;
+      await payment.save();
+      if (payment.coe_id) {
+        await updateCOEPaymentStatus(payment.coe_id, payment);
+      }
+      return { processed: true, payment_id: payment._id };
+    }
+
+    console.log('[GOAT Webhook] Unhandled event shape', {
+      type: body.type || body.event_type,
+      status: body.status,
+    });
+    return { processed: false, reason: 'Unknown event type' };
+  } catch (error) {
+    console.error('GOAT webhook processing failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify GOAT webhook signature (HMAC-SHA256 of JSON body; align header with GOAT docs when finalized).
  * @param {Object} payload - Webhook payload
- * @param {string} signature - Signature header
+ * @param {string} signature - Signature from header (e.g. x-signature)
  * @returns {boolean} Valid
  */
-function verifyWebhookSignature(payload, signature) {
+function verifyGoatWebhookSignature(payload, signature) {
   try {
-    const secret = process.env.GP_WEBHOOK_SECRET;
-    
-    // Allow webhooks in development without secret
+    const secret = process.env.GOAT_WEBHOOK_SIGNATURE;
     if (!secret) {
-      console.warn('GP_WEBHOOK_SECRET not configured, skipping signature verification');
+      console.warn(
+        'GOAT_WEBHOOK_SIGNATURE not configured, skipping signature verification'
+      );
       return true;
     }
-    
+    if (!signature) {
+      return false;
+    }
     const expected = crypto
       .createHmac('sha256', secret)
       .update(JSON.stringify(payload))
       .digest('hex');
-    
     return signature === expected;
   } catch (error) {
-    console.error('Webhook signature verification failed:', error);
+    console.error('GOAT webhook signature verification failed:', error);
     return false;
   }
+}
+
+/**
+ * @deprecated Legacy name; use verifyGoatWebhookSignature for GOAT.
+ */
+function verifyWebhookSignature(payload, signature) {
+  return verifyGoatWebhookSignature(payload, signature);
 }
 
 /**
@@ -1257,29 +1240,32 @@ async function tokenizeAndSaveCard(userId, cardDetails, setAsDefault = true) {
       throw new Error('User not found');
     }
     
-    // Call GP tokenization API
-    const gpClient = await createGPClient();
-    
-    const gpResponse = await gpClient.post('/ucp/payment-methods', {
-      reference: `tokenize-${userId}-${Date.now()}`,
-      card: {
-        number: cardDetails.number,
-        expiry_month: cardDetails.expiry_month,
-        expiry_year: cardDetails.expiry_year,
-        cvv: cardDetails.cvv
-      },
-      usage_mode: 'MULTIPLE'
+    const expiryMonth = parseInt(String(cardDetails.expiry_month), 10);
+    let expiryYear = parseInt(String(cardDetails.expiry_year), 10);
+    if (expiryYear < 100) {
+      expiryYear += 2000;
+    }
+
+    const { cardRef } = await goatClient.createSavedCardFromCardNumber({
+      card: String(cardDetails.number).replace(/\s/g, ''),
+      expiry_month: expiryMonth,
+      expiry_year: expiryYear,
     });
-    
-    const tokenId = gpResponse.data.id;
-    const cardInfo = gpResponse.data.card;
-    
-    
-    // Extract card info - GP returns masked_number_last4 as "XXXXXXXXXXXX5262"
-    const cardLastFour = cardInfo.last_four || 
-                        cardInfo.masked_number_last4?.slice(-4) || 
-                        cardInfo.last4 || 
-                        cardInfo.number?.slice(-4);
+
+    const tokenId = String(cardRef);
+    const sourceProbe = goatClient.toSourceToken(tokenId);
+    if (sourceProbe.length > goatClient.GOAT_MAX_SOURCE_LENGTH) {
+      throw new Error(
+        'GOAT returned a card token that exceeds gateway length limits. Try again or contact support.'
+      );
+    }
+
+    const cardLastFour = String(cardDetails.number || '')
+      .replace(/\D/g, '')
+      .slice(-4);
+    const cardInfo = {
+      brand: detectCardBrand(String(cardDetails.number).replace(/\s/g, '')),
+    };
     
     // Create card fingerprint for duplicate detection
     const cardFingerprint = `${cardLastFour}-${cardDetails.expiry_month}-${cardDetails.expiry_year}`;
@@ -1384,7 +1370,7 @@ async function tokenizeAndSaveCard(userId, cardDetails, setAsDefault = true) {
 /**
  * Charge saved card (Phase 2: Card Tokenization)
  * @param {string} userId - User ID
- * @param {string} tokenId - Token ID (from GP payment-methods)
+ * @param {string} tokenId - Saved GOAT cardRef (stored in user.saved_payment_methods)
  * @param {number} amount - Amount
  * @param {string} description - Description
  * @param {string} coeId - COE ID (optional)
@@ -1410,7 +1396,7 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       coe_id: coeId,
       user_id: userId,
       amount,
-      currency: GP_CONFIG.currency,
+      currency: PAYMENT_CONFIG.currency,
       payment_type: resolvedPaymentType,
       payment_token_id: tokenId,
       is_token_payment: true,
@@ -1418,80 +1404,70 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       description
     });
     await payment.save();
-    
-    const gpClient = await createGPClient();
-    const amountCents = Math.round(amount * 100).toString();
-    const baseChargeRequest = {
-      account_name: 'transaction_processing',
-      type: 'SALE',
-      channel: 'CNP',
-      amount: amountCents,
-      currency: GP_CONFIG.currency,
-      reference: payment._id.toString(),
-      country: 'US',
-      order: { description }
-    };
 
-    const chargeWithToken = () => ({
-      ...baseChargeRequest,
-      payment_method: {
-        entry_mode: 'ECOM',
-        storage_mode: 'ON_FILE',
-        id: tokenId
-      }
-    });
-
-    const chargeWithTestCard = () => ({
-      ...baseChargeRequest,
-      payment_method: {
-        name: 'Test User',
-        entry_mode: 'ECOM',
-        card: {
-          number: '4263970000005262',
-          expiry_month: '12',
-          expiry_year: '26',
-          cvv: '123',
-          cvv_indicator: 'PRESENT'
-        }
-      }
-    });
-
-    let gpResponse;
+    const source = goatClient.toSourceToken(tokenId);
+    const customerName = [user.firstName, user.lastName]
+      .map(v => (v == null ? '' : String(v).trim()))
+      .filter(Boolean)
+      .join(' ');
+    const userIdStr = user._id ? String(user._id) : String(userId);
+    let goatData;
     try {
-      gpResponse = await gpClient.post('/ucp/transactions', chargeWithToken());
-    } catch (gpError) {
-      const gpData = gpError.response?.data;
-      const gpMessage = (typeof gpData === 'object' && (gpData?.message || gpData?.error_description || gpData?.error)) || gpError.message;
-      console.error('GP API Error (token charge):', gpData || gpError.message);
-
-      const isSandbox = (GP_CONFIG.serviceUrl || '').toLowerCase().includes('sandbox');
-      const useTestCardFallback = process.env.GP_SANDBOX_TEST_CARD_FALLBACK === 'true' || (isSandbox && process.env.NODE_ENV !== 'production');
-
-      if (useTestCardFallback && gpError.response?.status >= 400 && gpError.response?.status < 500) {
-        try {
-          gpResponse = await gpClient.post('/ucp/transactions', chargeWithTestCard());
-        } catch (retryError) {
-          console.error('GP API Error (test card fallback):', retryError.response?.data || retryError.message);
-          payment.status = 'failed';
-          payment.failure_message = retryError.response?.data?.message || retryError.message;
-          payment.failed_at = new Date();
-          await payment.save();
-          throw new Error(gpMessage || 'Payment failed. Please try again.');
-        }
-      } else {
-        payment.status = 'failed';
-        payment.failure_message = gpMessage;
-        payment.failed_at = new Date();
-        await payment.save();
-        throw new Error(gpMessage || 'Payment failed. Please try again.');
+      goatData = await goatClient.chargeWithSource({
+        amount,
+        source,
+        description,
+        orderNumber: payment._id.toString(),
+        customerName,
+        customer: {
+          identifier: userIdStr,
+          email: user.email || undefined,
+        },
+      });
+    } catch (goatErr) {
+      let msg =
+        goatErr.message ||
+        goatErr.response?.data?.error_message ||
+        goatErr.response?.data?.message ||
+        'Payment failed. Please try again.';
+      // Only append generic migration hint for GOAT HTTP errors; local checks (e.g. source length) already include instructions.
+      if (
+        goatErr.response &&
+        /validation|invalid|source|token|not found|unauthoriz/i.test(msg) &&
+        !/GOAT_SOURCE_KEY/i.test(msg)
+      ) {
+        msg +=
+          ' If this card was saved before the GOAT migration, remove it in the app and add the card again.';
       }
+      payment.status = 'failed';
+      payment.failure_message = msg;
+      payment.failed_at = new Date();
+      await payment.save();
+      throw new Error(msg);
     }
-    
-    payment.gp_transaction_id = gpResponse.data.id;
+
+    if (!goatClient.isChargeApproved(goatData)) {
+      const msg =
+        goatData.error_message ||
+        goatData.message ||
+        'Payment was not approved';
+      payment.status = 'failed';
+      payment.failure_message = msg;
+      payment.failed_at = new Date();
+      await payment.save();
+      throw new Error(msg);
+    }
+
+    const refNum = goatData.reference_number;
+    payment.gp_transaction_id =
+      refNum != null ? String(refNum) : String(goatData.transaction?.id || '');
     payment.status = 'completed';
     payment.completed_at = new Date();
-    payment.card_brand = savedMethod.card_brand;
-    payment.card_last_four = savedMethod.card_last_four;
+    payment.card_brand = goatData.card_type || savedMethod.card_brand;
+    payment.card_last_four =
+      goatData.last_4 != null
+        ? String(goatData.last_4)
+        : savedMethod.card_last_four;
     await payment.save();
     
     // Update last used
@@ -1553,15 +1529,7 @@ async function removeSavedCard(userId, tokenId) {
     }
     
     await user.save();
-    
-    // Delete from GP (optional)
-    try {
-      const gpClient = await createGPClient();
-      await gpClient.delete(`/ucp/payment-methods/${tokenId}`);
-    } catch (gpError) {
-      console.warn('GP token deletion failed (may not be supported):', gpError.message);
-    }
-    
+
     console.log('Payment method removed:', {
       user_id: userId,
       token_id: tokenId,
@@ -1678,12 +1646,14 @@ module.exports = {
   createPaymentIntent,
   processRefund,
   processPaymentWebhook,
+  processGoatWebhook,
   updateCOEPaymentStatus,
   getPaymentHistory,
   getPaymentById,
   getUserPaymentHistory,
   getInvoiceData,
   verifyWebhookSignature,
+  verifyGoatWebhookSignature,
   computeInitialDepositPricing,
   isJointAllocationSeat,
   isFullDepositSeatRow,

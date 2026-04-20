@@ -3,56 +3,65 @@ const router = express.Router();
 const paymentService = require('../services/paymentService');
 
 /**
- * Webhook Routes - Global Payments Integration
- * @description Handle webhook events from Global Payments
+ * Webhook Routes - GOAT Payment Gateway
+ * @description Handle webhook callbacks from GOAT (register URL via GOAT API POST /api/v2/webhooks).
  */
 
 /**
- * POST /webhooks/global-payments
- * Handle Global Payments webhook events
+ * POST /webhooks/goat
+ * Handle GOAT webhook events (signature: optional x-signature / x-goat-signature when GOAT_WEBHOOK_SIGNATURE is set).
  */
-router.post('/global-payments', express.json(), async (req, res) => {
+router.post('/goat', express.json(), async (req, res) => {
   try {
-    const signature = req.headers['x-gp-signature'];
-    
-    console.log('Received webhook:', {
-      type: req.body.type,
-      timestamp: new Date().toISOString()
+    const signature =
+      req.headers['x-signature'] ||
+      req.headers['x-goat-signature'] ||
+      req.headers['x-webhook-signature'];
+
+    console.log('Received GOAT webhook:', {
+      timestamp: new Date().toISOString(),
+      hasBody: !!req.body,
     });
-    
-    // Verify webhook signature
-    const isValid = paymentService.verifyWebhookSignature(req.body, signature);
-    
+
+    const isValid = paymentService.verifyGoatWebhookSignature(req.body, signature);
+
     if (!isValid) {
-      console.error('Invalid webhook signature');
-      return res.status(401).json({ 
+      console.error('Invalid GOAT webhook signature');
+      return res.status(401).json({
         error: 'Invalid signature',
-        received: false
+        received: false,
       });
     }
-    
-    // Process webhook
-    const result = await paymentService.processPaymentWebhook(req.body);
-    
-    res.json({ 
-      received: true, 
-      processed: result.processed 
+
+    const result = await paymentService.processGoatWebhook(req.body);
+
+    res.json({
+      received: true,
+      processed: result.processed,
     });
-    
   } catch (error) {
-    console.error('Webhook processing error:', {
+    console.error('GOAT webhook processing error:', {
       error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
-    
-    // Return 500 so GP retries
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Webhook processing failed',
       received: true,
-      processed: false
+      processed: false,
     });
   }
 });
 
-module.exports = router;
+/**
+ * POST /webhooks/global-payments
+ * @deprecated Global Payments removed; respond 410 so old dashboards fail clearly.
+ */
+router.post('/global-payments', express.json(), (req, res) => {
+  res.status(410).json({
+    error: 'Global Payments integration removed. Configure GOAT webhooks to POST /webhooks/goat',
+    received: false,
+  });
+});
 
+module.exports = router;

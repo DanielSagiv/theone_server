@@ -40,6 +40,13 @@ Use these env vars:
 - Function 4: Source charge – saved token / PM / ref (`POST /transactions/charge`, `source`) - documented below.
 - Function 5: Refund (full/partial) (`POST /transactions/refund`) - documented below.
 - Function 6: Webhooks and signature verification (`/webhooks`) - documented below.
+- Function 7: Get single invoice (`GET /invoices/{id}`) - documented below.
+- Function 8: Cancel existing invoice (`POST /invoices/{id}/cancel`) - documented below.
+- Function 9: Reactivate canceled invoice (`POST /invoices/{id}/reactivate`) - documented below.
+- Function 10: Request final payment (`POST /invoices/{id}/request-final`) - documented below.
+- Function 11: Delete invoice (`DELETE /invoices/{id}`) - documented below.
+- Function 12: Update invoice (`PATCH /invoices/{id}`) - documented below.
+- Function 13: Send existing invoice (`POST /invoices/{id}/send`) - documented below.
 
 ---
 
@@ -604,6 +611,529 @@ Errors:
 
 ---
 
+## Function 7 - Get Single Invoice
+
+### Endpoint
+- Method: `GET`
+- Path: `/invoices/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Fetch one invoice by invoice ID so THEONE can display invoice details, payment link, line items, and balances due to clients/admins.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Response (200)
+Invoice object fields:
+- `id` (integer) - invoice ID
+- `status` (enum) - `canceled | paid | partially paid | sent | viewed | authorized | saved`
+- `to_email` (string) - comma-delimited recipient emails
+- `sub_total_amount` (number) - subtotal before tax/surcharge
+- `total_amount` (number) - total after tax (without surcharge)
+- `due_amount` (number) - unpaid balance
+- `paid_amount` (number) - amount already paid
+- `tax` (number) - calculated tax amount
+- `created_at` (date-time) - invoice create timestamp
+- `products` (array of `InvoiceProduct`) - line items
+- `payment_link` (string) - hosted pay URL
+- `customer_id` (integer or null)
+- `number` (string or null) - invoice number
+- `customer_company` (string <= 255)
+- `customer_email` (string <= 255)
+- `billing_info` (object)
+- `shipping_info` (object)
+- `date` (date)
+- `due_date` (date)
+- `note` (string)
+- `tax_percent` (number 0..100)
+- `discount` (object)
+- `requirement` (object)
+- `surcharge` (object)
+- `terms` (string)
+- `action` (enum) - `charge | authorize`
+
+### Error responses
+- `400` - request invalid or missing required fields
+- `401` - credentials missing or invalid
+- `403` - no permission for this feature
+- `404` - invoice not found
+
+### Example response
+```json
+{
+  "id": 0,
+  "status": "canceled",
+  "to_email": "string",
+  "sub_total_amount": 0,
+  "total_amount": 0,
+  "due_amount": 0,
+  "paid_amount": 0,
+  "tax": 0,
+  "created_at": "2019-08-24T14:15:22Z",
+  "products": [
+    {
+      "id": 0,
+      "product_id": null,
+      "name": "string",
+      "description": "string",
+      "price": 20000000,
+      "quantity": 0,
+      "taxable": false,
+      "tax": 100,
+      "surcharge": 0,
+      "subtotal": 0
+    }
+  ],
+  "payment_link": "string",
+  "customer_id": null,
+  "number": null,
+  "customer_company": "string",
+  "customer_email": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "date": "2019-08-24",
+  "due_date": "2019-08-24",
+  "note": "string",
+  "tax_percent": 100,
+  "discount": {
+    "value": 0,
+    "type": "percent"
+  },
+  "requirement": {
+    "value": 100,
+    "type": "percent"
+  },
+  "surcharge": {
+    "card": {
+      "value": 0,
+      "type": "percent"
+    },
+    "ach": {
+      "value": 0,
+      "type": "percent"
+    }
+  },
+  "terms": "string",
+  "action": "charge"
+}
+```
+
+### Mapping to THEONE
+- Use GOAT invoice `id` as external invoice reference if you need a direct link.
+- `payment_link` can be surfaced to clients for direct invoice payment (if this flow is enabled).
+- Keep THEONE’s generated invoice endpoints (`/v1/payments/:paymentId/invoice` and `/invoice.pdf`) as the source of truth unless product explicitly moves to gateway-native invoices.
+
+---
+
+## Function 8 - Cancel an Existing Invoice
+
+### Endpoint
+- Method: `POST`
+- Path: `/invoices/{id}/cancel`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}/cancel`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}/cancel`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Cancel an existing invoice after it has been sent but before any payment has been made.
+
+### Business rule
+- Invoice is cancelable only when sent and not yet paid.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Responses
+- `204` - Invoice canceled successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Invoice cannot be canceled.
+
+### Mapping to THEONE
+- Use this operation for explicit client/admin cancellation flows where GOAT-native invoices are used.
+- Keep local payment/invoice status transitions synchronized with GOAT cancel outcome (`204`) to avoid drift between systems.
+
+---
+
+## Function 9 - Reactivate a Canceled Invoice
+
+### Endpoint
+- Method: `POST`
+- Path: `/invoices/{id}/reactivate`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}/reactivate`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}/reactivate`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Reactivate an invoice that was previously canceled and optionally send a reactivation email/SMS notification.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Request body (application/json)
+- `body` (string, optional)  
+  Default: `"Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached."`  
+  If omitted, GOAT uses default template with placeholders. If supplied, text is sent exactly as provided (supports escape chars like `\n`).
+- `subject` (string, optional)  
+  Default: `"Reactivated Invoice {invoice_number} from {merchant_company}"`  
+  If supplied, text is sent exactly as provided without template parsing.
+- `to` (array of email strings, optional)  
+  Recipient list. If omitted, populated from invoice `customer_email`.
+- `sms_number` (array of strings, optional)  
+  Phone numbers for SMS send.
+- `attach_invoice` (boolean, optional, default `true`)  
+  Whether to attach the system invoice to email.
+
+### Request example
+```json
+{
+  "body": "Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached.",
+  "subject": "Reactivated Invoice {invoice_number} from {merchant_company}",
+  "to": [
+    "string"
+  ],
+  "sms_number": [
+    "string"
+  ],
+  "attach_invoice": true
+}
+```
+
+### Responses
+- `204` - Invoice reactivated successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Invoice cannot be reactivated because it is not canceled.
+
+### Mapping to THEONE
+- Use this to restore a canceled GOAT-native invoice flow without creating a brand new invoice id.
+- Keep THEONE local invoice/payment status synchronized with GOAT reactivation outcome (`204`) to avoid status drift.
+
+---
+
+## Function 10 - Request Final Payment for an Invoice
+
+### Endpoint
+- Method: `POST`
+- Path: `/invoices/{id}/request-final`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}/request-final`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}/request-final`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Request final payment for an invoice that is active and partially paid.
+
+### Business rule
+- Final payment request is valid only when invoice is active and in partially paid state.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Request body (application/json)
+- `body` (string, optional)  
+  Default: `"Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached."`  
+  If omitted, GOAT uses default template with placeholders. If supplied, text is sent exactly as provided (supports escape chars like `\n`).
+- `subject` (string, optional)  
+  Default: `"Invoice {invoice_number} from {merchant_company}"`  
+  If supplied, text is sent exactly as provided without template parsing.
+- `to` (array of email strings, optional)  
+  Recipient list. If omitted, populated from invoice `customer_email`.
+- `sms_number` (array of strings, optional)  
+  Phone numbers for SMS send.
+- `attach_invoice` (boolean, optional, default `true`)  
+  Whether to attach system invoice to email.
+
+### Request example
+```json
+{
+  "body": "Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached.",
+  "subject": "Invoice {invoice_number} from {merchant_company}",
+  "to": [
+    "string"
+  ],
+  "sms_number": [
+    "string"
+  ],
+  "attach_invoice": true
+}
+```
+
+### Responses
+- `204` - Payment request sent successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Request cannot be sent.
+
+### Mapping to THEONE
+- Use this endpoint to collect outstanding balance on partially paid GOAT-native invoices.
+- Keep THEONE-side invoice/payment status synchronized after request dispatch (`204`) and track follow-up via invoice status polling/webhooks.
+
+---
+
+## Function 11 - Delete an Invoice
+
+### Endpoint
+- Method: `DELETE`
+- Path: `/invoices/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Delete an invoice before any payment is made.
+
+### Business rule
+- Invoice can be deleted only when no payment has been made.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Responses
+- `204` - Invoice deleted successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Invoice cannot be deleted.
+
+### Mapping to THEONE
+- Use this for hard removal of unused/unpaid GOAT-native invoices.
+- After successful delete (`204`), clean local references to the deleted GOAT invoice id and keep THEONE status aligned.
+
+---
+
+## Function 12 - Update an Invoice
+
+### Endpoint
+- Method: `PATCH`
+- Path: `/invoices/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Update editable invoice fields before it is paid or canceled.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Request body (application/json)
+- `customer_id` (integer or null, default `null`)  
+  Customer ID to associate with/send invoice to.
+- `number` (string or null, default `null`)  
+  Invoice number (alphanumeric allowed). If set to `null`, increments highest numeric number.
+- `customer_company` (string <= 255)  
+  Customer name. If linked to customer and omitted, populated from customer.
+- `customer_email` (email string <= 255)  
+  Customer email. If linked to customer and omitted, populated from customer.
+- `billing_info` (object)  
+  Billing info. If linked to customer and omitted, populated from customer.
+- `shipping_info` (object)  
+  Shipping info. If linked to customer and omitted, populated from customer.
+- `date` (date string)  
+  Invoice date. Defaults to today.
+- `due_date` (date string)  
+  Due date. Defaults to 30 days from invoice date.
+- `note` (string)  
+  Invoice note.
+- `tax_percent` (number, range `0..100`)  
+  Tax percent for taxable products.
+- `discount` (object)  
+  Optional pre-tax discount.
+- `requirement` (object)  
+  Initial required amount; default full due amount.
+- `surcharge` (object)  
+  Optional card/ACH surcharge; may be overridden by ISO/MSP mandatory surcharge rules.
+- `terms` (string)  
+  Additional invoice terms.
+- `action` (enum, default `charge`)  
+  `charge | authorize`
+
+### Responses
+- `200` - Invoice updated successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Invoice cannot be updated once paid or canceled.
+
+### Example response
+```json
+{
+  "id": 0,
+  "status": "canceled",
+  "to_email": "string",
+  "sub_total_amount": 0,
+  "total_amount": 0,
+  "due_amount": 0,
+  "paid_amount": 0,
+  "tax": 0,
+  "created_at": "2019-08-24T14:15:22Z",
+  "products": [
+    {
+      "id": 0,
+      "product_id": null,
+      "name": "string",
+      "description": "string",
+      "price": 20000000,
+      "quantity": 0,
+      "taxable": false,
+      "tax": 100,
+      "surcharge": 0,
+      "subtotal": 0
+    }
+  ],
+  "payment_link": "string",
+  "customer_id": null,
+  "number": null,
+  "customer_company": "string",
+  "customer_email": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "date": "2019-08-24",
+  "due_date": "2019-08-24",
+  "note": "string",
+  "tax_percent": 100,
+  "discount": {
+    "value": 0,
+    "type": "percent"
+  },
+  "requirement": {
+    "value": 100,
+    "type": "percent"
+  },
+  "surcharge": {
+    "card": {
+      "value": 0,
+      "type": "percent"
+    },
+    "ach": {
+      "value": 0,
+      "type": "percent"
+    }
+  },
+  "terms": "string",
+  "action": "charge"
+}
+```
+
+### Mapping to THEONE
+- Use PATCH to keep invoice metadata aligned with evolving COE details before payment.
+- Gate updates in THEONE UI/workflow when invoice is paid/canceled to avoid predictable `422` responses.
+
+---
+
+## Function 13 - Send an Existing Invoice
+
+### Endpoint
+- Method: `POST`
+- Path: `/invoices/{id}/send`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/invoices/{id}/send`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/invoices/{id}/send`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Send an existing invoice before any payment is made.
+
+### Business rule
+- Invoice can only be sent before payment is made.
+- After payment has started/occurred, use `POST /invoices/{id}/request-final` for outstanding-balance collection.
+
+### Path parameter
+- `id` (required, integer >= 1) - The invoice ID.
+
+### Request body (application/json)
+- `body` (string, optional)  
+  Default: `"Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached."`  
+  If omitted, GOAT uses default template with placeholders. If supplied, text is sent exactly as provided (supports escape chars like `\n`).
+- `subject` (string, optional)  
+  Default: `"Invoice {invoice_number} from {merchant_company}"`  
+  If supplied, text is sent exactly as provided without template parsing.
+- `to` (array of email strings, optional)  
+  Recipient list. If omitted, populated from invoice `customer_email`.
+- `sms_number` (array of strings, optional)  
+  Phone numbers for SMS send.
+- `attach_invoice` (boolean, optional, default `true`)  
+  Whether to attach system invoice to email.
+
+### Request example
+```json
+{
+  "body": "Dear {customer_name},\n\nPlease see the Invoice {invoice_number} attached.",
+  "subject": "Invoice {invoice_number} from {merchant_company}",
+  "to": [
+    "string"
+  ],
+  "sms_number": [
+    "string"
+  ],
+  "attach_invoice": true
+}
+```
+
+### Responses
+- `204` - Invoice sent successfully.
+- `400` - Request invalid or missing required fields.
+- `401` - Credentials missing or invalid.
+- `403` - No permission to access this feature.
+- `404` - Invoice not found.
+- `422` - Invoice cannot be sent.
+
+### Mapping to THEONE
+- Use this for first-time send/resend of unpaid GOAT-native invoices.
+- If invoice has already been partially paid, route flow to `request-final` rather than `send` to match GOAT business rules.
+
+---
+
 ## Implementation readiness (summary)
 
 | Area | Status |
@@ -615,6 +1145,13 @@ Errors:
 | List transactions (`GET /transactions`) | Documented |
 | Refund (`POST /transactions/refund`) | Documented |
 | Webhook CRUD (`/webhooks`) | Documented |
+| Get single invoice (`GET /invoices/{id}`) | Documented |
+| Cancel existing invoice (`POST /invoices/{id}/cancel`) | Documented |
+| Reactivate canceled invoice (`POST /invoices/{id}/reactivate`) | Documented |
+| Request final payment (`POST /invoices/{id}/request-final`) | Documented |
+| Delete invoice (`DELETE /invoices/{id}`) | Documented |
+| Update invoice (`PATCH /invoices/{id}`) | Documented |
+| Send existing invoice (`POST /invoices/{id}/send`) | Documented |
 | **Inbound webhook HTTP payload + signature verification** | Still need GOAT docs or captured sample requests |
 
 You can implement charges, token charges, refunds, reconciliation, and webhook registration. **Async payment status** parity with Global Payments still needs the inbound webhook contract above, or polling `GET /transactions` until webhooks are wired.
