@@ -206,6 +206,9 @@ const coeSchema = new mongoose.Schema({
     processing_fee_total: { type: Number, min: 0, default: 0 }
   },
   total: { type: Number, min: 0, default: 0 },
+  subscription_deduction_applied: { type: Boolean, default: false },
+  subscription_deduction_amount: { type: Number, min: 0, default: 0 },
+  subscription_deduction_note: { type: String, trim: true, default: null },
   deposit_required: { type: Number, min: 0, default: 0 },
   deposit_paid: { type: Number, min: 0, default: 0 },
   

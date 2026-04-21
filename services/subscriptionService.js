@@ -431,6 +431,58 @@ async function getAllSubscriptions(filters = {}) {
   }
 }
 
+/**
+ * Charge and unlock required annual subscription gate for approved clients.
+ * @param {string} userId
+ * @param {string} paymentTokenId
+ */
+async function payRequiredAnnualSubscription(userId, paymentTokenId) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
+  if (user.role !== 'client') {
+    throw new Error('Only client users can pay required annual subscription');
+  }
+  if (user.entity_status !== 'live') {
+    throw new Error('Account must be approved before paying subscription');
+  }
+
+  const now = new Date();
+  const hasValidSubscription =
+    user.subscription_required !== true &&
+    user.subscription_expires_at &&
+    new Date(user.subscription_expires_at) > now;
+  if (hasValidSubscription) {
+    throw new Error('Required annual subscription is already active');
+  }
+
+  const amount = 1000;
+  const payment = await paymentService.chargeSavedCard(
+    userId,
+    paymentTokenId,
+    amount,
+    'Required annual subscription',
+    null,
+    'subscription'
+  );
+
+  const expiresAt = new Date(now);
+  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+  user.subscription_required = false;
+  user.subscription_paid_at = now;
+  user.subscription_expires_at = expiresAt;
+  await user.save();
+
+  return {
+    payment,
+    subscription_paid_at: now,
+    subscription_expires_at: expiresAt,
+    amount,
+  };
+}
+
 module.exports = {
   createSubscription,
   processSubscriptionPayment,
@@ -439,6 +491,7 @@ module.exports = {
   getSubscriptionById,
   updateSubscriptionPaymentMethod,
   getAllSubscriptions,
-  MEMBERSHIP_PRICING
+  MEMBERSHIP_PRICING,
+  payRequiredAnnualSubscription
 };
 

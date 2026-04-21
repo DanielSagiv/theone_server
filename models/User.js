@@ -202,6 +202,31 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Subscription'
   },
+  subscription_required: {
+    type: Boolean,
+    default: false
+  },
+  subscription_paid_at: {
+    type: Date,
+    default: null
+  },
+  subscription_expires_at: {
+    type: Date,
+    default: null
+  },
+  first_coe_deduction_enabled: {
+    type: Boolean,
+    default: false
+  },
+  first_coe_deduction_consumed: {
+    type: Boolean,
+    default: false
+  },
+  first_coe_deduction_amount: {
+    type: Number,
+    min: 0,
+    default: 1000
+  },
   
   // Push Notification Tokens
   push_tokens: [{

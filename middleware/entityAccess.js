@@ -34,12 +34,51 @@ function requireClientApprovedForApi(req, res, next) {
       });
     }
 
-    if (status !== 'pendingApproval') {
-      return next();
-    }
-
     const pathOnly = (req.originalUrl || '').split('?')[0];
     const method = String(req.method || 'GET').toUpperCase();
+    if (status !== 'pendingApproval') {
+      const subscriptionExpired =
+        !user.subscription_expires_at || new Date(user.subscription_expires_at) <= new Date();
+      const requiresSubscriptionNow =
+        status === 'live' &&
+        user.subscription_required === true &&
+        subscriptionExpired;
+      if (!requiresSubscriptionNow) {
+        return next();
+      }
+
+      const allowedSubscriptionRoutes = new Set([
+        'GET:/v1/auth/validate',
+        'POST:/v1/auth/logout',
+        'GET:/v1/users/profile',
+        'GET:/v1/features',
+        'GET:/v1/payments/saved-cards',
+        'POST:/v1/payments/tokenize',
+        'PUT:/v1/payments/saved-cards/:tokenId',
+        'PUT:/v1/payments/saved-cards/:tokenId/default',
+        'DELETE:/v1/payments/saved-cards/:tokenId',
+        'POST:/v1/subscriptions/pay-required-annual',
+        'GET:/v1/subscriptions/required-status',
+      ]);
+
+      const signature = `${method}:${pathOnly}`;
+      const matchesTokenPath =
+        /^PUT:\/v1\/payments\/saved-cards\/[^/]+$/.test(signature) ||
+        /^PUT:\/v1\/payments\/saved-cards\/[^/]+\/default$/.test(signature) ||
+        /^DELETE:\/v1\/payments\/saved-cards\/[^/]+$/.test(signature);
+      if (allowedSubscriptionRoutes.has(signature) || matchesTokenPath) {
+        return next();
+      }
+
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'SUBSCRIPTION_REQUIRED',
+          message: 'Annual subscription payment is required before app access.',
+        },
+      });
+    }
+
     const allowedPendingRoutes = new Set([
       'GET:/v1/auth/validate',
       'POST:/v1/auth/logout',

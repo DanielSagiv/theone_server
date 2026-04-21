@@ -200,14 +200,46 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       coe = await COE.findById(coeId).populate('client_id');
     }
 
+    // Apply one-time first COE subscription deduction before amount selection.
+    if (!isRevisionDiffPayment) {
+      const clientUser = await User.findById(userId);
+      const deductionEnabled = clientUser?.first_coe_deduction_enabled === true;
+      const deductionConsumed = clientUser?.first_coe_deduction_consumed === true;
+      const deductionAlreadyApplied = coe.subscription_deduction_applied === true;
+      if (deductionEnabled && !deductionConsumed && !deductionAlreadyApplied) {
+        const configuredAmount = Number(clientUser.first_coe_deduction_amount || 1000);
+        const coeTotalBefore = Number(coe.total || 0);
+        const deductionAmount = Math.max(0, Math.min(configuredAmount, coeTotalBefore));
+        if (deductionAmount > 0) {
+          const consumeResult = await User.updateOne(
+            { _id: userId, first_coe_deduction_consumed: false },
+            { $set: { first_coe_deduction_consumed: true } }
+          );
+          if (consumeResult.modifiedCount === 1) {
+            coe.subscription_deduction_applied = true;
+            coe.subscription_deduction_amount = deductionAmount;
+            coe.subscription_deduction_note = 'Annual subscription deduction applied';
+            coe.total = Math.max(0, coeTotalBefore - deductionAmount);
+            await coe.save();
+          }
+        }
+      }
+    }
+
     // Calculate amount based on payment type (total = subtotal + taxes + fees)
     let amount;
     if (paymentType === 'deposit') {
       if (coe.payment_status && coe.payment_status !== 'unpaid') {
         throw new Error('Deposit already paid');
       }
-      const pricing = computeInitialDepositPricing(coe);
-      amount = pricing.total;
+      if (coe.subscription_deduction_applied) {
+        const depositPercent =
+          typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+        amount = Math.round((Number(coe.total || 0) * (depositPercent / 100)) * 100) / 100;
+      } else {
+        const pricing = computeInitialDepositPricing(coe);
+        amount = pricing.total;
+      }
       coe.deposit_amount = amount;
     } else if (paymentType === 'final_payment') {
       if (coe.payment_status !== 'deposit_paid') {

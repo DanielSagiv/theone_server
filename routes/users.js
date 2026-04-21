@@ -482,6 +482,20 @@ router.put('/:id/status', authenticateToken, requireAdmin, async (req, res) => {
 
     // Update entity status
     user.entity_status = value.entity_status;
+    if (user.role === 'client' && value.entity_status === 'live') {
+      user.subscription_required = true;
+      user.subscription_paid_at = null;
+      user.subscription_expires_at = null;
+      user.first_coe_deduction_enabled = Boolean(value.first_coe_deduction_enabled);
+      user.first_coe_deduction_consumed = false;
+      if (
+        typeof user.first_coe_deduction_amount !== 'number' ||
+        Number.isNaN(user.first_coe_deduction_amount) ||
+        user.first_coe_deduction_amount <= 0
+      ) {
+        user.first_coe_deduction_amount = 1000;
+      }
+    }
     await user.save();
 
     res.json({

@@ -23,6 +23,9 @@ const cancelSubscriptionSchema = Joi.object({
 const updatePaymentMethodSchema = Joi.object({
   payment_token_id: Joi.string().required()
 });
+const payRequiredAnnualSchema = Joi.object({
+  payment_token_id: Joi.string().required()
+});
 
 /**
  * POST /v1/subscriptions
@@ -100,6 +103,82 @@ router.get('/my', authenticateToken, async (req, res) => {
         code: 'GET_SUBSCRIPTIONS_FAILED',
         message: 'Failed to retrieve subscriptions'
       }
+    });
+  }
+});
+
+/**
+ * GET /v1/subscriptions/required-status
+ * Returns required annual subscription gate state for authenticated user.
+ */
+router.get('/required-status', authenticateToken, async (req, res) => {
+  try {
+    const now = new Date();
+    const expiresAt = req.user.subscription_expires_at
+      ? new Date(req.user.subscription_expires_at)
+      : null;
+    const isExpired = !expiresAt || expiresAt <= now;
+    const requiredNow =
+      req.user.role === 'client' &&
+      req.user.entity_status === 'live' &&
+      req.user.subscription_required === true &&
+      isExpired;
+
+    res.json({
+      success: true,
+      data: {
+        required: requiredNow,
+        subscription_required: !!req.user.subscription_required,
+        subscription_paid_at: req.user.subscription_paid_at || null,
+        subscription_expires_at: req.user.subscription_expires_at || null,
+        first_coe_deduction_enabled: !!req.user.first_coe_deduction_enabled,
+        first_coe_deduction_amount: req.user.first_coe_deduction_amount || 1000,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'REQUIRED_SUBSCRIPTION_STATUS_FAILED',
+        message: 'Failed to retrieve required subscription status',
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/subscriptions/pay-required-annual
+ * Charge $1000 and unlock required annual subscription gate.
+ */
+router.post('/pay-required-annual', authenticateToken, async (req, res) => {
+  try {
+    const { error, value } = payRequiredAnnualSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const result = await subscriptionService.payRequiredAnnualSubscription(
+      req.user._id,
+      value.payment_token_id
+    );
+    res.json({
+      success: true,
+      data: result,
+      message: 'Annual subscription paid successfully',
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'REQUIRED_SUBSCRIPTION_PAYMENT_FAILED',
+        message: error.message,
+      },
     });
   }
 });

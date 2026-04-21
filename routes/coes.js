@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const COE = require('../models/COE');
+const User = require('../models/User');
 const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
@@ -18,6 +19,52 @@ const {
   updateSeatAssignmentsSchema
 } = require('../utils/validationSchemas');
 const proposalGroupService = require('../services/proposalGroupService');
+
+async function applyFirstExperienceDeductionForClientView(coe, user) {
+  try {
+    if (!coe || !user) return;
+    if (user.role !== 'client') return;
+    if (user.first_coe_deduction_enabled !== true) return;
+    if (user.first_coe_deduction_consumed === true) return;
+    if (user.subscription_required === true) return;
+    if (coe.subscription_deduction_applied === true) return;
+    if ((coe.payment_status || 'unpaid') !== 'unpaid') return;
+
+    const coeClientId = coe.client_id?._id?.toString?.() || coe.client_id?.toString?.();
+    if (!coeClientId || coeClientId !== user._id.toString()) return;
+
+    const totalBefore = Number(coe.total || 0);
+    const configured = Number(user.first_coe_deduction_amount || 1000);
+    const deductionAmount = Math.max(0, Math.min(configured, totalBefore));
+    if (deductionAmount <= 0) return;
+
+    const consumeResult = await User.updateOne(
+      { _id: user._id, first_coe_deduction_consumed: false },
+      { $set: { first_coe_deduction_consumed: true } }
+    );
+    if (consumeResult.modifiedCount !== 1) return;
+
+    const coeId = coe._id?._id?.toString?.() || coe._id?.toString?.() || String(coe._id);
+    await COE.updateOne(
+      { _id: coeId, subscription_deduction_applied: { $ne: true } },
+      {
+        $set: {
+          subscription_deduction_applied: true,
+          subscription_deduction_amount: deductionAmount,
+          subscription_deduction_note: 'Annual subscription deduction applied',
+          total: Math.max(0, totalBefore - deductionAmount),
+        },
+      }
+    );
+
+    coe.subscription_deduction_applied = true;
+    coe.subscription_deduction_amount = deductionAmount;
+    coe.subscription_deduction_note = 'Annual subscription deduction applied';
+    coe.total = Math.max(0, totalBefore - deductionAmount);
+  } catch (error) {
+    console.warn('[COES] applyFirstExperienceDeductionForClientView failed:', error.message);
+  }
+}
 
 /**
  * COE Routes
@@ -262,6 +309,9 @@ router.get('/my', authenticateToken, async (req, res) => {
       // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
       // This prevents incorrect cost breakdown calculation on client side
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
+      if (req.user.role === 'client') {
+        await applyFirstExperienceDeductionForClientView(coe, req.user);
+      }
     }
 
     // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
@@ -911,6 +961,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
     coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
+    if (req.user.role === 'client') {
+      await applyFirstExperienceDeductionForClientView(coe, req.user);
+    }
     
     // DEBUG: Log original_request_data so we can inspect what mobile receives
     try {

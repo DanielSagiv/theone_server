@@ -640,7 +640,8 @@ const updateProfileSchema = Joi.object({
  * Entity status update validation schema
  */
 const updateEntityStatusSchema = Joi.object({
-  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined').required()
+  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined').required(),
+  first_coe_deduction_enabled: Joi.boolean().optional()
 });
 
 const updateRoleSchema = Joi.object({
