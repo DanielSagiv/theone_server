@@ -103,6 +103,45 @@ const registerUser = async (userData) => {
         // Don't throw - user can resend later
       });
 
+    // Notify admins (non-blocking) that a new client is waiting for approval
+    setImmediate(() => {
+      (async () => {
+        try {
+          const notificationService = require('./notificationService');
+          const adminUsers = await User.find({
+            role: 'admin',
+            isActive: true,
+            entity_status: 'live',
+          }).select('_id');
+
+          if (!adminUsers || adminUsers.length === 0) {
+            return;
+          }
+
+          const senderName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'A new client';
+          await Promise.all(
+            adminUsers.map((adminUser) =>
+              notificationService.createAndSendNotification(
+                adminUser._id.toString(),
+                'admin_new_client_signup',
+                {
+                  sender_id: user._id,
+                  sender_name: senderName,
+                  action_url: 'the1://manage-new-clients',
+                }
+              )
+            )
+          );
+        } catch (notifyError) {
+          console.error('Admin signup notification error:', {
+            error: notifyError.message,
+            userId: user._id?.toString(),
+            timestamp: new Date().toISOString(),
+          });
+        }
+      })();
+    });
+
     // Return user profile without password
     return {
       user: user.getProfile(),
@@ -180,7 +219,11 @@ const authenticateUser = async (email, password, req) => {
       throw new Error('Your account has been deleted. Please contact an administrator for assistance.');
     }
 
-    if (user.entity_status === 'pendingApproval') {
+    if (user.entity_status === 'registrationDeclined') {
+      throw new Error('Your account registration was declined. Please contact an administrator for assistance.');
+    }
+
+    if (user.entity_status === 'pendingApproval' && user.role !== 'client') {
       throw new Error('Your account is pending approval. Please contact an administrator.');
     }
 

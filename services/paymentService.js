@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Event = require('../models/Event');
 const { getCoeTaxRate } = require('./coeService');
 const goatClient = require('./goatClient');
+const { sendPaymentReceiptEmail } = require('./paymentReceiptEmail');
 
 /**
  * Payment Service - GOAT Payment Gateway integration
@@ -1478,7 +1479,27 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
     if (coeId) {
       await updateCOEPaymentStatus(coeId, payment);
     }
-    
+
+    // Fire-and-forget: post-charge receipt email (SES). Never fail the charge response.
+    setImmediate(() => {
+      (async () => {
+        try {
+          let resolvedCoeName = null;
+          if (coeId) {
+            const coeDoc = await COE.findById(coeId).select('name').lean();
+            resolvedCoeName = coeDoc?.name || null;
+          }
+          await sendPaymentReceiptEmail({
+            user,
+            payment,
+            coeName: resolvedCoeName,
+          });
+        } catch (err) {
+          console.error('[PaymentReceiptEmail] async error:', err?.message || err);
+        }
+      })();
+    });
+
     console.log('Saved card charged:', {
       user_id: userId,
       token_id: tokenId,

@@ -301,6 +301,10 @@ Make sure all required environment variables are set in your ECS Task Definition
 - `GOAT_SOURCE_KEY` - GOAT source key (HTTP Basic user)
 - `GOAT_PIN` - GOAT PIN if configured (Basic password; can be empty)
 - `GOAT_WEBHOOK_SIGNATURE` - Webhook signing secret from GOAT when you register `https://your-host/webhooks/goat`
+- `API_PUBLIC_URL` - Public HTTPS origin of this API (no trailing slash), e.g. `https://api.the1.vip` — used in payment receipt emails for invoice PDF/JSON links. Fallback: `BACKEND_URL` if set.
+- `SEND_PAYMENT_RECEIPT_EMAIL` - Set to `true` to send a post-charge receipt email (AWS SES) after a successful saved-card charge. Requires SES credentials and `FROM_EMAIL`.
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - Required for SES when receipt email is enabled.
+- `FROM_EMAIL` - Verified SES sender address.
 - Any other variables from your `.env` file
 
 **GOAT webhooks:** Register callback URL `POST /webhooks/goat` on your public API base (same path as mounted in `server.js`). Store the signature secret in `GOAT_WEBHOOK_SIGNATURE`. Legacy `POST /webhooks/global-payments` returns HTTP 410.

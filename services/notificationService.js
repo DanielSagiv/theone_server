@@ -185,6 +185,10 @@ function generateNotificationContent(type, data) {
         return n === 1 ? '1 new proposal' : `${n} new proposals`;
       })(),
       body: 'Tap to review and choose your experience.'
+    },
+    admin_new_client_signup: {
+      title: 'New client pending approval',
+      body: `${senderName} signed up and is waiting for The1 approval.`
     }
   };
 

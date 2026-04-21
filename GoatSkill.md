@@ -1134,6 +1134,29 @@ Send an existing invoice before any payment is made.
 
 ---
 
+## Post-charge receipt (THEONE) vs GOAT invoices
+
+After a **successful immediate charge** (`POST /transactions/charge` with `source`), money is captured. The customer needs a **receipt** (proof of payment), not a “please pay” invoice email.
+
+| Channel | When to use |
+|--------|-------------|
+| **THEONE receipt + SES email** | Default: after charge completes, THEONE stores `Payment` and can email a receipt with links to `GET /v1/payments/:id/invoice` and `GET /v1/payments/:id/invoice.pdf` (authenticated). Implemented in `services/paymentReceiptEmail.js` + `SEND_PAYMENT_RECEIPT_EMAIL`. |
+| **GOAT `POST /invoices/{id}/send`** | Documented for sending an existing **unpaid** invoice before payment. Do **not** rely on this alone as the primary post-charge receipt; GOAT rules emphasize pre-pay / `request-final` flows. |
+
+**GOAT-native invoice creation (`POST /invoices` or equivalent)** is **not** documented in this skill. Confirm request/response and post-paid semantics with official GOAT API docs before storing `goat_invoice_id` / `payment_link` on `Payment` and extending `goatClient`. Until then, THEONE-generated invoices/receipts remain the source of truth for customer-facing documents after a charge.
+
+---
+
+## Optional: GOAT `payment_link` on Payment (phase 2)
+
+If the product requires a GOAT-hosted invoice URL:
+
+1. Obtain official GOAT documentation for **invoice creation** (e.g. `POST /api/v2/invoices`).
+2. Extend `services/goatClient.js` with validated helpers; add optional fields on `models/Payment.js` such as `goat_invoice_id`, `goat_payment_link`.
+3. Keep **SES receipt email** as the primary post-charge notification unless GOAT confirms `send` applies to your paid-invoice scenario.
+
+---
+
 ## Implementation readiness (summary)
 
 | Area | Status |

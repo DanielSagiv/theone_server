@@ -62,7 +62,7 @@ const userSchema = new mongoose.Schema({
   },
   entity_status: {
     type: String,
-    enum: ['live', 'suspended', 'deleted', 'pendingApproval'],
+    enum: ['live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined'],
     default: 'pendingApproval'
   },
   visibilityStatus: {

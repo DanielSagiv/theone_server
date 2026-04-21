@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const Session = require('../models/Session');
 const User = require('../models/User');
+const { requireClientApprovedForApi } = require('./entityAccess');
 
 /**
  * Authentication middleware for protected routes
@@ -64,7 +65,7 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     req.userSession = session; // Changed from req.session to avoid conflict with Express session
 
-    next();
+    return requireClientApprovedForApi(req, res, next);
   } catch (error) {
     console.error('Authentication error:', {
       error: error.message,
@@ -149,5 +150,6 @@ const requireAdmin = (req, res, next) => {
 
 module.exports = {
   authenticateToken,
+  authenticateTokenForApp: [authenticateToken, requireClientApprovedForApi],
   requireAdmin
 };

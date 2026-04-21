@@ -297,6 +297,39 @@ router.get('/search', authenticateToken, requireAdmin, async (req, res) => {
 });
 
 /**
+ * GET /v1/users/pending-registrations
+ * Get client users waiting for The1 approval (admin only)
+ */
+router.get('/pending-registrations', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const users = await User.find({
+      role: 'client',
+      entity_status: 'pendingApproval',
+    })
+      .select('firstName lastName email phone industry createdAt')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: users,
+      message: 'Pending registrations retrieved successfully',
+    });
+  } catch (error) {
+    console.error('Get pending registrations error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'PENDING_REGISTRATIONS_RETRIEVAL_FAILED',
+        message: 'Failed to retrieve pending registrations',
+      },
+    });
+  }
+});
+
+/**
  * GET /v1/users/:id/profile
  * Get user profile by ID (admin only)
  */

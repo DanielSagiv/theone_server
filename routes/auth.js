@@ -131,7 +131,12 @@ router.post('/signin', async (req, res) => {
 
     // Determine appropriate status code based on error type
     let statusCode = 401;
-    if (error.message.includes('pending approval') || error.message.includes('suspended') || error.message.includes('deleted')) {
+    if (
+      error.message.includes('pending approval') ||
+      error.message.includes('suspended') ||
+      error.message.includes('deleted') ||
+      error.message.includes('declined')
+    ) {
       statusCode = 403; // Forbidden for status-related issues
     }
 
@@ -374,11 +379,6 @@ router.post('/verify-email', async (req, res) => {
     user.emailVerifiedAt = new Date();
     user.emailVerificationCode = undefined;
     user.emailVerificationExpires = undefined;
-    
-    // Auto-approve user after email verification
-    if (user.entity_status === 'pendingApproval') {
-      user.entity_status = 'live';
-    }
     
     await user.save();
 

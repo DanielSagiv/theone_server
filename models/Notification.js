@@ -38,7 +38,9 @@ const notificationSchema = new mongoose.Schema({
       // Seat / section availability Notifications
       'seat_section_unavailable',
       // Multi-proposal group (client)
-      'proposal_group_ready'
+      'proposal_group_ready',
+      // Admin notifications
+      'admin_new_client_signup'
     ],
     required: true,
     index: true

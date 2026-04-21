@@ -574,7 +574,7 @@ const signupSchema = Joi.object({
   industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other').required(),
   industryCustom: Joi.string().allow('', null),
   role: Joi.string().valid('admin', 'client', 'runner').default('client'),
-  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval').default('pendingApproval'),
+  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined').default('pendingApproval'),
   visibilityStatus: Joi.string().valid('public', 'private').default('public'),
   userTier: Joi.string()
     .valid('member', 'vip', 'elite', 'silver', 'gold', 'platinum')
@@ -640,7 +640,7 @@ const updateProfileSchema = Joi.object({
  * Entity status update validation schema
  */
 const updateEntityStatusSchema = Joi.object({
-  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval').required()
+  entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined').required()
 });
 
 const updateRoleSchema = Joi.object({
