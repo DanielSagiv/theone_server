@@ -1,0 +1,40 @@
+Feature Name,Priority,Status,Coverage %,Implementation Notes,Section
+Client intake dialog,1,✅ Fully Implemented,100%,"Bot-based preferences form with city, dates, budget, party size, seat preferences. Creates Client Request + COE draft via bot or manual",4.1
+Client COE page,1,⚠️ Partially Implemented,60%,"Bot interface shows COE cards with drill-down, but no dedicated mobile COE page with clean itinerary view",4.1
+Locations CRUD,1,✅ Fully Implemented,100%,"Full CRUD with photos, address, geo coordinates, score, sentiment, seats. Endpoints: GET/POST/PUT/DELETE /v1/locations",4.2
+Events CRUD,1,✅ Fully Implemented,100%,"Full CRUD with location, datetime, capacity, availability, price, currency, status. Seat inheritance from locations. Endpoints: GET/POST/PUT/DELETE /v1/events",4.2
+Assets library,1,✅ Fully Implemented,100%,"Media arrays in Location, Event, and Seat models. Supports images, videos. S3-ready structure",4.2
+Sentiment rules,1,✅ Fully Implemented,100%,"Sentiment arrays on locations/seats. OpenAI-based sentiment matching for COE creation. Enhanced with embeddings and cosine similarity",4.2
+COE builder,1,✅ Fully Implemented,100%,"Manual builder via API + Bot/AI auto-builder. Add/remove events, reorder, notes, policies. Sentiment-based event selection",4.2
+COE workflow statuses,1,✅ Fully Implemented,100%,"Draft, approved, sent, accepted, rejected, expired, cancelled, completed. Status transition validation",4.2
+Approvals queue,1,⚠️ Partially Implemented,70%,"Status workflow exists with validation, but no dedicated admin approvals queue UI. Can approve via status update",4.2
+COE sharing link,1,⚠️ Partially Implemented,50%,"Participants model exists in COE schema, but no shareable link generation. Admin can add/remove clients via API",4.2
+COE sharing: multi client,1,✅ Fully Implemented,100%,"Participants array in COE model with user_id, role, added_by. Admin can add/remove clients via API endpoints",4.2
+COE participants list,2,✅ Fully Implemented,100%,"Participants field with user_id, role, added_by, added_at. List endpoint returns participants",4.2
+Client accept and hold,1,⚠️ Partially Implemented,80%,"Payment capture exists for deposits, but no explicit 'accept and hold' flow. Client can accept via status update and pay",4.1
+Availability revalidation,1,✅ Fully Implemented,100%,"validateSelectedSeats() before COE creation/update. Checks seat availability and event capacity",4.5
+Payments interface,1,✅ Fully Implemented,100%,"Global Payments integration. Payment intent creation, capture, refund endpoints. Compatible with The1 gateway",4.4
+Payment capture,1,✅ Fully Implemented,100%,"Capture deposit, final payment, full payment. POST /v1/payments/coe/:coeId/capture",4.4
+Refunds,1,✅ Fully Implemented,100%,"Full/partial refund support. POST /v1/payments/coe/:coeId/refund with amount and reason",4.4
+Payment transactions log,1,✅ Fully Implemented,100%,"PaymentTransaction model with type (capture, refund, hold), amount, raw data, created_at. Logs all payment actions",4.4
+Idempotency for payments,1,✅ Fully Implemented,100%,"Idempotency keys in payment intents and COE creation. Prevents duplicate charges on retries",4.4
+Webhook sandbox,1,⚠️ Partially Implemented,60%,"Webhook routes exist (/v1/webhooks), but sandbox simulation not confirmed. Webhook handling structure in place",4.4
+Audit log,1,✅ Fully Implemented,100%,"BotAuditLog model for bot interactions. COE status change tracking. Records all key actions with actor, entity, action, snapshots",4.5
+Analytics overview,1,❌ Not Implemented,0%,"No dashboard with COE/payment counts. Analytics endpoints may exist but no overview dashboard UI",6
+Notifications,1,❌ Not Implemented,0%,"No push/SMS notification system. No notification endpoints or models",6
+Messaging thread,1,❌ Not Implemented,0%,"No COE-scoped conversation/messaging model. No messaging endpoints",6
+Authentication,1,✅ Fully Implemented,100%,"JWT-based authentication with bcrypt password hashing. Login, logout, validate, register endpoints",7.2
+Authorization,1,✅ Fully Implemented,100%,"Role-based access control (admin, client, runner). Middleware: authenticateToken, requireAdmin",7.2
+Runner assignment,1,✅ Fully Implemented,100%,"Runner assignment at COE and event level with status tracking. Assign/update endpoints. Status: assigned, confirmed, active, completed, cancelled",4.2
+Data model in MongoDB,1,✅ Fully Implemented,100%,"All core models: User, Location, Event, COE, Payment, PaymentTransaction, BotAuditLog. Complete schema implementation",5
+Storage for media,1,✅ Fully Implemented,100%,"Media arrays in models (S3-ready structure). Images, videos stored in Location, Event, Seat models",9
+Admin UI,?,❌ Not Implemented,0%,"No dedicated admin console UI. Only API endpoints + EJS test interface. Admin operations via API",4.2
+API: client endpoints,1,✅ Fully Implemented,100%,"/v1/coes/my, /v1/events, /v1/locations, /v1/bot/*. Full client-facing API surface",6
+API: admin endpoints,1,✅ Fully Implemented,100%,"Full CRUD endpoints for all entities. Admin-only routes with requireAdmin middleware",6
+Currency and totals,1,✅ Fully Implemented,100%,"USD currency support. Subtotal, taxes, fees, total calculations in COE model. Pricing breakdown per event",5
+Deploy to ECS Fargate,1,✅ Fully Implemented,100%,"AWS deployment ready. Architecture supports ECS Fargate deployment",10
+Observability,1,✅ Fully Implemented,100%,"Structured logging, correlation IDs, error tracking. CloudWatch-ready logs",9
+Upgrade creation,1,❌ Not Implemented,0%,"No upgrade model or workflow in COE schema. No upgrade creation endpoints",4.2
+Upgrade workflow,1,❌ Not Implemented,0%,"No pending/accepted/rejected upgrade states. No upgrade status management",4.2
+Upgrade delta payment,1,❌ Not Implemented,0%,"No delta payment calculation or capture. No upgrade payment endpoints",4.2
+

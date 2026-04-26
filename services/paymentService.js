@@ -1,0 +1,1738 @@
+const crypto = require('crypto');
+const Payment = require('../models/Payment');
+const COE = require('../models/COE');
+const User = require('../models/User');
+const Event = require('../models/Event');
+const { getCoeTaxRate } = require('./coeService');
+const goatClient = require('./goatClient');
+const { sendPaymentReceiptEmail } = require('./paymentReceiptEmail');
+
+/**
+ * Payment Service - GOAT Payment Gateway integration
+ * @description Orchestrates COE payments, refunds, tokenized cards, and webhooks. Gateway transaction id is stored in `gp_transaction_id` (legacy field name).
+ */
+
+/**
+ * Seat row is part of a joint / shared-table allocation (multi-client flow).
+ * @param {object|undefined|null} s
+ * @returns {boolean}
+ */
+function isJointAllocationSeat(s) {
+  if (!s) return false;
+  if (s.is_joint_allocation === true) return true;
+  const gid = s.joint_event_group_id;
+  return gid != null && String(gid).trim() !== '';
+}
+
+/**
+ * Seat row whose full line pre-tax amount counts toward initial deposit (joint allocation or simpleJoint).
+ * @param {object|undefined|null} s
+ * @returns {boolean}
+ */
+function isFullDepositSeatRow(s) {
+  if (!s) return false;
+  if (s.is_simple_joint === true || s.is_simple_joint === 'true') return true;
+  return isJointAllocationSeat(s);
+}
+
+/**
+ * Initial deposit due: 100% of joint/simpleJoint line pre-tax + deposit_percent% of other seat pre-tax;
+ * then tax (and proportional fees) matching the COE breakdown.
+ * @param {object} coe - COE plain object or mongoose doc
+ * @returns {{ subtotalPreTax: number, tax: number, fees: number, total: number, usesSeatSplit: boolean }}
+ */
+function computeInitialDepositPricing(coe) {
+  if (!coe) {
+    return { subtotalPreTax: 0, tax: 0, fees: 0, total: 0, usesSeatSplit: false };
+  }
+  const depositPercent = coe.deposit_percent != null ? Number(coe.deposit_percent) : 20;
+  const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
+  const jointRows = seats.filter((s) => isFullDepositSeatRow(s));
+  const nonJointRows = seats.filter((s) => s && !isFullDepositSeatRow(s));
+  const usesSeatSplit =
+    seats.length > 0 && (jointRows.length > 0 || nonJointRows.length > 0);
+
+  let subtotalPreTax;
+  if (usesSeatSplit) {
+    const jointPart = jointRows.reduce(
+      (sum, r) => sum + (Number(r.event_price) || Number(r.base_price) || 0),
+      0,
+    );
+    const nonJointSubtotal = nonJointRows.reduce(
+      (sum, r) => sum + (Number(r.event_price) || Number(r.base_price) || 0),
+      0,
+    );
+    const nonJointDeposit = nonJointSubtotal * (depositPercent / 100);
+    subtotalPreTax = jointPart + nonJointDeposit;
+  } else {
+    const subtotalCoe = Number(coe.subtotal) || 0;
+    if (subtotalCoe > 0) {
+      subtotalPreTax = subtotalCoe * (depositPercent / 100);
+    } else {
+      subtotalPreTax = (Number(coe.total) || 0) * (depositPercent / 100);
+    }
+  }
+
+  /** Prefer stored sales-tax-to-subtotal ratio (location-based THE1 pricing); else env COE_TAX_RATE. */
+  const subtotalCoe = Number(coe.subtotal) || 0;
+  const taxField = Number(coe.taxes) || 0;
+  const effectiveRate =
+    subtotalCoe > 0 && taxField >= 0 ? taxField / subtotalCoe : getCoeTaxRate();
+  const tax = Math.round(subtotalPreTax * effectiveRate * 100) / 100;
+
+  let feesAlloc = 0;
+  if (subtotalCoe > 0 && typeof coe.fees === 'number' && coe.fees > 0) {
+    feesAlloc = Math.round((coe.fees * (subtotalPreTax / subtotalCoe)) * 100) / 100;
+  }
+
+  const total = Math.round((subtotalPreTax + tax + feesAlloc) * 100) / 100;
+
+  return {
+    subtotalPreTax,
+    tax,
+    fees: feesAlloc,
+    total,
+    usesSeatSplit,
+  };
+}
+
+const PAYMENT_CONFIG = {
+  currency: process.env.PAYMENT_CURRENCY || 'USD',
+};
+
+/**
+ * Detect card brand from card number
+ * @param {string} cardNumber - Card number
+ * @returns {string} Card brand
+ */
+function detectCardBrand(cardNumber) {
+  const firstDigit = cardNumber[0];
+  const firstTwoDigits = cardNumber.substring(0, 2);
+  
+  if (firstDigit === '4') return 'VISA';
+  if (firstTwoDigits >= '51' && firstTwoDigits <= '55') return 'MASTERCARD';
+  if (firstTwoDigits === '34' || firstTwoDigits === '37') return 'AMEX';
+  if (firstTwoDigits === '60' || firstTwoDigits === '65') return 'DISCOVER';
+  
+  return 'UNKNOWN';
+}
+
+/**
+ * Create payment intent
+ * @param {string} coeId - COE ID
+ * @param {string} userId - User ID
+ * @param {string} paymentType - 'deposit', 'final_payment', 'full_payment', plus revision diffs ('deposit_diff', 'full_diff')
+ * @param {Object} options - { saveCard: boolean, cardDetails: Object, tokenId: string }
+ * @returns {Promise<Object>} Payment intent with payment_url
+ */
+async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
+  try {
+    const { saveCard = false, cardDetails = null, tokenId = null } = options;
+    
+    // Get COE
+    let coe = await COE.findById(coeId).populate('client_id');
+    if (!coe) {
+      throw new Error('COE not found');
+    }
+    
+    // Verify user is client
+    if (coe.client_id._id.toString() !== userId.toString()) {
+      throw new Error('Unauthorized: You can only pay for your own COEs');
+    }
+
+    const isRevisionDiffPayment = paymentType === 'deposit_diff' || paymentType === 'full_diff';
+
+    // Check COE status (allow approved, accepted_not_paid, or pending_pay)
+    // For revision payments we gate by `revision_state` instead.
+    if (!isRevisionDiffPayment) {
+      if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
+        throw new Error(`Cannot pay for COE in status: ${coe.status}`);
+      }
+    } else {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying diff amounts');
+      }
+    }
+
+    // Enforce payment deadline if configured
+    const deadlineAt = isRevisionDiffPayment ? coe.revision_deadline_at : coe.payment_deadline_at;
+    if (deadlineAt) {
+      const now = new Date();
+      if (deadlineAt <= now) {
+        if (!isRevisionDiffPayment) {
+          // Optionally sync status to expired (defensive, cron should also handle this)
+          try {
+            const coeService = require('./coeService');
+            await coeService.updateCOEStatus(coeId, 'expired', null);
+          } catch (deadlineErr) {
+            console.error('[PaymentService] Failed to update COE to expired after deadline:', deadlineErr.message);
+          }
+          throw new Error('Payment window expired for this experience');
+        }
+
+        throw new Error('Revision payment window expired for this experience');
+      }
+    }
+
+    // Pre-payment: check seat availability and same-section fallback. If any event has no seats in section,
+    // reduce COE, notify user (no tables, contact The1, total updated from X to Y), and return so client
+    // can show the message and let user complete payment with the new amount on next attempt.
+    if (!isRevisionDiffPayment) {
+      const coeService = require('./coeService');
+      const prepared = await coeService.preparePaymentForCOE(coeId);
+      if (prepared && prepared.coe_updated) {
+        return {
+          coe_updated: true,
+          previous_total: prepared.previous_total,
+          new_total: prepared.new_total,
+          total_zero: prepared.new_total === 0,
+          unavailable_event_names: prepared.unavailable_event_names,
+          message: prepared.message
+        };
+      }
+    }
+
+    // Update status to pending_pay if currently approved or accepted_not_paid
+    if (!isRevisionDiffPayment && (coe.status === 'approved' || coe.status === 'accepted_not_paid')) {
+      const coeService = require('./coeService');
+      await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
+      // Reload coe after status update
+      coe = await COE.findById(coeId).populate('client_id');
+    }
+
+    // Apply one-time first COE subscription deduction before amount selection.
+    if (!isRevisionDiffPayment) {
+      const clientUser = await User.findById(userId);
+      const deductionEnabled = clientUser?.first_coe_deduction_enabled === true;
+      const deductionConsumed = clientUser?.first_coe_deduction_consumed === true;
+      const deductionAlreadyApplied = coe.subscription_deduction_applied === true;
+      if (deductionEnabled && !deductionConsumed && !deductionAlreadyApplied) {
+        const configuredAmount = Number(clientUser.first_coe_deduction_amount || 1000);
+        const coeTotalBefore = Number(coe.total || 0);
+        const deductionAmount = Math.max(0, Math.min(configuredAmount, coeTotalBefore));
+        if (deductionAmount > 0) {
+          const consumeResult = await User.updateOne(
+            { _id: userId, first_coe_deduction_consumed: false },
+            { $set: { first_coe_deduction_consumed: true } }
+          );
+          if (consumeResult.modifiedCount === 1) {
+            coe.subscription_deduction_applied = true;
+            coe.subscription_deduction_amount = deductionAmount;
+            coe.subscription_deduction_note = 'Annual subscription deduction applied';
+            coe.total = Math.max(0, coeTotalBefore - deductionAmount);
+            await coe.save();
+          }
+        }
+      }
+    }
+
+    // Calculate amount based on payment type (total = subtotal + taxes + fees)
+    let amount;
+    if (paymentType === 'deposit') {
+      if (coe.payment_status && coe.payment_status !== 'unpaid') {
+        throw new Error('Deposit already paid');
+      }
+      if (coe.subscription_deduction_applied) {
+        const depositPercent =
+          typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+        amount = Math.round((Number(coe.total || 0) * (depositPercent / 100)) * 100) / 100;
+      } else {
+        const pricing = computeInitialDepositPricing(coe);
+        amount = pricing.total;
+      }
+      coe.deposit_amount = amount;
+    } else if (paymentType === 'final_payment') {
+      if (coe.payment_status !== 'deposit_paid') {
+        throw new Error('Deposit must be paid first');
+      }
+      amount = coe.total - (coe.total_paid || 0);
+      coe.final_amount = amount;
+    } else if (paymentType === 'full_payment') {
+      if (coe.payment_status && coe.payment_status !== 'unpaid') {
+        throw new Error('Payment already processed');
+      }
+      amount = coe.total;
+    } else if (paymentType === 'deposit_diff') {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying deposit diff');
+      }
+
+      // Allow after full pay (Flow 3 hybrid): new total may require more than total_paid toward deposit cap.
+      if (coe.payment_status !== 'deposit_paid' && coe.payment_status !== 'paid') {
+        throw new Error('Deposit diff is only available for deposit_paid or paid experiences in revision');
+      }
+
+      const depositPercentFrozen =
+        typeof coe.revision_deposit_percent_frozen === 'number'
+          ? coe.revision_deposit_percent_frozen
+          : (coe.deposit_percent || 20);
+
+      const plainCap =
+        typeof coe.toObject === 'function'
+          ? coe.toObject()
+          : { ...coe };
+      plainCap.deposit_percent = depositPercentFrozen;
+      const currentDepositAmount = computeInitialDepositPricing(plainCap).total;
+      const paid = coe.total_paid || 0;
+      amount = Math.max(0, currentDepositAmount - Math.min(paid, currentDepositAmount));
+      coe.deposit_amount = amount;
+
+      if (amount <= 0) {
+        throw new Error('No deposit difference is currently due for this revision');
+      }
+    } else if (paymentType === 'full_diff') {
+      if (coe.revision_state !== 'accepted') {
+        throw new Error('Revision must be accepted before paying full diff');
+      }
+
+      amount = Math.max(0, (coe.total || 0) - (coe.total_paid || 0));
+      if (amount <= 0) {
+        throw new Error('No remaining amount is currently due for this revision');
+      }
+    } else {
+      throw new Error('Invalid payment type');
+    }
+    
+    // Validate amount
+    if (amount <= 0) {
+      throw new Error('Invalid payment amount');
+    }
+    
+    const description = `${coe.name} - ${paymentType.replace('_', ' ')}`;
+    
+    // If using saved token, charge it directly (Phase 2) – no duplicate Payment record
+    if (tokenId) {
+      const payment = await chargeSavedCard(userId, tokenId, amount, description, coeId, paymentType);
+      return {
+        payment_id: payment._id,
+        gp_transaction_id: payment.gp_transaction_id,
+        amount,
+        currency: coe.currency || PAYMENT_CONFIG.currency,
+        status: payment.status || 'completed'
+      };
+    }
+
+    // Hosted checkout was Global Payments ECOM; GOAT integration requires a saved card (token) for COE pay.
+    throw new Error(
+      'Payment requires a saved card. Add a card in the app and try again.'
+    );
+    
+  } catch (error) {
+    console.error('Payment intent creation failed:', {
+      coe_id: coeId,
+      user_id: userId,
+      payment_type: paymentType,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Process refund
+ * @param {string} paymentId - Payment ID
+ * @param {number} amount - Refund amount (null = full refund)
+ * @param {string} reason - Refund reason
+ * @returns {Promise<Object>} Refund result
+ */
+async function processRefund(paymentId, amount = null, reason = '') {
+  try {
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+    
+    if (!['completed'].includes(payment.status)) {
+      throw new Error(`Cannot refund payment in status: ${payment.status}`);
+    }
+    
+    const refundAmount = amount || payment.amount;
+    
+    if (refundAmount > payment.amount) {
+      throw new Error('Refund amount exceeds payment amount');
+    }
+    
+    if (refundAmount <= 0) {
+      throw new Error('Invalid refund amount');
+    }
+    
+    const refRaw = payment.gp_transaction_id;
+    const referenceNumber = parseInt(String(refRaw).replace(/\D/g, ''), 10);
+    if (!Number.isFinite(referenceNumber) || referenceNumber < 1) {
+      throw new Error('Invalid gateway transaction reference for refund');
+    }
+
+    const refundOpts = {
+      reference_number: referenceNumber,
+      description: reason || 'Refund',
+    };
+    if (refundAmount < payment.amount) {
+      refundOpts.amount = refundAmount;
+    }
+
+    const goatRefund = await goatClient.refundTransaction(refundOpts);
+    const newRefundRef =
+      goatRefund.reference_number != null
+        ? String(goatRefund.reference_number)
+        : String(goatRefund.refund_reference || '');
+
+    // Update payment
+    payment.status = 'refunded';
+    payment.refunded_at = new Date();
+    payment.refund_amount = refundAmount;
+    payment.refund_reason = reason;
+    payment.refund_transaction_id = newRefundRef;
+    await payment.save();
+    
+    // Update COE
+    if (payment.coe_id) {
+      const coe = await COE.findById(payment.coe_id);
+      if (coe) {
+        coe.total_paid = Math.max(0, (coe.total_paid || 0) - refundAmount);
+        coe.refund_amount = (coe.refund_amount || 0) + refundAmount;
+        
+        if (refundAmount === payment.amount) {
+          // Full refund
+          if (payment.payment_type === 'deposit') {
+            coe.payment_status = 'unpaid';
+            coe.deposit_paid = 0;
+            coe.deposit_paid_at = null;
+          } else {
+            coe.payment_status = 'unpaid'; // Revert to unpaid for full refund
+          }
+          coe.refunded_at = new Date();
+        } else {
+          // Partial refund - keep payment_status as 'paid'
+          coe.payment_status = 'paid';
+        }
+        
+        await coe.save();
+      }
+    }
+    
+    console.log('Refund processed:', {
+      payment_id: paymentId,
+      refund_amount: refundAmount,
+      goat_refund_reference: newRefundRef,
+      timestamp: new Date().toISOString()
+    });
+
+    return {
+      refund_id: newRefundRef,
+      amount: refundAmount,
+      status: 'completed'
+    };
+    
+  } catch (error) {
+    console.error('Refund processing failed:', {
+      payment_id: paymentId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Process payment webhook
+ * @param {Object} webhookData - Webhook payload
+ * @returns {Promise<Object>} Processing result
+ */
+async function processPaymentWebhook(webhookData) {
+  try {
+    const { type, reference, id } = webhookData;
+    
+    // Find payment by reference (our payment _id)
+    const payment = await Payment.findById(reference);
+    if (!payment) {
+      console.error('Payment not found for webhook:', reference);
+      return { processed: false, reason: 'Payment not found' };
+    }
+    
+    console.log('Processing webhook:', {
+      payment_id: payment._id,
+      event_type: type,
+      gp_transaction_id: id,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Update payment based on webhook event
+    switch (type) {
+      case 'PAYMENT_AUTHORIZED':
+        payment.status = 'authorized';
+        payment.gp_authorization_code = webhookData.authorization_code;
+        break;
+        
+      case 'PAYMENT_CAPTURED':
+      case 'PAYMENT_COMPLETED':
+        // Idempotent: direct card charge + webhook, or CAPTURED + COMPLETED, must not re-run COE updates / notifications
+        if (payment.status === 'completed') {
+          console.log('[PaymentService] Duplicate completion webhook ignored (idempotent)', {
+            payment_id: payment._id?.toString(),
+            event_type: type
+          });
+          return { processed: true, duplicate: true, payment_id: payment._id };
+        }
+        payment.status = 'completed';
+        payment.completed_at = new Date();
+        payment.card_brand = webhookData.payment_method?.card?.brand;
+        payment.card_last_four = webhookData.payment_method?.card?.last_four;
+        payment.gp_response_code = webhookData.response_code;
+        payment.gp_response_message = webhookData.response_message;
+        
+        // Update COE payment status
+        await updateCOEPaymentStatus(payment.coe_id, payment);
+        break;
+        
+      case 'PAYMENT_FAILED':
+        payment.status = 'failed';
+        payment.failed_at = new Date();
+        payment.failure_code = webhookData.error_code;
+        payment.failure_message = webhookData.error_message;
+        
+        // Send payment failure notification
+        try {
+          const notificationService = require('./notificationService');
+          const COE = require('../models/COE');
+          const coe = await COE.findById(payment.coe_id);
+          
+          if (coe && payment.user_id) {
+            await notificationService.createAndSendNotification(
+              payment.user_id.toString(),
+              'payment_failed',
+              {
+                coe_id: payment.coe_id,
+                payment_id: payment._id,
+                coe: { name: coe.name }
+              }
+            );
+          }
+        } catch (error) {
+          // Log but don't fail webhook processing if notification fails
+          console.error('[PaymentService] Error sending payment failure notification:', error);
+        }
+        break;
+        
+      case 'REFUND_COMPLETED':
+        // Already handled in processRefund
+        break;
+        
+      default:
+        console.log('Unhandled webhook type:', type);
+        return { processed: false, reason: 'Unknown event type' };
+    }
+    
+    await payment.save();
+    
+    console.log('Webhook processed successfully:', {
+      payment_id: payment._id,
+      event_type: type,
+      new_status: payment.status,
+      timestamp: new Date().toISOString()
+    });
+    
+    return { processed: true, payment_id: payment._id };
+    
+  } catch (error) {
+    console.error('Webhook processing failed:', {
+      webhook_data: webhookData,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Update COE payment status
+ * @param {string} coeId - COE ID
+ * @param {Object} completedPayment - Completed payment object
+ */
+async function updateCOEPaymentStatus(coeId, completedPayment) {
+  try {
+    if (!coeId) return;
+    
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      console.error('COE not found:', coeId);
+      return;
+    }
+    const previousPaymentStatus = coe.payment_status;
+    const previousRevisionState = coe.revision_state;
+
+    // Get all completed payments for this COE
+    const payments = await Payment.find({ 
+      coe_id: coeId, 
+      status: 'completed' 
+    });
+    
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    coe.total_paid = totalPaid;
+    
+    // Determine payment status
+    const coeService = require('./coeService');
+    let shouldUpdateStatus = false;
+    let statusToUpdate = null;
+    
+    if (totalPaid === 0) {
+      coe.payment_status = 'unpaid';
+    } else if (completedPayment.payment_type === 'deposit') {
+      coe.payment_status = 'deposit_paid';
+      coe.deposit_paid = completedPayment.amount;
+      coe.deposit_paid_at = new Date();
+      coe.deposit_payment_id = completedPayment._id;
+      
+      // Check if also fully paid (can happen with full_payment)
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      }
+    } else if (completedPayment.payment_type === 'deposit_diff') {
+      // Deposit difference after revision acceptance:
+      // keep the COE in `deposit_paid` until it reaches full `paid`.
+      coe.payment_status = 'deposit_paid';
+      coe.deposit_paid = totalPaid;
+      coe.deposit_paid_at = new Date();
+      coe.deposit_payment_id = completedPayment._id;
+
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      }
+    } else if (completedPayment.payment_type === 'final_payment') {
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        coe.final_paid_at = new Date();
+        coe.final_payment_id = completedPayment._id;
+        // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      } else {
+        coe.payment_status = 'unpaid';
+      }
+    } else if (completedPayment.payment_type === 'full_diff') {
+      // Full diff after revision acceptance:
+      // it should bring the COE to the updated `total`, therefore resolve the revision.
+      if (totalPaid >= coe.total) {
+        coe.payment_status = 'paid';
+        coe.deposit_paid = totalPaid;
+        coe.deposit_paid_at = new Date();
+        coe.deposit_payment_id = completedPayment._id;
+
+        if (
+          coe.status === 'approved' ||
+          coe.status === 'accepted_not_paid' ||
+          coe.status === 'pending_pay'
+        ) {
+          shouldUpdateStatus = true;
+          statusToUpdate = 'paid';
+        }
+      } else {
+        // Defensive fallback: if full_diff didn't complete the full amount for some reason
+        coe.payment_status = 'deposit_paid';
+        coe.deposit_paid = totalPaid;
+        coe.deposit_paid_at = new Date();
+        coe.deposit_payment_id = completedPayment._id;
+      }
+    } else if (completedPayment.payment_type === 'full_payment') {
+      coe.payment_status = 'paid';
+      coe.deposit_paid = completedPayment.amount;
+      coe.deposit_paid_at = new Date();
+      coe.deposit_payment_id = completedPayment._id;
+      // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+      if (
+        coe.status === 'approved' ||
+        coe.status === 'accepted_not_paid' ||
+        coe.status === 'pending_pay'
+      ) {
+        shouldUpdateStatus = true;
+        statusToUpdate = 'paid';
+      }
+    } else if (totalPaid >= coe.total) {
+      coe.payment_status = 'paid';
+      // Update status to 'paid' if currently in 'approved', 'accepted_not_paid', or 'pending_pay' status
+      if (
+        coe.status === 'approved' ||
+        coe.status === 'accepted_not_paid' ||
+        coe.status === 'pending_pay'
+      ) {
+        shouldUpdateStatus = true;
+        statusToUpdate = 'paid';
+      }
+    } else {
+      coe.payment_status = 'unpaid';
+    }
+
+    // After revision diff payments, recompute stored dues so list/detail badges match reality.
+    const isRevisionDiffPayment =
+      completedPayment.payment_type === 'deposit_diff' ||
+      completedPayment.payment_type === 'full_diff';
+    if (isRevisionDiffPayment && coe.revision_state === 'accepted') {
+      const pct =
+        typeof coe.revision_deposit_percent_frozen === 'number'
+          ? coe.revision_deposit_percent_frozen
+          : coe.deposit_percent || 20;
+      const totalNum = coe.total || 0;
+      const plainCap =
+        typeof coe.toObject === 'function'
+          ? coe.toObject()
+          : { ...coe };
+      plainCap.deposit_percent = pct;
+      const depositCap = computeInitialDepositPricing(plainCap).total;
+      const paidNum = coe.total_paid || 0;
+      coe.revision_due_deposit_diff_amount = Math.max(
+        0,
+        depositCap - Math.min(paidNum, depositCap)
+      );
+      coe.revision_due_full_diff_amount = Math.max(0, totalNum - paidNum);
+    }
+
+    // Revision state resolution:
+    // Once the revision is accepted and the COE becomes fully paid for the updated total,
+    // mark the revision as resolved.
+    if (coe.revision_state === 'accepted' && coe.payment_status === 'paid') {
+      coe.revision_state = 'resolved';
+      coe.revision_due_deposit_diff_amount = 0;
+      coe.revision_due_full_diff_amount = 0;
+    }
+
+    // Initial proposal timer no longer applies after full payment; revision flow uses revision_deadline_* only.
+    if (coe.payment_status === 'paid') {
+      coe.payment_deadline_at = undefined;
+      coe.payment_deadline_hours = null;
+    }
+
+    // Revision base snapshot persistence:
+    // - when we transition to `deposit_paid` for the first time after unpaid
+    // - when we transition to `paid` (either directly or after deposit)
+    const transitionedToDepositPaid =
+      previousPaymentStatus === 'unpaid' && coe.payment_status === 'deposit_paid';
+    const transitionedToPaid =
+      previousPaymentStatus !== 'paid' && coe.payment_status === 'paid';
+    
+    // Save payment status first
+    await coe.save();
+
+    // Hold seats only when transitioning to paid; release when reverting to unpaid (per HOLD-SEATS-ON-PAYMENT plan)
+    if (coe.payment_status === 'unpaid') {
+      try {
+        await coeService.releaseSelectedSeats(coeId);
+      } catch (releaseErr) {
+        console.error('[PaymentService] Error releasing seats on revert to unpaid:', releaseErr);
+      }
+    } else if (previousPaymentStatus === 'unpaid' && (coe.payment_status === 'deposit_paid' || coe.payment_status === 'paid')) {
+      try {
+        await coeService.holdSeatsForCOE(coeId);
+      } catch (holdErr) {
+        console.error('[PaymentService] Error holding seats on payment:', holdErr);
+      }
+    }
+
+    // Update COE status if needed (use coeService to ensure proper side effects: seat booking, date fields)
+    if (shouldUpdateStatus && statusToUpdate) {
+      await coeService.updateCOEStatus(coeId, statusToUpdate, null);
+    }
+
+    // Persist base snapshot for revision flow once per transition.
+    // Stored after seat hold / status updates so selected seat statuses are consistent with payment.
+    if (transitionedToDepositPaid || transitionedToPaid) {
+      try {
+        const coeFresh = await COE.findById(coeId);
+        if (coeFresh) {
+          coeFresh.revision_state = 'none';
+          coeFresh.revision_case = null;
+          coeFresh.revision_deadline_hours = null;
+          coeFresh.revision_deadline_at = undefined;
+          coeFresh.revision_due_deposit_diff_amount = 0;
+          coeFresh.revision_due_full_diff_amount = 0;
+          coeFresh.client_credit_balance = 0;
+          coeFresh.revision_deposit_percent_frozen =
+            typeof coeFresh.deposit_percent === 'number' ? coeFresh.deposit_percent : null;
+
+          coeFresh.revision_base_snapshot = {
+            payment_phase: coeFresh.payment_status === 'paid' ? 'full' : 'deposit',
+            payment_status: coeFresh.payment_status,
+            total_paid: coeFresh.total_paid,
+            subtotal: coeFresh.subtotal,
+            taxes: coeFresh.taxes,
+            fees: coeFresh.fees,
+            total: coeFresh.total,
+            fee_breakdown: coeFresh.fee_breakdown,
+            deposit_percent: coeFresh.deposit_percent,
+            pricing_breakdown: coeFresh.pricing_breakdown,
+            events: coeFresh.events,
+            selected_seats: coeFresh.selected_seats
+          };
+
+          await coeFresh.save();
+        }
+      } catch (snapshotErr) {
+        console.error('[PaymentService] Failed to persist revision base snapshot:', snapshotErr.message);
+      }
+    }
+    
+    // Best-effort history logging for payment status changes
+    try {
+      const { logIncident } = require('./coeHistoryService');
+      const paymentType = completedPayment.payment_type;
+      const amount = completedPayment.amount;
+
+      const changes = [
+        {
+          field: 'payment_status',
+          label: 'Payment status',
+          from: previousPaymentStatus || 'unpaid',
+          to: coe.payment_status,
+          message: `Payment status changed from ${previousPaymentStatus || 'unpaid'} to ${coe.payment_status}`
+        }
+      ];
+
+      await logIncident({
+        coe,
+        coeId,
+        userId: completedPayment.user_id,
+        userRole: 'client',
+        title: 'Payment updated',
+        changes,
+        metadata: {
+          payment_type: paymentType,
+          amount
+        }
+      });
+
+      if (previousRevisionState === 'accepted' && coe.revision_state === 'resolved') {
+        await logIncident({
+          coe,
+          coeId,
+          userId: completedPayment.user_id,
+          userRole: 'client',
+          title: 'Revision payment resolved',
+          changes: [
+            {
+              field: 'revision_state',
+              label: 'Revision state',
+              from: 'accepted',
+              to: 'resolved',
+              message: 'Revision diff amounts fully paid'
+            }
+          ],
+          metadata: {
+            revision_case: coe.revision_case,
+            payment_type: paymentType,
+            payment_amount: amount,
+            total_paid: coe.total_paid,
+            total: coe.total
+          }
+        });
+      }
+    } catch (historyErr) {
+      console.error('[PaymentService] Failed to log payment history incident:', historyErr.message);
+    }
+
+    // Send payment_received only when COE experience status will NOT transition to `paid` here.
+    // If it will, updateCOEStatus('paid') sends coe_paid to client + admin (avoids duplicate "Payment received" alerts).
+    const skipPaymentReceivedForCoePaid =
+      shouldUpdateStatus && statusToUpdate === 'paid';
+
+    if (!skipPaymentReceivedForCoePaid) {
+      try {
+        const notificationService = require('./notificationService');
+
+        if (completedPayment.user_id) {
+          await notificationService.createAndSendNotification(
+            completedPayment.user_id.toString(),
+            'payment_received',
+            {
+              coe_id: coeId,
+              payment_id: completedPayment._id,
+              amount: completedPayment.amount,
+              coe: { name: coe.name }
+            }
+          );
+        }
+
+        if (coe.admin_id && coe.admin_id.toString() !== completedPayment.user_id?.toString()) {
+          await notificationService.createAndSendNotification(
+            coe.admin_id.toString(),
+            'payment_received',
+            {
+              coe_id: coeId,
+              payment_id: completedPayment._id,
+              amount: completedPayment.amount,
+              coe: { name: coe.name },
+              is_admin: true
+            }
+          );
+        }
+      } catch (error) {
+        console.error('[PaymentService] Error sending payment notification:', error);
+      }
+    }
+    
+    console.log('COE payment status updated:', {
+      coe_id: coeId,
+      payment_status: coe.payment_status,
+      total_paid: totalPaid,
+      coe_status: coe.status,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error updating COE payment status:', {
+      coe_id: coeId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Get payment history
+ * @param {string} coeId - COE ID
+ * @returns {Promise<Array>} Payments
+ */
+async function getPaymentHistory(coeId) {
+  try {
+    const payments = await Payment.find({ coe_id: coeId })
+      .populate('user_id', 'firstName lastName email')
+      .sort({ created_at: -1 });
+    
+    return payments;
+  } catch (error) {
+    console.error('Error getting payment history:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get payment by ID
+ * @param {string} paymentId - Payment ID
+ * @returns {Promise<Object>} Payment
+ */
+async function getPaymentById(paymentId) {
+  try {
+    const payment = await Payment.findById(paymentId)
+      .populate('user_id', 'firstName lastName email')
+      .populate('coe_id', 'name total currency');
+    
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+    
+    return payment;
+  } catch (error) {
+    console.error('Error getting payment:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get user payment history with filters and pagination
+ * @param {string} userId - User ID
+ * @param {Object} filters - Filter options { status, payment_type, coe_id, start_date, end_date }
+ * @param {Object} pagination - Pagination options { page, limit }
+ * @returns {Promise<Object>} Payments with pagination and summary
+ */
+async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
+  try {
+    const {
+      status,
+      payment_type,
+      coe_id,
+      start_date,
+      end_date
+    } = filters;
+    
+    const page = parseInt(pagination.page) || 1;
+    const limit = Math.min(parseInt(pagination.limit) || 20, 100); // Max 100 per page
+    const skip = (page - 1) * limit;
+    
+    // Build query
+    const query = { user_id: userId };
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (payment_type) {
+      query.payment_type = payment_type;
+    }
+    
+    if (coe_id) {
+      query.coe_id = coe_id;
+    }
+    
+    if (start_date || end_date) {
+      query.created_at = {};
+      if (start_date) {
+        query.created_at.$gte = new Date(start_date);
+      }
+      if (end_date) {
+        query.created_at.$lte = new Date(end_date);
+      }
+    }
+    
+    // Get total count for pagination
+    const total = await Payment.countDocuments(query);
+    
+    // Get payments with pagination
+    const payments = await Payment.find(query)
+      .populate('coe_id', 'name')
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    // Calculate summary statistics
+    const allUserPayments = await Payment.find({ user_id: userId }).lean();
+    const totalAmount = allUserPayments
+      .filter(p => p.status === 'completed')
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const totalRefunded = allUserPayments
+      .filter(p => p.status === 'refunded')
+      .reduce((sum, p) => sum + (p.refund_amount || 0), 0);
+    const netAmount = totalAmount - totalRefunded;
+    
+    // Format payments with COE name
+    const formattedPayments = payments.map(payment => ({
+      ...payment,
+      coe_name: payment.coe_id?.name || null,
+      coe_id: payment.coe_id?._id || payment.coe_id || null
+    }));
+    
+    return {
+      payments: formattedPayments,
+      pagination: {
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit)
+      },
+      summary: {
+        total_payments: total,
+        total_amount: totalAmount,
+        total_refunded: totalRefunded,
+        net_amount: netAmount
+      }
+    };
+  } catch (error) {
+    console.error('Error getting user payment history:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get invoice data for a payment
+ * @param {string} paymentId - Payment ID
+ * @param {string} userId - User ID (for authorization)
+ * @returns {Promise<Object>} Invoice data
+ */
+async function getInvoiceData(paymentId, userId) {
+  try {
+    // Get payment with populated data
+    const payment = await Payment.findById(paymentId)
+      .populate('user_id', 'firstName lastName email phone')
+      .populate({
+        path: 'coe_id',
+        select: 'name description total subtotal tax currency events selected_seats',
+        populate: {
+          path: 'events.event_id',
+          select: 'name description start_datetime end_datetime base_price'
+        }
+      });
+    
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+    
+    // Verify user owns the payment
+    if (payment.user_id._id.toString() !== userId.toString()) {
+      throw new Error('Unauthorized: You can only access your own invoices');
+    }
+    
+    // Generate invoice number (using payment ID first 8 chars)
+    const invoiceNumber = `INV-${payment._id.toString().substring(0, 8).toUpperCase()}`;
+    
+    // Format invoice data
+    const invoice = {
+      invoice_number: invoiceNumber,
+      invoice_date: payment.created_at,
+      payment_date: payment.completed_at || payment.created_at,
+      status: payment.status === 'completed' ? 'paid' : payment.status,
+      
+      // Bill To
+      bill_to: {
+        name: `${payment.user_id.firstName} ${payment.user_id.lastName}`,
+        email: payment.user_id.email,
+        phone: payment.user_id.phone || null
+      },
+      
+      // COE Details
+      coe: payment.coe_id ? {
+        _id: payment.coe_id._id,
+        name: payment.coe_id.name,
+        description: payment.coe_id.description || '',
+        events: (payment.coe_id.events || []).map(event => ({
+          event_name: event.event_id?.name || 'Event',
+          event_date: event.event_date || event.event_id?.start_datetime,
+          base_price: event.base_price || event.event_id?.base_price || 0
+        }))
+      } : null,
+      
+      // Payment Details
+      payment: {
+        _id: payment._id,
+        amount: payment.amount,
+        currency: payment.currency || 'USD',
+        payment_type: payment.payment_type,
+        payment_method: {
+          brand: payment.card_brand || 'N/A',
+          last_four: payment.card_last_four || 'N/A'
+        },
+        transaction_id: payment.gp_transaction_id || 'N/A',
+        completed_at: payment.completed_at
+      },
+      
+      // Pricing Breakdown (from COE if available, otherwise from payment)
+      pricing: {
+        subtotal: payment.coe_id?.subtotal || payment.amount,
+        taxes: payment.coe_id?.tax || 0,
+        fees: 0,
+        total: payment.amount
+      },
+      
+      // Refund Information
+      refund: {
+        refund_amount: payment.refund_amount || 0,
+        refunded_at: payment.refunded_at || null,
+        refund_reason: payment.refund_reason || null
+      }
+    };
+    
+    return invoice;
+  } catch (error) {
+    console.error('Error getting invoice data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Process GOAT gateway webhook (payload shape may vary; best-effort mapping).
+ * @param {Object} body - Parsed JSON body
+ * @returns {Promise<Object>}
+ */
+async function processGoatWebhook(body) {
+  try {
+    const ref =
+      body.reference ||
+      body.order_id ||
+      body.transaction_details?.order_number ||
+      body.transaction_details?.key ||
+      body.key;
+    let payment = null;
+
+    if (ref && /^[a-f0-9]{24}$/i.test(String(ref))) {
+      payment = await Payment.findById(ref);
+    }
+    if (!payment && body.reference_number != null) {
+      payment = await Payment.findOne({
+        gp_transaction_id: String(body.reference_number),
+      });
+    }
+
+    if (!payment) {
+      console.warn('[GOAT Webhook] Payment not found', {
+        snippet: JSON.stringify(body).slice(0, 400),
+      });
+      return { processed: false, reason: 'Payment not found' };
+    }
+
+    const typeStr = `${body.type || body.event_type || body.status || ''}`.toLowerCase();
+    const failed =
+      typeStr.includes('declin') ||
+      typeStr.includes('fail') ||
+      body.status_code === 'D' ||
+      body.status_code === 'E';
+
+    if (failed) {
+      if (payment.status === 'completed') {
+        return { processed: true, duplicate: true, payment_id: payment._id };
+      }
+      payment.status = 'failed';
+      payment.failed_at = new Date();
+      payment.failure_message =
+        body.error_message || body.message || 'Payment declined';
+      await payment.save();
+      return { processed: true, payment_id: payment._id };
+    }
+
+    const ok =
+      body.status_code === 'A' ||
+      (body.status && String(body.status).toLowerCase() === 'approved') ||
+      typeStr.includes('approv') ||
+      typeStr.includes('captur') ||
+      typeStr.includes('complet');
+
+    if (ok) {
+      if (payment.status === 'completed') {
+        return { processed: true, duplicate: true, payment_id: payment._id };
+      }
+      payment.status = 'completed';
+      payment.completed_at = new Date();
+      if (body.last_4 != null) payment.card_last_four = String(body.last_4);
+      if (body.card_type) payment.card_brand = String(body.card_type);
+      payment.gp_response_message = body.error_message || payment.gp_response_message;
+      await payment.save();
+      if (payment.coe_id) {
+        await updateCOEPaymentStatus(payment.coe_id, payment);
+      }
+      return { processed: true, payment_id: payment._id };
+    }
+
+    console.log('[GOAT Webhook] Unhandled event shape', {
+      type: body.type || body.event_type,
+      status: body.status,
+    });
+    return { processed: false, reason: 'Unknown event type' };
+  } catch (error) {
+    console.error('GOAT webhook processing failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify GOAT webhook signature (HMAC-SHA256 of JSON body; align header with GOAT docs when finalized).
+ * @param {Object} payload - Webhook payload
+ * @param {string} signature - Signature from header (e.g. x-signature)
+ * @returns {boolean} Valid
+ */
+function verifyGoatWebhookSignature(payload, signature) {
+  try {
+    const secret = process.env.GOAT_WEBHOOK_SIGNATURE;
+    if (!secret) {
+      console.warn(
+        'GOAT_WEBHOOK_SIGNATURE not configured, skipping signature verification'
+      );
+      return true;
+    }
+    if (!signature) {
+      return false;
+    }
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(JSON.stringify(payload))
+      .digest('hex');
+    return signature === expected;
+  } catch (error) {
+    console.error('GOAT webhook signature verification failed:', error);
+    return false;
+  }
+}
+
+/**
+ * @deprecated Legacy name; use verifyGoatWebhookSignature for GOAT.
+ */
+function verifyWebhookSignature(payload, signature) {
+  return verifyGoatWebhookSignature(payload, signature);
+}
+
+/**
+ * Tokenize and save card (Phase 2: Card Tokenization)
+ * @param {string} userId - User ID
+ * @param {Object} cardDetails - Card details
+ * @param {boolean} setAsDefault - Set as default
+ * @returns {Promise<Object>} Token data
+ */
+async function tokenizeAndSaveCard(userId, cardDetails, setAsDefault = true) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const expiryMonth = parseInt(String(cardDetails.expiry_month), 10);
+    let expiryYear = parseInt(String(cardDetails.expiry_year), 10);
+    if (expiryYear < 100) {
+      expiryYear += 2000;
+    }
+
+    const { cardRef } = await goatClient.createSavedCardFromCardNumber({
+      card: String(cardDetails.number).replace(/\s/g, ''),
+      expiry_month: expiryMonth,
+      expiry_year: expiryYear,
+    });
+
+    const tokenId = String(cardRef);
+    const sourceProbe = goatClient.toSourceToken(tokenId);
+    if (sourceProbe.length > goatClient.GOAT_MAX_SOURCE_LENGTH) {
+      throw new Error(
+        'GOAT returned a card token that exceeds gateway length limits. Try again or contact support.'
+      );
+    }
+
+    const cardLastFour = String(cardDetails.number || '')
+      .replace(/\D/g, '')
+      .slice(-4);
+    const cardInfo = {
+      brand: detectCardBrand(String(cardDetails.number).replace(/\s/g, '')),
+    };
+    
+    // Create card fingerprint for duplicate detection
+    const cardFingerprint = `${cardLastFour}-${cardDetails.expiry_month}-${cardDetails.expiry_year}`;
+    
+    // Check for existing card with same fingerprint
+    const existingCardIndex = user.saved_payment_methods.findIndex(method => 
+      method.card_last_four === cardLastFour && 
+      method.expiry_month === cardDetails.expiry_month && 
+      method.expiry_year === cardDetails.expiry_year
+    );
+    
+    let action = 'added';
+    let oldTokenId = null;
+    
+    if (existingCardIndex !== -1) {
+      // Update existing card
+      const existingCard = user.saved_payment_methods[existingCardIndex];
+      oldTokenId = existingCard.token_id;
+      
+      // Update the existing card with new token and info
+      user.saved_payment_methods[existingCardIndex] = {
+        ...existingCard,
+        token_id: tokenId,
+        card_brand: cardInfo.brand,
+        card_last_four: cardLastFour,
+        expiry_month: cardDetails.expiry_month,
+        expiry_year: cardDetails.expiry_year,
+        nickname: cardDetails.nickname || existingCard.nickname || `${cardInfo.brand} •••• ${cardLastFour || 'XXXX'}`,
+        updated_at: new Date(),
+        update_history: [
+          ...(existingCard.update_history || []),
+          {
+            old_token_id: oldTokenId,
+            updated_at: new Date(),
+            reason: 'card_tokenization'
+          }
+        ]
+      };
+      
+      action = 'updated';
+    } else {
+      // Check card limit (max 5 cards)
+      if (user.saved_payment_methods.length >= 5) {
+        throw new Error('Maximum of 5 payment methods allowed. Please remove an existing card first.');
+      }
+      
+      // Add new card
+      const savedMethod = {
+        token_id: tokenId,
+        card_brand: cardInfo.brand,
+        card_last_four: cardLastFour,
+        expiry_month: cardDetails.expiry_month,
+        expiry_year: cardDetails.expiry_year,
+        is_default: setAsDefault || user.saved_payment_methods.length === 0,
+        nickname: cardDetails.nickname || `${cardInfo.brand} •••• ${cardLastFour || 'XXXX'}`,
+        created_at: new Date(),
+        update_history: []
+      };
+      
+      user.saved_payment_methods.push(savedMethod);
+    }
+    
+    if (setAsDefault || !user.default_payment_method) {
+      user.default_payment_method = tokenId;
+      user.saved_payment_methods.forEach(m => {
+        m.is_default = (m.token_id === tokenId);
+      });
+    }
+    
+    await user.save();
+    
+    console.log('Card tokenized and saved:', {
+      user_id: userId,
+      token_id: tokenId,
+      card_last_four: cardLastFour,
+      action: action,
+      old_token_id: oldTokenId,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Find the current card to get is_default status
+    const currentCard = user.saved_payment_methods.find(method => method.token_id === tokenId);
+    
+    return {
+      token_id: tokenId,
+      card_brand: cardInfo.brand,
+      card_last_four: cardLastFour,
+      is_default: currentCard ? currentCard.is_default : false,
+      action: action,
+      old_token_id: oldTokenId
+    };
+  } catch (error) {
+    console.error('Card tokenization failed:', {
+      user_id: userId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Charge saved card (Phase 2: Card Tokenization)
+ * @param {string} userId - User ID
+ * @param {string} tokenId - Saved GOAT cardRef (stored in user.saved_payment_methods)
+ * @param {number} amount - Amount
+ * @param {string} description - Description
+ * @param {string} coeId - COE ID (optional)
+ * @param {string} paymentType - 'deposit' | 'final_payment' | 'full_payment' | 'subscription' (optional; used when coeId is set)
+ * @returns {Promise<Object>} Payment result
+ */
+async function chargeSavedCard(userId, tokenId, amount, description, coeId = null, paymentType = null) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const savedMethod = user.saved_payment_methods.find(m => m.token_id === tokenId);
+    if (!savedMethod) {
+      throw new Error('Payment method not found or unauthorized');
+    }
+    
+    const resolvedPaymentType = paymentType || (coeId ? 'final_payment' : 'subscription');
+    
+    // Create payment record
+    const payment = new Payment({
+      coe_id: coeId,
+      user_id: userId,
+      amount,
+      currency: PAYMENT_CONFIG.currency,
+      payment_type: resolvedPaymentType,
+      payment_token_id: tokenId,
+      is_token_payment: true,
+      status: 'pending',
+      description
+    });
+    await payment.save();
+
+    const source = goatClient.toSourceToken(tokenId);
+    const customerName = [user.firstName, user.lastName]
+      .map(v => (v == null ? '' : String(v).trim()))
+      .filter(Boolean)
+      .join(' ');
+    const userIdStr = user._id ? String(user._id) : String(userId);
+    let goatData;
+    const chargeRequest = {
+      amount,
+      source,
+      description,
+      orderNumber: payment._id.toString(),
+      customerName,
+      customer: {
+        identifier: userIdStr,
+        email: user.email || undefined,
+      },
+    };
+    try {
+      goatData = await goatClient.chargeWithSource(chargeRequest);
+    } catch (goatErr) {
+      const isTimeoutError =
+        goatErr?.code === 'ECONNABORTED' ||
+        /timeout/i.test(goatErr?.message || '');
+      if (isTimeoutError) {
+        // Retry once with the same order number. GOAT duplicate protection is enabled,
+        // so this safely reconciles transient timeout responses.
+        try {
+          goatData = await goatClient.chargeWithSource(chargeRequest);
+        } catch (retryErr) {
+          goatErr = retryErr;
+        }
+      }
+      if (goatData) {
+        // First attempt timed out but retry returned a charge response.
+        // Continue regular approval flow below.
+      } else {
+      let msg =
+        goatErr.message ||
+        goatErr.response?.data?.error_message ||
+        goatErr.response?.data?.message ||
+        'Payment failed. Please try again.';
+      // Only append generic migration hint for GOAT HTTP errors; local checks (e.g. source length) already include instructions.
+      if (
+        goatErr.response &&
+        /validation|invalid|source|token|not found|unauthoriz/i.test(msg) &&
+        !/GOAT_SOURCE_KEY/i.test(msg)
+      ) {
+        msg +=
+          ' If this card was saved before the GOAT migration, remove it in the app and add the card again.';
+      }
+      payment.status = 'failed';
+      payment.failure_message = msg;
+      payment.failed_at = new Date();
+      await payment.save();
+      throw new Error(msg);
+      }
+    }
+
+    if (!goatClient.isChargeApproved(goatData)) {
+      const msg =
+        goatData.error_message ||
+        goatData.message ||
+        'Payment was not approved';
+      payment.status = 'failed';
+      payment.failure_message = msg;
+      payment.failed_at = new Date();
+      await payment.save();
+      throw new Error(msg);
+    }
+
+    const refNum = goatData.reference_number;
+    payment.gp_transaction_id =
+      refNum != null ? String(refNum) : String(goatData.transaction?.id || '');
+    payment.status = 'completed';
+    payment.completed_at = new Date();
+    payment.card_brand = goatData.card_type || savedMethod.card_brand;
+    payment.card_last_four =
+      goatData.last_4 != null
+        ? String(goatData.last_4)
+        : savedMethod.card_last_four;
+    await payment.save();
+    
+    // Update last used
+    savedMethod.last_used_at = new Date();
+    await user.save();
+    
+    // Update COE if applicable
+    if (coeId) {
+      await updateCOEPaymentStatus(coeId, payment);
+    }
+
+    // Fire-and-forget: post-charge receipt email (SES). Never fail the charge response.
+    setImmediate(() => {
+      (async () => {
+        try {
+          let resolvedCoeName = null;
+          if (coeId) {
+            const coeDoc = await COE.findById(coeId).select('name').lean();
+            resolvedCoeName = coeDoc?.name || null;
+          }
+          await sendPaymentReceiptEmail({
+            user,
+            payment,
+            coeName: resolvedCoeName,
+          });
+        } catch (err) {
+          console.error('[PaymentReceiptEmail] async error:', err?.message || err);
+        }
+      })();
+    });
+
+    console.log('Saved card charged:', {
+      user_id: userId,
+      token_id: tokenId,
+      amount,
+      payment_id: payment._id,
+      timestamp: new Date().toISOString()
+    });
+    
+    return payment;
+  } catch (error) {
+    console.error('Charge saved card failed:', {
+      user_id: userId,
+      token_id: tokenId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Remove saved card (Phase 2: Card Tokenization)
+ * @param {string} userId - User ID
+ * @param {string} tokenId - Token ID
+ * @returns {Promise<boolean>} Success
+ */
+async function removeSavedCard(userId, tokenId) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const methodIndex = user.saved_payment_methods.findIndex(m => m.token_id === tokenId);
+    if (methodIndex === -1) {
+      throw new Error('Payment method not found');
+    }
+    
+    const wasDefault = user.saved_payment_methods[methodIndex].is_default;
+    
+    user.saved_payment_methods.splice(methodIndex, 1);
+    
+    if (wasDefault && user.saved_payment_methods.length > 0) {
+      user.saved_payment_methods[0].is_default = true;
+      user.default_payment_method = user.saved_payment_methods[0].token_id;
+    } else if (user.saved_payment_methods.length === 0) {
+      user.default_payment_method = null;
+    }
+    
+    await user.save();
+
+    console.log('Payment method removed:', {
+      user_id: userId,
+      token_id: tokenId,
+      timestamp: new Date().toISOString()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Remove card failed:', {
+      user_id: userId,
+      token_id: tokenId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Set default payment method (Phase 2: Card Tokenization)
+ * @param {string} userId - User ID
+ * @param {string} tokenId - Token ID
+ * @returns {Promise<boolean>} Success
+ */
+async function setDefaultPaymentMethod(userId, tokenId) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    const method = user.saved_payment_methods.find(m => m.token_id === tokenId);
+    if (!method) {
+      throw new Error('Payment method not found');
+    }
+    
+    user.saved_payment_methods.forEach(m => {
+      m.is_default = (m.token_id === tokenId);
+    });
+    
+    user.default_payment_method = tokenId;
+    await user.save();
+    
+    console.log('Default payment method updated:', {
+      user_id: userId,
+      token_id: tokenId,
+      timestamp: new Date().toISOString()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Set default payment method failed:', {
+      user_id: userId,
+      token_id: tokenId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+/**
+ * Update saved card metadata (expiry, nickname)
+ * @param {string} userId
+ * @param {string} tokenId
+ * @param {{nickname?: string, expiry_month?: string, expiry_year?: string}} updates
+ */
+async function updateSavedCard(userId, tokenId, updates = {}) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const method = user.saved_payment_methods.find(m => m.token_id === tokenId);
+    if (!method) {
+      throw new Error('Payment method not found');
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'nickname')) {
+      method.nickname = updates.nickname;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'expiry_month')) {
+      method.expiry_month = updates.expiry_month;
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'expiry_year')) {
+      method.expiry_year = updates.expiry_year;
+    }
+
+    await user.save();
+
+    console.log('Saved card updated:', {
+      user_id: userId,
+      token_id: tokenId,
+      has_nickname: Object.prototype.hasOwnProperty.call(updates, 'nickname'),
+      has_expiry_month: Object.prototype.hasOwnProperty.call(updates, 'expiry_month'),
+      has_expiry_year: Object.prototype.hasOwnProperty.call(updates, 'expiry_year'),
+      timestamp: new Date().toISOString()
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Update saved card failed:', {
+      user_id: userId,
+      token_id: tokenId,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+}
+
+module.exports = {
+  createPaymentIntent,
+  processRefund,
+  processPaymentWebhook,
+  processGoatWebhook,
+  updateCOEPaymentStatus,
+  getPaymentHistory,
+  getPaymentById,
+  getUserPaymentHistory,
+  getInvoiceData,
+  verifyWebhookSignature,
+  verifyGoatWebhookSignature,
+  computeInitialDepositPricing,
+  isJointAllocationSeat,
+  isFullDepositSeatRow,
+  // Phase 2: Card Tokenization
+  tokenizeAndSaveCard,
+  chargeSavedCard,
+  removeSavedCard,
+  setDefaultPaymentMethod,
+  updateSavedCard
+};
+

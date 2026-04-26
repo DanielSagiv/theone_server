@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .verify-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 60px 50px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+            letter-spacing: -1px;
+        }
+
+        .loading {
+            color: #667eea;
+            font-size: 1.2rem;
+            margin: 30px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .success {
+            color: #27ae60;
+        }
+
+        .success h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        .success-icon {
+            font-size: 4rem;
+            color: #27ae60;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            color: #e74c3c;
+        }
+
+        .error h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin: 20px 0;
+            color: #666;
+        }
+
+        .btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            text-decoration: none;
+            margin-top: 30px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        @media (max-width: 600px) {
+            .verify-container {
+                padding: 40px 30px;
+                margin: 20px;
+            }
+            
+            .logo {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="verify-container">
+        <div class="logo">The1 Platform</div>
+        <div id="status">
+            <div class="spinner"></div>
+            <p class="loading">Verifying your email...</p>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Verify email with token
+         */
+        async function verifyEmail() {
+            // Get token from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+
+            if (!token) {
+                showError('Invalid verification link. The link appears to be malformed.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/v1/auth/verify-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showSuccess();
+                } else {
+                    showError(result.error.message);
+                }
+
+            } catch (error) {
+                console.error('Verification error:', error);
+                showError('Verification failed. Please try again or contact support.');
+            }
+        }
+
+        /**
+         * Show success message
+         */
+        function showSuccess() {
+            document.getElementById('status').innerHTML = `
+                <div class="success">
+                    <div class="success-icon">✓</div>
+                    <h2>Email Verified!</h2>
+                    <p class="message">Your email has been successfully verified.<br>You can now log in to your account.</p>
+                    <a href="/test/login" class="btn">Go to Login</a>
+                </div>
+            `;
+        }
+
+        /**
+         * Show error message
+         */
+        function showError(message) {
+            document.getElementById('status').innerHTML = `
+                <div class="error">
+                    <div class="error-icon">✗</div>
+                    <h2>Verification Failed</h2>
+                    <p class="message">${message}</p>
+                    <p class="message" style="font-size: 0.95rem;">The link may have expired or is invalid.</p>
+                    <a href="/test/login" class="btn">Go to Login</a>
+                </div>
+            `;
+        }
+
+        // Auto-verify on page load
+        verifyEmail();
+    </script>
+</body>
+</html>
+
