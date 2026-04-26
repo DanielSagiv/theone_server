@@ -1445,19 +1445,36 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       .join(' ');
     const userIdStr = user._id ? String(user._id) : String(userId);
     let goatData;
+    const chargeRequest = {
+      amount,
+      source,
+      description,
+      orderNumber: payment._id.toString(),
+      customerName,
+      customer: {
+        identifier: userIdStr,
+        email: user.email || undefined,
+      },
+    };
     try {
-      goatData = await goatClient.chargeWithSource({
-        amount,
-        source,
-        description,
-        orderNumber: payment._id.toString(),
-        customerName,
-        customer: {
-          identifier: userIdStr,
-          email: user.email || undefined,
-        },
-      });
+      goatData = await goatClient.chargeWithSource(chargeRequest);
     } catch (goatErr) {
+      const isTimeoutError =
+        goatErr?.code === 'ECONNABORTED' ||
+        /timeout/i.test(goatErr?.message || '');
+      if (isTimeoutError) {
+        // Retry once with the same order number. GOAT duplicate protection is enabled,
+        // so this safely reconciles transient timeout responses.
+        try {
+          goatData = await goatClient.chargeWithSource(chargeRequest);
+        } catch (retryErr) {
+          goatErr = retryErr;
+        }
+      }
+      if (goatData) {
+        // First attempt timed out but retry returned a charge response.
+        // Continue regular approval flow below.
+      } else {
       let msg =
         goatErr.message ||
         goatErr.response?.data?.error_message ||
@@ -1477,6 +1494,7 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       payment.failed_at = new Date();
       await payment.save();
       throw new Error(msg);
+      }
     }
 
     if (!goatClient.isChargeApproved(goatData)) {

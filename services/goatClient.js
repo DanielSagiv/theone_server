@@ -197,18 +197,49 @@ async function chargeWithSource(opts) {
       body.customer = customer;
     }
   }
-  const res = await client.post('/transactions/charge', body);
-  if (res.status >= 400) {
-    console.error('[GOAT] POST /transactions/charge failed', {
-      status: res.status,
-      body: res.data,
-      requestSummary: { amount: body.amount, sourcePrefix: String(body.source).slice(0, 12) },
-    });
-    const err = new Error(formatGoatHttpError(res, 'GOAT charge failed'));
-    err.response = res;
-    throw err;
+  const maxAttempts = 3;
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const res = await client.post('/transactions/charge', body);
+      if (res.status >= 400) {
+        const msg = formatGoatHttpError(res, 'GOAT charge failed');
+        const isTransient =
+          res.status >= 500 ||
+          /auth service unavailable|timeout|temporar/i.test(msg);
+        if (isTransient && attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+          continue;
+        }
+        console.error('[GOAT] POST /transactions/charge failed', {
+          status: res.status,
+          body: res.data,
+          requestSummary: {
+            amount: body.amount,
+            sourcePrefix: String(body.source).slice(0, 12),
+            attempt,
+          },
+        });
+        const err = new Error(msg);
+        err.response = res;
+        throw err;
+      }
+      return res.data;
+    } catch (err) {
+      const isTransientNetwork =
+        err?.code === 'ECONNABORTED' ||
+        err?.code === 'ETIMEDOUT' ||
+        err?.code === 'ECONNRESET' ||
+        /timeout|network|socket hang up/i.test(err?.message || '');
+      lastErr = err;
+      if (isTransientNetwork && attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 800));
+        continue;
+      }
+      throw err;
+    }
   }
-  return res.data;
+  throw lastErr || new Error('GOAT charge failed');
 }
 
 /**
