@@ -56,6 +56,9 @@ app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/website/assets', express.static(path.join(__dirname, 'website/assets')));
 app.use('/website2/assets', express.static(path.join(__dirname, 'website2/assets')));
 
+// Trust reverse proxy headers (ALB/NGINX) so secure session cookies work on AWS.
+app.set('trust proxy', 1);
+
 // Session middleware for password protection
 app.use(session({
   secret: process.env.SESSION_SECRET || 'the1-platform-secret-key-change-in-production',
