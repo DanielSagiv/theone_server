@@ -100,6 +100,51 @@ const PAYMENT_CONFIG = {
   currency: process.env.PAYMENT_CURRENCY || 'USD',
 };
 
+function roundCurrency(amount) {
+  return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function getFirstCoeDeductionContext({ user, coe, paymentType }) {
+  const grossAmount = roundCurrency(coe?.total || 0);
+  const supportsDualCharge = paymentType === 'deposit' || paymentType === 'full_payment';
+  const isEligible =
+    !!user &&
+    user.role === 'client' &&
+    user.first_coe_deduction_enabled === true &&
+    user.first_coe_deduction_consumed !== true &&
+    coe?.subscription_deduction_applied !== true &&
+    (coe?.payment_status || 'unpaid') === 'unpaid' &&
+    supportsDualCharge;
+
+  const configuredAmount = Math.max(0, Number(user?.first_coe_deduction_amount || 1000));
+  const deductionAmount = isEligible
+    ? roundCurrency(Math.min(configuredAmount, grossAmount))
+    : 0;
+  const experienceNetAmount = roundCurrency(Math.max(0, grossAmount - deductionAmount));
+  const subscriptionChargeAmount = deductionAmount > 0 ? deductionAmount : 0;
+
+  return {
+    isEligible: deductionAmount > 0,
+    supportsDualCharge,
+    grossAmount,
+    configuredAmount,
+    deductionAmount,
+    subscriptionChargeAmount,
+    experienceNetAmount,
+  };
+}
+
+async function shouldTreatFirstCoeDeductionAsConsumed({ userId, isConsumedFlag }) {
+  if (isConsumedFlag !== true) return false;
+  const priorDualChargeSubscription = await Payment.exists({
+    user_id: userId,
+    payment_type: 'subscription',
+    status: 'completed',
+    description: { $regex: 'first-coe-deduction:' },
+  });
+  return !!priorDualChargeSubscription;
+}
+
 /**
  * Detect card brand from card number
  * @param {string} cardNumber - Card number
@@ -200,28 +245,39 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       coe = await COE.findById(coeId).populate('client_id');
     }
 
-    // Apply one-time first COE subscription deduction before amount selection.
-    if (!isRevisionDiffPayment) {
-      const clientUser = await User.findById(userId);
-      const deductionEnabled = clientUser?.first_coe_deduction_enabled === true;
-      const deductionConsumed = clientUser?.first_coe_deduction_consumed === true;
-      const deductionAlreadyApplied = coe.subscription_deduction_applied === true;
-      if (deductionEnabled && !deductionConsumed && !deductionAlreadyApplied) {
-        const configuredAmount = Number(clientUser.first_coe_deduction_amount || 1000);
-        const coeTotalBefore = Number(coe.total || 0);
-        const deductionAmount = Math.max(0, Math.min(configuredAmount, coeTotalBefore));
-        if (deductionAmount > 0) {
-          const consumeResult = await User.updateOne(
-            { _id: userId, first_coe_deduction_consumed: false },
-            { $set: { first_coe_deduction_consumed: true } }
-          );
-          if (consumeResult.modifiedCount === 1) {
-            coe.subscription_deduction_applied = true;
-            coe.subscription_deduction_amount = deductionAmount;
-            coe.subscription_deduction_note = 'Annual subscription deduction applied';
-            coe.total = Math.max(0, coeTotalBefore - deductionAmount);
-            await coe.save();
-          }
+    const clientUser = !isRevisionDiffPayment
+      ? await User.findById(userId).select(
+        'role first_coe_deduction_enabled first_coe_deduction_consumed first_coe_deduction_amount'
+      )
+      : null;
+    let deductionContext = !isRevisionDiffPayment
+      ? getFirstCoeDeductionContext({ user: clientUser, coe, paymentType })
+      : {
+        isEligible: false,
+        grossAmount: roundCurrency(coe.total || 0),
+        deductionAmount: 0,
+        subscriptionChargeAmount: 0,
+        experienceNetAmount: roundCurrency(coe.total || 0),
+      };
+    if (!isRevisionDiffPayment && deductionContext.isEligible === false && clientUser) {
+      const canRecoverLegacyConsumedFlag = clientUser.first_coe_deduction_enabled === true &&
+        coe.subscription_deduction_applied !== true &&
+        (coe.payment_status || 'unpaid') === 'unpaid';
+      if (canRecoverLegacyConsumedFlag) {
+        const actuallyConsumed = await shouldTreatFirstCoeDeductionAsConsumed({
+          userId,
+          isConsumedFlag: clientUser.first_coe_deduction_consumed === true,
+        });
+        if (!actuallyConsumed) {
+          const overrideUser = {
+            ...clientUser.toObject(),
+            first_coe_deduction_consumed: false,
+          };
+          deductionContext = getFirstCoeDeductionContext({
+            user: overrideUser,
+            coe,
+            paymentType,
+          });
         }
       }
     }
@@ -232,10 +288,10 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       if (coe.payment_status && coe.payment_status !== 'unpaid') {
         throw new Error('Deposit already paid');
       }
-      if (coe.subscription_deduction_applied) {
+      if (deductionContext.isEligible) {
         const depositPercent =
           typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
-        amount = Math.round((Number(coe.total || 0) * (depositPercent / 100)) * 100) / 100;
+        amount = roundCurrency(deductionContext.experienceNetAmount * (depositPercent / 100));
       } else {
         const pricing = computeInitialDepositPricing(coe);
         amount = pricing.total;
@@ -251,7 +307,9 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       if (coe.payment_status && coe.payment_status !== 'unpaid') {
         throw new Error('Payment already processed');
       }
-      amount = coe.total;
+      amount = deductionContext.isEligible
+        ? deductionContext.experienceNetAmount
+        : coe.total;
     } else if (paymentType === 'deposit_diff') {
       if (coe.revision_state !== 'accepted') {
         throw new Error('Revision must be accepted before paying deposit diff');
@@ -298,17 +356,130 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
       throw new Error('Invalid payment amount');
     }
     
+    const experienceChargeAmount = roundCurrency(amount);
+    const subscriptionChargeAmount = roundCurrency(deductionContext.subscriptionChargeAmount || 0);
+    const totalDueNow = roundCurrency(subscriptionChargeAmount + experienceChargeAmount);
+    const deductionMarker = `first-coe-deduction:${coeId}`;
     const description = `${coe.name} - ${paymentType.replace('_', ' ')}`;
+    const quoteBreakdown = {
+      subscription_charge_amount: subscriptionChargeAmount,
+      experience_gross_amount: roundCurrency(deductionContext.grossAmount || coe.total || 0),
+      first_coe_deduction_amount: roundCurrency(deductionContext.deductionAmount || 0),
+      experience_net_amount: roundCurrency(deductionContext.experienceNetAmount || coe.total || 0),
+      deposit_amount: paymentType === 'deposit' ? experienceChargeAmount : null,
+      experience_charge_amount: experienceChargeAmount,
+      total_due_now: totalDueNow,
+      first_coe_dual_charge_applies: deductionContext.isEligible === true,
+    };
     
     // If using saved token, charge it directly (Phase 2) – no duplicate Payment record
     if (tokenId) {
-      const payment = await chargeSavedCard(userId, tokenId, amount, description, coeId, paymentType);
+      if (deductionContext.isEligible) {
+        const subscriptionDescription =
+          `Required annual subscription (first COE deduction flow) [${deductionMarker}]`;
+        const experienceDescription =
+          `${description} (first COE deduction applied: $${roundCurrency(deductionContext.deductionAmount).toFixed(2)}) [${deductionMarker}]`;
+
+        let chargedSubscriptionInThisRequest = false;
+        let subscriptionPayment = await Payment.findOne({
+          user_id: userId,
+          payment_type: 'subscription',
+          status: 'completed',
+          description: { $regex: deductionMarker },
+        }).sort({ createdAt: -1 });
+
+        if (!subscriptionPayment) {
+          subscriptionPayment = await chargeSavedCard(
+            userId,
+            tokenId,
+            subscriptionChargeAmount,
+            subscriptionDescription,
+            null,
+            'subscription'
+          );
+          chargedSubscriptionInThisRequest = true;
+        }
+
+        let experiencePayment;
+        try {
+          experiencePayment = await chargeSavedCard(
+            userId,
+            tokenId,
+            experienceChargeAmount,
+            experienceDescription,
+            coeId,
+            paymentType
+          );
+        } catch (experienceError) {
+          if (chargedSubscriptionInThisRequest && subscriptionPayment?._id) {
+            try {
+              await processRefund(
+                subscriptionPayment._id,
+                subscriptionPayment.amount,
+                `Compensation refund after experience charge failure [${deductionMarker}]`
+              );
+            } catch (refundError) {
+              throw new Error(
+                `${experienceError.message}. Subscription charge succeeded but compensation refund failed; manual review required.`
+              );
+            }
+          }
+          throw experienceError;
+        }
+
+        const now = new Date();
+        const nextYear = new Date(now);
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+        await User.updateOne(
+          { _id: userId, first_coe_deduction_consumed: false },
+          {
+            $set: {
+              first_coe_deduction_consumed: true,
+              subscription_required: false,
+              subscription_paid_at: now,
+              subscription_expires_at: nextYear,
+            },
+          }
+        );
+
+        await COE.updateOne(
+          { _id: coeId, subscription_deduction_applied: { $ne: true } },
+          {
+            $set: {
+              subscription_deduction_applied: true,
+              subscription_deduction_amount: deductionContext.deductionAmount,
+              subscription_deduction_note: 'First COE dual-charge deduction applied',
+            },
+          }
+        );
+
+        return {
+          payment_id: experiencePayment._id,
+          subscription_payment_id: subscriptionPayment._id,
+          gp_transaction_id: experiencePayment.gp_transaction_id,
+          amount: totalDueNow,
+          currency: coe.currency || PAYMENT_CONFIG.currency,
+          status: experiencePayment.status || 'completed',
+          breakdown: quoteBreakdown,
+        };
+      }
+
+      const payment = await chargeSavedCard(
+        userId,
+        tokenId,
+        experienceChargeAmount,
+        description,
+        coeId,
+        paymentType
+      );
       return {
         payment_id: payment._id,
         gp_transaction_id: payment.gp_transaction_id,
-        amount,
+        amount: experienceChargeAmount,
         currency: coe.currency || PAYMENT_CONFIG.currency,
-        status: payment.status || 'completed'
+        status: payment.status || 'completed',
+        breakdown: quoteBreakdown,
       };
     }
 

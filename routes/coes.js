@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const COE = require('../models/COE');
 const User = require('../models/User');
+const Payment = require('../models/Payment');
 const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
@@ -20,50 +21,87 @@ const {
 } = require('../utils/validationSchemas');
 const proposalGroupService = require('../services/proposalGroupService');
 
-async function applyFirstExperienceDeductionForClientView(coe, user) {
+function roundCurrency(amount) {
+  return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function assignRuntimeField(target, key, value) {
+  if (!target) return;
+  if (typeof target.set === 'function') {
+    target.set(key, value);
+    return;
+  }
+  target[key] = value;
+}
+
+async function attachFirstExperienceDeductionPreview(coe, user) {
   try {
     if (!coe || !user) return;
     if (user.role !== 'client') return;
     if (user.first_coe_deduction_enabled !== true) return;
-    if (user.first_coe_deduction_consumed === true) return;
-    if (user.subscription_required === true) return;
     if (coe.subscription_deduction_applied === true) return;
     if ((coe.payment_status || 'unpaid') !== 'unpaid') return;
+    let isConsumed = user.first_coe_deduction_consumed === true;
+    if (isConsumed) {
+      const priorDualChargeSubscription = await Payment.exists({
+        user_id: user._id,
+        payment_type: 'subscription',
+        status: 'completed',
+        description: { $regex: 'first-coe-deduction:' },
+      });
+      // Recovery mode: legacy bug may have consumed the flag before any actual charge.
+      if (!priorDualChargeSubscription) {
+        isConsumed = false;
+      }
+    }
+    if (isConsumed) return;
+
 
     const coeClientId = coe.client_id?._id?.toString?.() || coe.client_id?.toString?.();
     if (!coeClientId || coeClientId !== user._id.toString()) return;
 
-    const totalBefore = Number(coe.total || 0);
+    const totalBefore = roundCurrency(Number(coe.total || 0));
     const configured = Number(user.first_coe_deduction_amount || 1000);
-    const deductionAmount = Math.max(0, Math.min(configured, totalBefore));
+    const deductionAmount = roundCurrency(Math.max(0, Math.min(configured, totalBefore)));
     if (deductionAmount <= 0) return;
 
-    const consumeResult = await User.updateOne(
-      { _id: user._id, first_coe_deduction_consumed: false },
-      { $set: { first_coe_deduction_consumed: true } }
-    );
-    if (consumeResult.modifiedCount !== 1) return;
+    const experienceNet = roundCurrency(Math.max(0, totalBefore - deductionAmount));
+    const depositPercent = typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+    const depositOnNet = roundCurrency(experienceNet * (depositPercent / 100));
 
-    const coeId = coe._id?._id?.toString?.() || coe._id?.toString?.() || String(coe._id);
-    await COE.updateOne(
-      { _id: coeId, subscription_deduction_applied: { $ne: true } },
-      {
-        $set: {
-          subscription_deduction_applied: true,
-          subscription_deduction_amount: deductionAmount,
-          subscription_deduction_note: 'Annual subscription deduction applied',
-          total: Math.max(0, totalBefore - deductionAmount),
-        },
-      }
+    assignRuntimeField(coe, 'first_coe_deduction_preview_applies', true);
+    assignRuntimeField(coe, 'first_coe_deduction_preview_amount', deductionAmount);
+    assignRuntimeField(coe, 'first_coe_subscription_charge_preview_amount', deductionAmount);
+    assignRuntimeField(coe, 'first_coe_experience_gross_amount', totalBefore);
+    assignRuntimeField(coe, 'first_coe_experience_net_amount', experienceNet);
+    assignRuntimeField(
+      coe,
+      'first_coe_total_due_now_preview_deposit',
+      depositOnNet
     );
-
-    coe.subscription_deduction_applied = true;
-    coe.subscription_deduction_amount = deductionAmount;
-    coe.subscription_deduction_note = 'Annual subscription deduction applied';
-    coe.total = Math.max(0, totalBefore - deductionAmount);
+    assignRuntimeField(
+      coe,
+      'first_coe_total_due_now_preview_full',
+      roundCurrency(deductionAmount + experienceNet)
+    );
   } catch (error) {
-    console.warn('[COES] applyFirstExperienceDeductionForClientView failed:', error.message);
+    console.warn('[COES] attachFirstExperienceDeductionPreview failed:', error.message);
   }
+}
+
+async function resolveClientUserForDeductionPreview(coe, viewerUser) {
+  if (!coe || !viewerUser) return null;
+  if (viewerUser.role === 'client') return viewerUser;
+
+  const clientId =
+    coe.client_id?._id?.toString?.() ||
+    coe.client_id?.toString?.() ||
+    null;
+  if (!clientId) return null;
+
+  return User.findById(clientId).select(
+    '_id role first_coe_deduction_enabled first_coe_deduction_consumed first_coe_deduction_amount'
+  );
 }
 
 /**
@@ -309,8 +347,9 @@ router.get('/my', authenticateToken, async (req, res) => {
       // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
       // This prevents incorrect cost breakdown calculation on client side
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
-      if (req.user.role === 'client') {
-        await applyFirstExperienceDeductionForClientView(coe, req.user);
+      const deductionPreviewUser = await resolveClientUserForDeductionPreview(coe, req.user);
+      if (deductionPreviewUser) {
+        await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
       }
     }
 
@@ -961,8 +1000,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
     coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
-    if (req.user.role === 'client') {
-      await applyFirstExperienceDeductionForClientView(coe, req.user);
+    const deductionPreviewUser = await resolveClientUserForDeductionPreview(coe, req.user);
+    if (deductionPreviewUser) {
+      await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
     }
     
     // DEBUG: Log original_request_data so we can inspect what mobile receives
