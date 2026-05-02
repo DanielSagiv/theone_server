@@ -1572,6 +1572,112 @@ async function tokenizeAndSaveCard(userId, cardDetails, setAsDefault = true) {
 }
 
 /**
+ * Build a stable customer display name for GOAT payloads.
+ * @param {object} user
+ * @returns {string}
+ */
+function getCustomerDisplayName(user) {
+  return [user?.firstName, user?.lastName]
+    .map((v) => (v == null ? '' : String(v).trim()))
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * Parse positive integer ids from mixed API values.
+ * @param {any} value
+ * @returns {number|null}
+ */
+function toPositiveInt(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  return n;
+}
+
+/**
+ * Resolve or create GOAT customer id for a THEONE user.
+ * @param {object} userDoc
+ * @returns {Promise<number>}
+ */
+async function ensureGoatCustomerId(userDoc) {
+  const userIdStr = userDoc?._id ? String(userDoc._id) : '';
+  if (!userIdStr) {
+    throw new Error('Cannot resolve GOAT customer without user id');
+  }
+
+  const cachedId = toPositiveInt(userDoc.goat_customer_id);
+  if (cachedId) return cachedId;
+
+  const listQuery = {
+    customer_number: userIdStr,
+    limit: 1,
+    order: 'asc',
+  };
+
+  const persistCustomerId = async (customerId) => {
+    await User.updateOne(
+      { _id: userDoc._id },
+      { $set: { goat_customer_id: customerId } },
+    );
+    userDoc.goat_customer_id = customerId;
+    return customerId;
+  };
+
+  const findExisting = async () => {
+    const rows = await goatClient.listCustomers(listQuery);
+    const first = Array.isArray(rows) && rows.length ? rows[0] : null;
+    return toPositiveInt(first?.id);
+  };
+
+  try {
+    const existingId = await findExisting();
+    if (existingId) {
+      return await persistCustomerId(existingId);
+    }
+
+    const customerName = getCustomerDisplayName(userDoc);
+    const fallbackIdentifier =
+      String(userDoc.email || '').trim() || `user-${userIdStr.slice(-12)}`;
+    const createPayload = {
+      identifier: (customerName || fallbackIdentifier).slice(0, 255),
+      customer_number: userIdStr,
+      email: userDoc.email || undefined,
+      first_name: userDoc.firstName || undefined,
+      last_name: userDoc.lastName || undefined,
+      phone: userDoc.phone || undefined,
+    };
+
+    const created = await goatClient.createCustomer(createPayload);
+    const createdId = toPositiveInt(created?.id);
+    if (!createdId) {
+      throw new Error('GOAT create customer did not return id');
+    }
+    return await persistCustomerId(createdId);
+  } catch (err) {
+    try {
+      const relistedId = await findExisting();
+      if (relistedId) {
+        return await persistCustomerId(relistedId);
+      }
+    } catch (relistErr) {
+      console.error('[GOAT] customer relist failed after create/list error', {
+        user_id: userIdStr,
+        customer_number: userIdStr,
+        error: relistErr?.message || relistErr,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    console.error('[GOAT] ensure customer failed', {
+      user_id: userIdStr,
+      customer_number: userIdStr,
+      error: err?.message || err,
+      timestamp: new Date().toISOString(),
+    });
+    throw err;
+  }
+}
+
+/**
  * Charge saved card (Phase 2: Card Tokenization)
  * @param {string} userId - User ID
  * @param {string} tokenId - Saved GOAT cardRef (stored in user.saved_payment_methods)
@@ -1610,11 +1716,9 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
     await payment.save();
 
     const source = goatClient.toSourceToken(tokenId);
-    const customerName = [user.firstName, user.lastName]
-      .map(v => (v == null ? '' : String(v).trim()))
-      .filter(Boolean)
-      .join(' ');
+    const customerName = getCustomerDisplayName(user);
     const userIdStr = user._id ? String(user._id) : String(userId);
+    const goatCustomerId = await ensureGoatCustomerId(user);
     let goatData;
     const chargeRequest = {
       amount,
@@ -1623,6 +1727,7 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
       orderNumber: payment._id.toString(),
       customerName,
       customer: {
+        customer_id: goatCustomerId,
         identifier: userIdStr,
         email: user.email || undefined,
       },

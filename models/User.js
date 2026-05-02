@@ -179,6 +179,10 @@ const userSchema = new mongoose.Schema({
   }],
   
   default_payment_method: String,
+  goat_customer_id: {
+    type: Number,
+    min: 1
+  },
   
   // Membership Status (Phase 3: Recurring Billing)
   membership_status: {
