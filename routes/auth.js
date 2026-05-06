@@ -10,7 +10,9 @@ const {
   renewPasswordSchema, 
   resetPasswordSchema,
   verifyEmailSchema,
-  resendVerificationSchema
+  resendVerificationSchema,
+  loginOtpRequestSchema,
+  loginOtpVerifySchema
 } = require('../utils/validationSchemas');
 
 const router = express.Router();
@@ -145,6 +147,157 @@ router.post('/signin', async (req, res) => {
       error: {
         code: 'SIGNIN_FAILED',
         message: error.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/auth/login/request-code
+ * Send a one-time sign-in code to the user's email (passwordless login).
+ */
+router.post('/login/request-code', async (req, res) => {
+  try {
+    const { error, value } = loginOtpRequestSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const result = await authService.requestLoginOtp(value.email, req);
+
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (err) {
+    console.error('Login OTP request error:', {
+      message: err.message,
+      code: err.code,
+      timestamp: new Date().toISOString()
+    });
+
+    if (err.code === 'USER_NOT_FOUND') {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: err.message
+        }
+      });
+    }
+
+    if (err.code === 'RATE_LIMIT_EXCEEDED') {
+      return res.status(429).json({
+        success: false,
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: err.message
+        }
+      });
+    }
+
+    if (err.message === 'EMAIL_NOT_VERIFIED') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+          action: 'resend_verification'
+        }
+      });
+    }
+
+    const isForbidden =
+      err.message.includes('pending approval') ||
+      err.message.includes('suspended') ||
+      err.message.includes('deleted') ||
+      err.message.includes('declined') ||
+      err.message.includes('disabled');
+    const statusCode = isForbidden ? 403 : 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'LOGIN_OTP_REQUEST_FAILED',
+        message: err.message
+      }
+    });
+  }
+});
+
+/**
+ * POST /v1/auth/login/verify-code
+ * Verify sign-in code and return JWT (same shape as POST /signin).
+ */
+router.post('/login/verify-code', async (req, res) => {
+  try {
+    const { error, value } = loginOtpVerifySchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message
+        }
+      });
+    }
+
+    const result = await authService.verifyLoginOtp(value.email, value.code, req);
+
+    res.json({
+      success: true,
+      data: result,
+      message: 'Login successful'
+    });
+  } catch (err) {
+    console.error('Login OTP verify error:', {
+      message: err.message,
+      code: err.code,
+      timestamp: new Date().toISOString()
+    });
+
+    if (err.code === 'INVALID_LOGIN_OTP') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_LOGIN_OTP',
+          message: err.message
+        }
+      });
+    }
+
+    if (err.message === 'EMAIL_NOT_VERIFIED') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'EMAIL_NOT_VERIFIED',
+          message: 'Please verify your email address before logging in. Check your inbox for the verification link.',
+          action: 'resend_verification'
+        }
+      });
+    }
+
+    let statusCode = 401;
+    if (
+      err.message.includes('pending approval') ||
+      err.message.includes('suspended') ||
+      err.message.includes('deleted') ||
+      err.message.includes('declined')
+    ) {
+      statusCode = 403;
+    }
+
+    res.status(statusCode).json({
+      success: false,
+      error: {
+        code: 'LOGIN_OTP_VERIFY_FAILED',
+        message: err.message
       }
     });
   }

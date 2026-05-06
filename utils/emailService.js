@@ -187,6 +187,56 @@ async function sendPasswordResetEmail(user, code) {
 }
 
 /**
+ * Send sign-in OTP email (passwordless login)
+ * @param {Object} user - User with email, firstName
+ * @param {string} code - 6-digit code
+ * @returns {Promise<Object>} Send result
+ */
+async function sendLoginOtpEmail(user, code) {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+        .content h2 { color: #2c3e50; margin-top: 0; }
+        .code-box { background: #f0f0f0; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; }
+        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
+        .warning { color: #999; font-size: 12px; font-style: italic; margin-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>The1 Platform</h1>
+        </div>
+        <div class="content">
+          <h2>Your sign-in code</h2>
+          <p>Hi ${user.firstName},</p>
+          <p>Use this code to sign in to The1. It is valid for 15 minutes.</p>
+          <div class="code-box">${code}</div>
+          <p class="warning">If you did not request this code, you can ignore this email.</p>
+        </div>
+        <div class="footer">
+          &copy; 2025 The1 Platform. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: user.email,
+    subject: 'Your The1 sign-in code',
+    html
+  });
+}
+
+/**
  * Send welcome email after verification
  * @param {Object} user - User object
  * @returns {Promise<Object>} Send result
@@ -715,6 +765,7 @@ module.exports = {
   // Template functions (pre-built emails)
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendLoginOtpEmail,
   sendWelcomeEmail,
   sendCOEInvitationEmail,
   sendBookingConfirmationEmail,

@@ -1,16 +1,36 @@
 const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../utils/emailService');
 
 /**
- * Generate JWT token for user
- * @param {string} userId - User ID
- * @param {string} email - User email
- * @param {string} role - User role
- * @returns {string} JWT token
+ * Same eligibility rules as password sign-in (verified email, active, entity status).
+ * @param {Object} user - User document
+ * @throws {Error} With message/code matching existing signin behavior
  */
+const enforceLoginEligibility = (user) => {
+  if (!user.emailVerified) {
+    const err = new Error('EMAIL_NOT_VERIFIED');
+    err.code = 'EMAIL_NOT_VERIFIED';
+    throw err;
+  }
+  if (!user.isActive) {
+    throw new Error('User account is disabled');
+  }
+  if (user.entity_status === 'deleted') {
+    throw new Error('Your account has been deleted. Please contact an administrator for assistance.');
+  }
+  if (user.entity_status === 'registrationDeclined') {
+    throw new Error('Your account registration was declined. Please contact an administrator for assistance.');
+  }
+  if (user.entity_status === 'pendingApproval' && user.role !== 'client') {
+    throw new Error('Your account is pending approval. Please contact an administrator.');
+  }
+  if (user.entity_status === 'suspended') {
+    throw new Error('Your account has been suspended. Please contact an administrator.');
+  }
+};
+
 const generateToken = (userId, email, role) => {
   try {
     const payload = {
@@ -25,6 +45,24 @@ const generateToken = (userId, email, role) => {
     console.error('Token generation error:', error);
     throw new Error('Failed to generate token');
   }
+};
+
+/**
+ * Update last login, create JWT and DB session (shared by password sign-in and login OTP).
+ * @param {Object} user - User document
+ * @param {Object} req - Express request
+ * @returns {Promise<{ token: string, user: Object, expiresAt: Date }>}
+ */
+const issueSessionForUser = async (user, req) => {
+  user.lastLogin = new Date();
+  await user.save();
+  const token = generateToken(user._id, user.email, user.role);
+  const session = await createSession(user._id, token, req);
+  return {
+    token,
+    user: user.getProfile(),
+    expiresAt: session.expiresAt
+  };
 };
 
 /**
@@ -204,48 +242,8 @@ const authenticateUser = async (email, password, req) => {
       throw new Error('Invalid credentials');
     }
 
-    // Check if email is verified
-    if (!user.emailVerified) {
-      throw new Error('EMAIL_NOT_VERIFIED');
-    }
-
-    // Check if user is active
-    if (!user.isActive) {
-      throw new Error('User account is disabled');
-    }
-
-    // Check entity status
-    if (user.entity_status === 'deleted') {
-      throw new Error('Your account has been deleted. Please contact an administrator for assistance.');
-    }
-
-    if (user.entity_status === 'registrationDeclined') {
-      throw new Error('Your account registration was declined. Please contact an administrator for assistance.');
-    }
-
-    if (user.entity_status === 'pendingApproval' && user.role !== 'client') {
-      throw new Error('Your account is pending approval. Please contact an administrator.');
-    }
-
-    if (user.entity_status === 'suspended') {
-      throw new Error('Your account has been suspended. Please contact an administrator.');
-    }
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Generate token
-    const token = generateToken(user._id, user.email, user.role);
-
-    // Create session
-    const session = await createSession(user._id, token, req);
-
-    return {
-      token,
-      user: user.getProfile(),
-      expiresAt: session.expiresAt
-    };
+    enforceLoginEligibility(user);
+    return issueSessionForUser(user, req);
   } catch (error) {
     console.error('User authentication error:', error);
     throw error;
@@ -367,6 +365,103 @@ const requestPasswordReset = async (email) => {
  * @param {string} password - New password
  * @returns {Promise<Object>} Success message
  */
+/**
+ * Send a login OTP email after eligibility checks (passwordless sign-in).
+ * @param {string} email - User email
+ * @param {Object} req - Express request (for logging context)
+ * @returns {Promise<{ message: string }>}
+ */
+const requestLoginOtp = async (email, req) => {
+  try {
+    const emailLower = email.toLowerCase();
+    const user = await User.findOne({ email: emailLower });
+    if (!user) {
+      const err = new Error('No account found for this email address.');
+      err.code = 'USER_NOT_FOUND';
+      throw err;
+    }
+
+    enforceLoginEligibility(user);
+
+    // Temporary: disable OTP resend rate-limit during UI/flow testing.
+    // Keep loginOtpSentAt updates so this can be re-enabled later without schema changes.
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    user.loginOtpCode = otp;
+    user.loginOtpExpires = expiresAt;
+    user.loginOtpSentAt = new Date();
+    await user.save();
+
+    emailService.sendLoginOtpEmail(user, otp)
+      .then(() => {
+        console.log('[AUTH_SERVICE] Login OTP email sent', {
+          email: user.email,
+          requestId: req?.id,
+          timestamp: new Date().toISOString()
+        });
+      })
+      .catch((sendErr) => {
+        console.error('[AUTH_SERVICE] Login OTP email failed', {
+          email: user.email,
+          error: sendErr.message,
+          timestamp: new Date().toISOString()
+        });
+      });
+
+    return {
+      message: 'Sign-in code sent to your email.'
+    };
+  } catch (error) {
+    console.error('[AUTH_SERVICE] requestLoginOtp error:', {
+      message: error.message,
+      code: error.code,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
+ * Verify login OTP and return the same payload as password sign-in.
+ * @param {string} email - User email
+ * @param {string} code - 6-digit code
+ * @param {Object} req - Express request
+ * @returns {Promise<{ token: string, user: Object, expiresAt: Date }>}
+ */
+const verifyLoginOtp = async (email, code, req) => {
+  try {
+    const emailLower = email.toLowerCase();
+    const user = await User.findOne({ email: emailLower }).select('+loginOtpCode');
+
+    if (
+      !user ||
+      !user.loginOtpCode ||
+      user.loginOtpCode !== code ||
+      !user.loginOtpExpires ||
+      user.loginOtpExpires.getTime() <= Date.now()
+    ) {
+      const err = new Error('Invalid or expired sign-in code');
+      err.code = 'INVALID_LOGIN_OTP';
+      throw err;
+    }
+
+    enforceLoginEligibility(user);
+
+    user.loginOtpCode = undefined;
+    user.loginOtpExpires = undefined;
+
+    return issueSessionForUser(user, req);
+  } catch (error) {
+    console.error('[AUTH_SERVICE] verifyLoginOtp error:', {
+      message: error.message,
+      code: error.code,
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
 const resetPassword = async (code, password) => {
   try {
     // Find user with valid code
@@ -408,5 +503,7 @@ module.exports = {
   logoutUser,
   validateSession,
   requestPasswordReset,
-  resetPassword
+  resetPassword,
+  requestLoginOtp,
+  verifyLoginOtp
 };

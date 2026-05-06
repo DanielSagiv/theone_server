@@ -692,6 +692,25 @@ const resendVerificationSchema = Joi.object({
     })
 });
 
+/** Request passwordless login OTP */
+const loginOtpRequestSchema = Joi.object({
+  email: Joi.string().email().required()
+});
+
+/** Verify passwordless login OTP */
+const loginOtpVerifySchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string()
+    .length(6)
+    .pattern(/^[0-9]+$/)
+    .required()
+    .messages({
+      'string.length': 'Sign-in code must be 6 digits',
+      'string.pattern.base': 'Sign-in code must contain only numbers',
+      'any.required': 'Sign-in code is required'
+    })
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -722,5 +741,7 @@ module.exports = {
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema,
   verifyEmailSchema,
-  resendVerificationSchema
+  resendVerificationSchema,
+  loginOtpRequestSchema,
+  loginOtpVerifySchema
 };

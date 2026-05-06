@@ -119,6 +119,10 @@ const jointEventsRoutes = require('./routes/jointEvents');
 
 // API Routes
 app.use('/v1/auth', authRoutes);
+console.log('[AUTH_ROUTES] OTP login endpoints active:', {
+  requestCode: 'POST /v1/auth/login/request-code',
+  verifyCode: 'POST /v1/auth/login/verify-code',
+});
 app.use('/v1/users', userRoutes);
 app.use('/v1/locations', locationRoutes);
 app.use('/v1/events', eventRoutes);
