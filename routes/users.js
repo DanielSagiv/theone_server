@@ -1,7 +1,8 @@
 const express = require('express');
 const User = require('../models/User');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
-const { updateProfileSchema, updateEntityStatusSchema, updateRoleSchema, updateVisibilityStatusSchema, updateUserTierSchema } = require('../utils/validationSchemas');
+const { updateProfileSchema, updateEntityStatusSchema, adminCreateClientSchema, updateRoleSchema, updateVisibilityStatusSchema, updateUserTierSchema } = require('../utils/validationSchemas');
+const authService = require('../services/authService');
 const multer = require('multer');
 const { enrichUserAvatarFields } = require('../utils/ensureImageMetadata');
 const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
@@ -324,6 +325,56 @@ router.get('/pending-registrations', authenticateToken, requireAdmin, async (req
       error: {
         code: 'PENDING_REGISTRATIONS_RETRIEVAL_FAILED',
         message: 'Failed to retrieve pending registrations',
+      },
+    });
+  }
+});
+
+/**
+ * POST /v1/users/admin/clients
+ * Create a live client user (admin only). Sends welcome email with app links when configured.
+ */
+router.post('/admin/clients', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { error, value } = adminCreateClientSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message,
+        },
+      });
+    }
+
+    const result = await authService.createClientByAdmin(value);
+
+    res.status(201).json({
+      success: true,
+      data: result.user,
+      message: 'Client created successfully',
+    });
+  } catch (error) {
+    console.error('Admin create client error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (error.message === 'User with this email already exists') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'EMAIL_EXISTS',
+          message: error.message,
+        },
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'ADMIN_CREATE_CLIENT_FAILED',
+        message: 'Failed to create client',
       },
     });
   }

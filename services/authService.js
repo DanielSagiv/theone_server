@@ -191,6 +191,88 @@ const registerUser = async (userData) => {
   }
 };
 
+const ADMIN_CREATE_INDUSTRY_ENUM = [
+  'fintech',
+  'cyber',
+  'social',
+  'sales',
+  'e-commerce',
+  'AI',
+  'energy',
+  'crypto',
+  'banking',
+  'real-estate',
+  'tech',
+  'other',
+];
+
+/**
+ * Create a client user directly (admin). User is live and email-verified; random password; welcome email with app links.
+ * @param {Object} payload - Validated body (adminCreateClientSchema)
+ * @returns {Promise<{ user: object }>}
+ */
+const createClientByAdmin = async (payload) => {
+  const crypto = require('crypto');
+  const emailLower = (payload.email || '').toLowerCase().trim();
+
+  const existingUser = await User.findOne({ email: emailLower });
+  if (existingUser) {
+    throw new Error('User with this email already exists');
+  }
+
+  const phoneRaw = payload.phone != null ? String(payload.phone).trim() : '';
+  const phone =
+    phoneRaw.length >= 10 ? phoneRaw : '0000000000';
+
+  const industry =
+    payload.industry && ADMIN_CREATE_INDUSTRY_ENUM.includes(payload.industry)
+      ? payload.industry
+      : 'other';
+
+  const randomPassword = crypto.randomBytes(32).toString('hex');
+  const now = new Date();
+
+  const user = new User({
+    email: emailLower,
+    password: randomPassword,
+    firstName: payload.firstName.trim(),
+    lastName: payload.lastName.trim(),
+    phone,
+    dateOfBirth: payload.dateOfBirth ? new Date(payload.dateOfBirth) : undefined,
+    industry,
+    industryCustom: payload.industryCustom || undefined,
+    role: 'client',
+    entity_status: 'live',
+    emailVerified: true,
+    emailVerifiedAt: now,
+    termsAcceptedAt: now,
+    privacyConsentAt: now,
+    first_coe_deduction_enabled: Boolean(payload.first_coe_deduction_enabled),
+    first_coe_deduction_consumed: false,
+    first_coe_deduction_amount: 1000,
+  });
+
+  await user.save();
+
+  emailService
+    .sendAdminCreatedClientWelcomeEmail(user)
+    .then(() => {
+      console.log('[AUTH_SERVICE] Admin-created client welcome email queued', {
+        email: user.email,
+        timestamp: new Date().toISOString(),
+      });
+    })
+    .catch((err) => {
+      console.error('[AUTH_SERVICE] Admin-created client welcome email failed', {
+        email: user.email,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+  return { user: user.getProfile() };
+};
+
 /**
  * Authenticate user login
  * @param {string} email - User email
@@ -499,6 +581,7 @@ module.exports = {
   generateToken,
   createSession,
   registerUser,
+  createClientByAdmin,
   authenticateUser,
   logoutUser,
   validateSession,

@@ -270,6 +270,77 @@ async function sendWelcomeEmail(user) {
 }
 
 /**
+ * Welcome email for a client account created by an admin (live + verified; app download CTAs).
+ * @param {Object} user - User document
+ * @returns {Promise<Object>} Send result
+ */
+async function sendAdminCreatedClientWelcomeEmail(user) {
+  const first = escapeHtml(user.firstName || 'there');
+  const iosUrl = (process.env.MOBILE_APP_IOS_URL || '').trim();
+  const androidUrl = (process.env.MOBILE_APP_ANDROID_URL || '').trim();
+
+  const introHtml = [
+    escapeHtml(
+      'Your The 1 account has been created for you. Open the mobile app and sign in using ',
+    ),
+    `<strong>${escapeHtml('email sign-in code')}</strong>`,
+    escapeHtml(' with this email address, or use '),
+    `<strong>${escapeHtml('Forgot password')}</strong>`,
+    escapeHtml(' on the sign-in screen to set a password.'),
+  ].join('');
+
+  const parts = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph(introHtml, {rawHtml: true}),
+    renderSpacer(24),
+    renderBoldLine('Get the app'),
+  ];
+
+  if (iosUrl) {
+    parts.push(renderPrimaryCta({href: iosUrl, label: 'Download for iOS'}));
+  }
+  if (androidUrl) {
+    parts.push(renderPrimaryCta({href: androidUrl, label: 'Download for Android'}));
+  }
+  if (!iosUrl && !androidUrl) {
+    parts.push(renderMutedParagraph('App store links will be added soon.'));
+  }
+
+  const bodyHtml = parts.join('');
+
+  const textLines = [
+    'Your The 1 account',
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    'Your account has been created. Open the mobile app and sign in using the email sign-in code with this address, or use Forgot password to set a password.',
+    '',
+    'Get the app:',
+  ];
+  if (iosUrl) {
+    textLines.push(`iOS: ${iosUrl}`);
+  }
+  if (androidUrl) {
+    textLines.push(`Android: ${androidUrl}`);
+  }
+  if (!iosUrl && !androidUrl) {
+    textLines.push('Store links will be added soon.');
+  }
+
+  const html = renderEmailDocument({
+    preheader: 'Your The 1 account is ready — download the app',
+    bodyHtml,
+  });
+
+  return sendEmail({
+    to: user.email,
+    subject: 'Your The 1 account is ready',
+    html,
+    text: textLines.join('\n'),
+  });
+}
+
+/**
  * Send COE invitation email to client
  * @param {Object} client - Client user object
  * @param {Object} coe - COE object with details
@@ -644,6 +715,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendLoginOtpEmail,
   sendWelcomeEmail,
+  sendAdminCreatedClientWelcomeEmail,
   sendCOEInvitationEmail,
   sendBookingConfirmationEmail,
   sendAdminNotificationEmail,

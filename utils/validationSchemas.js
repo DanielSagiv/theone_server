@@ -644,6 +644,35 @@ const updateEntityStatusSchema = Joi.object({
   first_coe_deduction_enabled: Joi.boolean().optional()
 });
 
+const industryEnum = [
+  'fintech',
+  'cyber',
+  'social',
+  'sales',
+  'e-commerce',
+  'AI',
+  'energy',
+  'crypto',
+  'banking',
+  'real-estate',
+  'tech',
+  'other',
+];
+
+/**
+ * Admin-only: create a live client user (no pending approval flow).
+ */
+const adminCreateClientSchema = Joi.object({
+  email: Joi.string().email().required(),
+  firstName: Joi.string().min(2).trim().required(),
+  lastName: Joi.string().min(2).trim().required(),
+  phone: Joi.string().trim().min(10).optional().allow('', null),
+  dateOfBirth: Joi.date().max('now').optional().allow(null),
+  industry: Joi.string().valid(...industryEnum).optional(),
+  industryCustom: Joi.string().allow('', null).optional(),
+  first_coe_deduction_enabled: Joi.boolean().default(false),
+});
+
 const updateRoleSchema = Joi.object({
   role: Joi.string().valid('admin', 'client', 'runner').required()
 });
@@ -718,6 +747,7 @@ module.exports = {
   resetPasswordSchema,
   updateProfileSchema,
   updateEntityStatusSchema,
+  adminCreateClientSchema,
   updateRoleSchema,
   updateVisibilityStatusSchema,
   updateUserTierSchema,
