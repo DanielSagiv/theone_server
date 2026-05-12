@@ -12,7 +12,7 @@ const Notification = require('../models/Notification');
 const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const coeService = require('../services/coeService');
-//
+
 /** Hard-coded tools password (dashboard Tools tab); validate on every request. */
 const TOOLS_CLEAN_PASSWORD = 'sagsag';
 
