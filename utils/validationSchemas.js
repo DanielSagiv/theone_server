@@ -9,7 +9,8 @@ const assetSchema = Joi.object({
   width: Joi.number().min(0).optional(),
   height: Joi.number().min(0).optional(),
   byte_size: Joi.number().min(0).optional(),
-  thumb_url: Joi.string().uri().allow('', null).optional()
+  thumb_url: Joi.string().uri().allow('', null).optional(),
+  list_thumb_url: Joi.string().uri().allow('', null).optional()
 });
 
 const sentimentSchema = Joi.object({
