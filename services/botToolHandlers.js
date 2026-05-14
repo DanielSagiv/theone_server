@@ -1586,7 +1586,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
     // Determine initial status based on creator role
     // Client-created COEs start as 'request', admin-created COEs start as 'draft'
-    const initialStatus = user.role === 'client' ? 'request' : 'draft';
+    const roleNorm = (user.role != null ? String(user.role) : '').toLowerCase();
+    const initialStatus = roleNorm === 'client' ? 'request' : 'draft';
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Setting initial COE status:', {
       userRole: user.role,

@@ -1169,7 +1169,13 @@ async function autoFillCOEData(baseData, preferences = {}, selectedEvents = []) 
 
   // 4. Default values
   autoFilled.currency = autoFilled.currency || 'USD';
-  autoFilled.status = autoFilled.status || 'draft';
+  // Preserve caller workflow status (e.g. client "request"). Do not use `|| 'draft'` — that can
+  // replace a missing intermediate value and hide bugs; explicit baseData.status must win.
+  if (baseData.status != null && String(baseData.status).trim() !== '') {
+    autoFilled.status = baseData.status;
+  } else if (autoFilled.status == null || String(autoFilled.status).trim() === '') {
+    autoFilled.status = 'draft';
+  }
   autoFilled.created_method = autoFilled.created_method || 'automated';
   autoFilled.participants = autoFilled.participants || [];
   autoFilled.tags = autoFilled.tags || [];

@@ -969,13 +969,35 @@ async function createCOE(coeData, createdBy) {
      * When a client creates a COE in `request` status, notify the assigned admin (push + in-app).
      * Centralized here so all entry points (bot create_coe_draft, request-only shortcut, etc.) stay consistent.
      */
-    if (
+    const normActorId = id => {
+      if (id == null) {
+        return '';
+      }
+      if (id instanceof mongoose.Types.ObjectId) {
+        return id.toString();
+      }
+      if (typeof id === 'object' && id._id != null) {
+        return String(id._id);
+      }
+      return String(id);
+    };
+    const clientIdStr = normActorId(coeData.client_id);
+    const createdByStr = normActorId(createdBy);
+    const clientRoleNorm = (client.role != null ? String(client.role) : '').toLowerCase();
+    const looksLikeClientUser =
+      client.role == null ||
+      String(client.role).trim() === '' ||
+      clientRoleNorm === 'client';
+    const shouldNotifyAdminNewRequest =
       coe.status === 'request' &&
       admin &&
       client &&
-      client.role === 'client' &&
-      String(client._id) === String(createdBy)
-    ) {
+      clientIdStr &&
+      createdByStr &&
+      clientIdStr === createdByStr &&
+      looksLikeClientUser;
+
+    if (shouldNotifyAdminNewRequest) {
       try {
         const notificationService = require('./notificationService');
         const clientName =
@@ -999,6 +1021,15 @@ async function createCOE(coeData, createdBy) {
       } catch (notifErr) {
         console.error('[COE_SERVICE] coe_requested notification failed:', notifErr);
       }
+    } else if (coe.status === 'request' && admin && client) {
+      console.warn('[COE_SERVICE] Skipping coe_requested notification (gate)', {
+        coeId: coe._id?.toString(),
+        coeStatus: coe.status,
+        clientIdStr,
+        createdByStr,
+        clientRole: client.role,
+        hasAdmin: !!admin
+      });
     }
 
     // Best-effort history logging for COE creation

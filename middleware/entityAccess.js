@@ -52,6 +52,8 @@ function requireClientApprovedForApi(req, res, next) {
         'POST:/v1/auth/logout',
         'GET:/v1/users/profile',
         'GET:/v1/features',
+        'GET:/v1/notifications',
+        'GET:/v1/notifications/unread-count',
         'GET:/v1/payments/saved-cards',
         'POST:/v1/payments/tokenize',
         'PUT:/v1/payments/saved-cards/:tokenId',
@@ -84,6 +86,8 @@ function requireClientApprovedForApi(req, res, next) {
       'POST:/v1/auth/logout',
       'GET:/v1/users/profile',
       'GET:/v1/features',
+      'GET:/v1/notifications',
+      'GET:/v1/notifications/unread-count',
     ]);
 
     if (allowedPendingRoutes.has(`${method}:${pathOnly}`)) {
