@@ -1880,42 +1880,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       deposit_required: populatedCOE.deposit_required
     });
 
-    // Send notification to admin if COE status is 'request'
-    if (populatedCOE.status === 'request' && populatedCOE.admin_id) {
-      try {
-        const notificationService = require('./notificationService');
-        const adminId = populatedCOE.admin_id?._id 
-          ? populatedCOE.admin_id._id.toString() 
-          : (populatedCOE.admin_id?.toString ? populatedCOE.admin_id.toString() : String(populatedCOE.admin_id));
-        
-        // Get client info for notification
-        const client = await User.findById(targetClientId).select('firstName lastName');
-        const clientName = client 
-          ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || 'A client'
-          : 'A client';
-        
-        await notificationService.createAndSendNotification(
-          adminId,
-          'coe_requested',
-          {
-            coe_id: populatedCOE._id,
-            coe: { name: populatedCOE.name },
-            sender_name: clientName,
-            sender_id: targetClientId
-          }
-        );
-        
-        console.log('[BOT] Sent COE request notification to admin:', {
-          adminId: adminId,
-          coeId: populatedCOE._id.toString(),
-          coeName: populatedCOE.name,
-          clientName: clientName
-        });
-      } catch (notificationError) {
-        console.error('[BOT] Failed to send COE request notification:', notificationError);
-        // Don't fail COE creation if notification fails
-      }
-    }
+    // Admin push for client `request` COEs is sent from coeService.createCOE (single place).
 
     // Generate seat upgrade offers for draft or request COEs
     if (populatedCOE.status === 'draft' || populatedCOE.status === 'request') {

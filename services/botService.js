@@ -5,7 +5,6 @@ const BotUsageLog = require('../models/BotUsageLog');
 const BotAuditLog = require('../models/BotAuditLog');
 const User = require('../models/User');
 const coeService = require('./coeService');
-const notificationService = require('./notificationService');
 const { formatDateRange } = require('../utils/dateParser');
 const { getOpenAIFunctions, getTool, hasPermission } = require('./botTools');
 const { toolHandlers } = require('./botToolHandlers');
@@ -984,31 +983,7 @@ async function sendBotMessage(userId, prompt, user, correlationId = null) {
             status: coe.status,
           });
 
-          // Notify admin of new request (same as create_coe_draft path when status is request)
-          if (coe.status === 'request' && coe.admin_id) {
-            try {
-              const adminId = coe.admin_id?._id
-                ? coe.admin_id._id.toString()
-                : (coe.admin_id?.toString ? coe.admin_id.toString() : String(coe.admin_id));
-              await notificationService.createAndSendNotification(
-                adminId,
-                'coe_requested',
-                {
-                  coe_id: coe._id,
-                  coe: { name: coeName },
-                  sender_name: clientFullName,
-                  sender_id: client._id
-                }
-              );
-              console.log('[BOT] Sent COE request notification to admin (request-only flow):', {
-                adminId,
-                coeId: coe._id?.toString(),
-                coeName
-              });
-            } catch (notificationError) {
-              console.error('[BOT] Failed to send COE request notification (request-only flow):', notificationError);
-            }
-          }
+          // Admin notification for request COEs is sent inside coeService.createCOE.
 
           // Link this COE to the conversation so later flows can find it
           conversation.active_coe_id = coe._id.toString();

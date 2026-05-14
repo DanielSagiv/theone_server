@@ -965,6 +965,42 @@ async function createCOE(coeData, createdBy) {
       { path: 'created_by', select: 'firstName lastName email role' }
     ]);
 
+    /**
+     * When a client creates a COE in `request` status, notify the assigned admin (push + in-app).
+     * Centralized here so all entry points (bot create_coe_draft, request-only shortcut, etc.) stay consistent.
+     */
+    if (
+      coe.status === 'request' &&
+      admin &&
+      client &&
+      client.role === 'client' &&
+      String(client._id) === String(createdBy)
+    ) {
+      try {
+        const notificationService = require('./notificationService');
+        const clientName =
+          `${client.firstName || ''} ${client.lastName || ''}`.trim() ||
+          client.email ||
+          'A client';
+        await notificationService.createAndSendNotification(
+          admin._id.toString(),
+          'coe_requested',
+          {
+            coe_id: coe._id,
+            coe: { name: coe.name },
+            sender_name: clientName,
+            sender_id: client._id
+          }
+        );
+        console.log('[COE_SERVICE] coe_requested notification sent for new client request', {
+          adminId: admin._id.toString(),
+          coeId: coe._id.toString()
+        });
+      } catch (notifErr) {
+        console.error('[COE_SERVICE] coe_requested notification failed:', notifErr);
+      }
+    }
+
     // Best-effort history logging for COE creation
     try {
       const { logIncident } = require('./coeHistoryService');

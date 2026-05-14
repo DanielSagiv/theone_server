@@ -5,7 +5,8 @@ const Location = require('../models/Location');
  * City display name -> possible DB values (e.g. locations may store "LV" not "Las Vegas")
  */
 const CITY_ALIASES = {
-  'las vegas': ['LV', 'Las Vegas', 'Las Vegas, NV'],
+  /** Match `address.city` variants when client sends full display name e.g. "Las Vegas, Nevada". */
+  'las vegas': ['LV', 'Las Vegas', 'Las Vegas, NV', 'Las Vegas, Nevada'],
   'new york': ['NYC', 'New York', 'New York City'],
   'la': ['LA', 'Los Angeles'],
   'miami': ['Miami', 'Miami Beach'],
@@ -84,9 +85,13 @@ async function searchEvents(searchParams, options = {}) {
 
       // City: match the search term OR any alias (e.g. "Las Vegas" also matches "LV" so Tao is included)
       if (city) {
-        const cityKey = city.trim().toLowerCase();
-        const cityValues = [city.trim()];
-        const aliases = CITY_ALIASES[cityKey];
+        const rawCity = city.trim();
+        const cityKeyLower = rawCity.toLowerCase();
+        const aliasLookupKey = cityKeyLower.includes(',')
+          ? cityKeyLower.split(',')[0].trim()
+          : cityKeyLower;
+        const cityValues = [rawCity];
+        const aliases = CITY_ALIASES[aliasLookupKey];
         if (aliases && Array.isArray(aliases)) {
           aliases.forEach(a => { if (a && !cityValues.some(c => c.toLowerCase() === a.toLowerCase())) cityValues.push(a); });
         }
