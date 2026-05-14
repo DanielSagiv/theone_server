@@ -1,0 +1,14 @@
+---
+description: Before UI or client-facing contract changes, flag risk of losing existing product logic; warn the user first.
+alwaysApply: true
+---
+
+# Design / surface change — preserve behavior
+
+When changing **routes, EJS test UI, response shapes, filters, or anything that affects how the mobile app or operators reach features**:
+
+1. **Trace consumers** — mobile screens, notifications, deep links, admin tools, scripts.
+2. **If a change would drop or narrow behavior** (e.g. stricter filters, removed fields, renamed routes) **without a documented replacement**, **warn the user in chat before merging the approach** — name the regression risk and the smallest safe alternative.
+3. Prefer **additive** changes or **feature flags** when deprecating paths.
+
+This pairs with the same rule in the **mobile** repo for full-stack parity.
