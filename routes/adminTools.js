@@ -2,7 +2,7 @@
  * Admin-only dashboard utilities (test / dev tooling).
  * @description Secured CLEAN operations for selected Mongo collections.
  */
-//
+
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
