@@ -12,6 +12,10 @@ const { enrichCOESeatUpgradeMedia } = require('../utils/ensureImageMetadata');
  * @description Business logic for COE operations
  */
 
+/** Location fields returned on populated events for client map / venue detail. */
+const COE_EVENT_LOCATION_SELECT =
+  'name type media seats address geo description tagline';
+
 /**
  * Validate that all selected seats are available before COE creation
  * @param {Array} selectedSeats - Array of seat data
@@ -1199,7 +1203,7 @@ async function getCOEById(coeId) {
         populate: [
           {
             path: 'location_id',
-            select: 'name type media seats'
+            select: COE_EVENT_LOCATION_SELECT
           }
         ]
       })
@@ -1236,7 +1240,7 @@ async function getCOEById(coeId) {
             // Try to populate it manually
             try {
               const populatedEvent = await Event.findById(eventIdValue)
-                .populate('location_id', 'name type media seats')
+                .populate('location_id', COE_EVENT_LOCATION_SELECT)
                 .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
               if (populatedEvent) {
                 eventItem.event_id = populatedEvent;
@@ -1283,7 +1287,7 @@ async function getCOEById(coeId) {
             populate: [
               {
                 path: 'location_id',
-                select: 'name type media seats'
+                select: COE_EVENT_LOCATION_SELECT
               }
             ]
           })
@@ -1317,7 +1321,7 @@ async function getCOEById(coeId) {
                 
                 try {
                   const populatedEvent = await Event.findById(eventIdValue)
-                    .populate('location_id', 'name type media seats')
+                    .populate('location_id', COE_EVENT_LOCATION_SELECT)
                     .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone')
                     .lean();
                   if (populatedEvent) {

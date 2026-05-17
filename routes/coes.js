@@ -295,7 +295,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
-        select: 'name type media'
+        select: 'name type media seats address geo description tagline'
       }
     })
     .sort({ created_at: -1 });
@@ -327,7 +327,7 @@ router.get('/my', authenticateToken, async (req, res) => {
               
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media')
+                  .populate('location_id', 'name type media seats address geo description tagline')
                   .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
@@ -535,7 +535,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
       select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
-        select: 'name type media'
+        select: 'name type media seats address geo description tagline'
       }
     })
     .sort({ created_at: -1 });
@@ -567,7 +567,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
               
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media')
+                  .populate('location_id', 'name type media seats address geo description tagline')
                   .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
@@ -754,11 +754,36 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
           populate: [
             {
               path: 'location_id',
-              select: 'name type media seats'
+              select: 'name type media seats address geo description tagline'
             }
           ]
         })
         .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
+
+      // Ensure venue address/geo on populated events (lean populate can omit nested fields)
+      if (coe?.events?.length) {
+        const Location = require('../models/Location');
+        const locationSelect =
+          'name type media seats address geo description tagline';
+        for (const eventItem of coe.events) {
+          const ev = eventItem?.event_id;
+          if (!ev || typeof ev !== 'object') continue;
+          const loc = ev.location_id;
+          const locId = loc?._id || loc;
+          if (!locId) continue;
+          try {
+            const full = await Location.findById(locId)
+              .select(locationSelect)
+              .lean();
+            if (full) ev.location_id = full;
+          } catch (locErr) {
+            console.warn(
+              '[GET /coes/my/:id] Location enrich failed:',
+              locErr.message,
+            );
+          }
+        }
+      }
       
       // Verify events array matches raw data
       const rawEventIds = (coeRaw.events || []).map(e => String(e.event_id)).sort();
@@ -800,7 +825,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
           try {
             const populatedEvent = await Event.findById(eventItem.event_id)
               .lean()
-              .populate('location_id', 'name type media seats')
+              .populate('location_id', 'name type media seats address geo description tagline')
               .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
             if (populatedEvent) {
               coe.events[i].event_id = populatedEvent;
