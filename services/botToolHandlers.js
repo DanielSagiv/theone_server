@@ -1833,17 +1833,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     
     let coe;
     if (request_coe_id) {
-      // Flow A: upgrade an existing request-only COE into a draft instead of creating a new one.
+      // Flow A / client request edit: upgrade existing request COE in place.
       console.log('[BOT] [COE_CREATION_FULL_DEBUG] Flow A detected - updating existing request COE:', {
         request_coe_id: request_coe_id
       });
-      
-      // Use updateCOE so that seat hold/release logic is respected.
-      // We intentionally DO NOT overwrite original_request_data here; updateCOE
-      // only touches fields present in coeData.
+
+      const existingRequestCoe = await coeService.getCOEById(request_coe_id);
+      const preserveRequestStatus =
+        roleNorm === 'client' && existingRequestCoe?.status === 'request';
+
       coe = await coeService.updateCOE(request_coe_id, {
         ...coeData,
-        status: coeData.status || 'draft'
+        status: preserveRequestStatus ? 'request' : coeData.status || 'draft',
       });
     } else {
       // Default behaviour: create a new draft/request COE as before.

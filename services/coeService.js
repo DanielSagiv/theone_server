@@ -1482,6 +1482,340 @@ function mergeOriginalRequestDataForUpdate(existingSubdoc, patch) {
 }
 
 /**
+ * Normalize a date field for history comparison.
+ * @param {Date|string|undefined} value
+ * @returns {string|null}
+ */
+function historyNormDate(value) {
+  if (value == null) {
+    return null;
+  }
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Sorted comma-separated event ids for history comparison.
+ * @param {object} coe
+ * @returns {string}
+ */
+function historyEventIdSignature(coe) {
+  return (coe?.events || [])
+    .map(e => {
+      const ref = e?.event_id;
+      if (ref == null) {
+        return '';
+      }
+      if (typeof ref === 'object' && ref._id != null) {
+        return ref._id.toString();
+      }
+      return ref.toString();
+    })
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+/**
+ * Log experience history when a client updates their request COE.
+ * @param {object} beforeCoe Snapshot before update
+ * @param {object} afterCoe COE after update
+ * @param {string} userId
+ * @param {string} userRole
+ */
+async function logClientRequestUpdateHistory(beforeCoe, afterCoe, userId, userRole) {
+  try {
+    const { logIncident } = require('./coeHistoryService');
+    const changes = [];
+    const beforeReq = beforeCoe?.original_request_data || {};
+    const afterReq = afterCoe?.original_request_data || {};
+
+    const beforeStart = historyNormDate(
+      beforeCoe?.start_date || beforeReq.requested_dates?.start_date,
+    );
+    const afterStart = historyNormDate(
+      afterCoe?.start_date || afterReq.requested_dates?.start_date,
+    );
+    const beforeEnd = historyNormDate(
+      beforeCoe?.end_date || beforeReq.requested_dates?.end_date,
+    );
+    const afterEnd = historyNormDate(
+      afterCoe?.end_date || afterReq.requested_dates?.end_date,
+    );
+    if (beforeStart !== afterStart || beforeEnd !== afterEnd) {
+      changes.push({
+        field: 'dates',
+        label: 'Requested dates',
+        from: { start: beforeStart, end: beforeEnd },
+        to: { start: afterStart, end: afterEnd },
+        message: 'Requested dates updated',
+      });
+    }
+
+    const beforeCity = beforeReq.city || null;
+    const afterCity = afterReq.city || null;
+    if (beforeCity !== afterCity) {
+      changes.push({
+        field: 'city',
+        label: 'City',
+        from: beforeCity,
+        to: afterCity,
+        message: `City updated to ${afterCity || '—'}`,
+      });
+    }
+
+    const beforeParty = beforeReq.party_size ?? null;
+    const afterParty = afterReq.party_size ?? null;
+    if (beforeParty !== afterParty) {
+      changes.push({
+        field: 'party_size',
+        label: 'Number of people',
+        from: beforeParty,
+        to: afterParty,
+        message: `Party size updated to ${afterParty ?? '—'}`,
+      });
+    }
+
+    const beforeBudget = beforeReq.budget?.max ?? null;
+    const afterBudget = afterReq.budget?.max ?? null;
+    if (beforeBudget !== afterBudget) {
+      changes.push({
+        field: 'budget',
+        label: 'Budget (max)',
+        from: beforeBudget,
+        to: afterBudget,
+        message: `Budget updated to ${afterBudget ?? '—'}`,
+      });
+    }
+
+    const beforeSeatPref = beforeReq.seat_preferences ?? '';
+    const afterSeatPref = afterReq.seat_preferences ?? '';
+    if (beforeSeatPref !== afterSeatPref) {
+      changes.push({
+        field: 'seat_preferences',
+        label: 'Seat/Table preferences',
+        from: beforeSeatPref || null,
+        to: afterSeatPref || null,
+        message: 'Seat/table preferences updated',
+      });
+    }
+
+    const beforeGenPref =
+      beforeReq.general_preferences ?? beforeReq.specific_preferences ?? '';
+    const afterGenPref =
+      afterReq.general_preferences ?? afterReq.specific_preferences ?? '';
+    if (beforeGenPref !== afterGenPref) {
+      changes.push({
+        field: 'specific_preferences',
+        label: 'Specific preferences',
+        from: beforeGenPref || null,
+        to: afterGenPref || null,
+        message: 'Specific preferences updated',
+      });
+    }
+
+    if (historyEventIdSignature(beforeCoe) !== historyEventIdSignature(afterCoe)) {
+      const beforeCount = (beforeCoe?.events || []).length;
+      const afterCount = (afterCoe?.events || []).length;
+      changes.push({
+        field: 'events',
+        label: 'Included events',
+        from: beforeCount,
+        to: afterCount,
+        message: `Included events updated (${beforeCount} → ${afterCount})`,
+      });
+    }
+
+    const beforeTotal = Number(beforeCoe?.total || 0);
+    const afterTotal = Number(afterCoe?.total || 0);
+    if (beforeTotal !== afterTotal) {
+      changes.push({
+        field: 'total',
+        label: 'Total',
+        from: beforeTotal,
+        to: afterTotal,
+        message: `Total updated from $${beforeTotal.toFixed(2)} to $${afterTotal.toFixed(2)}`,
+      });
+    }
+
+    if (changes.length === 0) {
+      changes.push({
+        field: 'request',
+        label: 'Request',
+        from: null,
+        to: null,
+        message: 'Client updated their experience request',
+      });
+    }
+
+    await logIncident({
+      coe: afterCoe,
+      coeId: afterCoe._id,
+      userId,
+      userRole: userRole || 'client',
+      title: 'Experience request updated',
+      changes,
+    });
+  } catch (historyErr) {
+    console.error(
+      '[updateClientRequestCOE] Failed to log history incident:',
+      historyErr.message,
+    );
+  }
+}
+
+/**
+ * Client updates their own COE while status is request (metadata and/or events via create_coe_draft).
+ * @param {string} coeId
+ * @param {string} userId
+ * @param {object} body Validated updateClientRequestCOESchema payload
+ * @param {Function} executeCreateCoeDraft - async (toolParams, user) => tool result
+ * @param {object} user Mongoose user doc
+ * @returns {Promise<object>} Populated COE
+ */
+async function updateClientRequestCOE(coeId, userId, body, executeCreateCoeDraft, user) {
+  const existingCOE = await COE.findById(coeId);
+  if (!existingCOE) {
+    throw new Error('COE not found');
+  }
+  const beforeSnapshot =
+    typeof existingCOE.toObject === 'function'
+      ? existingCOE.toObject()
+      : { ...existingCOE };
+  if (existingCOE.status !== 'request') {
+    throw new Error('COE is not in request status');
+  }
+  const clientIdStr =
+    existingCOE.client_id?._id?.toString() ||
+    existingCOE.client_id?.toString();
+  if (!clientIdStr || clientIdStr !== userId.toString()) {
+    throw new Error('Permission denied');
+  }
+
+  const {
+    mergeClientOriginalRequestData,
+    buildCreateCoeDraftParamsFromClientRequest,
+  } = require('../utils/clientRequestUpdate');
+
+  const startDate = new Date(body.start_date);
+  const endDate = new Date(body.end_date);
+  const mergedOriginal = mergeClientOriginalRequestData(
+    existingCOE.original_request_data,
+    {
+      ...body,
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+    },
+  );
+
+  const hasEventSelections =
+    body.rebuild_events === true ||
+    (Array.isArray(body.event_selections) && body.event_selections.length > 0);
+
+  if (hasEventSelections) {
+    const toolParams = buildCreateCoeDraftParamsFromClientRequest(body, coeId);
+    const toolResult = await executeCreateCoeDraft(toolParams, user);
+    if (!toolResult?.success) {
+      const msg =
+        toolResult?.error?.message ||
+        toolResult?.message ||
+        'Failed to update request events';
+      throw new Error(msg);
+    }
+    let coe = await getCOEById(coeId);
+    await COE.findByIdAndUpdate(coeId, {
+      $set: {
+        status: 'request',
+        start_date: startDate,
+        end_date: endDate,
+        original_request_data: mergedOriginal,
+        updated_at: new Date(),
+      },
+    });
+    coe = await getCOEById(coeId);
+    await notifyAdminClientRequestUpdated(coe, user);
+    await logClientRequestUpdateHistory(
+      beforeSnapshot,
+      coe,
+      userId,
+      user?.role || 'client',
+    );
+    return coe;
+  }
+
+  const flatUpdate = {
+    status: 'request',
+    start_date: startDate,
+    end_date: endDate,
+    original_request_data: mergedOriginal,
+    updated_at: new Date(),
+  };
+
+  if (Array.isArray(body.event_selections) && body.event_selections.length === 0) {
+    await releaseSelectedSeats(coeId);
+    flatUpdate.events = [];
+    flatUpdate.selected_seats = [];
+    flatUpdate.subtotal = 0;
+    flatUpdate.taxes = 0;
+    flatUpdate.fees = 0;
+    flatUpdate.total = 0;
+    flatUpdate.deposit_required = 0;
+  }
+
+  const coe = await COE.findByIdAndUpdate(
+    coeId,
+    { $set: flatUpdate },
+    { new: true, runValidators: true },
+  )
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
+    .populate('admin_id', 'firstName lastName email')
+    .populate('created_by', 'firstName lastName email');
+
+  if (!coe) {
+    throw new Error('COE not found');
+  }
+
+  await notifyAdminClientRequestUpdated(coe, user);
+  const finalCoe = await getCOEById(coeId);
+  await logClientRequestUpdateHistory(
+    beforeSnapshot,
+    finalCoe,
+    userId,
+    user?.role || 'client',
+  );
+  return finalCoe;
+}
+
+/**
+ * Notify assigned admin when client updates a request COE.
+ * @param {object} coe
+ * @param {object} clientUser
+ */
+async function notifyAdminClientRequestUpdated(coe, clientUser) {
+  try {
+    const adminId =
+      coe.admin_id?._id?.toString() || coe.admin_id?.toString();
+    if (!adminId) {
+      return;
+    }
+    const notificationService = require('./notificationService');
+    const clientName =
+      `${clientUser.firstName || ''} ${clientUser.lastName || ''}`.trim() ||
+      clientUser.email ||
+      'A client';
+    await notificationService.createAndSendNotification(adminId, 'coe_requested', {
+      coe_id: coe._id,
+      coe: { name: coe.name },
+      sender_name: clientName,
+      sender_id: clientUser._id,
+      request_updated: true,
+    });
+  } catch (err) {
+    console.warn('[COE_SERVICE] notifyAdminClientRequestUpdated failed:', err.message);
+  }
+}
+
+/**
  * Update COE
  * @param {string} coeId - COE ID
  * @param {Object} updateData - Update data
@@ -5238,6 +5572,7 @@ module.exports = {
   getCOEById,
   getCOEs,
   updateCOE,
+  updateClientRequestCOE,
   deleteCOE,
   addEventToCOE,
   removeEventFromCOE,

@@ -17,8 +17,10 @@ const {
   addEventToCOEWithSeatSchema,
   updateCOEStatusSchema,
   assignRunnerToCOESchema,
-  updateSeatAssignmentsSchema
+  updateSeatAssignmentsSchema,
+  updateClientRequestCOESchema,
 } = require('../utils/validationSchemas');
+const { canClientEditOwnRequest } = require('../utils/coeUtils');
 const proposalGroupService = require('../services/proposalGroupService');
 
 function roundCurrency(amount) {
@@ -1104,6 +1106,96 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       success: false,
       error: 'Failed to fetch COE',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * PUT /v1/coes/my/:id/request
+ * Client updates their own experience request while status is request.
+ * @access Client (owner only)
+ */
+router.put('/my/:id/request', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format',
+      });
+    }
+
+    if (req.user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only clients can update their own requests',
+      });
+    }
+
+    const { error, value } = updateClientRequestCOESchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        error: error.details[0].message,
+      });
+    }
+
+    const coeCheck = await COE.findById(id).select('status client_id');
+    if (!coeCheck) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found',
+      });
+    }
+
+    const permission = canClientEditOwnRequest(
+      coeCheck,
+      req.user.id || req.user._id,
+      req.user,
+    );
+    if (!permission.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: permission.reason || 'Permission denied',
+      });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const correlationId = `client-request-update-${id}-${Date.now()}`;
+
+    const executeCreateCoeDraft = async (toolParams, user) =>
+      executeTool('create_coe_draft', toolParams, user, correlationId);
+
+    const updatedCoe = await coeService.updateClientRequestCOE(
+      id,
+      userId,
+      value,
+      executeCreateCoeDraft,
+      req.user,
+    );
+
+    coeService.filterSelectedSeatsByEvents(updatedCoe, '[PUT /coes/my/:id/request]');
+
+    return res.json({
+      success: true,
+      message: 'Request updated successfully',
+      data: updatedCoe,
+    });
+  } catch (err) {
+    console.error('[PUT /coes/my/:id/request] Error:', err);
+    if (err.message === 'COE not found') {
+      return res.status(404).json({ success: false, message: err.message });
+    }
+    if (
+      err.message === 'Permission denied' ||
+      err.message === 'COE is not in request status'
+    ) {
+      return res.status(403).json({ success: false, message: err.message });
+    }
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to update request',
     });
   }
 });

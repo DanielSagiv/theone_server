@@ -741,6 +741,35 @@ const loginOtpVerifySchema = Joi.object({
     })
 });
 
+/** Client PUT /coes/my/:id/request — edit own request while status is request */
+const clientRequestEventSelectionSchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  seat_category: Joi.string().allow('', null),
+  simple_joint_manual_price: Joi.number().min(0).allow(null),
+  simple_joint_the1_fee_percent: Joi.number().min(0).max(100).allow(null),
+  venue_catalog_price: Joi.number().min(0).allow(null),
+  the1_base_price: Joi.number().min(0).allow(null),
+  the1_fee_percent: Joi.number().min(0).max(100).allow(null),
+});
+
+const updateClientRequestCOESchema = Joi.object({
+  start_date: Joi.date().required(),
+  end_date: Joi.date().min(Joi.ref('start_date')).required(),
+  city: Joi.string().min(1).max(200).required(),
+  party_size: Joi.number().integer().min(1).required(),
+  budget: Joi.object({
+    max: Joi.number().min(0).required(),
+    currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD'),
+  }).required(),
+  seat_preferences: Joi.string().max(2000).allow(''),
+  specific_preferences: Joi.string().max(2000).allow(''),
+  event_selections: Joi.array().items(clientRequestEventSelectionSchema).default([]),
+  prioritized_event_ids: Joi.array()
+    .items(Joi.string().hex().length(24))
+    .optional(),
+  rebuild_events: Joi.boolean().default(false),
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -774,5 +803,6 @@ module.exports = {
   verifyEmailSchema,
   resendVerificationSchema,
   loginOtpRequestSchema,
-  loginOtpVerifySchema
+  loginOtpVerifySchema,
+  updateClientRequestCOESchema,
 };
