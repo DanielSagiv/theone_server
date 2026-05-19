@@ -258,6 +258,7 @@ function extractPreferencesFromFormSubmission(message) {
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
+    prioritized_event_ids: /Prioritized event IDs:\s*([^\n]+?)(?:\n|$)/i,
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
     selected_simple_joint_prices:
       /Simple joint line prices:\s*([^\n]+?)(?:\n|$)/i,
@@ -382,6 +383,18 @@ function extractPreferencesFromFormSubmission(message) {
       .filter(Boolean);
   } else {
     preferences.selected_events = [];
+  }
+
+  // Prioritized list (mobile screen 20) — authoritative when present; overrides stale Selected lines.
+  const prioritizedEventsMatch = message.match(patterns.prioritized_event_ids);
+  if (prioritizedEventsMatch && prioritizedEventsMatch[1]) {
+    const prioritized = prioritizedEventsMatch[1]
+      .split(',')
+      .map(id => id.trim())
+      .filter(Boolean);
+    if (prioritized.length > 0) {
+      preferences.selected_events = prioritized;
+    }
   }
 
   // Extract selected seat categories per event (optional): "eventId1:Category A, eventId2:Category B"

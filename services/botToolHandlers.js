@@ -1846,6 +1846,13 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         ...coeData,
         status: preserveRequestStatus ? 'request' : coeData.status || 'draft',
       });
+      coeService.filterSelectedSeatsByEvents(
+        coe,
+        '[create_coe_draft request_coe_id]'
+      );
+      if (coe.isModified && coe.isModified('selected_seats')) {
+        await coe.save();
+      }
     } else {
       // Default behaviour: create a new draft/request COE as before.
       coe = await coeService.createCOE(coeData, user._id);
