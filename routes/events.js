@@ -244,14 +244,22 @@ router.get('/:id/seats', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const availableOnly = req.query.available_only === 'true' || req.query.available_only === '1';
+    let excludeClientId = req.query.exclude_client_id?.toString?.() || null;
+    if (!excludeClientId && req.user?.role === 'client') {
+      excludeClientId = req.user._id?.toString() || null;
+    }
 
     console.log('[EventsRoute] GET /:id/seats called:', {
       eventId: id,
       available_only: availableOnly,
+      exclude_client_id: excludeClientId,
       user_id: req.user._id?.toString()
     });
 
-    const result = await getEventSeatsWithSummaries(id, { available_only: availableOnly });
+    const result = await getEventSeatsWithSummaries(id, {
+      available_only: availableOnly,
+      exclude_client_id: excludeClientId || undefined,
+    });
 
     res.json({
       success: true,

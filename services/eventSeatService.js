@@ -2,9 +2,102 @@
  * Event Seat Service
  * Fetches event seats with AI-generated sentiment summaries
  */
+const mongoose = require('mongoose');
 const Event = require('../models/Event');
 const Location = require('../models/Location');
+const COE = require('../models/COE');
 const { generateSeatRecommendation } = require('./seatRecommendationService');
+
+/** COE statuses where simple-joint section labels may still be relevant for other clients. */
+const ACTIVE_COE_STATUSES = [
+  'draft',
+  'request',
+  'approved',
+  'accepted_not_paid',
+  'pending_pay',
+];
+
+/**
+ * Normalize seat category/section for cross-COE matching (lowercase, underscores).
+ * @param {string|null|undefined} raw
+ * @returns {string|null}
+ */
+function normalizeCategoryKey(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim().toLowerCase().replace(/\s+/g, '_');
+  return trimmed || null;
+}
+
+/**
+ * Category key from a COE selected_seats row.
+ * @param {object} seat
+ * @returns {string|null}
+ */
+function seatCategoryKeyFromRow(seat) {
+  return normalizeCategoryKey(
+    seat?.category || seat?.section || seat?.section_name
+  );
+}
+
+/**
+ * @param {object|undefined|null} seat
+ * @returns {boolean}
+ */
+function isSimpleJointSeatRow(seat) {
+  return seat?.is_simple_joint === true || seat?.is_simple_joint === 'true';
+}
+
+/**
+ * Distinct section/category keys on other clients' COEs with simple-joint for this event.
+ * @param {string} eventId
+ * @param {string|null|undefined} excludeClientId - omit COEs for this client (show "elsewhere" only)
+ * @returns {Promise<string[]>}
+ */
+async function getSimpleJointCategoriesElsewhereForEvent(eventId, excludeClientId) {
+  try {
+    if (!eventId || !mongoose.Types.ObjectId.isValid(eventId)) {
+      return [];
+    }
+    const eventOid = new mongoose.Types.ObjectId(eventId);
+    const eventIdStr = eventOid.toString();
+
+    const filter = {
+      status: { $in: ACTIVE_COE_STATUSES },
+      selected_seats: {
+        $elemMatch: {
+          event_id: eventOid,
+          is_simple_joint: true,
+        },
+      },
+    };
+
+    if (excludeClientId && mongoose.Types.ObjectId.isValid(excludeClientId)) {
+      filter.client_id = { $ne: new mongoose.Types.ObjectId(excludeClientId) };
+    }
+
+    const coes = await COE.find(filter).select('selected_seats').lean();
+    const keys = new Set();
+    for (const coe of coes) {
+      for (const seat of coe.selected_seats || []) {
+        if (!isSimpleJointSeatRow(seat)) continue;
+        const seatEventId =
+          seat.event_id?._id?.toString?.() ||
+          seat.event_id?.toString?.() ||
+          String(seat.event_id || '');
+        if (seatEventId !== eventIdStr) continue;
+        const key = seatCategoryKeyFromRow(seat);
+        if (key) keys.add(key);
+      }
+    }
+    return Array.from(keys);
+  } catch (error) {
+    console.error(
+      '[EventSeatService] getSimpleJointCategoriesElsewhereForEvent:',
+      error.message
+    );
+    return [];
+  }
+}
 
 /**
  * Get event seats with AI-generated sentiment summaries
@@ -142,10 +235,17 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
       }
     };
 
+    const simpleJointCategoriesElsewhere =
+      await getSimpleJointCategoriesElsewhereForEvent(
+        eventId,
+        options.exclude_client_id
+      );
+
     return {
       event: eventData,
       seats: seatsWithSummaries,
-      summary
+      summary,
+      simple_joint_categories_elsewhere: simpleJointCategoriesElsewhere,
     };
   } catch (error) {
     console.error('[EventSeatService] Error getting event seats:', error);
@@ -154,6 +254,8 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
 }
 
 module.exports = {
-  getEventSeatsWithSummaries
+  getEventSeatsWithSummaries,
+  getSimpleJointCategoriesElsewhereForEvent,
+  normalizeCategoryKey,
 };
 
