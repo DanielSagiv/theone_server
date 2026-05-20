@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../utils/emailService');
+const { isClientRegistrationApprovalRequired } = require('../utils/featureFlags');
 
 /**
  * Same eligibility rules as password sign-in (verified email, active, entity status).
@@ -113,14 +114,25 @@ const registerUser = async (userData) => {
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
     const verificationExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
-    // Create new user with verification fields
+    const role = userData.role || 'client';
+    const autoApproveClient =
+      role === 'client' && !isClientRegistrationApprovalRequired();
+
+    // Create new user with verification fields (entity_status owned by server, not signup body)
     const user = new User({
       ...userData,
       emailVerified: false,
       emailVerificationCode: verificationCode,
       emailVerificationExpires: verificationExpires,
       emailVerificationSentAt: new Date(),
-      entity_status: 'pendingApproval'
+      entity_status: autoApproveClient ? 'live' : 'pendingApproval',
+      ...(autoApproveClient
+        ? {
+            first_coe_deduction_enabled: false,
+            first_coe_deduction_consumed: false,
+            first_coe_deduction_amount: 1000,
+          }
+        : {}),
     });
     await user.save();
 
@@ -142,43 +154,45 @@ const registerUser = async (userData) => {
       });
 
     // Notify admins (non-blocking) that a new client is waiting for approval
-    setImmediate(() => {
-      (async () => {
-        try {
-          const notificationService = require('./notificationService');
-          const adminUsers = await User.find({
-            role: 'admin',
-            isActive: true,
-            entity_status: 'live',
-          }).select('_id');
+    if (user.role === 'client' && user.entity_status === 'pendingApproval') {
+      setImmediate(() => {
+        (async () => {
+          try {
+            const notificationService = require('./notificationService');
+            const adminUsers = await User.find({
+              role: 'admin',
+              isActive: true,
+              entity_status: 'live',
+            }).select('_id');
 
-          if (!adminUsers || adminUsers.length === 0) {
-            return;
-          }
+            if (!adminUsers || adminUsers.length === 0) {
+              return;
+            }
 
-          const senderName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'A new client';
-          await Promise.all(
-            adminUsers.map((adminUser) =>
-              notificationService.createAndSendNotification(
-                adminUser._id.toString(),
-                'admin_new_client_signup',
-                {
-                  sender_id: user._id,
-                  sender_name: senderName,
-                  action_url: 'the1://manage-new-clients',
-                }
+            const senderName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'A new client';
+            await Promise.all(
+              adminUsers.map((adminUser) =>
+                notificationService.createAndSendNotification(
+                  adminUser._id.toString(),
+                  'admin_new_client_signup',
+                  {
+                    sender_id: user._id,
+                    sender_name: senderName,
+                    action_url: 'the1://manage-new-clients',
+                  }
+                )
               )
-            )
-          );
-        } catch (notifyError) {
-          console.error('Admin signup notification error:', {
-            error: notifyError.message,
-            userId: user._id?.toString(),
-            timestamp: new Date().toISOString(),
-          });
-        }
-      })();
-    });
+            );
+          } catch (notifyError) {
+            console.error('Admin signup notification error:', {
+              error: notifyError.message,
+              userId: user._id?.toString(),
+              timestamp: new Date().toISOString(),
+            });
+          }
+        })();
+      });
+    }
 
     // Return user profile without password
     return {

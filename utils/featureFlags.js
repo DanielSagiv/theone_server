@@ -29,9 +29,19 @@ function isJointEventAdminEnabled() {
   return process.env.ENABLE_JOINT_EVENT_ADMIN === 'true';
 }
 
+/**
+ * When true (default), new client signups require admin approval (pendingApproval).
+ * Set VERIFY_USER=false to auto-approve clients at signup.
+ * @returns {boolean}
+ */
+function isClientRegistrationApprovalRequired() {
+  return process.env.VERIFY_USER !== 'false';
+}
+
 module.exports = {
   isClientCOECreationEnabled,
   isClientCOEEditingEnabled,
   isJointEventAdminEnabled,
+  isClientRegistrationApprovalRequired,
 };
 
