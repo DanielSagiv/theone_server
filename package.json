@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "test:deposit-simple-joint": "node tests/computeInitialDepositPricing-simple-joint.test.js",
     "backfill:image-metadata": "node scripts/backfill-image-metadata.js",
-    "backfill:image-metadata:dry": "node scripts/backfill-image-metadata.js --dry-run"
+    "backfill:image-metadata:dry": "node scripts/backfill-image-metadata.js --dry-run",
+    "copy:stage-locations-events-to-prod:dry": "node scripts/copy-stage-locations-events-to-prod.js --dry-run",
+    "copy:stage-locations-events-to-prod": "node scripts/copy-stage-locations-events-to-prod.js"
   },
   "keywords": [
     "nodejs",
