@@ -155,7 +155,18 @@ const userSchema = new mongoose.Schema({
   emailVerifiedAt: {
     type: Date
   },
-  
+  /** One-time login code (passwordless sign-in); never expose in API responses */
+  loginOtpCode: {
+    type: String,
+    select: false
+  },
+  loginOtpExpires: {
+    type: Date
+  },
+  loginOtpSentAt: {
+    type: Date
+  },
+
   // Saved Payment Methods (Phase 2: Card Tokenization)
   saved_payment_methods: [{
     token_id: {
@@ -179,6 +190,10 @@ const userSchema = new mongoose.Schema({
   }],
   
   default_payment_method: String,
+  goat_customer_id: {
+    type: Number,
+    min: 1
+  },
   
   // Membership Status (Phase 3: Recurring Billing)
   membership_status: {
@@ -338,6 +353,9 @@ userSchema.methods.getProfile = function() {
   delete userObject.resetPasswordToken;
   delete userObject.resetPasswordCode;
   delete userObject.resetPasswordExpires;
+  delete userObject.loginOtpCode;
+  delete userObject.loginOtpExpires;
+  delete userObject.loginOtpSentAt;
   return userObject;
 };
 

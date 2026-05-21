@@ -295,6 +295,36 @@ async function listTransactions(query = {}) {
   return res.data;
 }
 
+/**
+ * List customers for lookup by customer_number/identifier.
+ * @param {Record<string, string|number|boolean>} query
+ * @returns {Promise<object[]>}
+ */
+async function listCustomers(query = {}) {
+  const client = createGoatAxios();
+  const res = await client.get('/customers', { params: query });
+  if (res.status >= 400) {
+    throw new Error(formatGoatHttpError(res, 'GOAT list customers failed'));
+  }
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/**
+ * Create a customer in GOAT vault.
+ * @param {object} payload
+ * @returns {Promise<object>}
+ */
+async function createCustomer(payload) {
+  const client = createGoatAxios();
+  const res = await client.post('/customers', payload || {});
+  if (res.status >= 400) {
+    const err = new Error(formatGoatHttpError(res, 'GOAT create customer failed'));
+    err.response = res;
+    throw err;
+  }
+  return res.data;
+}
+
 module.exports = {
   getGoatBaseUrl,
   getGoatApiRoot,
@@ -306,4 +336,6 @@ module.exports = {
   isChargeApproved,
   refundTransaction,
   listTransactions,
+  listCustomers,
+  createCustomer,
 };

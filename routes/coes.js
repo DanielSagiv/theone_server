@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const COE = require('../models/COE');
 const User = require('../models/User');
+const Payment = require('../models/Payment');
 const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
@@ -16,54 +17,93 @@ const {
   addEventToCOEWithSeatSchema,
   updateCOEStatusSchema,
   assignRunnerToCOESchema,
-  updateSeatAssignmentsSchema
+  updateSeatAssignmentsSchema,
+  updateClientRequestCOESchema,
 } = require('../utils/validationSchemas');
+const { canClientEditOwnRequest } = require('../utils/coeUtils');
 const proposalGroupService = require('../services/proposalGroupService');
 
-async function applyFirstExperienceDeductionForClientView(coe, user) {
+function roundCurrency(amount) {
+  return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function assignRuntimeField(target, key, value) {
+  if (!target) return;
+  if (typeof target.set === 'function') {
+    target.set(key, value);
+    return;
+  }
+  target[key] = value;
+}
+
+async function attachFirstExperienceDeductionPreview(coe, user) {
   try {
     if (!coe || !user) return;
     if (user.role !== 'client') return;
     if (user.first_coe_deduction_enabled !== true) return;
-    if (user.first_coe_deduction_consumed === true) return;
-    if (user.subscription_required === true) return;
     if (coe.subscription_deduction_applied === true) return;
     if ((coe.payment_status || 'unpaid') !== 'unpaid') return;
+    let isConsumed = user.first_coe_deduction_consumed === true;
+    if (isConsumed) {
+      const priorDualChargeSubscription = await Payment.exists({
+        user_id: user._id,
+        payment_type: 'subscription',
+        status: 'completed',
+        description: { $regex: 'first-coe-deduction:' },
+      });
+      // Recovery mode: legacy bug may have consumed the flag before any actual charge.
+      if (!priorDualChargeSubscription) {
+        isConsumed = false;
+      }
+    }
+    if (isConsumed) return;
+
 
     const coeClientId = coe.client_id?._id?.toString?.() || coe.client_id?.toString?.();
     if (!coeClientId || coeClientId !== user._id.toString()) return;
 
-    const totalBefore = Number(coe.total || 0);
+    const totalBefore = roundCurrency(Number(coe.total || 0));
     const configured = Number(user.first_coe_deduction_amount || 1000);
-    const deductionAmount = Math.max(0, Math.min(configured, totalBefore));
+    const deductionAmount = roundCurrency(Math.max(0, Math.min(configured, totalBefore)));
     if (deductionAmount <= 0) return;
 
-    const consumeResult = await User.updateOne(
-      { _id: user._id, first_coe_deduction_consumed: false },
-      { $set: { first_coe_deduction_consumed: true } }
-    );
-    if (consumeResult.modifiedCount !== 1) return;
+    const experienceNet = roundCurrency(Math.max(0, totalBefore - deductionAmount));
+    const depositPercent = typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+    const depositOnNet = roundCurrency(experienceNet * (depositPercent / 100));
 
-    const coeId = coe._id?._id?.toString?.() || coe._id?.toString?.() || String(coe._id);
-    await COE.updateOne(
-      { _id: coeId, subscription_deduction_applied: { $ne: true } },
-      {
-        $set: {
-          subscription_deduction_applied: true,
-          subscription_deduction_amount: deductionAmount,
-          subscription_deduction_note: 'Annual subscription deduction applied',
-          total: Math.max(0, totalBefore - deductionAmount),
-        },
-      }
+    assignRuntimeField(coe, 'first_coe_deduction_preview_applies', true);
+    assignRuntimeField(coe, 'first_coe_deduction_preview_amount', deductionAmount);
+    assignRuntimeField(coe, 'first_coe_subscription_charge_preview_amount', deductionAmount);
+    assignRuntimeField(coe, 'first_coe_experience_gross_amount', totalBefore);
+    assignRuntimeField(coe, 'first_coe_experience_net_amount', experienceNet);
+    assignRuntimeField(
+      coe,
+      'first_coe_total_due_now_preview_deposit',
+      depositOnNet
     );
-
-    coe.subscription_deduction_applied = true;
-    coe.subscription_deduction_amount = deductionAmount;
-    coe.subscription_deduction_note = 'Annual subscription deduction applied';
-    coe.total = Math.max(0, totalBefore - deductionAmount);
+    assignRuntimeField(
+      coe,
+      'first_coe_total_due_now_preview_full',
+      roundCurrency(deductionAmount + experienceNet)
+    );
   } catch (error) {
-    console.warn('[COES] applyFirstExperienceDeductionForClientView failed:', error.message);
+    console.warn('[COES] attachFirstExperienceDeductionPreview failed:', error.message);
   }
+}
+
+async function resolveClientUserForDeductionPreview(coe, viewerUser) {
+  if (!coe || !viewerUser) return null;
+  if (viewerUser.role === 'client') return viewerUser;
+
+  const clientId =
+    coe.client_id?._id?.toString?.() ||
+    coe.client_id?.toString?.() ||
+    null;
+  if (!clientId) return null;
+
+  return User.findById(clientId).select(
+    '_id role first_coe_deduction_enabled first_coe_deduction_consumed first_coe_deduction_amount'
+  );
 }
 
 /**
@@ -257,7 +297,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
-        select: 'name type media'
+        select: 'name type media seats address geo description tagline'
       }
     })
     .sort({ created_at: -1 });
@@ -289,7 +329,7 @@ router.get('/my', authenticateToken, async (req, res) => {
               
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media')
+                  .populate('location_id', 'name type media seats address geo description tagline')
                   .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
@@ -309,9 +349,11 @@ router.get('/my', authenticateToken, async (req, res) => {
       // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
       // This prevents incorrect cost breakdown calculation on client side
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
-      if (req.user.role === 'client') {
-        await applyFirstExperienceDeductionForClientView(coe, req.user);
+      const deductionPreviewUser = await resolveClientUserForDeductionPreview(coe, req.user);
+      if (deductionPreviewUser) {
+        await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
       }
+      await coeService.attachCatalogTotalDisplay(coe);
     }
 
     // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
@@ -496,7 +538,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
       select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
       populate: {
         path: 'location_id',
-        select: 'name type media'
+        select: 'name type media seats address geo description tagline'
       }
     })
     .sort({ created_at: -1 });
@@ -528,7 +570,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
               
               try {
                 const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media')
+                  .populate('location_id', 'name type media seats address geo description tagline')
                   .select('name description location_id start_datetime end_datetime media seats performers type timezone');
                 if (populatedEvent) {
                   eventItem.event_id = populatedEvent;
@@ -715,11 +757,36 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
           populate: [
             {
               path: 'location_id',
-              select: 'name type media seats'
+              select: 'name type media seats address geo description tagline'
             }
           ]
         })
         .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
+
+      // Ensure venue address/geo on populated events (lean populate can omit nested fields)
+      if (coe?.events?.length) {
+        const Location = require('../models/Location');
+        const locationSelect =
+          'name type media seats address geo description tagline';
+        for (const eventItem of coe.events) {
+          const ev = eventItem?.event_id;
+          if (!ev || typeof ev !== 'object') continue;
+          const loc = ev.location_id;
+          const locId = loc?._id || loc;
+          if (!locId) continue;
+          try {
+            const full = await Location.findById(locId)
+              .select(locationSelect)
+              .lean();
+            if (full) ev.location_id = full;
+          } catch (locErr) {
+            console.warn(
+              '[GET /coes/my/:id] Location enrich failed:',
+              locErr.message,
+            );
+          }
+        }
+      }
       
       // Verify events array matches raw data
       const rawEventIds = (coeRaw.events || []).map(e => String(e.event_id)).sort();
@@ -761,7 +828,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
           try {
             const populatedEvent = await Event.findById(eventItem.event_id)
               .lean()
-              .populate('location_id', 'name type media seats')
+              .populate('location_id', 'name type media seats address geo description tagline')
               .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
             if (populatedEvent) {
               coe.events[i].event_id = populatedEvent;
@@ -961,10 +1028,12 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
     // This prevents incorrect cost breakdown calculation on client side
     coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my/:id]');
-    if (req.user.role === 'client') {
-      await applyFirstExperienceDeductionForClientView(coe, req.user);
+    const deductionPreviewUser = await resolveClientUserForDeductionPreview(coe, req.user);
+    if (deductionPreviewUser) {
+      await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
     }
-    
+    await coeService.attachCatalogTotalDisplay(coe);
+
     // DEBUG: Log original_request_data so we can inspect what mobile receives
     try {
       const originalRequestPreview = coe.original_request_data
@@ -1039,6 +1108,96 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       success: false,
       error: 'Failed to fetch COE',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+/**
+ * PUT /v1/coes/my/:id/request
+ * Client updates their own experience request while status is request.
+ * @access Client (owner only)
+ */
+router.put('/my/:id/request', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid COE ID format',
+      });
+    }
+
+    if (req.user.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only clients can update their own requests',
+      });
+    }
+
+    const { error, value } = updateClientRequestCOESchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        error: error.details[0].message,
+      });
+    }
+
+    const coeCheck = await COE.findById(id).select('status client_id');
+    if (!coeCheck) {
+      return res.status(404).json({
+        success: false,
+        message: 'COE not found',
+      });
+    }
+
+    const permission = canClientEditOwnRequest(
+      coeCheck,
+      req.user.id || req.user._id,
+      req.user,
+    );
+    if (!permission.canEdit) {
+      return res.status(403).json({
+        success: false,
+        message: permission.reason || 'Permission denied',
+      });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const correlationId = `client-request-update-${id}-${Date.now()}`;
+
+    const executeCreateCoeDraft = async (toolParams, user) =>
+      executeTool('create_coe_draft', toolParams, user, correlationId);
+
+    const updatedCoe = await coeService.updateClientRequestCOE(
+      id,
+      userId,
+      value,
+      executeCreateCoeDraft,
+      req.user,
+    );
+
+    coeService.filterSelectedSeatsByEvents(updatedCoe, '[PUT /coes/my/:id/request]');
+
+    return res.json({
+      success: true,
+      message: 'Request updated successfully',
+      data: updatedCoe,
+    });
+  } catch (err) {
+    console.error('[PUT /coes/my/:id/request] Error:', err);
+    if (err.message === 'COE not found') {
+      return res.status(404).json({ success: false, message: err.message });
+    }
+    if (
+      err.message === 'Permission denied' ||
+      err.message === 'COE is not in request status'
+    ) {
+      return res.status(403).json({ success: false, message: err.message });
+    }
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Failed to update request',
     });
   }
 });

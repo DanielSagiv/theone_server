@@ -50,6 +50,33 @@ function canClientEditCOE(coe, userId, user) {
   };
 }
 
+/**
+ * Client may edit their own COE while it remains in request status (awaiting admin review).
+ * @param {Object} coe
+ * @param {string} userId
+ * @param {Object} user
+ * @returns {{ canEdit: boolean, reason?: string }}
+ */
+function canClientEditOwnRequest(coe, userId, user) {
+  if (!coe || (user.role != null && String(user.role).toLowerCase() !== 'client')) {
+    return { canEdit: false, reason: 'Client only' };
+  }
+  if (coe.status !== 'request') {
+    return {
+      canEdit: false,
+      reason: 'Request can only be edited while status is request',
+    };
+  }
+  const userIdStr = userId?.toString() || userId;
+  const clientIdStr =
+    coe.client_id?._id?.toString() || coe.client_id?.toString();
+  if (!clientIdStr || !userIdStr || clientIdStr !== userIdStr) {
+    return { canEdit: false, reason: 'You can only edit your own requests' };
+  }
+  return { canEdit: true };
+}
+
 module.exports = {
-  canClientEditCOE
+  canClientEditCOE,
+  canClientEditOwnRequest,
 };

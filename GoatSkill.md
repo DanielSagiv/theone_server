@@ -47,6 +47,17 @@ Use these env vars:
 - Function 11: Delete invoice (`DELETE /invoices/{id}`) - documented below.
 - Function 12: Update invoice (`PATCH /invoices/{id}`) - documented below.
 - Function 13: Send existing invoice (`POST /invoices/{id}/send`) - documented below.
+- Function 14: Customers list (`GET /customers`) - documented below.
+- Function 15: Create customer (`POST /customers`) - documented below.
+- Function 16: Create customer from transaction (`POST /customers/create-from-transaction`) - documented below.
+- Function 17: Get single customer (`GET /customers/{id}`) - documented below.
+- Function 18: Update customer (`PATCH /customers/{id}`) - documented below.
+- Function 19: Delete customer (`DELETE /customers/{id}`) - documented below.
+- Function 20: List customer payment methods (`GET /customers/{id}/payment-methods`) - documented below.
+- Function 21: Create customer payment method (`POST /customers/{id}/payment-methods`) - documented below.
+- Function 22: List customer recurring schedules (`GET /customers/{id}/recurring-schedules`) - documented below.
+- Function 23: Create customer recurring schedule (`POST /customers/{id}/recurring-schedules`) - documented below.
+- Function 24: List customer transactions (`GET /customers/{id}/transactions`) - documented below.
 
 ---
 
@@ -1134,6 +1145,1211 @@ Send an existing invoice before any payment is made.
 
 ---
 
+## Function 14 - Get Multiple Customers
+
+### Endpoint
+- Method: `GET`
+- Path: `/customers`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Return a paginated array of GOAT customers. Use for admin/support lookups and to find an existing customer (e.g. filter by `customer_number`) before associating charges with `customer_id`.
+
+### Query parameters
+- `order` (string, default `"asc"`, enum: `"asc"` | `"desc"`) – sort order.
+- `limit` (integer, `1..100`, default `10`) – maximum number of results.
+- `offset` (integer, `>= 0`, default `0`) – 0-based offset for pagination.
+- `active` (boolean, optional) – filter by customer active status.
+- `customer_number` (string, optional) – filter by the customer’s `customer_number` (custom identifier).
+
+### Response schema (200)
+Content type: `application/json`
+
+Returns an **array** of customer objects. Each item may include:
+
+- `id` (integer, `>= 1`) – GOAT customer ID (use as `customer.customer_id` on charges when linking).
+- `identifier` (string, `<= 255`) – identifies the customer (e.g. name or company).
+- `customer_number` (string, `<= 255`) – custom identifier (good fit for stable external keys such as THEONE `User._id` as string).
+- `first_name` (string, `<= 255`)
+- `last_name` (string, `<= 255`)
+- `email` (string, email, `<= 255`)
+- `website` (string, `<= 255`)
+- `phone` (string, `<= 50`)
+- `alternate_phone` (string, `<= 50`)
+- `billing_info` (object, `Address`) – `first_name`, `last_name`, `street`, `street2`, `state`, `city`, `zip`, `country`, `phone`
+- `shipping_info` (object, `Address`) – same shape as `billing_info`
+- `active` (boolean, default `true`)
+- `note` (string, `<= 750`)
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+
+### Example response (200)
+```json
+[
+  {
+    "identifier": "string",
+    "customer_number": "string",
+    "first_name": "string",
+    "last_name": "string",
+    "email": "string",
+    "website": "string",
+    "phone": "string",
+    "alternate_phone": "string",
+    "billing_info": {
+      "first_name": "string",
+      "last_name": "string",
+      "street": "string",
+      "street2": "string",
+      "state": "string",
+      "city": "string",
+      "zip": "string",
+      "country": "string",
+      "phone": "string"
+    },
+    "shipping_info": {
+      "first_name": "string",
+      "last_name": "string",
+      "street": "string",
+      "street2": "string",
+      "state": "string",
+      "city": "string",
+      "zip": "string",
+      "country": "string",
+      "phone": "string"
+    },
+    "active": true,
+    "note": "string",
+    "id": 1
+  }
+]
+```
+
+### cURL (list customers, sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X GET "${GOAT_SANDBOX_BASE_URL}/api/v2/customers?limit=10&offset=0&order=asc" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Accept: application/json"
+```
+
+### Mapping to THEONE
+- Prefer `customer_number` (or `identifier`, per product choice) to store THEONE’s stable user key so `GET /customers?customer_number=...` can resolve the GOAT `id` before `POST /transactions/charge`.
+- After resolving `id`, send `customer: { customer_id: <id>, identifier: ..., email: ... }` on source charges (see Function 4) so transactions stay linked to the vault customer.
+
+---
+
+## Function 15 - Create a Customer
+
+### Endpoint
+- Method: `POST`
+- Path: `/customers`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Create a GOAT customer record. Use when no customer exists for a THEONE user (e.g. after `GET /customers?customer_number=...` returns empty), then persist the returned `id` and pass it as `customer.customer_id` on subsequent charges (Function 4).
+
+### Request body (application/json)
+Content type: `application/json` (required; `415` if missing or wrong).
+
+**Required**
+- `identifier` (string, `<= 255`) – something that identifies the customer (e.g. name or company).
+
+**Optional**
+- `customer_number` (string, `<= 255`) – custom identifier (recommended for THEONE `User._id` as string for stable lookup).
+- `first_name`, `last_name` (string, `<= 255` each)
+- `email` (string, valid email, `<= 255`)
+- `website` (string, `<= 255`)
+- `phone`, `alternate_phone` (string, `<= 50` each)
+- `billing_info`, `shipping_info` (object, `Address`) – `first_name`, `last_name`, `street`, `street2`, `state`, `city`, `zip`, `country`, `phone`
+- `active` (boolean, default `true`)
+- `note` (string, `<= 750`)
+
+### Response schema (201)
+Content type: `application/json`
+
+Same fields as the request, plus:
+- `id` (integer, `>= 1`) – GOAT customer ID to use as `customer_id` on charges and invoices.
+
+### Error responses
+- `400` – request invalid or missing required fields (e.g. missing `identifier`).
+- `401` – credentials missing or invalid.
+- `415` – `Content-Type` must be `application/json`.
+
+### Request example
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string"
+}
+```
+
+### Response example (201)
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string",
+  "id": 1
+}
+```
+
+### cURL (create customer, sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X POST "${GOAT_SANDBOX_BASE_URL}/api/v2/customers" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "identifier": "Acme Corp",
+    "customer_number": "theone-user-objectid",
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "jane@example.com"
+  }'
+```
+
+### Mapping to THEONE
+- Minimum viable body: `identifier` (required) plus `customer_number` set to THEONE user id string, `email`, and `first_name` / `last_name` from profile when available.
+- On `201`, read `id` and cache on the user (or derive via Function 14 before each charge if you skip caching).
+- Handle duplicate or conflict responses per GOAT behavior in production (not listed above); consider listing by `customer_number` again before creating if races occur.
+
+---
+
+## Function 16 - Create a Customer From a Transaction
+
+### Endpoint
+- Method: `POST`
+- Path: `/customers/create-from-transaction`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/create-from-transaction`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/create-from-transaction`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Create a new GOAT **customer** using data copied from an existing **transaction** (by `reference_number`). GOAT documentation states:
+
+- A **payment method** can later be created using the **same transaction** as the source.
+- Any field sent in the request body **overrides** the corresponding value from the transaction.
+- A **new customer is always created**, even when the transaction is already linked to an existing customer (does not merge into that customer).
+- If the transaction was **not** linked to a customer, it will be **linked to this newly created** customer.
+
+### Request body (application/json)
+Content type: `application/json` (required; `415` if missing or wrong).
+
+**Required**
+- `reference_number` (integer, `>= 1`) – GOAT transaction reference number (same concept as charge response `reference_number`; see Functions 2 and 4).
+
+**Optional** (each overrides transaction-sourced data when provided)
+- `identifier` (string, `<= 255`)
+- `customer_number` (string, `<= 255`)
+- `first_name`, `last_name` (string, `<= 255` each)
+- `email` (string, valid email, `<= 255`)
+- `website` (string, `<= 255`)
+- `phone`, `alternate_phone` (string, `<= 50` each)
+- `billing_info`, `shipping_info` (object, `Address`)
+- `active` (boolean, default `true`)
+- `note` (string, `<= 750`)
+
+### Response schema (201)
+Content type: `application/json`
+
+Customer object: same optional profile fields as Function 15, plus:
+- `id` (integer, `>= 1`) – new GOAT customer ID.
+
+### Error responses
+- `400` – body invalid (e.g. missing or bad `reference_number`).
+- `401` – credentials missing or invalid.
+- `404` – transaction not found for the given `reference_number`.
+- `415` – `Content-Type` must be `application/json`.
+
+### Request example
+`reference_number` is required. Omit optional fields to rely entirely on transaction data (still send a JSON object with at least `reference_number`).
+
+```json
+{
+  "reference_number": 123456,
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string"
+}
+```
+
+### Response example (201)
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string",
+  "id": 1
+}
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X POST "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/create-from-transaction" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reference_number": 123456,
+    "customer_number": "theone-user-objectid",
+    "email": "client@example.com"
+  }'
+```
+
+### Mapping to THEONE
+- Use after a successful charge when you have `gp_transaction_id` / GOAT `reference_number` and want a customer row plus future **payment-method-from-transaction** flows.
+- Because GOAT **always creates a new customer**, avoid calling this repeatedly for the same transaction unless product intends multiple customer records; prefer Function 15 or **list + create** (Functions 14–15) for idempotent “ensure customer” patterns.
+- Set `customer_number` to THEONE `User._id` string when overriding so Function 14 can find the record later.
+
+---
+
+## Function 17 - Get a Single Customer
+
+### Endpoint
+- Method: `GET`
+- Path: `/customers/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Return one GOAT customer by numeric ID (e.g. after create or when reading cached `goat_customer_id` / invoice `customer_id`).
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Response schema (200)
+Content type: `application/json`
+
+Single customer object:
+
+- `id` (integer, `>= 1`) – customer ID.
+- `identifier` (string, `<= 255`)
+- `customer_number` (string, `<= 255`)
+- `first_name`, `last_name` (string, `<= 255` each)
+- `email` (string, email, `<= 255`)
+- `website` (string, `<= 255`)
+- `phone`, `alternate_phone` (string, `<= 50` each)
+- `billing_info`, `shipping_info` (object, `Address`)
+- `active` (boolean, default `true`)
+- `note` (string, `<= 750`)
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+
+### Example response (200)
+`GET` has no request body; the payload below is the response body.
+
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string",
+  "id": 1
+}
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X GET "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Accept: application/json"
+```
+
+### Mapping to THEONE
+- Use to verify or refresh customer metadata after storing GOAT `id` on a user or payment record.
+- For lookup by THEONE user id without a known GOAT `id`, prefer Function 14 (`GET /customers?customer_number=...`).
+
+---
+
+## Function 18 - Update a Customer
+
+### Endpoint
+- Method: `PATCH`
+- Path: `/customers/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Update fields on an existing GOAT customer (e.g. sync `email`, name, or `customer_number` after THEONE profile changes).
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Request body (application/json)
+All fields optional for PATCH semantics (send only fields to change):
+
+- `identifier` (string, `<= 255`)
+- `customer_number` (string, `<= 255`)
+- `first_name`, `last_name` (string, `<= 255` each)
+- `email` (string, valid email, `<= 255`)
+- `website` (string, `<= 255`)
+- `phone`, `alternate_phone` (string, `<= 50` each)
+- `billing_info`, `shipping_info` (object, `Address`)
+- `active` (boolean, default `true`)
+- `note` (string, `<= 750`)
+
+### Response schema (200)
+Content type: `application/json`
+
+Full customer object after update (same shape as Function 17), including `id`.
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+
+### Request example
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string"
+}
+```
+
+### Response example (200)
+```json
+{
+  "identifier": "string",
+  "customer_number": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "email": "string",
+  "website": "string",
+  "phone": "string",
+  "alternate_phone": "string",
+  "billing_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "shipping_info": {
+    "first_name": "string",
+    "last_name": "string",
+    "street": "string",
+    "street2": "string",
+    "state": "string",
+    "city": "string",
+    "zip": "string",
+    "country": "string",
+    "phone": "string"
+  },
+  "active": true,
+  "note": "string",
+  "id": 1
+}
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X PATCH "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "updated@example.com", "first_name": "Jane"}'
+```
+
+### Mapping to THEONE
+- Call when THEONE user profile fields change and GOAT should reflect the same `email`, display name, or `customer_number` (THEONE `User._id` string).
+- Prefer partial bodies (only changed keys) to avoid unintentionally clearing fields if the API treats omitted nested objects in a destructive way—confirm merge behavior with GOAT if you use `billing_info` / `shipping_info` patches.
+
+---
+
+## Function 19 - Delete a Customer
+
+### Endpoint
+- Method: `DELETE`
+- Path: `/customers/{id}`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Remove a GOAT customer record by ID. Use sparingly in THEONE (e.g. account erasure flows); most integrations keep customers and set `active: false` via Function 18 instead.
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Responses
+- `204` – customer deleted successfully (typically no response body).
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+- `409` – customer is linked to **active recurring schedules**; resolve or cancel those before retrying delete.
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X DELETE "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}"
+```
+
+### Mapping to THEONE
+- If THEONE caches `goat_customer_id` on `User`, clear it after a successful `204` so the next charge path can recreate or relink per product rules.
+- Handle `409` by surfacing a clear error (user must cancel or complete recurring obligations in GOAT first).
+
+---
+
+## Function 20 - Get Payment Methods for a Customer
+
+### Endpoint
+- Method: `GET`
+- Path: `/customers/{id}/payment-methods`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}/payment-methods`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}/payment-methods`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Return all **payment methods** vaulted for a GOAT customer. GOAT models this as an array whose items may be one of several shapes (e.g. **credit card**, **check**, **DAF card**). Below documents the **card** variant; extend parsing when you encounter other `payment_method_type` values.
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID (`customer_id`).
+
+### Response schema (200)
+Content type: `application/json`
+
+**Array** of payment method objects.
+
+**Credit card payment method** (representative fields):
+- `id` (integer, `>= 1`) – payment method ID (usable as `pm-…` **source** on `POST /transactions/charge` per Function 4; confirm prefix with GOAT).
+- `customer_id` (integer, `>= 1`)
+- `created_at` (string, date-time)
+- `avs_address` (string, `<= 255`) – billing street/address on file.
+- `avs_zip` (string, `<= 50`) – billing ZIP; recommended for fraud prevention and e-commerce rates.
+- `name` (string, `<= 255`) – name on the account.
+- `expiry_month` (integer, `1..12`)
+- `expiry_year` (integer, `2020..9999`)
+- `payment_method_type` (string) – e.g. `"card"`.
+- `card_type` (string, enum) – e.g. `Visa`, `MasterCard`, `Amex`, `Discover`, `JCB`, `Diners`.
+- `bin` (string, 6 characters) – first six digits of the PAN.
+- `bin_details` (object) – issuer/metadata; shape depends on GOAT (may include fields such as `type`).
+- `last4` (string, 4 characters) – last four digits of the card number.
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+
+### Example response (200)
+`GET` has no request body. Sample shows one **card** entry; `bin_details` varies by BIN.
+
+```json
+[
+  {
+    "id": 1,
+    "customer_id": 1,
+    "created_at": "2019-08-24T14:15:22Z",
+    "avs_address": "string",
+    "avs_zip": "string",
+    "name": "string",
+    "expiry_month": 1,
+    "expiry_year": 2020,
+    "payment_method_type": "card",
+    "card_type": "Visa",
+    "bin": "411111",
+    "bin_details": {
+      "type": "C"
+    },
+    "last4": "1111"
+  }
+]
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X GET "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1/payment-methods" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Accept: application/json"
+```
+
+### Mapping to THEONE
+- After resolving `goat_customer_id`, this endpoint can **reconcile** gateway-saved methods with `user.saved_payment_methods` (last4, brand, expiry)—note THEONE may still store **token** charges as `tkn-` + `cardRef` while GOAT also exposes **`pm-`** IDs for the same customer.
+- Do not persist full PAN; `bin` + `last4` are sufficient for display and support.
+
+---
+
+## Function 21 - Create a Payment Method (`POST /customers/{id}/payment-methods`)
+
+Vaulted payment method on an existing GOAT customer. Full path under API root: `/api/v2/customers/{id}/payment-methods`.
+
+### Endpoint
+- Method: `POST`
+- Path: `/customers/{id}/payment-methods` (i.e. `POST /api/v2/customers/{id}/payment-methods` when combined with `{GOAT_*_BASE_URL}/api/v2`)
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}/payment-methods`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}/payment-methods`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Create a **vaulted payment method** on a GOAT customer. GOAT accepts multiple **request body variants** (e.g. credit card, check, DAF card, **create from source**). This section documents the **credit card** variant; see official schema for ACH/check/DAF/from-source payloads.
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Request body (application/json) – Create credit card payment method
+Content type: `application/json` (required; `415` if wrong).
+
+**Required**
+- `card` (string, `14..16` characters, `^\d+$`) – card number (PAN).
+- `expiry_month` (integer, `1..12`)
+- `expiry_year` (integer, `2020..9999`)
+
+**Optional**
+- `avs_address` (string, `<= 255`) – billing address for the card.
+- `avs_zip` (string, `<= 50`) – billing ZIP; recommended for fraud prevention and e-commerce rates.
+- `name` (string, `<= 255`) – name on the account.
+
+### Response schema (201)
+Content type: `application/json`
+
+**Credit card payment method** (same family as Function 20 list items):
+- `id` (integer, `>= 1`) – payment method ID (candidate for `source: "pm-" + id` on Function 4; confirm formatting with GOAT).
+- `customer_id` (integer, `>= 1`)
+- `created_at` (string, date-time)
+- `avs_address`, `avs_zip`, `name`
+- `expiry_month` (`1..12`), `expiry_year` (`2020..9999`)
+- `payment_method_type` (string) – e.g. `"card"`.
+- `card_type` (string, enum) – `Visa`, `MasterCard`, `Amex`, `Discover`, `JCB`, `Diners`.
+- `bin` (string, 6 characters)
+- `bin_details` (object)
+- `last4` (string, 4 characters)
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+- `409` – a payment method with these details **already exists** for this customer.
+- `415` – `Content-Type` must be `application/json`.
+
+### Request example (credit card)
+Do **not** send `id`, `customer_id`, `bin`, or `last4` in the request; GOAT derives those on create.
+
+```json
+{
+  "card": "4111111111111111",
+  "expiry_month": 12,
+  "expiry_year": 2030,
+  "avs_address": "123 Main St",
+  "avs_zip": "90210",
+  "name": "Jane Doe"
+}
+```
+
+### Response example (201)
+```json
+{
+  "id": 1,
+  "customer_id": 1,
+  "created_at": "2019-08-24T14:15:22Z",
+  "avs_address": "123 Main St",
+  "avs_zip": "90210",
+  "name": "Jane Doe",
+  "expiry_month": 12,
+  "expiry_year": 2030,
+  "payment_method_type": "card",
+  "card_type": "Visa",
+  "bin": "411111",
+  "bin_details": {
+    "type": "C"
+  },
+  "last4": "1111"
+}
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X POST "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1/payment-methods" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "card": "4111111111111111",
+    "expiry_month": 12,
+    "expiry_year": 2030,
+    "name": "Sandbox Test"
+  }'
+```
+
+### Mapping to THEONE
+- **PCI**: only call from trusted server code; never from mobile with raw PAN unless using a GOAT-hosted flow that keeps PAN off your servers.
+- THEONE’s primary card-on-file path today uses **`POST /saved-cards`** + `tkn-` charges (Functions 1 and 4). Use this endpoint when you need a **customer-scoped payment method** (`pm-`) for the same GOAT `customer_id` you send on charges.
+- On `409`, treat as idempotent “already vaulted” and optionally **list** payment methods (Function 20) to find the existing `id`.
+
+---
+
+## Function 22 - Get Recurring Schedules for a Customer (`GET /customers/{id}/recurring-schedules`)
+
+Full path under API root: `/api/v2/customers/{id}/recurring-schedules`.
+
+### Endpoint
+- Method: `GET`
+- Path: `/customers/{id}/recurring-schedules`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}/recurring-schedules`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}/recurring-schedules`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Return all **recurring billing schedules** attached to a GOAT customer (amount, frequency, next run, status, linked payment method). Use for admin/support, and to understand why **DELETE customer** may return `409` (Function 19: active recurring schedules).
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Response schema (200)
+Content type: `application/json`
+
+**Array** of schedule objects:
+
+- `title` (string, `<= 255`)
+- `frequency` (string, default `"monthly"`) – enum: `daily`, `weekly`, `biweekly`, `monthly`, `bimonthly`, `quarterly`, `biannually`, `annually`
+- `amount` (number, `0.01..20000000`) – amount to bill; actual capture may differ if ISO/MSP **surcharge** rules apply.
+- `next_run_date` (string, date) – next date in **EST** the schedule runs; must be after today; default described by GOAT as **tomorrow in EST** when creating schedules.
+- `num_left` (integer, `>= 0`, default `0`) – billings remaining; **`0` = ongoing** (no fixed count).
+- `payment_method_id` (integer, `>= 1`) – GOAT payment method id (see Functions 20–21).
+- `active` (boolean, default `true`)
+- `receipt_email` (string, email, `<= 255`) – receipt destination each run.
+- `status` (string) – enum:
+  - `active` – schedule will run on `next_run_date`.
+  - `declined` – last run was **declined**; may retry next day if retries remain.
+  - `error` – last run **errored**; may retry next day if retries remain.
+  - `finished` – completed the configured number of runs.
+  - `failed` – exhausted retries; will not retry until the next **frequency** boundary (e.g. next month).
+- `prev_run_date` (string, date) – previous run date (**UTC**).
+- `transaction_count` (integer, `>= 0`) – number of transactions processed by this schedule.
+- `id` (integer, `>= 1`) – schedule ID.
+- `customer_id` (integer, `>= 1`)
+- `created_at` (string, date-time)
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+
+### Example response (200)
+`GET` has no request body.
+
+```json
+[
+  {
+    "title": "string",
+    "frequency": "daily",
+    "amount": 0.01,
+    "next_run_date": "2019-08-24",
+    "num_left": 0,
+    "payment_method_id": 1,
+    "active": true,
+    "receipt_email": "string",
+    "status": "active",
+    "prev_run_date": "2019-08-24",
+    "transaction_count": 0,
+    "id": 1,
+    "customer_id": 1,
+    "created_at": "2019-08-24T14:15:22Z"
+  }
+]
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X GET "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1/recurring-schedules" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Accept: application/json"
+```
+
+### Mapping to THEONE
+- Correlate `customer_id` with cached THEONE `goat_customer_id` when debugging subscription/membership flows.
+- Before deleting a customer (Function 19), list schedules here and cancel or finish them to avoid `409`.
+
+---
+
+## Function 23 - Create a Recurring Schedule (`POST /customers/{id}/recurring-schedules`)
+
+Full path under API root: `/api/v2/customers/{id}/recurring-schedules`.
+
+### Endpoint
+- Method: `POST`
+- Path: `/customers/{id}/recurring-schedules`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}/recurring-schedules`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}/recurring-schedules`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Create a **recurring billing schedule** for a GOAT customer, using an existing **payment method** (`payment_method_id` from Functions 20–21).
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Request body (application/json)
+Content type: `application/json` (required; `415` if wrong).
+
+**Required**
+- `title` (string, `<= 255`)
+- `amount` (number, `0.01..20000000`) – amount to bill; actual capture may differ under mandatory ISO/MSP **surcharge** rules.
+- `payment_method_id` (integer, `>= 1`)
+
+**Optional**
+- `frequency` (string, default `"monthly"`) – enum: `daily`, `weekly`, `biweekly`, `monthly`, `bimonthly`, `quarterly`, `biannually`, `annually`
+- `next_run_date` (string, date) – next run in **EST**; must be **after today**; GOAT default described as **tomorrow in EST** when omitted.
+- `num_left` (integer, `>= 0`, default `0`) – billings remaining; **`0` = ongoing**.
+- `active` (boolean, default `true`)
+- `receipt_email` (string, email, `<= 255`) – receipt each run.
+- `use_this_source_key` (boolean, default `false`) – by default recurring runs use the **Recurring** source key; set `true` to use the **same source key** as this request’s Basic auth credentials.
+
+### Response schema (201)
+Content type: `application/json`
+
+Returns the created schedule, including server-assigned fields:
+
+- All submitted fields above (except `use_this_source_key` is typically not echoed—confirm in your environment).
+- `status` (string) – enum `active` | `declined` | `error` | `finished` | `failed` (meanings same as Function 22).
+- `prev_run_date` (string, date, optional until first run) – previous run (**UTC**).
+- `transaction_count` (integer, `>= 0`)
+- `id` (integer, `>= 1`) – schedule ID.
+- `customer_id` (integer, `>= 1`)
+- `created_at` (string, date-time)
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+- `415` – `Content-Type` must be `application/json`.
+
+### Request example
+```json
+{
+  "title": "string",
+  "frequency": "daily",
+  "amount": 0.01,
+  "next_run_date": "2019-08-24",
+  "num_left": 0,
+  "payment_method_id": 1,
+  "active": true,
+  "receipt_email": "string",
+  "use_this_source_key": false
+}
+```
+
+### Response example (201)
+```json
+{
+  "title": "string",
+  "frequency": "daily",
+  "amount": 0.01,
+  "next_run_date": "2019-08-24",
+  "num_left": 0,
+  "payment_method_id": 1,
+  "active": true,
+  "receipt_email": "string",
+  "status": "active",
+  "prev_run_date": "2019-08-24",
+  "transaction_count": 0,
+  "id": 1,
+  "customer_id": 1,
+  "created_at": "2019-08-24T14:15:22Z"
+}
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -X POST "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1/recurring-schedules" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "THEONE membership",
+    "amount": 99.00,
+    "payment_method_id": 1,
+    "frequency": "annually",
+    "num_left": 0,
+    "receipt_email": "member@example.com"
+  }'
+```
+
+### Mapping to THEONE
+- Requires a GOAT **customer** (Functions 14–17) and a vaulted **payment method** (Functions 20–21). Membership logic in THEONE should store the returned **`id`** if you need cancel/update flows (document those endpoints when added to this skill).
+- Choose `use_this_source_key` deliberately: recurring vs standard key permissions differ in the GOAT dashboard.
+
+---
+
+## Function 24 - Get Transactions for a Customer (`GET /customers/{id}/transactions`)
+
+Full path under API root: `/api/v2/customers/{id}/transactions`.
+
+### Endpoint
+- Method: `GET`
+- Path: `/customers/{id}/transactions`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/customers/{id}/transactions`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/customers/{id}/transactions`
+- Auth: `BasicAuthentication`
+
+### Purpose
+Return **transactions** scoped to one GOAT **customer** (`id`), with the same filtering and pagination style as global **`GET /transactions`** (Function 3). Each array element is a **credit card** or **check** transaction object; the shape aligns with Function 3’s transaction items.
+
+### Path parameter
+- `id` (required, integer `>= 1`) – the GOAT customer ID.
+
+### Query parameters
+- `order` (string, default `"asc"`, enum: `"asc"` | `"desc"`) – sort order.
+- `status` (array of strings, or comma-separated) – filter by status(es):  
+  `captured`, `pending`, `reserve`, `originated`, `returned`, `cancelled`, `queued`, `declined`, `error`, `settled`, `voided`, `approved`, `blocked`, `expired`.
+- `payment_type` (array of strings, or comma-separated) – `credit_card`, `check`.
+- `settled_date` (string, date) – settled date in **UTC**; **excludes** transactions settled **more than 30 days before** this date, regardless of `date_from`.
+- `date_field` (string, default `"created_at"`, enum: `settled_at` | `created_at`) – which date field `date_from` / `date_to` apply to.
+- `date_from` (integer or string) – earliest search instant, rounded **down** to start of day **UTC**.
+- `date_to` (integer or string) – latest search instant, rounded **up** to end of day **UTC**.
+- `limit` (integer, `1..100`, default `10`) – max results.
+- `offset` (integer, `>= 0`, default `0`) – pagination offset.
+
+### Response schema (200)
+Content type: `application/json`
+
+**Array** of transactions. Top-level fields per item (credit card variant shown in example; check transactions differ per GOAT schema):
+
+- `id` (integer, `>= 1`) – transaction ID / reference number.
+- `created_at` (string, date-time) – when the transaction was run.
+- `settled_date` (string, date) – settlement date **UTC**.
+- `amount_details` (object) – amounts, tax, surcharge, subtotal, etc. (see Function 3).
+- `transaction_details` (object) – `description`, `order_number`, `key`, `source`, `type`, `reference_number`, `schedule_id`, etc.
+- `customer` (object) – `identifier`, `email`, `fax`, `customer_id`.
+- `status_details` (object) – `status`, `error_code`, `error_message`.
+- `billing_info`, `shipping_info` (object, `Address`)
+- `custom_fields` (object) – `custom1` … `custom20`.
+- `card_details` (object) – card-present metadata when applicable (`last4`, `expiry_month`/`expiry_year`, `card_type`, AVS/CVV/CAVV results, `bin`, `bin_details`, etc.).
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid.
+- `404` – customer not found.
+
+### Example response (200)
+`GET` has no request body. Expanded sample (one credit card transaction); `last4` is four characters in live data.
+
+```json
+[
+  {
+    "id": 1,
+    "created_at": "2019-08-24T14:15:22Z",
+    "settled_date": "2019-08-24",
+    "amount_details": {
+      "amount": 0.01,
+      "tax": 0,
+      "tax_percent": 0,
+      "surcharge": 0,
+      "shipping": 0,
+      "tip": 0,
+      "discount": 0,
+      "subtotal": 0,
+      "original_requested_amount": 0.01,
+      "original_authorized_amount": 0.01
+    },
+    "transaction_details": {
+      "description": "string",
+      "clerk": "string",
+      "terminal": "string",
+      "key": "string",
+      "client_ip": "string",
+      "signature": "string",
+      "invoice_number": "string",
+      "po_number": "string",
+      "order_number": "string",
+      "batch_id": 1,
+      "source": "string",
+      "terminal_name": "string",
+      "terminal_id": "string",
+      "username": "string",
+      "type": "charge",
+      "reference_number": 1,
+      "schedule_id": 0
+    },
+    "customer": {
+      "identifier": "string",
+      "email": "string",
+      "fax": "string",
+      "customer_id": 1
+    },
+    "status_details": {
+      "error_code": "string",
+      "error_message": "string",
+      "status": "captured"
+    },
+    "billing_info": {
+      "first_name": "string",
+      "last_name": "string",
+      "street": "string",
+      "street2": "string",
+      "state": "string",
+      "city": "string",
+      "zip": "string",
+      "country": "string",
+      "phone": "string"
+    },
+    "shipping_info": {
+      "first_name": "string",
+      "last_name": "string",
+      "street": "string",
+      "street2": "string",
+      "state": "string",
+      "city": "string",
+      "zip": "string",
+      "country": "string",
+      "phone": "string"
+    },
+    "custom_fields": {
+      "custom1": "string",
+      "custom2": "string",
+      "custom3": "string",
+      "custom4": "string",
+      "custom5": "string",
+      "custom6": "string",
+      "custom7": "string",
+      "custom8": "string",
+      "custom9": "string",
+      "custom10": "string",
+      "custom11": "string",
+      "custom12": "string",
+      "custom13": "string",
+      "custom14": "string",
+      "custom15": "string",
+      "custom16": "string",
+      "custom17": "string",
+      "custom18": "string",
+      "custom19": "string",
+      "custom20": "string"
+    },
+    "card_details": {
+      "name": "string",
+      "last4": "1111",
+      "expiry_month": 1,
+      "expiry_year": 2020,
+      "card_type": "Visa",
+      "avs_street": "string",
+      "avs_zip": "string",
+      "auth_code": "string",
+      "bin": "411111",
+      "bin_details": {
+        "type": "C"
+      },
+      "avs_result": "string",
+      "avs_result_code": "YYY",
+      "cvv_result": "string",
+      "cvv_result_code": "M",
+      "cavv_result": "string",
+      "cavv_result_code": "string"
+    }
+  }
+]
+```
+
+### cURL (sandbox)
+```bash
+curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+  -G "${GOAT_SANDBOX_BASE_URL}/api/v2/customers/1/transactions" \
+  -u "${GOAT_SOURCE_KEY}:${GOAT_PIN}" \
+  -H "Accept: application/json" \
+  --data-urlencode "order=desc" \
+  --data-urlencode "limit=25" \
+  --data-urlencode "offset=0" \
+  --data-urlencode "status=captured,settled"
+```
+
+### Mapping to THEONE
+- Use for **per-customer** history in admin/support UIs when you already know `goat_customer_id`; use Function 3 for **account-wide** reconciliation across customers.
+- Match `transaction_details.key` / `order_number` / `custom_fields` to THEONE `Payment` / COE ids if you store them on charge (Function 4).
+
+---
+
 ## Post-charge receipt (THEONE) vs GOAT invoices
 
 After a **successful immediate charge** (`POST /transactions/charge` with `source`), money is captured. The customer needs a **receipt** (proof of payment), not a “please pay” invoice email.
@@ -1175,6 +2391,17 @@ If the product requires a GOAT-hosted invoice URL:
 | Delete invoice (`DELETE /invoices/{id}`) | Documented |
 | Update invoice (`PATCH /invoices/{id}`) | Documented |
 | Send existing invoice (`POST /invoices/{id}/send`) | Documented |
+| List customers (`GET /customers`) | Documented |
+| Create customer (`POST /customers`) | Documented |
+| Create customer from transaction (`POST /customers/create-from-transaction`) | Documented |
+| Get single customer (`GET /customers/{id}`) | Documented |
+| Update customer (`PATCH /customers/{id}`) | Documented |
+| Delete customer (`DELETE /customers/{id}`) | Documented |
+| List customer payment methods (`GET /customers/{id}/payment-methods`) | Documented |
+| Create customer payment method (`POST /customers/{id}/payment-methods`) | Documented |
+| List customer recurring schedules (`GET /customers/{id}/recurring-schedules`) | Documented |
+| Create customer recurring schedule (`POST /customers/{id}/recurring-schedules`) | Documented |
+| List customer transactions (`GET /customers/{id}/transactions`) | Documented |
 | **Inbound webhook HTTP payload + signature verification** | Still need GOAT docs or captured sample requests |
 
 You can implement charges, token charges, refunds, reconciliation, and webhook registration. **Async payment status** parity with Global Payments still needs the inbound webhook contract above, or polling `GET /transactions` until webhooks are wired.

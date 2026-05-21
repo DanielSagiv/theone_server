@@ -13,6 +13,8 @@ const MediaAssetSchema = new mongoose.Schema(
     height: { type: Number, min: 0 },
     byte_size: { type: Number, min: 0 },
     thumb_url: { type: String, trim: true },
+    /** Long-edge ~240px JPEG for lists / small tiles (optional; falls back to thumb_url). */
+    list_thumb_url: { type: String, trim: true },
   },
   { _id: false }
 );

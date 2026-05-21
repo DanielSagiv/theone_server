@@ -1,10 +1,25 @@
 /**
  * Email Service
  * Centralized service for sending all types of emails via AWS SES
- * @description Provides reusable email functions with branded templates
+ * @description Provides reusable email functions with branded templates (Figma-aligned dark card)
  */
 
 const AWS = require('aws-sdk');
+const {
+  renderEmailDocument,
+  renderPrimaryCta,
+  renderBulletList,
+  renderCodeBox,
+  renderBoldLine,
+  renderMutedParagraph,
+  renderFinePrint,
+  renderDetailPanel,
+  renderSpacer,
+  renderAdminNotePanel,
+  renderStatusBadge,
+  getWelcomeDashboardUrl,
+  escapeHtml,
+} = require('./emailTemplates');
 
 // Configure AWS SDK
 AWS.config.update({
@@ -22,7 +37,7 @@ const ses = new AWS.SES({ apiVersion: '2010-12-01' });
  * @param {string} options.to - Recipient email
  * @param {string} options.subject - Email subject
  * @param {string} options.html - HTML content
- * @param {string} options.text - Plain text content (optional)
+ * @param {string} [options.text] - Plain text content (optional)
  * @returns {Promise<Object>} Send result with messageId
  */
 async function sendEmail({ to, subject, html, text }) {
@@ -51,18 +66,18 @@ async function sendEmail({ to, subject, html, text }) {
     };
 
     const result = await ses.sendEmail(params).promise();
-    console.log('[EMAIL_SUCCESS]', { 
-      to, 
-      subject, 
+    console.log('[EMAIL_SUCCESS]', {
+      to,
+      subject,
       messageId: result.MessageId,
       from: params.Source,
       timestamp: new Date().toISOString()
     });
     return { messageId: result.MessageId };
   } catch (error) {
-    console.error('[EMAIL_ERROR]', { 
-      to, 
-      subject, 
+    console.error('[EMAIL_ERROR]', {
+      to,
+      subject,
       from: process.env.FROM_EMAIL || 'noreply@the1.vip',
       error: {
         message: error.message,
@@ -78,58 +93,44 @@ async function sendEmail({ to, subject, html, text }) {
 }
 
 /**
- * EMAIL TEMPLATE FUNCTIONS
- * Pre-built email templates for common use cases
- */
-
-/**
  * Send email verification email
  * @param {Object} user - User object with email, firstName
  * @param {string} code - Verification code (6-digit numeric string)
  * @returns {Promise<Object>} Send result
  */
 async function sendVerificationEmail(user, code) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .content h2 { color: #2c3e50; margin-top: 0; }
-        .code-box { background: #f0f0f0; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #667eea; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-        .warning { color: #999; font-size: 12px; font-style: italic; margin-top: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>The1 Platform</h1>
-        </div>
-        <div class="content">
-          <h2>Welcome, ${user.firstName}!</h2>
-          <p>Thank you for signing up for The1 Platform. Please verify your email address using the code below:</p>
-          <div class="code-box">${code}</div>
-          <p>Enter this code in the mobile app to activate your account.</p>
-          <p class="warning">This code expires in 30 minutes.</p>
-          <p class="warning">If you didn't create an account, please ignore this email.</p>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform. All rights reserved.
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const first = escapeHtml(user.firstName || 'there');
+  const bodyHtml = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph('Thank you for signing up for The 1. Please verify your email address using the code below:'),
+    renderCodeBox(code),
+    renderMutedParagraph('Enter this code in the mobile app to activate your account.'),
+    renderFinePrint('This code expires in 30 minutes.'),
+    renderFinePrint("If you didn't create an account, please ignore this email."),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `Your The 1 verification code: ${code}`,
+    bodyHtml,
+  });
+
+  const text = [
+    'Verify your email — The 1',
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    `Your verification code: ${code}`,
+    '',
+    'Enter this code in the mobile app to activate your account.',
+    'This code expires in 30 minutes.',
+    "If you didn't create an account, ignore this email.",
+  ].join('\n');
 
   return sendEmail({
     to: user.email,
-    subject: 'Verify Your Email - The1 Platform',
-    html
+    subject: 'Verify Your Email — The 1',
+    html,
+    text,
   });
 }
 
@@ -140,49 +141,77 @@ async function sendVerificationEmail(user, code) {
  * @returns {Promise<Object>} Send result
  */
 async function sendPasswordResetEmail(user, code) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .content h2 { color: #2c3e50; margin-top: 0; }
-        .code-box { background: #f0f0f0; border: 2px solid #e74c3c; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #e74c3c; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-        .warning { color: #e74c3c; font-size: 12px; font-weight: bold; margin-top: 20px; }
-        .info { color: #999; font-size: 12px; font-style: italic; margin-top: 10px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>The1 Platform</h1>
-        </div>
-        <div class="content">
-          <h2>Password Reset Request</h2>
-          <p>Hi ${user.firstName},</p>
-          <p>We received a request to reset your password. Use the code below to create a new password:</p>
-          <div class="code-box">${code}</div>
-          <p>Enter this code in the mobile app to reset your password.</p>
-          <p class="warning">This code expires in 30 minutes.</p>
-          <p class="info">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform. All rights reserved.
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const first = escapeHtml(user.firstName || 'there');
+  const bodyHtml = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph('We received a request to reset your password. Use the code below to create a new password:'),
+    renderCodeBox(code),
+    renderMutedParagraph('Enter this code in the mobile app to reset your password.'),
+    renderFinePrint('This code expires in 30 minutes.'),
+    renderFinePrint("If you didn't request this password reset, please ignore this email. Your password will remain unchanged."),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: 'Password reset code for your The 1 account',
+    bodyHtml,
+  });
+
+  const text = [
+    'Password reset — The 1',
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    `Your reset code: ${code}`,
+    '',
+    'Enter this code in the mobile app to reset your password.',
+    'This code expires in 30 minutes.',
+    "If you didn't request this reset, ignore this email.",
+  ].join('\n');
 
   return sendEmail({
     to: user.email,
-    subject: 'Password Reset Request - The1 Platform',
-    html
+    subject: 'Password Reset — The 1',
+    html,
+    text,
+  });
+}
+
+/**
+ * Send sign-in OTP email (passwordless login)
+ * @param {Object} user - User with email, firstName
+ * @param {string} code - 6-digit code
+ * @returns {Promise<Object>} Send result
+ */
+async function sendLoginOtpEmail(user, code) {
+  const first = escapeHtml(user.firstName || 'there');
+  const bodyHtml = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph('Use this code to sign in to The 1. It is valid for 15 minutes.'),
+    renderCodeBox(code),
+    renderFinePrint('If you did not request this code, you can ignore this email.'),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `Your The 1 sign-in code: ${code}`,
+    bodyHtml,
+  });
+
+  const text = [
+    'Your The 1 sign-in code',
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    `Code: ${code}`,
+    '',
+    'Valid for 15 minutes.',
+    'If you did not request this code, ignore this email.',
+  ].join('\n');
+
+  return sendEmail({
+    to: user.email,
+    subject: 'Your The 1 sign-in code',
+    html,
+    text,
   });
 }
 
@@ -192,60 +221,122 @@ async function sendPasswordResetEmail(user, code) {
  * @returns {Promise<Object>} Send result
  */
 async function sendWelcomeEmail(user) {
-  const dashboardUrl = `${process.env.FRONTEND_URL}/test/dashboard`;
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .content h2 { color: #2c3e50; margin-top: 0; }
-        .button { display: inline-block; background: #27ae60; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }
-        .button:hover { background: #229954; }
-        .features { margin: 20px 0; }
-        .feature-item { margin: 10px 0; padding-left: 20px; position: relative; }
-        .feature-item:before { content: "✓"; position: absolute; left: 0; color: #27ae60; font-weight: bold; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>The1 Platform</h1>
-        </div>
-        <div class="content">
-          <h2>Welcome to The1 Platform!</h2>
-          <p>Hi ${user.firstName},</p>
-          <p>Your email has been verified successfully. You're all set to start exploring premium events and exclusive experiences!</p>
-          <div class="features">
-            <p><strong>What you can do now:</strong></p>
-            <div class="feature-item">Browse exclusive events and venues</div>
-            <div class="feature-item">Book premium tables and experiences</div>
-            <div class="feature-item">Manage your bookings and profile</div>
-            <div class="feature-item">Receive personalized event recommendations</div>
-          </div>
-          <p style="text-align: center;">
-            <a href="${dashboardUrl}" class="button">Go to Dashboard</a>
-          </p>
-          <p>If you have any questions, feel free to reach out to our support team.</p>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform. All rights reserved.
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const dashboardUrl = getWelcomeDashboardUrl();
+  const first = escapeHtml(user.firstName || 'there');
+  const bullets = [
+    'Browse exclusive events',
+    'Book premium tables and experiences',
+    'Manage your bookings and profile',
+    'Receive personalised event recommendations',
+  ];
+
+  const bodyHtml = [
+    renderBoldLine(`${first}, welcome to The 1,`),
+    renderMutedParagraph(
+      `${escapeHtml('Your email has been verified successfully.')}<br/><br/>${escapeHtml("You're all set to start exploring premium events and exclusive experiences!")}`,
+      { rawHtml: true }
+    ),
+    renderSpacer(32),
+    renderBoldLine('Now you can:'),
+    renderBulletList(bullets),
+    renderPrimaryCta({ href: dashboardUrl, label: 'Go to Dashboard' }),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: 'Welcome to The 1 — your email is verified',
+    bodyHtml,
+  });
+
+  const text = [
+    'Welcome to The 1',
+    '',
+    `${user.firstName || 'there'}, welcome to The 1,`,
+    '',
+    'Your email has been verified successfully.',
+    "You're all set to start exploring premium events and exclusive experiences!",
+    '',
+    'Now you can:',
+    ...bullets.map((b) => `• ${b}`),
+    '',
+    `Go to Dashboard: ${dashboardUrl}`,
+  ].join('\n');
 
   return sendEmail({
     to: user.email,
-    subject: 'Welcome to The1 Platform',
-    html
+    subject: 'Welcome to The 1',
+    html,
+    text,
+  });
+}
+
+/**
+ * Welcome email for a client account created by an admin (live + verified; app download CTAs).
+ * @param {Object} user - User document
+ * @returns {Promise<Object>} Send result
+ */
+async function sendAdminCreatedClientWelcomeEmail(user) {
+  const first = escapeHtml(user.firstName || 'there');
+  const iosUrl = (process.env.MOBILE_APP_IOS_URL || '').trim();
+  const androidUrl = (process.env.MOBILE_APP_ANDROID_URL || '').trim();
+
+  const introHtml = [
+    escapeHtml(
+      'Your The 1 account has been created for you. Open the mobile app and sign in using ',
+    ),
+    `<strong>${escapeHtml('email sign-in code')}</strong>`,
+    escapeHtml(' with this email address, or use '),
+    `<strong>${escapeHtml('Forgot password')}</strong>`,
+    escapeHtml(' on the sign-in screen to set a password.'),
+  ].join('');
+
+  const parts = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph(introHtml, {rawHtml: true}),
+    renderSpacer(24),
+    renderBoldLine('Get the app'),
+  ];
+
+  if (iosUrl) {
+    parts.push(renderPrimaryCta({href: iosUrl, label: 'Download for iOS'}));
+  }
+  if (androidUrl) {
+    parts.push(renderPrimaryCta({href: androidUrl, label: 'Download for Android'}));
+  }
+  if (!iosUrl && !androidUrl) {
+    parts.push(renderMutedParagraph('App store links will be added soon.'));
+  }
+
+  const bodyHtml = parts.join('');
+
+  const textLines = [
+    'Your The 1 account',
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    'Your account has been created. Open the mobile app and sign in using the email sign-in code with this address, or use Forgot password to set a password.',
+    '',
+    'Get the app:',
+  ];
+  if (iosUrl) {
+    textLines.push(`iOS: ${iosUrl}`);
+  }
+  if (androidUrl) {
+    textLines.push(`Android: ${androidUrl}`);
+  }
+  if (!iosUrl && !androidUrl) {
+    textLines.push('Store links will be added soon.');
+  }
+
+  const html = renderEmailDocument({
+    preheader: 'Your The 1 account is ready — download the app',
+    bodyHtml,
+  });
+
+  return sendEmail({
+    to: user.email,
+    subject: 'Your The 1 account is ready',
+    html,
+    text: textLines.join('\n'),
   });
 }
 
@@ -258,70 +349,54 @@ async function sendWelcomeEmail(user) {
  */
 async function sendCOEInvitationEmail(client, coe, adminNote = '') {
   const coeUrl = `${process.env.FRONTEND_URL}/coe/${coe._id}`;
-  
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .content h2 { color: #2c3e50; margin-top: 0; }
-        .coe-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
-        .detail-row { margin: 10px 0; }
-        .detail-label { font-weight: bold; color: #666; }
-        .price { font-size: 24px; color: #27ae60; font-weight: bold; margin: 20px 0; }
-        .button { display: inline-block; background: #667eea; color: white !important; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; font-weight: bold; }
-        .button:hover { background: #5568d3; }
-        .admin-note { background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 8px; margin: 20px 0; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>The1 Platform</h1>
-        </div>
-        <div class="content">
-          <h2>Exclusive Event Package</h2>
-          <p>Hi ${client.firstName},</p>
-          <p>You've been invited to review an exclusive Curated One Experience designed specifically for you:</p>
-          
-          <div class="coe-details">
-            <h3 style="margin-top: 0; color: #667eea;">${coe.name}</h3>
-            <p>${coe.description}</p>
-            <div class="detail-row">
-              <span class="detail-label">Dates:</span> ${formatDateRange(coe.start_date, coe.end_date)}
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Events:</span> ${coe.events ? coe.events.length : 0} exclusive events
-            </div>
-            <div class="price">Total: $${formatCurrency(coe.total_amount || 0)}</div>
-          </div>
-          
-          ${adminNote ? `<div class="admin-note"><strong>Note from your event manager:</strong><br>${adminNote}</div>` : ''}
-          
-          <p style="text-align: center;">
-            <a href="${coeUrl}" class="button">View Package Details</a>
-          </p>
-          
-          <p>This exclusive package has been curated to provide you with an unforgettable experience. Please review the details and let us know if you have any questions.</p>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform. All rights reserved.
-        </div>
-      </div>
-    </body>
-    </html>
+  const first = escapeHtml(client.firstName || 'there');
+  const coeName = escapeHtml(coe.name || 'Exclusive package');
+  const coeDesc = escapeHtml(coe.description || '');
+  const eventsCount = coe.events ? coe.events.length : 0;
+  const totalFormatted = formatCurrency(coe.total_amount || 0);
+
+  const detailsInner = `
+    <p style="margin:0 0 12px 0;font-weight:bold;color:#B4C1EA;font-size:15px;">${coeName}</p>
+    <p style="margin:0 0 16px 0;">${coeDesc}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Dates:</strong> ${escapeHtml(formatDateRange(coe.start_date, coe.end_date))}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Events:</strong> ${eventsCount} exclusive events</p>
+    <p style="margin:16px 0 0 0;font-size:18px;font-weight:bold;color:#ffffff;">Total: $${totalFormatted}</p>
   `;
+
+  const bodyHtml = [
+    renderBoldLine(`Hi ${first},`),
+    renderMutedParagraph("You've been invited to review an exclusive Curated One Experience designed specifically for you:"),
+    renderDetailPanel(detailsInner),
+    adminNote ? renderAdminNotePanel(adminNote) : '',
+    renderPrimaryCta({ href: coeUrl, label: 'View Package Details' }),
+    renderMutedParagraph('This exclusive package has been curated to provide you with an unforgettable experience. Please review the details and let us know if you have any questions.'),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `Exclusive package: ${coe.name || 'The 1'}`,
+    bodyHtml,
+  });
+
+  const text = [
+    `Exclusive Event Package: ${coe.name}`,
+    '',
+    `Hi ${client.firstName || 'there'},`,
+    '',
+    `Package: ${coe.name}`,
+    `${coe.description || ''}`,
+    `Dates: ${formatDateRange(coe.start_date, coe.end_date)}`,
+    `Events: ${eventsCount}`,
+    `Total: $${totalFormatted}`,
+    '',
+    adminNote ? `Note: ${adminNote}\n` : '',
+    `Open: ${coeUrl}`,
+  ].join('\n');
 
   return sendEmail({
     to: client.email,
     subject: `Exclusive Event Package: ${coe.name}`,
-    html
+    html,
+    text,
   });
 }
 
@@ -333,66 +408,53 @@ async function sendCOEInvitationEmail(client, coe, adminNote = '') {
  * @returns {Promise<Object>} Send result
  */
 async function sendBookingConfirmationEmail(user, event, seat) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .content h2 { color: #2c3e50; margin-top: 0; }
-        .booking-details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #27ae60; }
-        .detail-row { margin: 10px 0; }
-        .detail-label { font-weight: bold; color: #666; }
-        .success-badge { background: #27ae60; color: white; padding: 10px 20px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>The1 Platform</h1>
-        </div>
-        <div class="content">
-          <h2>Booking Confirmed!</h2>
-          <p>Hi ${user.firstName},</p>
-          <p><span class="success-badge">✓ Confirmed</span></p>
-          <p>Your booking has been confirmed. We're excited to host you!</p>
-          
-          <div class="booking-details">
-            <h3 style="margin-top: 0; color: #2c3e50;">${event.name}</h3>
-            <div class="detail-row">
-              <span class="detail-label">Date:</span> ${formatDate(event.start_datetime)}
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Location:</span> ${event.location_id ? event.location_id.name : 'TBD'}
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Table:</span> ${seat.code}
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Capacity:</span> ${seat.capacity} people
-            </div>
-          </div>
-          
-          <p>Please arrive 15 minutes before the event starts. If you have any questions or need to make changes, please contact us.</p>
-          <p><strong>We look forward to seeing you there!</strong></p>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform. All rights reserved.
-        </div>
-      </div>
-    </body>
-    </html>
+  const first = escapeHtml(user.firstName || 'there');
+  const eventName = escapeHtml(event.name || 'Event');
+  const locName = event.location_id && event.location_id.name ? escapeHtml(event.location_id.name) : 'TBD';
+  const seatCode = escapeHtml(seat.code || '');
+  const cap = seat.capacity != null ? escapeHtml(String(seat.capacity)) : '';
+
+  const detailsInner = `
+    <p style="margin:0 0 12px 0;font-weight:bold;color:#B4C1EA;font-size:15px;">${eventName}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Date:</strong> ${escapeHtml(formatDate(event.start_datetime))}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Location:</strong> ${locName}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Table:</strong> ${seatCode}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Capacity:</strong> ${cap} people</p>
   `;
+
+  const bodyHtml = [
+    renderBoldLine(`Hi ${first},`),
+    renderStatusBadge('Confirmed'),
+    renderMutedParagraph("Your booking has been confirmed. We're excited to host you!"),
+    renderDetailPanel(detailsInner),
+    renderMutedParagraph('Please arrive 15 minutes before the event starts. If you have any questions or need to make changes, please contact us.'),
+    renderBoldLine('We look forward to seeing you there!'),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `Booking confirmed: ${event.name}`,
+    bodyHtml,
+  });
+
+  const text = [
+    `Booking Confirmed: ${event.name}`,
+    '',
+    `Hi ${user.firstName || 'there'},`,
+    '',
+    'Status: Confirmed',
+    '',
+    `${event.name}`,
+    `Date: ${formatDate(event.start_datetime)}`,
+    `Location: ${event.location_id ? event.location_id.name : 'TBD'}`,
+    `Table: ${seat.code}`,
+    `Capacity: ${seat.capacity} people`,
+  ].join('\n');
 
   return sendEmail({
     to: user.email,
     subject: `Booking Confirmed: ${event.name}`,
-    html
+    html,
+    text,
   });
 }
 
@@ -404,45 +466,30 @@ async function sendBookingConfirmationEmail(user, event, seat) {
  * @returns {Promise<Object>} Send result
  */
 async function sendAdminNotificationEmail(adminEmail, subject, message) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #2c3e50; color: white; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 24px; }
-        .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-        .notification { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3498db; }
-        .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; }
-        .timestamp { color: #999; font-size: 12px; margin-top: 10px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>Admin Notification</h1>
-        </div>
-        <div class="content">
-          <h2 style="color: #2c3e50; margin-top: 0;">${subject}</h2>
-          <div class="notification">
-            <p>${message}</p>
-            <p class="timestamp">Timestamp: ${new Date().toLocaleString()}</p>
-          </div>
-        </div>
-        <div class="footer">
-          &copy; 2025 The1 Platform - Admin System
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
+  const safeSubject = escapeHtml(subject);
+  const safeMessage = escapeHtml(message);
+
+  const bodyHtml = [
+    renderBoldLine('Admin notification'),
+    renderMutedParagraph(`<strong style="color:#ffffff;font-weight:bold;">${safeSubject}</strong>`, { rawHtml: true }),
+    renderDetailPanel(`<p style="margin:0;white-space:pre-wrap;">${safeMessage}</p>`),
+    renderMutedParagraph(`Timestamp: ${escapeHtml(new Date().toLocaleString())}`, { rawHtml: true }),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: subject,
+    bodyHtml,
+    footerNote: 'Internal message — The 1 admin system.',
+    brandName: 'The 1',
+  });
+
+  const text = [`[Admin] ${subject}`, '', message, '', `Timestamp: ${new Date().toLocaleString()}`].join('\n');
 
   return sendEmail({
     to: adminEmail,
     subject: `[Admin] ${subject}`,
-    html
+    html,
+    text,
   });
 }
 
@@ -471,59 +518,39 @@ async function sendNewsletterSubscriptionEmail(email) {
     timestamp: new Date().toISOString()
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2933; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #d4af37; color: #1f2933; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 22px; font-weight: 600; }
-        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }
-        .subscription-badge { background: #d4af37; color: #1f2933; padding: 8px 16px; border-radius: 20px; display: inline-block; margin: 10px 0; font-weight: bold; font-size: 14px; }
-        .row { margin-bottom: 15px; padding: 10px; background: white; border-radius: 6px; }
-        .label { font-weight: bold; color: #4b5563; display: block; margin-bottom: 5px; }
-        .value { color: #111827; font-size: 16px; }
-        .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
-        .timestamp { color: #9ca3af; font-size: 12px; margin-top: 10px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>📧 Newsletter Subscription</h1>
-        </div>
-        <div class="content">
-          <div class="subscription-badge">NEW SUBSCRIPTION</div>
-          <p style="margin-top: 20px; font-size: 16px; color: #111827;">A new subscriber has signed up for the newsletter:</p>
-          <div class="row">
-            <span class="label">Subscriber Email:</span>
-            <span class="value">${email}</span>
-          </div>
-          <div class="row">
-            <span class="label">Subscription Date:</span>
-            <span class="value">${new Date().toLocaleString()}</span>
-          </div>
-          <div class="row">
-            <span class="label">Source:</span>
-            <span class="value">THE1 Website (website2)</span>
-          </div>
-          <p class="timestamp">This is a newsletter subscription notification, not a contact form submission.</p>
-        </div>
-        <div class="footer">
-          THE1 Website Newsletter Subscription System
-        </div>
-      </div>
-    </body>
-    </html>
+  const safeEmail = escapeHtml(email);
+  const rowsInner = `
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Subscriber email:</strong> ${safeEmail}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Subscription date:</strong> ${escapeHtml(new Date().toLocaleString())}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Source:</strong> THE1 Website (website2)</p>
   `;
+
+  const bodyHtml = [
+    renderBoldLine('Newsletter subscription'),
+    renderMutedParagraph('A new subscriber has signed up for the newsletter.'),
+    renderDetailPanel(rowsInner),
+    renderFinePrint('This is a newsletter subscription notification, not a contact form submission.'),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `New newsletter subscriber: ${email}`,
+    bodyHtml,
+    footerNote: 'THE1 Website — internal notification.',
+  });
+
+  const text = [
+    'Newsletter subscription',
+    '',
+    `Subscriber: ${email}`,
+    `Date: ${new Date().toLocaleString()}`,
+    'Source: THE1 Website (website2)',
+  ].join('\n');
 
   const result = await sendEmail({
     to: recipient,
     subject: emailSubject,
-    html
+    html,
+    text,
   });
 
   console.log('[EMAIL_NEWSLETTER] Newsletter subscription email sent via SES', {
@@ -558,9 +585,9 @@ async function sendContactFormEmail(data) {
   }
 
   const { name, email, phone, subject, message } = data;
+  const safeMessage = message || '';
 
   const emailSubject = `[THE1 Website Contact] ${subject}`;
-  const safeMessage = message || '';
 
   console.log('[EMAIL_CONTACT] Preparing to send contact form email', {
     to: recipient,
@@ -572,63 +599,44 @@ async function sendContactFormEmail(data) {
     timestamp: new Date().toISOString()
   });
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2933; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #111827; color: #f9fafb; padding: 20px; text-align: center; border-radius: 10px 10px 0 0; }
-        .header h1 { margin: 0; font-size: 22px; }
-        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb; }
-        .row { margin-bottom: 10px; }
-        .label { font-weight: bold; color: #4b5563; }
-        .value { color: #111827; }
-        .message { margin-top: 20px; white-space: pre-wrap; }
-        .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h1>New Contact Form Submission</h1>
-        </div>
-        <div class="content">
-          <div class="row">
-            <span class="label">Name:</span>
-            <span class="value">${name}</span>
-          </div>
-          <div class="row">
-            <span class="label">Email:</span>
-            <span class="value">${email}</span>
-          </div>
-          <div class="row">
-            <span class="label">Phone:</span>
-            <span class="value">${phone || 'N/A'}</span>
-          </div>
-          <div class="row">
-            <span class="label">Submitted at:</span>
-            <span class="value">${new Date().toLocaleString()}</span>
-          </div>
-          <div class="message">
-            <span class="label">Message:</span>
-            <div class="value">${safeMessage.replace(/\n/g, '<br>')}</div>
-          </div>
-        </div>
-        <div class="footer">
-          THE1 Website Contact Form
-        </div>
-      </div>
-    </body>
-    </html>
+  const inner = `
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Name:</strong> ${escapeHtml(name || '')}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Email:</strong> ${escapeHtml(email || '')}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Phone:</strong> ${escapeHtml(phone || 'N/A')}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Submitted at:</strong> ${escapeHtml(new Date().toLocaleString())}</p>
+    <p style="margin:16px 0 0 0;"><strong style="color:#ffffff;font-weight:bold;">Message:</strong></p>
+    <p style="margin:8px 0 0 0;white-space:pre-wrap;">${escapeHtml(safeMessage)}</p>
   `;
+
+  const bodyHtml = [
+    renderBoldLine('New contact form submission'),
+    renderMutedParagraph(`Subject: ${escapeHtml(subject || '')}`, { rawHtml: true }),
+    renderDetailPanel(inner),
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `Contact: ${subject}`,
+    bodyHtml,
+    footerNote: 'THE1 Website — internal notification.',
+  });
+
+  const text = [
+    'Contact form',
+    '',
+    `Name: ${name}`,
+    `Email: ${email}`,
+    `Phone: ${phone || 'N/A'}`,
+    `Subject: ${subject}`,
+    `Submitted: ${new Date().toLocaleString()}`,
+    '',
+    safeMessage,
+  ].join('\n');
 
   const result = await sendEmail({
     to: recipient,
     subject: emailSubject,
-    html
+    html,
+    text,
   });
 
   console.log('[EMAIL_CONTACT] Contact form email sent via SES', {
@@ -640,10 +648,6 @@ async function sendContactFormEmail(data) {
 
   return result;
 }
-
-/**
- * UTILITY FUNCTIONS
- */
 
 /**
  * Strip HTML tags for plain text fallback
@@ -705,26 +709,19 @@ function formatCurrency(amount) {
   });
 }
 
-/**
- * EXPORTS
- */
 module.exports = {
-  // Core function (use for any custom email)
   sendEmail,
-  
-  // Template functions (pre-built emails)
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendLoginOtpEmail,
   sendWelcomeEmail,
+  sendAdminCreatedClientWelcomeEmail,
   sendCOEInvitationEmail,
   sendBookingConfirmationEmail,
   sendAdminNotificationEmail,
   sendContactFormEmail,
   sendNewsletterSubscriptionEmail,
-  
-  // Utility functions (exported for testing)
   formatDate,
   formatDateRange,
   formatCurrency
 };
-

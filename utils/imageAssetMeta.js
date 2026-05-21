@@ -1,12 +1,15 @@
 const crypto = require('crypto');
 const axios = require('axios');
 const sharp = require('sharp');
+const { getObjectBufferFromConfiguredBucketUrl } = require('./s3');
 
 /** Max bytes to download when enriching metadata from a remote URL. */
 const MAX_FETCH_BYTES = 25 * 1024 * 1024;
 
-/** Long edge for generated JPEG thumbnails. */
+/** Long edge for generated JPEG thumbnails (admin uploads / general enrichment). */
 const THUMB_MAX_EDGE = 512;
+/** Long edge for list / section-picker tiles (small bandwidth). */
+const LIST_THUMB_MAX_EDGE = 240;
 
 /**
  * @param {string} mime
@@ -30,7 +33,19 @@ function isRasterImageMime(mime) {
  * @returns {Promise<Buffer>}
  */
 async function fetchImageBufferLimited(url) {
-  const res = await axios.get(url.trim(), {
+  const u = String(url || '').trim();
+  if (!u) {
+    throw new Error('Missing image URL');
+  }
+  try {
+    const viaS3 = await getObjectBufferFromConfiguredBucketUrl(u);
+    if (viaS3 && viaS3.length > 0) {
+      return viaS3;
+    }
+  } catch (err) {
+    console.warn('[imageAssetMeta] S3 getObject failed, trying HTTP:', u.slice(0, 72), err.message);
+  }
+  const res = await axios.get(u, {
     responseType: 'arraybuffer',
     maxContentLength: MAX_FETCH_BYTES,
     maxBodyLength: MAX_FETCH_BYTES,
@@ -117,10 +132,16 @@ function mediaItemNeedsEnrichment(item) {
  * Enrich a single media subdocument in-place (fetch URL, probe, optional thumb upload).
  * @param {object} item - Plain or Mongoose subdoc
  * @param {(buf: Buffer, key: string, contentType: string) => Promise<string>} uploadThumb - uploads JPEG, returns URL
+ * @param {{ thumbMaxEdge?: number }} [options] - optional smaller long-edge for list thumbnails
  * @returns {Promise<boolean>} true if item was mutated
  */
-async function enrichMediaItemInPlace(item, uploadThumb) {
+async function enrichMediaItemInPlace(item, uploadThumb, options = {}) {
   if (!mediaItemNeedsEnrichment(item)) return false;
+
+  const thumbMaxEdge =
+    typeof options.thumbMaxEdge === 'number' && options.thumbMaxEdge > 0
+      ? options.thumbMaxEdge
+      : THUMB_MAX_EDGE;
 
   const w = Number(item.width);
   const h = Number(item.height);
@@ -136,9 +157,9 @@ async function enrichMediaItemInPlace(item, uploadThumb) {
 
       if (!item.thumb_url && uploadThumb) {
         try {
-          const thumbBuf = await buildThumbnailJpegBuffer(buf);
+          const thumbBuf = await buildThumbnailJpegBuffer(buf, thumbMaxEdge);
           const hash = crypto.createHash('sha256').update(item.url).digest('hex').slice(0, 16);
-          const key = `thumbs/enriched/${hash}_w${THUMB_MAX_EDGE}.jpg`;
+          const key = `thumbs/enriched/${hash}_w${thumbMaxEdge}.jpg`;
           item.thumb_url = await uploadThumb(thumbBuf, key, 'image/jpeg');
         } catch (te) {
           console.warn('[imageAssetMeta] thumb upload failed:', te.message);
@@ -149,9 +170,9 @@ async function enrichMediaItemInPlace(item, uploadThumb) {
 
     if (!item.thumb_url && uploadThumb) {
       const buf = await fetchImageBufferLimited(item.url);
-      const thumbBuf = await buildThumbnailJpegBuffer(buf);
+      const thumbBuf = await buildThumbnailJpegBuffer(buf, thumbMaxEdge);
       const hash = crypto.createHash('sha256').update(item.url).digest('hex').slice(0, 16);
-      const key = `thumbs/enriched/${hash}_w${THUMB_MAX_EDGE}.jpg`;
+      const key = `thumbs/enriched/${hash}_w${thumbMaxEdge}.jpg`;
       item.thumb_url = await uploadThumb(thumbBuf, key, 'image/jpeg');
       return true;
     }
@@ -161,14 +182,57 @@ async function enrichMediaItemInPlace(item, uploadThumb) {
   return false;
 }
 
+/**
+ * Ensure `list_thumb_url` exists for an image media item (small JPEG on S3). Prefers downloading
+ * `thumb_url` when set (often 512) over full `url` to avoid pulling multi-megabyte originals.
+ * @param {object} item - Plain or Mongoose subdoc
+ * @param {(buf: Buffer, key: string, contentType: string) => Promise<string>} uploadThumb
+ * @returns {Promise<boolean>} true if item was mutated
+ */
+async function ensureListThumbUrlInPlace(item, uploadThumb) {
+  if (!item || item.type !== 'image' || !item.url || typeof item.url !== 'string') {
+    return false;
+  }
+  if (String(item.list_thumb_url || '').trim()) {
+    return false;
+  }
+  if (!uploadThumb) {
+    return false;
+  }
+  const canonicalUrl = item.url.trim();
+  const thumbTrim = String(item.thumb_url || '').trim();
+  try {
+    let buf;
+    try {
+      buf = await fetchImageBufferLimited(thumbTrim || canonicalUrl);
+    } catch (e1) {
+      if (thumbTrim && canonicalUrl && thumbTrim !== canonicalUrl) {
+        buf = await fetchImageBufferLimited(canonicalUrl);
+      } else {
+        throw e1;
+      }
+    }
+    const thumbBuf = await buildThumbnailJpegBuffer(buf, LIST_THUMB_MAX_EDGE);
+    const hash = crypto.createHash('sha256').update(canonicalUrl).digest('hex').slice(0, 16);
+    const key = `thumbs/enriched/${hash}_w${LIST_THUMB_MAX_EDGE}.jpg`;
+    item.list_thumb_url = await uploadThumb(thumbBuf, key, 'image/jpeg');
+    return true;
+  } catch (err) {
+    console.warn('[imageAssetMeta] ensureListThumbUrlInPlace failed:', canonicalUrl?.slice(0, 80), err.message);
+    return false;
+  }
+}
+
 module.exports = {
   MAX_FETCH_BYTES,
   THUMB_MAX_EDGE,
+  LIST_THUMB_MAX_EDGE,
   isRasterImageMime,
   fetchImageBufferLimited,
   probeImageBuffer,
   buildThumbnailJpegBuffer,
   extractMetaFromUploadBuffer,
   mediaItemNeedsEnrichment,
-  enrichMediaItemInPlace
+  enrichMediaItemInPlace,
+  ensureListThumbUrlInPlace
 };

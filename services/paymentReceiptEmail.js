@@ -3,6 +3,15 @@
  * Sent after a successful GOAT source charge; does not block the payment API response.
  */
 const { sendEmail } = require('../utils/emailService');
+const {
+  renderEmailDocument,
+  renderPrimaryCta,
+  renderMutedParagraph,
+  renderBoldLine,
+  renderDetailPanel,
+  escapeHtml,
+  escapeHtmlAttr,
+} = require('../utils/emailTemplates');
 
 function getApiPublicBaseUrl() {
   const raw = process.env.API_PUBLIC_URL || process.env.BACKEND_URL || '';
@@ -12,17 +21,6 @@ function getApiPublicBaseUrl() {
 function isReceiptEmailEnabled() {
   const v = process.env.SEND_PAYMENT_RECEIPT_EMAIL;
   return v === 'true' || v === '1';
-}
-
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeHtmlAttr(s) {
-  return escapeHtml(s).replace(/"/g, '&quot;');
 }
 
 /**
@@ -66,42 +64,50 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
 
   const subject = `Payment receipt — ${experienceLabel}`;
 
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-  .container { max-width: 600px; margin: 0 auto; padding: 24px; }
-  .header { font-size: 22px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px; }
-  .gold { color: #b8860b; }
-  .box { background: #f7f7f7; border-radius: 8px; padding: 16px; margin: 16px 0; }
-  .row { margin: 8px 0; }
-  .label { color: #666; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-  .cta { display: inline-block; margin-top: 16px; padding: 12px 20px; background: #1a1a1a; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 600; }
-  .note { font-size: 13px; color: #666; margin-top: 24px; }
-  .mono { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all; }
-</style></head><body>
-<div class="container">
-  <div class="header">THE1 — <span class="gold">Payment received</span></div>
-  <p>Thank you. Your card was charged successfully.</p>
-  <div class="box">
-    <div class="row"><span class="label">Experience</span><br/><strong>${escapeHtml(experienceLabel)}</strong></div>
-    <div class="row"><span class="label">Amount</span><br/><strong>${escapeHtml(formattedAmount)}</strong></div>
-    <div class="row"><span class="label">Card</span><br/>•••• ${escapeHtml(lastFour)}</div>
-    <div class="row"><span class="label">Transaction reference</span><br/><span class="mono">${escapeHtml(txnRef)}</span></div>
-  </div>
-  <p><a class="cta" href="${escapeHtmlAttr(appDeepLink)}">Open receipt in THE1 app</a></p>
-  ${
-    pdfUrl
-      ? `<p class="note">PDF receipt (use the app while signed in to download; direct API URLs require authentication):<br/><a href="${escapeHtmlAttr(pdfUrl)}">${escapeHtml(pdfUrl)}</a></p>`
-      : `<p class="note">Open the THE1 app → Cards and Payment History → this payment → <strong>View invoice / receipt</strong> to see or download your PDF.</p>`
+  const detailsInner = `
+    <p style="margin:0 0 12px 0;font-weight:bold;color:#B4C1EA;font-size:15px;">${escapeHtml(experienceLabel)}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Amount:</strong> ${escapeHtml(formattedAmount)}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Card:</strong> •••• ${escapeHtml(lastFour)}</p>
+    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Transaction reference:</strong><br/><span style="font-family:'Courier New',monospace;font-size:12px;word-break:break-all;">${escapeHtml(txnRef)}</span></p>
+  `;
+
+  const linkParagraphs = [];
+  if (pdfUrl) {
+    linkParagraphs.push(
+      renderMutedParagraph(
+        `${escapeHtml('PDF receipt (sign in via the app to download; direct API URLs require authentication):')}<br/><a href="${escapeHtmlAttr(pdfUrl)}" style="color:#B4C1EA;">${escapeHtml(pdfUrl)}</a>`,
+        { rawHtml: true }
+      )
+    );
+  } else {
+    linkParagraphs.push(
+      renderMutedParagraph(
+        'Open the THE1 app, go to Cards and Payment History, open this payment, then use View invoice / receipt to see or download your PDF.',
+        { rawHtml: false }
+      )
+    );
   }
-  ${
-    jsonUrl
-      ? `<p class="note">Invoice data (JSON): <a href="${escapeHtmlAttr(jsonUrl)}">${escapeHtml(jsonUrl)}</a></p>`
-      : ''
+  if (jsonUrl) {
+    linkParagraphs.push(
+      renderMutedParagraph(
+        `${escapeHtml('Invoice data (JSON):')} <a href="${escapeHtmlAttr(jsonUrl)}" style="color:#B4C1EA;">${escapeHtml(jsonUrl)}</a>`,
+        { rawHtml: true }
+      )
+    );
   }
-</div>
-</body></html>`;
+
+  const bodyHtml = [
+    renderBoldLine('Payment received'),
+    renderMutedParagraph('Thank you. Your card was charged successfully.'),
+    renderDetailPanel(detailsInner),
+    renderPrimaryCta({ href: appDeepLink, label: 'Open receipt in THE1 app' }),
+    ...linkParagraphs,
+  ].join('');
+
+  const html = renderEmailDocument({
+    preheader: `${formattedAmount} charged — ${experienceLabel}`,
+    bodyHtml,
+  });
 
   const textParts = [
     'THE1 — Payment received',
@@ -119,7 +125,7 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
   if (jsonUrl) {
     textParts.push(`Invoice JSON: ${jsonUrl}`);
   }
-  textParts.push('', '— THE1 Platform');
+  textParts.push('', '— The 1');
 
   await sendEmail({
     to,

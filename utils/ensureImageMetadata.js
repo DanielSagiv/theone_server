@@ -1,5 +1,5 @@
 const { uploadBufferToS3 } = require('./s3');
-const { enrichMediaItemInPlace } = require('./imageAssetMeta');
+const { enrichMediaItemInPlace, ensureListThumbUrlInPlace } = require('./imageAssetMeta');
 
 /**
  * Upload helper for thumbnail JPEGs during enrichment (same cache policy as main assets).
@@ -23,6 +23,7 @@ async function enrichLocationImageFields(location) {
   if (Array.isArray(loc.media)) {
     for (const item of loc.media) {
       if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+      if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
     }
   }
   if (Array.isArray(loc.seats)) {
@@ -30,6 +31,7 @@ async function enrichLocationImageFields(location) {
       if (!seat || !Array.isArray(seat.media)) continue;
       for (const item of seat.media) {
         if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+        if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
       }
     }
   }
@@ -38,6 +40,7 @@ async function enrichLocationImageFields(location) {
       if (!unit || !Array.isArray(unit.media)) continue;
       for (const item of unit.media) {
         if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+        if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
       }
     }
   }
@@ -55,6 +58,7 @@ async function enrichEventImageFields(event) {
   if (Array.isArray(ev.media)) {
     for (const item of ev.media) {
       if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+      if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
     }
   }
   if (Array.isArray(ev.seats)) {
@@ -62,6 +66,7 @@ async function enrichEventImageFields(event) {
       if (!seat || !Array.isArray(seat.media)) continue;
       for (const item of seat.media) {
         if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+        if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
       }
     }
   }
@@ -70,6 +75,7 @@ async function enrichEventImageFields(event) {
       if (!unit || !Array.isArray(unit.media)) continue;
       for (const item of unit.media) {
         if (await enrichMediaItemInPlace(item, uploadEnrichmentThumb)) dirty = true;
+        if (await ensureListThumbUrlInPlace(item, uploadEnrichmentThumb)) dirty = true;
       }
     }
   }

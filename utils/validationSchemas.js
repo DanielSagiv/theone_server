@@ -9,7 +9,8 @@ const assetSchema = Joi.object({
   width: Joi.number().min(0).optional(),
   height: Joi.number().min(0).optional(),
   byte_size: Joi.number().min(0).optional(),
-  thumb_url: Joi.string().uri().allow('', null).optional()
+  thumb_url: Joi.string().uri().allow('', null).optional(),
+  list_thumb_url: Joi.string().uri().allow('', null).optional()
 });
 
 const sentimentSchema = Joi.object({
@@ -644,6 +645,35 @@ const updateEntityStatusSchema = Joi.object({
   first_coe_deduction_enabled: Joi.boolean().optional()
 });
 
+const industryEnum = [
+  'fintech',
+  'cyber',
+  'social',
+  'sales',
+  'e-commerce',
+  'AI',
+  'energy',
+  'crypto',
+  'banking',
+  'real-estate',
+  'tech',
+  'other',
+];
+
+/**
+ * Admin-only: create a live client user (no pending approval flow).
+ */
+const adminCreateClientSchema = Joi.object({
+  email: Joi.string().email().required(),
+  firstName: Joi.string().min(2).trim().required(),
+  lastName: Joi.string().min(2).trim().required(),
+  phone: Joi.string().trim().min(10).optional().allow('', null),
+  dateOfBirth: Joi.date().max('now').optional().allow(null),
+  industry: Joi.string().valid(...industryEnum).optional(),
+  industryCustom: Joi.string().allow('', null).optional(),
+  first_coe_deduction_enabled: Joi.boolean().default(false),
+});
+
 const updateRoleSchema = Joi.object({
   role: Joi.string().valid('admin', 'client', 'runner').required()
 });
@@ -692,6 +722,54 @@ const resendVerificationSchema = Joi.object({
     })
 });
 
+/** Request passwordless login OTP */
+const loginOtpRequestSchema = Joi.object({
+  email: Joi.string().email().required()
+});
+
+/** Verify passwordless login OTP */
+const loginOtpVerifySchema = Joi.object({
+  email: Joi.string().email().required(),
+  code: Joi.string()
+    .length(6)
+    .pattern(/^[0-9]+$/)
+    .required()
+    .messages({
+      'string.length': 'Sign-in code must be 6 digits',
+      'string.pattern.base': 'Sign-in code must contain only numbers',
+      'any.required': 'Sign-in code is required'
+    })
+});
+
+/** Client PUT /coes/my/:id/request — edit own request while status is request */
+const clientRequestEventSelectionSchema = Joi.object({
+  event_id: Joi.string().hex().length(24).required(),
+  seat_category: Joi.string().allow('', null),
+  simple_joint_manual_price: Joi.number().min(0).allow(null),
+  simple_joint_the1_fee_percent: Joi.number().min(0).max(100).allow(null),
+  venue_catalog_price: Joi.number().min(0).allow(null),
+  the1_base_price: Joi.number().min(0).allow(null),
+  the1_fee_percent: Joi.number().min(0).max(100).allow(null),
+});
+
+const updateClientRequestCOESchema = Joi.object({
+  start_date: Joi.date().required(),
+  end_date: Joi.date().min(Joi.ref('start_date')).required(),
+  city: Joi.string().min(1).max(200).required(),
+  party_size: Joi.number().integer().min(1).required(),
+  budget: Joi.object({
+    max: Joi.number().min(0).required(),
+    currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD'),
+  }).required(),
+  seat_preferences: Joi.string().max(2000).allow(''),
+  specific_preferences: Joi.string().max(2000).allow(''),
+  event_selections: Joi.array().items(clientRequestEventSelectionSchema).default([]),
+  prioritized_event_ids: Joi.array()
+    .items(Joi.string().hex().length(24))
+    .optional(),
+  rebuild_events: Joi.boolean().default(false),
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -699,6 +777,7 @@ module.exports = {
   resetPasswordSchema,
   updateProfileSchema,
   updateEntityStatusSchema,
+  adminCreateClientSchema,
   updateRoleSchema,
   updateVisibilityStatusSchema,
   updateUserTierSchema,
@@ -722,5 +801,8 @@ module.exports = {
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema,
   verifyEmailSchema,
-  resendVerificationSchema
+  resendVerificationSchema,
+  loginOtpRequestSchema,
+  loginOtpVerifySchema,
+  updateClientRequestCOESchema,
 };

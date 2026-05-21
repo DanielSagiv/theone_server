@@ -1,7 +1,55 @@
 const admin = require('firebase-admin');
+const mongoose = require('mongoose');
 const { Expo } = require('expo-server-sdk');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+
+/**
+ * Normalize recipient id when persisting notifications (consistent ObjectId in Mongo).
+ * @param {unknown} userId
+ * @returns {unknown}
+ */
+function normalizeRecipientUserIdForWrite(userId) {
+  if (userId == null) return userId;
+  if (userId instanceof mongoose.Types.ObjectId) return userId;
+  const s = String(userId);
+  if (mongoose.Types.ObjectId.isValid(s) && new mongoose.Types.ObjectId(s).toString() === s) {
+    return new mongoose.Types.ObjectId(s);
+  }
+  return userId;
+}
+
+/**
+ * Match notifications for this user (ObjectId or legacy string `user_id` in DB).
+ * @param {unknown} userId
+ * @returns {Record<string, unknown>}
+ */
+function recipientUserIdQuery(userId) {
+  if (userId == null) return { user_id: userId };
+  const s = String(userId);
+  if (mongoose.Types.ObjectId.isValid(s) && new mongoose.Types.ObjectId(s).toString() === s) {
+    const oid = new mongoose.Types.ObjectId(s);
+    return { $or: [{ user_id: oid }, { user_id: s }] };
+  }
+  return { user_id: userId };
+}
+
+/**
+ * Combine recipient match with additional AND conditions.
+ * @param {unknown} userId
+ * @param {Record<string, unknown>} extra
+ * @returns {Record<string, unknown>}
+ */
+function notificationQueryForUser(userId, extra = {}) {
+  const rec = recipientUserIdQuery(userId);
+  if (!extra || Object.keys(extra).length === 0) {
+    return rec;
+  }
+  if (rec.$or) {
+    return { $and: [rec, extra] };
+  }
+  return { ...rec, ...extra };
+}
 
 /**
  * Notification Service
@@ -259,6 +307,8 @@ function generateDeepLink(type, data) {
  */
 async function createNotification(userId, type, data) {
   try {
+    userId = normalizeRecipientUserIdForWrite(userId) ?? userId;
+
     // Check for existing notification to prevent duplicates (idempotency)
     
     // For coe_requested notifications, check for existing notification with same COE
@@ -651,17 +701,13 @@ function buildPushDataFromNotification(notification) {
  */
 async function sendPushNotification(userId, notification) {
   try {
-    if (!firebaseInitialized) {
-      console.warn('[NotificationService] Firebase not initialized, skipping push notification');
-      return { success: false, reason: 'firebase_not_initialized' };
-    }
-
-    // Get user's push tokens
-    const user = await User.findById(userId);
+    // Expo push does not require Firebase; native FCM/APNs branches guard separately.
+    const uid = normalizeRecipientUserIdForWrite(userId) ?? userId;
+    const user = await User.findById(uid);
     
     // Enhanced diagnostic logging to understand why tokens aren't found
     if (!user) {
-      console.error(`[NotificationService] ❌ User not found for userId: ${userId} (type: ${typeof userId})`);
+      console.error(`[NotificationService] ❌ User not found for userId: ${uid} (type: ${typeof uid})`);
       return { success: false, reason: 'user_not_found' };
     }
     
@@ -677,12 +723,12 @@ async function sendPushNotification(userId, notification) {
     });
     
     if (!user.push_tokens || user.push_tokens.length === 0) {
-      console.log(`[NotificationService] ⚠️ No push tokens found for user ${userId}`);
+      console.log(`[NotificationService] ⚠️ No push tokens found for user ${uid}`);
       return { success: false, reason: 'no_push_tokens' };
     }
     
     console.log(`[NotificationService] User has ${user.push_tokens.length} push token(s):`, {
-      user_id: userId?.toString(),
+      user_id: uid?.toString(),
       token_count: user.push_tokens.length,
       tokens: user.push_tokens.map(t => ({
         token_preview: t.token?.substring(0, 20) + '...',
@@ -1257,7 +1303,7 @@ async function createAndSendNotification(userId, type, data) {
  * @param {string} userId - User ID
  * @param {Object} filters - Filter options { read, type }
  * @param {Object} pagination - Pagination options { page, limit }
- * @returns {Promise<Object>} Notifications with pagination
+ * @returns {Promise<Object>} Notifications with pagination and `unread_count` scoped to the same filters as the list (plus `read: false`).
  */
 async function getUserNotifications(userId, filters = {}, pagination = {}, isAdmin = false) {
   try {
@@ -1266,34 +1312,32 @@ async function getUserNotifications(userId, filters = {}, pagination = {}, isAdm
     const limit = Math.min(parseInt(pagination.limit) || 20, 100);
     const skip = (page - 1) * limit;
 
-    // Build query
-    const query = { user_id: userId };
+    // Build query (ObjectId or legacy string `user_id` on stored documents)
+    const extraConditions = {};
     if (read !== undefined) {
-      query.read = read === 'true' || read === true;
+      extraConditions.read = read === 'true' || read === true;
     }
     if (type) {
-      // Support comma-separated types (e.g., "coe_approved,coe_paid,coe_completed")
       if (type.includes(',')) {
         const types = type.split(',').map(t => t.trim()).filter(t => t);
-        query.type = { $in: types };
+        extraConditions.type = { $in: types };
       } else {
-        query.type = type;
+        extraConditions.type = type;
       }
     }
-    
-    // Date filtering
     if (startDate || endDate) {
-      query.createdAt = {};
+      extraConditions.createdAt = {};
       if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
+        extraConditions.createdAt.$gte = new Date(startDate);
       }
       if (endDate) {
-        // Add 1 day to endDate to include the full day
         const end = new Date(endDate);
         end.setDate(end.getDate() + 1);
-        query.createdAt.$lt = end;
+        extraConditions.createdAt.$lt = end;
       }
     }
+
+    const query = notificationQueryForUser(userId, extraConditions);
 
     // Get notifications
     // Use createdAt (camelCase) since timestamps: true creates createdAt, not created_at
@@ -1309,7 +1353,6 @@ async function getUserNotifications(userId, filters = {}, pagination = {}, isAdm
     // For admin users, fetch fresh COE status to ensure it's up-to-date
     if (isAdmin) {
       const COE = require('../models/COE');
-      const mongoose = require('mongoose');
       for (const notification of notifications) {
         if (notification.data?.coe_id && notification.type?.startsWith('coe_')) {
           try {
@@ -1374,8 +1417,14 @@ async function getUserNotifications(userId, filters = {}, pagination = {}, isAdm
     // Get total count
     const total = await Notification.countDocuments(query);
 
-    // Get unread count
-    const unreadCount = await Notification.countDocuments({ user_id: userId, read: false });
+    // Unread count must match the same scope as the list (type / date / read filters).
+    // Previously this always counted all unread types, so e.g. "Messages" showed an empty list
+    // while the header still showed unread from `coe_requested` or other types.
+    const unreadQuery = notificationQueryForUser(userId, {
+      ...extraConditions,
+      read: false
+    });
+    const unreadCount = await Notification.countDocuments(unreadQuery);
 
     return {
       notifications: uniqueNotifications,
@@ -1401,10 +1450,9 @@ async function getUserNotifications(userId, filters = {}, pagination = {}, isAdm
  */
 async function markAsRead(notificationId, userId) {
   try {
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      user_id: userId
-    });
+    const notification = await Notification.findOne(
+      notificationQueryForUser(userId, { _id: notificationId })
+    );
 
     if (!notification) {
       throw new Error('Notification not found');
@@ -1431,7 +1479,7 @@ async function markAsRead(notificationId, userId) {
 async function markAllAsRead(userId) {
   try {
     const result = await Notification.updateMany(
-      { user_id: userId, read: false },
+      notificationQueryForUser(userId, { read: false }),
       { 
         $set: { 
           read: true,
@@ -1456,10 +1504,9 @@ async function markAllAsRead(userId) {
  */
 async function getUnreadCount(userId) {
   try {
-    const count = await Notification.countDocuments({
-      user_id: userId,
-      read: false
-    });
+    const count = await Notification.countDocuments(
+      notificationQueryForUser(userId, { read: false })
+    );
 
     return count;
   } catch (error) {
@@ -1476,10 +1523,9 @@ async function getUnreadCount(userId) {
  */
 async function markAsUnread(notificationId, userId) {
   try {
-    const notification = await Notification.findOne({
-      _id: notificationId,
-      user_id: userId
-    });
+    const notification = await Notification.findOne(
+      notificationQueryForUser(userId, { _id: notificationId })
+    );
 
     if (!notification) {
       throw new Error('Notification not found');
@@ -1506,10 +1552,9 @@ async function markAsUnread(notificationId, userId) {
  */
 async function deleteNotification(notificationId, userId) {
   try {
-    const notification = await Notification.findOneAndDelete({
-      _id: notificationId,
-      user_id: userId
-    });
+    const notification = await Notification.findOneAndDelete(
+      notificationQueryForUser(userId, { _id: notificationId })
+    );
 
     if (!notification) {
       throw new Error('Notification not found');
@@ -1529,10 +1574,9 @@ async function deleteNotification(notificationId, userId) {
  */
 async function deleteAllRead(userId) {
   try {
-    const result = await Notification.deleteMany({
-      user_id: userId,
-      read: true
-    });
+    const result = await Notification.deleteMany(
+      notificationQueryForUser(userId, { read: true })
+    );
 
     return {
       deletedCount: result.deletedCount

@@ -12,6 +12,10 @@ const { enrichCOESeatUpgradeMedia } = require('../utils/ensureImageMetadata');
  * @description Business logic for COE operations
  */
 
+/** Location fields returned on populated events for client map / venue detail. */
+const COE_EVENT_LOCATION_SELECT =
+  'name type media seats address geo description tagline';
+
 /**
  * Validate that all selected seats are available before COE creation
  * @param {Array} selectedSeats - Array of seat data
@@ -214,12 +218,54 @@ function pctToFraction(n) {
 }
 
 /**
+ * Catalog / venue-original base for a seat (matches mobile calculateCostBreakdown strikethrough sources).
+ * @param {Object} row
+ * @returns {number}
+ */
+function getCatalogBaseForSeat(row) {
+  const ep = Number(row.event_price) || Number(row.base_price) || 0;
+  const isSimpleJoint =
+    row.is_simple_joint === true || row.is_simple_joint === 'true';
+  if (isSimpleJoint) {
+    const orig = Number(row.simple_joint_original_price);
+    if (Number.isFinite(orig) && orig >= 0) {
+      return orig;
+    }
+    return ep;
+  }
+  const vcRaw = row.venue_catalog_price;
+  const vc = vcRaw != null ? Number(vcRaw) : null;
+  if (
+    vc != null &&
+    Number.isFinite(vc) &&
+    vc > 0 &&
+    Math.round(vc * 100) !== Math.round(ep * 100)
+  ) {
+    return vc;
+  }
+  return ep;
+}
+
+/**
+ * Negotiated (charged) base for a seat.
+ * @param {Object} row
+ * @returns {number}
+ */
+function getNegotiatedBaseForSeat(row) {
+  return Number(row.event_price) || Number(row.base_price) || 0;
+}
+
+/**
  * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
  * from selected_seats using per-event Location percents. Rows without a resolved Location use global getCoeTaxRate() on B for sales tax only.
  * @param {Array<Object>} selectedSeats
+ * @param {{ useCatalogBase?: boolean }} [options]
  * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
  */
-async function computePricingTotalsFromSelectedSeats(selectedSeats) {
+async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}) {
+  const resolveBase = options.useCatalogBase
+    ? getCatalogBaseForSeat
+    : getNegotiatedBaseForSeat;
   const emptyBreakdown = () => ({
     gratuity_total: 0,
     venue_admin_fee_total: 0,
@@ -265,7 +311,7 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
   let processingSum = 0;
 
   for (const row of selectedSeats) {
-    const B = Number(row.event_price) || Number(row.base_price) || 0;
+    const B = resolveBase(row);
     subtotal += B;
 
     const eid = idStr(row);
@@ -404,7 +450,11 @@ async function applyPricingFromSelectedSeats(coe) {
       the1_fee_total: 0,
       processing_fee_total: 0
     };
-    if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
+    coe.catalog_total = 0;
+    if (typeof coe.markModified === 'function') {
+      coe.markModified('fee_breakdown');
+      coe.markModified('catalog_total');
+    }
     syncCoeEventLineItemsFromSelectedSeats(coe);
     return;
   }
@@ -414,8 +464,52 @@ async function applyPricingFromSelectedSeats(coe) {
   coe.fees = r.fees;
   coe.total = r.total;
   coe.fee_breakdown = r.fee_breakdown;
-  if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
+  const catalogR = await computePricingTotalsFromSelectedSeats(seats, {
+    useCatalogBase: true,
+  });
+  coe.catalog_total = catalogR.total;
+  if (typeof coe.markModified === 'function') {
+    coe.markModified('fee_breakdown');
+    coe.markModified('catalog_total');
+  }
   syncCoeEventLineItemsFromSelectedSeats(coe);
+}
+
+/**
+ * Attach catalog_total for summary strikethrough (runtime field when not persisted).
+ * @param {Object} coe
+ * @returns {Promise<void>}
+ */
+async function attachCatalogTotalDisplay(coe) {
+  if (!coe) return;
+  const seats = coe.selected_seats;
+  if (!Array.isArray(seats) || seats.length === 0) {
+    if (typeof coe.set === 'function') {
+      coe.set('catalog_total', null);
+      coe.set('catalog_total_display_applies', false);
+    } else {
+      coe.catalog_total = null;
+      coe.catalog_total_display_applies = false;
+    }
+    return;
+  }
+  try {
+    const catalogR = await computePricingTotalsFromSelectedSeats(seats, {
+      useCatalogBase: true,
+    });
+    const negotiatedTotal = Number(coe.total || 0);
+    const catalogTotal = catalogR.total;
+    const applies = catalogTotal > negotiatedTotal + 0.009;
+    if (typeof coe.set === 'function') {
+      coe.set('catalog_total', catalogTotal);
+      coe.set('catalog_total_display_applies', applies);
+    } else {
+      coe.catalog_total = catalogTotal;
+      coe.catalog_total_display_applies = applies;
+    }
+  } catch (err) {
+    console.warn('[coeService] attachCatalogTotalDisplay failed:', err.message);
+  }
 }
 
 /**
@@ -965,6 +1059,73 @@ async function createCOE(coeData, createdBy) {
       { path: 'created_by', select: 'firstName lastName email role' }
     ]);
 
+    /**
+     * When a client creates a COE in `request` status, notify the assigned admin (push + in-app).
+     * Centralized here so all entry points (bot create_coe_draft, request-only shortcut, etc.) stay consistent.
+     */
+    const normActorId = id => {
+      if (id == null) {
+        return '';
+      }
+      if (id instanceof mongoose.Types.ObjectId) {
+        return id.toString();
+      }
+      if (typeof id === 'object' && id._id != null) {
+        return String(id._id);
+      }
+      return String(id);
+    };
+    const clientIdStr = normActorId(coeData.client_id);
+    const createdByStr = normActorId(createdBy);
+    const clientRoleNorm = (client.role != null ? String(client.role) : '').toLowerCase();
+    const looksLikeClientUser =
+      client.role == null ||
+      String(client.role).trim() === '' ||
+      clientRoleNorm === 'client';
+    const shouldNotifyAdminNewRequest =
+      coe.status === 'request' &&
+      admin &&
+      client &&
+      clientIdStr &&
+      createdByStr &&
+      clientIdStr === createdByStr &&
+      looksLikeClientUser;
+
+    if (shouldNotifyAdminNewRequest) {
+      try {
+        const notificationService = require('./notificationService');
+        const clientName =
+          `${client.firstName || ''} ${client.lastName || ''}`.trim() ||
+          client.email ||
+          'A client';
+        await notificationService.createAndSendNotification(
+          admin._id.toString(),
+          'coe_requested',
+          {
+            coe_id: coe._id,
+            coe: { name: coe.name },
+            sender_name: clientName,
+            sender_id: client._id
+          }
+        );
+        console.log('[COE_SERVICE] coe_requested notification sent for new client request', {
+          adminId: admin._id.toString(),
+          coeId: coe._id.toString()
+        });
+      } catch (notifErr) {
+        console.error('[COE_SERVICE] coe_requested notification failed:', notifErr);
+      }
+    } else if (coe.status === 'request' && admin && client) {
+      console.warn('[COE_SERVICE] Skipping coe_requested notification (gate)', {
+        coeId: coe._id?.toString(),
+        coeStatus: coe.status,
+        clientIdStr,
+        createdByStr,
+        clientRole: client.role,
+        hasAdmin: !!admin
+      });
+    }
+
     // Best-effort history logging for COE creation
     try {
       const { logIncident } = require('./coeHistoryService');
@@ -1132,7 +1293,7 @@ async function getCOEById(coeId) {
         populate: [
           {
             path: 'location_id',
-            select: 'name type media seats'
+            select: COE_EVENT_LOCATION_SELECT
           }
         ]
       })
@@ -1169,7 +1330,7 @@ async function getCOEById(coeId) {
             // Try to populate it manually
             try {
               const populatedEvent = await Event.findById(eventIdValue)
-                .populate('location_id', 'name type media seats')
+                .populate('location_id', COE_EVENT_LOCATION_SELECT)
                 .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone');
               if (populatedEvent) {
                 eventItem.event_id = populatedEvent;
@@ -1197,6 +1358,7 @@ async function getCOEById(coeId) {
       console.warn('[getCOEById] ensureProposalOptionLabelIfMissing:', labelErr.message);
     }
 
+    await attachCatalogTotalDisplay(coe);
     return coe;
   } catch (error) {
     // If validation fails, try using lean() to bypass validation
@@ -1216,7 +1378,7 @@ async function getCOEById(coeId) {
             populate: [
               {
                 path: 'location_id',
-                select: 'name type media seats'
+                select: COE_EVENT_LOCATION_SELECT
               }
             ]
           })
@@ -1250,7 +1412,7 @@ async function getCOEById(coeId) {
                 
                 try {
                   const populatedEvent = await Event.findById(eventIdValue)
-                    .populate('location_id', 'name type media seats')
+                    .populate('location_id', COE_EVENT_LOCATION_SELECT)
                     .select('name description location_id start_datetime end_datetime base_price currency status media seats performers type timezone')
                     .lean();
                   if (populatedEvent) {
@@ -1279,6 +1441,7 @@ async function getCOEById(coeId) {
           console.warn('[getCOEById] ensureProposalOptionLabelIfMissing (lean):', labelErr.message);
         }
         
+        await attachCatalogTotalDisplay(coe);
         return coe;
       } catch (leanError) {
         console.error('Error getting COE with lean():', leanError);
@@ -1408,6 +1571,340 @@ function mergeOriginalRequestDataForUpdate(existingSubdoc, patch) {
     }
   }
   return prev;
+}
+
+/**
+ * Normalize a date field for history comparison.
+ * @param {Date|string|undefined} value
+ * @returns {string|null}
+ */
+function historyNormDate(value) {
+  if (value == null) {
+    return null;
+  }
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Sorted comma-separated event ids for history comparison.
+ * @param {object} coe
+ * @returns {string}
+ */
+function historyEventIdSignature(coe) {
+  return (coe?.events || [])
+    .map(e => {
+      const ref = e?.event_id;
+      if (ref == null) {
+        return '';
+      }
+      if (typeof ref === 'object' && ref._id != null) {
+        return ref._id.toString();
+      }
+      return ref.toString();
+    })
+    .filter(Boolean)
+    .sort()
+    .join(',');
+}
+
+/**
+ * Log experience history when a client updates their request COE.
+ * @param {object} beforeCoe Snapshot before update
+ * @param {object} afterCoe COE after update
+ * @param {string} userId
+ * @param {string} userRole
+ */
+async function logClientRequestUpdateHistory(beforeCoe, afterCoe, userId, userRole) {
+  try {
+    const { logIncident } = require('./coeHistoryService');
+    const changes = [];
+    const beforeReq = beforeCoe?.original_request_data || {};
+    const afterReq = afterCoe?.original_request_data || {};
+
+    const beforeStart = historyNormDate(
+      beforeCoe?.start_date || beforeReq.requested_dates?.start_date,
+    );
+    const afterStart = historyNormDate(
+      afterCoe?.start_date || afterReq.requested_dates?.start_date,
+    );
+    const beforeEnd = historyNormDate(
+      beforeCoe?.end_date || beforeReq.requested_dates?.end_date,
+    );
+    const afterEnd = historyNormDate(
+      afterCoe?.end_date || afterReq.requested_dates?.end_date,
+    );
+    if (beforeStart !== afterStart || beforeEnd !== afterEnd) {
+      changes.push({
+        field: 'dates',
+        label: 'Requested dates',
+        from: { start: beforeStart, end: beforeEnd },
+        to: { start: afterStart, end: afterEnd },
+        message: 'Requested dates updated',
+      });
+    }
+
+    const beforeCity = beforeReq.city || null;
+    const afterCity = afterReq.city || null;
+    if (beforeCity !== afterCity) {
+      changes.push({
+        field: 'city',
+        label: 'City',
+        from: beforeCity,
+        to: afterCity,
+        message: `City updated to ${afterCity || '—'}`,
+      });
+    }
+
+    const beforeParty = beforeReq.party_size ?? null;
+    const afterParty = afterReq.party_size ?? null;
+    if (beforeParty !== afterParty) {
+      changes.push({
+        field: 'party_size',
+        label: 'Number of people',
+        from: beforeParty,
+        to: afterParty,
+        message: `Party size updated to ${afterParty ?? '—'}`,
+      });
+    }
+
+    const beforeBudget = beforeReq.budget?.max ?? null;
+    const afterBudget = afterReq.budget?.max ?? null;
+    if (beforeBudget !== afterBudget) {
+      changes.push({
+        field: 'budget',
+        label: 'Budget (max)',
+        from: beforeBudget,
+        to: afterBudget,
+        message: `Budget updated to ${afterBudget ?? '—'}`,
+      });
+    }
+
+    const beforeSeatPref = beforeReq.seat_preferences ?? '';
+    const afterSeatPref = afterReq.seat_preferences ?? '';
+    if (beforeSeatPref !== afterSeatPref) {
+      changes.push({
+        field: 'seat_preferences',
+        label: 'Seat/Table preferences',
+        from: beforeSeatPref || null,
+        to: afterSeatPref || null,
+        message: 'Seat/table preferences updated',
+      });
+    }
+
+    const beforeGenPref =
+      beforeReq.general_preferences ?? beforeReq.specific_preferences ?? '';
+    const afterGenPref =
+      afterReq.general_preferences ?? afterReq.specific_preferences ?? '';
+    if (beforeGenPref !== afterGenPref) {
+      changes.push({
+        field: 'specific_preferences',
+        label: 'Specific preferences',
+        from: beforeGenPref || null,
+        to: afterGenPref || null,
+        message: 'Specific preferences updated',
+      });
+    }
+
+    if (historyEventIdSignature(beforeCoe) !== historyEventIdSignature(afterCoe)) {
+      const beforeCount = (beforeCoe?.events || []).length;
+      const afterCount = (afterCoe?.events || []).length;
+      changes.push({
+        field: 'events',
+        label: 'Included events',
+        from: beforeCount,
+        to: afterCount,
+        message: `Included events updated (${beforeCount} → ${afterCount})`,
+      });
+    }
+
+    const beforeTotal = Number(beforeCoe?.total || 0);
+    const afterTotal = Number(afterCoe?.total || 0);
+    if (beforeTotal !== afterTotal) {
+      changes.push({
+        field: 'total',
+        label: 'Total',
+        from: beforeTotal,
+        to: afterTotal,
+        message: `Total updated from $${beforeTotal.toFixed(2)} to $${afterTotal.toFixed(2)}`,
+      });
+    }
+
+    if (changes.length === 0) {
+      changes.push({
+        field: 'request',
+        label: 'Request',
+        from: null,
+        to: null,
+        message: 'Client updated their experience request',
+      });
+    }
+
+    await logIncident({
+      coe: afterCoe,
+      coeId: afterCoe._id,
+      userId,
+      userRole: userRole || 'client',
+      title: 'Experience request updated',
+      changes,
+    });
+  } catch (historyErr) {
+    console.error(
+      '[updateClientRequestCOE] Failed to log history incident:',
+      historyErr.message,
+    );
+  }
+}
+
+/**
+ * Client updates their own COE while status is request (metadata and/or events via create_coe_draft).
+ * @param {string} coeId
+ * @param {string} userId
+ * @param {object} body Validated updateClientRequestCOESchema payload
+ * @param {Function} executeCreateCoeDraft - async (toolParams, user) => tool result
+ * @param {object} user Mongoose user doc
+ * @returns {Promise<object>} Populated COE
+ */
+async function updateClientRequestCOE(coeId, userId, body, executeCreateCoeDraft, user) {
+  const existingCOE = await COE.findById(coeId);
+  if (!existingCOE) {
+    throw new Error('COE not found');
+  }
+  const beforeSnapshot =
+    typeof existingCOE.toObject === 'function'
+      ? existingCOE.toObject()
+      : { ...existingCOE };
+  if (existingCOE.status !== 'request') {
+    throw new Error('COE is not in request status');
+  }
+  const clientIdStr =
+    existingCOE.client_id?._id?.toString() ||
+    existingCOE.client_id?.toString();
+  if (!clientIdStr || clientIdStr !== userId.toString()) {
+    throw new Error('Permission denied');
+  }
+
+  const {
+    mergeClientOriginalRequestData,
+    buildCreateCoeDraftParamsFromClientRequest,
+  } = require('../utils/clientRequestUpdate');
+
+  const startDate = new Date(body.start_date);
+  const endDate = new Date(body.end_date);
+  const mergedOriginal = mergeClientOriginalRequestData(
+    existingCOE.original_request_data,
+    {
+      ...body,
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+    },
+  );
+
+  const hasEventSelections =
+    body.rebuild_events === true ||
+    (Array.isArray(body.event_selections) && body.event_selections.length > 0);
+
+  if (hasEventSelections) {
+    const toolParams = buildCreateCoeDraftParamsFromClientRequest(body, coeId);
+    const toolResult = await executeCreateCoeDraft(toolParams, user);
+    if (!toolResult?.success) {
+      const msg =
+        toolResult?.error?.message ||
+        toolResult?.message ||
+        'Failed to update request events';
+      throw new Error(msg);
+    }
+    let coe = await getCOEById(coeId);
+    await COE.findByIdAndUpdate(coeId, {
+      $set: {
+        status: 'request',
+        start_date: startDate,
+        end_date: endDate,
+        original_request_data: mergedOriginal,
+        updated_at: new Date(),
+      },
+    });
+    coe = await getCOEById(coeId);
+    await notifyAdminClientRequestUpdated(coe, user);
+    await logClientRequestUpdateHistory(
+      beforeSnapshot,
+      coe,
+      userId,
+      user?.role || 'client',
+    );
+    return coe;
+  }
+
+  const flatUpdate = {
+    status: 'request',
+    start_date: startDate,
+    end_date: endDate,
+    original_request_data: mergedOriginal,
+    updated_at: new Date(),
+  };
+
+  if (Array.isArray(body.event_selections) && body.event_selections.length === 0) {
+    await releaseSelectedSeats(coeId);
+    flatUpdate.events = [];
+    flatUpdate.selected_seats = [];
+    flatUpdate.subtotal = 0;
+    flatUpdate.taxes = 0;
+    flatUpdate.fees = 0;
+    flatUpdate.total = 0;
+    flatUpdate.deposit_required = 0;
+  }
+
+  const coe = await COE.findByIdAndUpdate(
+    coeId,
+    { $set: flatUpdate },
+    { new: true, runValidators: true },
+  )
+    .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
+    .populate('admin_id', 'firstName lastName email')
+    .populate('created_by', 'firstName lastName email');
+
+  if (!coe) {
+    throw new Error('COE not found');
+  }
+
+  await notifyAdminClientRequestUpdated(coe, user);
+  const finalCoe = await getCOEById(coeId);
+  await logClientRequestUpdateHistory(
+    beforeSnapshot,
+    finalCoe,
+    userId,
+    user?.role || 'client',
+  );
+  return finalCoe;
+}
+
+/**
+ * Notify assigned admin when client updates a request COE.
+ * @param {object} coe
+ * @param {object} clientUser
+ */
+async function notifyAdminClientRequestUpdated(coe, clientUser) {
+  try {
+    const adminId =
+      coe.admin_id?._id?.toString() || coe.admin_id?.toString();
+    if (!adminId) {
+      return;
+    }
+    const notificationService = require('./notificationService');
+    const clientName =
+      `${clientUser.firstName || ''} ${clientUser.lastName || ''}`.trim() ||
+      clientUser.email ||
+      'A client';
+    await notificationService.createAndSendNotification(adminId, 'coe_requested', {
+      coe_id: coe._id,
+      coe: { name: coe.name },
+      sender_name: clientName,
+      sender_id: clientUser._id,
+      request_updated: true,
+    });
+  } catch (err) {
+    console.warn('[COE_SERVICE] notifyAdminClientRequestUpdated failed:', err.message);
+  }
 }
 
 /**
@@ -5158,6 +5655,8 @@ module.exports = {
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,
   computePricingTotalsFromSelectedSeats,
+  attachCatalogTotalDisplay,
+  getCatalogBaseForSeat,
   DEFAULT_THE1_FEE_PERCENT_UI,
   applyPricingFromSelectedSeats,
   updateSelectedSeatsStatus,
@@ -5167,6 +5666,7 @@ module.exports = {
   getCOEById,
   getCOEs,
   updateCOE,
+  updateClientRequestCOE,
   deleteCOE,
   addEventToCOE,
   removeEventFromCOE,

@@ -1586,7 +1586,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
     // Determine initial status based on creator role
     // Client-created COEs start as 'request', admin-created COEs start as 'draft'
-    const initialStatus = user.role === 'client' ? 'request' : 'draft';
+    const roleNorm = (user.role != null ? String(user.role) : '').toLowerCase();
+    const initialStatus = roleNorm === 'client' ? 'request' : 'draft';
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Setting initial COE status:', {
       userRole: user.role,
@@ -1832,18 +1833,26 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     
     let coe;
     if (request_coe_id) {
-      // Flow A: upgrade an existing request-only COE into a draft instead of creating a new one.
+      // Flow A / client request edit: upgrade existing request COE in place.
       console.log('[BOT] [COE_CREATION_FULL_DEBUG] Flow A detected - updating existing request COE:', {
         request_coe_id: request_coe_id
       });
-      
-      // Use updateCOE so that seat hold/release logic is respected.
-      // We intentionally DO NOT overwrite original_request_data here; updateCOE
-      // only touches fields present in coeData.
+
+      const existingRequestCoe = await coeService.getCOEById(request_coe_id);
+      const preserveRequestStatus =
+        roleNorm === 'client' && existingRequestCoe?.status === 'request';
+
       coe = await coeService.updateCOE(request_coe_id, {
         ...coeData,
-        status: coeData.status || 'draft'
+        status: preserveRequestStatus ? 'request' : coeData.status || 'draft',
       });
+      coeService.filterSelectedSeatsByEvents(
+        coe,
+        '[create_coe_draft request_coe_id]'
+      );
+      if (coe.isModified && coe.isModified('selected_seats')) {
+        await coe.save();
+      }
     } else {
       // Default behaviour: create a new draft/request COE as before.
       coe = await coeService.createCOE(coeData, user._id);
@@ -1880,42 +1889,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       deposit_required: populatedCOE.deposit_required
     });
 
-    // Send notification to admin if COE status is 'request'
-    if (populatedCOE.status === 'request' && populatedCOE.admin_id) {
-      try {
-        const notificationService = require('./notificationService');
-        const adminId = populatedCOE.admin_id?._id 
-          ? populatedCOE.admin_id._id.toString() 
-          : (populatedCOE.admin_id?.toString ? populatedCOE.admin_id.toString() : String(populatedCOE.admin_id));
-        
-        // Get client info for notification
-        const client = await User.findById(targetClientId).select('firstName lastName');
-        const clientName = client 
-          ? `${client.firstName || ''} ${client.lastName || ''}`.trim() || 'A client'
-          : 'A client';
-        
-        await notificationService.createAndSendNotification(
-          adminId,
-          'coe_requested',
-          {
-            coe_id: populatedCOE._id,
-            coe: { name: populatedCOE.name },
-            sender_name: clientName,
-            sender_id: targetClientId
-          }
-        );
-        
-        console.log('[BOT] Sent COE request notification to admin:', {
-          adminId: adminId,
-          coeId: populatedCOE._id.toString(),
-          coeName: populatedCOE.name,
-          clientName: clientName
-        });
-      } catch (notificationError) {
-        console.error('[BOT] Failed to send COE request notification:', notificationError);
-        // Don't fail COE creation if notification fails
-      }
-    }
+    // Admin push for client `request` COEs is sent from coeService.createCOE (single place).
 
     // Generate seat upgrade offers for draft or request COEs
     if (populatedCOE.status === 'draft' || populatedCOE.status === 'request') {
