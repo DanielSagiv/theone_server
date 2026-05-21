@@ -218,12 +218,54 @@ function pctToFraction(n) {
 }
 
 /**
+ * Catalog / venue-original base for a seat (matches mobile calculateCostBreakdown strikethrough sources).
+ * @param {Object} row
+ * @returns {number}
+ */
+function getCatalogBaseForSeat(row) {
+  const ep = Number(row.event_price) || Number(row.base_price) || 0;
+  const isSimpleJoint =
+    row.is_simple_joint === true || row.is_simple_joint === 'true';
+  if (isSimpleJoint) {
+    const orig = Number(row.simple_joint_original_price);
+    if (Number.isFinite(orig) && orig >= 0) {
+      return orig;
+    }
+    return ep;
+  }
+  const vcRaw = row.venue_catalog_price;
+  const vc = vcRaw != null ? Number(vcRaw) : null;
+  if (
+    vc != null &&
+    Number.isFinite(vc) &&
+    vc > 0 &&
+    Math.round(vc * 100) !== Math.round(ep * 100)
+  ) {
+    return vc;
+  }
+  return ep;
+}
+
+/**
+ * Negotiated (charged) base for a seat.
+ * @param {Object} row
+ * @returns {number}
+ */
+function getNegotiatedBaseForSeat(row) {
+  return Number(row.event_price) || Number(row.base_price) || 0;
+}
+
+/**
  * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
  * from selected_seats using per-event Location percents. Rows without a resolved Location use global getCoeTaxRate() on B for sales tax only.
  * @param {Array<Object>} selectedSeats
+ * @param {{ useCatalogBase?: boolean }} [options]
  * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
  */
-async function computePricingTotalsFromSelectedSeats(selectedSeats) {
+async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}) {
+  const resolveBase = options.useCatalogBase
+    ? getCatalogBaseForSeat
+    : getNegotiatedBaseForSeat;
   const emptyBreakdown = () => ({
     gratuity_total: 0,
     venue_admin_fee_total: 0,
@@ -269,7 +311,7 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats) {
   let processingSum = 0;
 
   for (const row of selectedSeats) {
-    const B = Number(row.event_price) || Number(row.base_price) || 0;
+    const B = resolveBase(row);
     subtotal += B;
 
     const eid = idStr(row);
@@ -408,7 +450,11 @@ async function applyPricingFromSelectedSeats(coe) {
       the1_fee_total: 0,
       processing_fee_total: 0
     };
-    if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
+    coe.catalog_total = 0;
+    if (typeof coe.markModified === 'function') {
+      coe.markModified('fee_breakdown');
+      coe.markModified('catalog_total');
+    }
     syncCoeEventLineItemsFromSelectedSeats(coe);
     return;
   }
@@ -418,8 +464,52 @@ async function applyPricingFromSelectedSeats(coe) {
   coe.fees = r.fees;
   coe.total = r.total;
   coe.fee_breakdown = r.fee_breakdown;
-  if (typeof coe.markModified === 'function') coe.markModified('fee_breakdown');
+  const catalogR = await computePricingTotalsFromSelectedSeats(seats, {
+    useCatalogBase: true,
+  });
+  coe.catalog_total = catalogR.total;
+  if (typeof coe.markModified === 'function') {
+    coe.markModified('fee_breakdown');
+    coe.markModified('catalog_total');
+  }
   syncCoeEventLineItemsFromSelectedSeats(coe);
+}
+
+/**
+ * Attach catalog_total for summary strikethrough (runtime field when not persisted).
+ * @param {Object} coe
+ * @returns {Promise<void>}
+ */
+async function attachCatalogTotalDisplay(coe) {
+  if (!coe) return;
+  const seats = coe.selected_seats;
+  if (!Array.isArray(seats) || seats.length === 0) {
+    if (typeof coe.set === 'function') {
+      coe.set('catalog_total', null);
+      coe.set('catalog_total_display_applies', false);
+    } else {
+      coe.catalog_total = null;
+      coe.catalog_total_display_applies = false;
+    }
+    return;
+  }
+  try {
+    const catalogR = await computePricingTotalsFromSelectedSeats(seats, {
+      useCatalogBase: true,
+    });
+    const negotiatedTotal = Number(coe.total || 0);
+    const catalogTotal = catalogR.total;
+    const applies = catalogTotal > negotiatedTotal + 0.009;
+    if (typeof coe.set === 'function') {
+      coe.set('catalog_total', catalogTotal);
+      coe.set('catalog_total_display_applies', applies);
+    } else {
+      coe.catalog_total = catalogTotal;
+      coe.catalog_total_display_applies = applies;
+    }
+  } catch (err) {
+    console.warn('[coeService] attachCatalogTotalDisplay failed:', err.message);
+  }
 }
 
 /**
@@ -1268,6 +1358,7 @@ async function getCOEById(coeId) {
       console.warn('[getCOEById] ensureProposalOptionLabelIfMissing:', labelErr.message);
     }
 
+    await attachCatalogTotalDisplay(coe);
     return coe;
   } catch (error) {
     // If validation fails, try using lean() to bypass validation
@@ -1350,6 +1441,7 @@ async function getCOEById(coeId) {
           console.warn('[getCOEById] ensureProposalOptionLabelIfMissing (lean):', labelErr.message);
         }
         
+        await attachCatalogTotalDisplay(coe);
         return coe;
       } catch (leanError) {
         console.error('Error getting COE with lean():', leanError);
@@ -5563,6 +5655,8 @@ module.exports = {
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,
   computePricingTotalsFromSelectedSeats,
+  attachCatalogTotalDisplay,
+  getCatalogBaseForSeat,
   DEFAULT_THE1_FEE_PERCENT_UI,
   applyPricingFromSelectedSeats,
   updateSelectedSeatsStatus,

@@ -353,6 +353,7 @@ router.get('/my', authenticateToken, async (req, res) => {
       if (deductionPreviewUser) {
         await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
       }
+      await coeService.attachCatalogTotalDisplay(coe);
     }
 
     // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
@@ -1031,7 +1032,8 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     if (deductionPreviewUser) {
       await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
     }
-    
+    await coeService.attachCatalogTotalDisplay(coe);
+
     // DEBUG: Log original_request_data so we can inspect what mobile receives
     try {
       const originalRequestPreview = coe.original_request_data

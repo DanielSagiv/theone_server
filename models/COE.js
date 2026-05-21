@@ -206,6 +206,8 @@ const coeSchema = new mongoose.Schema({
     processing_fee_total: { type: Number, min: 0, default: 0 }
   },
   total: { type: Number, min: 0, default: 0 },
+  /** Experience total at venue/catalog seat bases (same fee rules as total); for strikethrough UI. */
+  catalog_total: { type: Number, min: 0, default: null },
   subscription_deduction_applied: { type: Boolean, default: false },
   subscription_deduction_amount: { type: Number, min: 0, default: 0 },
   subscription_deduction_note: { type: String, trim: true, default: null },
