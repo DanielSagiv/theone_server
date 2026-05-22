@@ -1,3 +1,12 @@
 {
-  "expo": {}
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "5ddd2611-7fcb-4948-84e2-28b7f52ec9e6"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.sagivdaniel.theoneserver"
+    }
+  }
 }
