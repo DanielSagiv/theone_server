@@ -347,6 +347,67 @@ const authenticateUser = async (email, password, req) => {
 };
 
 /**
+ * Permanently delete the authenticated user's account (self-service).
+ * Soft-deletes via entity_status, scrubs PII, and invalidates all sessions.
+ * @param {import('mongoose').Types.ObjectId|string} userId
+ * @returns {Promise<{ message: string }>}
+ */
+const deleteOwnAccount = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+    if (user.entity_status === 'deleted') {
+      throw new Error('Account already deleted');
+    }
+
+    const uid = user._id.toString();
+    user.entity_status = 'deleted';
+    user.isActive = false;
+    user.push_tokens = [];
+    user.saved_payment_methods = [];
+    user.default_payment_method = undefined;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordCode = undefined;
+    user.resetPasswordExpires = undefined;
+    user.loginOtpCode = undefined;
+    user.loginOtpExpires = undefined;
+    user.loginOtpSentAt = undefined;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationCode = undefined;
+    user.emailVerificationExpires = undefined;
+    user.email = `deleted+${uid}@removed.the1.vip`;
+    user.firstName = 'Deleted';
+    user.lastName = 'Account';
+    user.phone = `+1000${uid.replace(/[^a-f0-9]/gi, '').slice(-10).padStart(10, '0')}`;
+    user.avatarUrl = undefined;
+    user.avatar_thumb_url = undefined;
+    user.avatar_width = undefined;
+    user.avatar_height = undefined;
+    user.avatar_byte_size = undefined;
+    user.socialMedia = undefined;
+    user.goat_customer_id = undefined;
+
+    await user.save();
+
+    await Session.updateMany(
+      { userId: user._id, isActive: true },
+      { $set: { isActive: false } }
+    );
+
+    return { message: 'Account deleted successfully' };
+  } catch (error) {
+    console.error('Delete own account error:', {
+      error: error.message,
+      userId: userId?.toString?.(),
+      timestamp: new Date().toISOString()
+    });
+    throw error;
+  }
+};
+
+/**
  * Logout user by invalidating session
  * @param {string} token - JWT token
  * @returns {Promise<boolean>} Success status
@@ -597,6 +658,7 @@ module.exports = {
   registerUser,
   createClientByAdmin,
   authenticateUser,
+  deleteOwnAccount,
   logoutUser,
   validateSession,
   requestPasswordReset,

@@ -118,6 +118,43 @@ router.put('/profile', authenticateToken, async (req, res) => {
 });
 
 /**
+ * DELETE /v1/users/profile/account
+ * Permanently delete the authenticated user's account (Apple 5.1.1(v) self-service deletion).
+ */
+router.delete('/profile/account', authenticateToken, async (req, res) => {
+  try {
+    await authService.deleteOwnAccount(req.user._id);
+
+    res.json({
+      success: true,
+      message: 'Account deleted successfully'
+    });
+  } catch (error) {
+    const message = error.message || 'Failed to delete account';
+    const status =
+      message === 'User not found'
+        ? 404
+        : message === 'Account already deleted'
+          ? 400
+          : 500;
+
+    console.error('Delete own account error:', {
+      error: message,
+      userId: req.user?._id?.toString?.(),
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(status).json({
+      success: false,
+      error: {
+        code: 'ACCOUNT_DELETE_FAILED',
+        message
+      }
+    });
+  }
+});
+
+/**
  * POST /v1/users/profile/avatar
  * Upload avatar image to S3 and save URL (self only)
  */
