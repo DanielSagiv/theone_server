@@ -1,4 +1,5 @@
 const express = require('express');
+const Joi = require('joi');
 const router = express.Router();
 const COE = require('../models/COE');
 const User = require('../models/User');
@@ -7,7 +8,9 @@ const coeService = require('../services/coeService');
 const { authenticateToken } = require('../middleware/auth');
 const { requireAdmin } = require('../middleware/auth');
 const mergeService = require('../services/mergeService');
-const { executeTool, getOrCreateConversation } = require('../services/botService');
+const { executeTool } = require('../services/botService');
+const { submitExperienceFromFormattedPrompt } = require('../services/coeFormSubmissionService');
+const { generateCorrelationId } = require('../utils/botUtils');
 const notificationService = require('../services/notificationService');
 const { getHistoryForCOE } = require('../services/coeHistoryService');
 const {
@@ -1202,6 +1205,66 @@ router.put('/my/:id/request', authenticateToken, async (req, res) => {
   }
 });
 
+const submitFromFormSchema = Joi.object({
+  prompt: Joi.string().min(1).max(4000).required(),
+});
+
+/**
+ * POST /v1/coes/submit-from-form
+ * Deterministic COE creation from structured mobile form prompts (no OpenAI, no bot conversation).
+ */
+router.post('/submit-from-form', authenticateToken, async (req, res) => {
+  try {
+    const { error, value } = submitFromFormSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message,
+        },
+      });
+    }
+
+    const correlationId = generateCorrelationId();
+    res.set('X-Correlation-ID', correlationId);
+
+    const result = await submitExperienceFromFormattedPrompt(
+      req.user,
+      value.prompt,
+      correlationId
+    );
+
+    if (!result.success) {
+      const statusCode =
+        result.error?.code === 'VALIDATION_ERROR'
+          ? 400
+          : result.error?.code === 'CLIENT_REQUIRED'
+            ? 400
+            : 422;
+      return res.status(statusCode).json({
+        ...result,
+        correlation_id: correlationId,
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: result.data,
+      correlation_id: correlationId,
+    });
+  } catch (err) {
+    console.error('[POST /coes/submit-from-form] Unexpected error:', err);
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'SUBMIT_FAILED',
+        message: err.message || 'Failed to submit experience form',
+      },
+    });
+  }
+});
+
 /**
  * POST /v1/coes/:coeId/build-experience-form
  * Create a "Create COE for client" form (coe_create_form) for an existing request-only COE.
@@ -1312,17 +1375,6 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
           : {}),
       },
     };
-
-    // Append a new assistant message with the coe_create_form structured_data
-    // to the admin's bot conversation so it appears in the Bot screen.
-    const conversation = await getOrCreateConversation(user._id || user.id, { role: user.role });
-    conversation.messages.push({
-      role: 'assistant',
-      content: enrichedData.message || toolResult.data.message || 'Create a new COE draft for this client.',
-      structured_data: enrichedData,
-      timestamp: new Date().toISOString(),
-    });
-    await conversation.save();
 
     res.json({
       success: true,
