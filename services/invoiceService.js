@@ -15,6 +15,20 @@ function generateInvoiceNumber(paymentId) {
 }
 
 /**
+ * Payment method line for invoice HTML/PDF (on-spot uses payer + card copy).
+ * @param {object} payment - Invoice `payment` block
+ * @returns {string}
+ */
+function formatInvoicePaymentMethodLine(payment) {
+  if (payment?.adhoc_payment_summary) {
+    return payment.adhoc_payment_summary;
+  }
+  const brand = payment?.payment_method?.brand || 'N/A';
+  const lastFour = payment?.payment_method?.last_four || 'N/A';
+  return `${brand} •••• ${lastFour}`;
+}
+
+/**
  * Generate invoice HTML template
  * @param {Object} invoiceData - Invoice data
  * @returns {string} HTML string
@@ -287,7 +301,7 @@ function generateInvoiceHTML(invoiceData) {
   <div class="section">
     <div class="section-title">Payment Information</div>
     <div class="payment-info">
-      <p><strong>Payment Method:</strong> ${payment.payment_method.brand} •••• ${payment.payment_method.last_four}</p>
+      <p><strong>Payment Method:</strong> ${formatInvoicePaymentMethodLine(payment)}</p>
       <p><strong>Transaction ID:</strong> ${payment.transaction_id}</p>
       <p><strong>Payment Date:</strong> ${formatDate(payment.completed_at || payment_date)}</p>
       ${refund.refund_amount > 0 ? `
@@ -473,7 +487,7 @@ async function generateInvoicePDF(invoiceData, options = {}) {
          .moveDown(0.5);
       
       doc.fontSize(12)
-         .text(`Payment Method: ${invoiceData.payment.payment_method.brand} •••• ${invoiceData.payment.payment_method.last_four}`)
+         .text(`Payment Method: ${formatInvoicePaymentMethodLine(invoiceData.payment)}`)
          .text(`Transaction ID: ${invoiceData.payment.transaction_id}`)
          .text(`Payment Date: ${new Date(invoiceData.payment.completed_at || invoiceData.payment_date).toLocaleDateString()}`);
       

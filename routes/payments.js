@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const paymentService = require('../services/paymentService');
+const adhocPaymentService = require('../services/adhocPaymentService');
 const Joi = require('joi');
 
 /**
@@ -32,6 +33,124 @@ const updateSavedCardSchema = Joi.object({
   expiry_month: Joi.string().pattern(/^\d{2}$/).optional(),
   expiry_year: Joi.string().pattern(/^\d{2}$/).optional()
 }).min(1);
+
+const adhocPayerSchema = Joi.object({
+  type: Joi.string().valid('client', 'participant', 'guest').required(),
+  display_name: Joi.string().trim().when('type', {
+    is: 'guest',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  email: Joi.string().email().when('type', {
+    is: 'guest',
+    then: Joi.required(),
+    otherwise: Joi.allow('', null).optional(),
+  }),
+  phone: Joi.string().trim().allow('', null).optional(),
+});
+
+const adminAdhocPaymentSchema = Joi.object({
+  coe_id: Joi.string().hex().length(24).required(),
+  event_id: Joi.string().hex().length(24).optional(),
+  amount: Joi.number().positive().required(),
+  description: Joi.string().trim().min(1).max(500).required(),
+  charge_method: Joi.string().valid('saved_card', 'one_time_card').required(),
+  payer_user_id: Joi.string().hex().length(24).when('charge_method', {
+    is: 'saved_card',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  token_id: Joi.string().when('charge_method', {
+    is: 'saved_card',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  card: Joi.object({
+    card: Joi.string().required(),
+    expiry_month: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+    expiry_year: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  }).when('charge_method', {
+    is: 'one_time_card',
+    then: Joi.required(),
+    otherwise: Joi.forbidden(),
+  }),
+  save_to_payer: Joi.boolean().optional(),
+  adhoc_payer: adhocPayerSchema.optional(),
+  adhoc_note: Joi.string().trim().max(500).optional(),
+});
+
+/**
+ * GET /v1/payments/admin/coe/:coeId/payment-options
+ * Admin adhoc screen: COE payers, saved cards, events
+ */
+router.get(
+  '/admin/coe/:coeId/payment-options',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { coeId } = req.params;
+      const eventId = req.query.eventId || req.query.event_id || null;
+      const data = await adhocPaymentService.getAdhocPaymentOptions(coeId, eventId);
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('Adhoc payment options error:', {
+        coe_id: req.params.coeId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      const status = error.message === 'COE not found' ? 404 : 400;
+      res.status(status).json({
+        success: false,
+        error: { code: 'ADHOC_OPTIONS_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/payments/admin/adhoc
+ * Admin on-spot charge (COE or event scope)
+ */
+router.post('/admin/adhoc', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { error, value } = adminAdhocPaymentSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message,
+        },
+      });
+    }
+
+    const idempotencyKey =
+      req.get('Idempotency-Key') || req.get('idempotency-key') || null;
+    const adminId = req.user._id?.toString?.() || req.user.id;
+    const payment = await adhocPaymentService.processAdhocPayment(
+      adminId,
+      value,
+      idempotencyKey
+    );
+
+    res.json({
+      success: true,
+      data: adhocPaymentService.serializePaymentForApi(payment, true),
+      message: 'On-spot payment completed',
+    });
+  } catch (error) {
+    console.error('Admin adhoc payment error:', {
+      admin_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(400).json({
+      success: false,
+      error: { code: 'ADHOC_PAYMENT_FAILED', message: error.message },
+    });
+  }
+});
 
 /**
  * POST /v1/payments/coe/:coeId/intent
@@ -137,11 +256,19 @@ router.post('/:paymentId/refund', authenticateToken, requireAdmin, async (req, r
  */
 router.get('/coe/:coeId', authenticateToken, async (req, res) => {
   try {
-    const payments = await paymentService.getPaymentHistory(req.params.coeId);
-    
+    let payments = await paymentService.getPaymentHistory(req.params.coeId);
+    const paymentTypeFilter = req.query.payment_type;
+    if (paymentTypeFilter) {
+      payments = payments.filter((p) => p.payment_type === paymentTypeFilter);
+    }
+    const isAdmin = req.user.role === 'admin';
+    const data = payments.map((p) =>
+      adhocPaymentService.serializePaymentForApi(p, isAdmin)
+    );
+
     res.json({
       success: true,
-      data: payments
+      data,
     });
     
   } catch (error) {
@@ -315,7 +442,8 @@ router.get('/:paymentId/invoice.pdf', authenticateToken, async (req, res) => {
     // Get invoice data
     const invoiceData = await paymentService.getInvoiceData(
       req.params.paymentId,
-      req.user._id
+      req.user._id,
+      { isAdmin: req.user.role === 'admin' }
     );
     
     // Generate PDF
@@ -364,7 +492,8 @@ router.get('/:paymentId/invoice', authenticateToken, async (req, res) => {
   try {
     const invoiceData = await paymentService.getInvoiceData(
       req.params.paymentId,
-      req.user._id
+      req.user._id,
+      { isAdmin: req.user.role === 'admin' }
     );
     
     res.json({
@@ -402,9 +531,9 @@ router.get('/:paymentId/invoice', authenticateToken, async (req, res) => {
 router.get('/:paymentId', authenticateToken, async (req, res) => {
   try {
     const payment = await paymentService.getPaymentById(req.params.paymentId);
-    
-    // Verify user owns the payment
-    if (payment.user_id._id.toString() !== req.user._id.toString()) {
+    const isAdmin = req.user.role === 'admin';
+
+    if (!paymentService.canAccessPaymentRecord(payment, req.user._id, isAdmin)) {
       return res.status(403).json({
         success: false,
         error: {
@@ -413,10 +542,15 @@ router.get('/:paymentId', authenticateToken, async (req, res) => {
         }
       });
     }
+
+    const data =
+      payment.payment_type === 'adhoc'
+        ? adhocPaymentService.serializePaymentForApi(payment, isAdmin)
+        : payment;
     
     res.json({
       success: true,
-      data: payment
+      data
     });
     
   } catch (error) {

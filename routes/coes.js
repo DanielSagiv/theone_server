@@ -25,6 +25,7 @@ const {
 } = require('../utils/validationSchemas');
 const { canClientEditOwnRequest } = require('../utils/coeUtils');
 const proposalGroupService = require('../services/proposalGroupService');
+const adhocPaymentService = require('../services/adhocPaymentService');
 
 function roundCurrency(amount) {
   return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
@@ -2956,6 +2957,78 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
     });
   }
 });
+
+/**
+ * GET /v1/coes/:id/admin/adhoc-payment-options
+ * Admin on-spot payment screen data (payers, cards, events).
+ */
+router.get(
+  '/:id/admin/adhoc-payment-options',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const eventId = req.query.eventId || req.query.event_id || null;
+      const data = await adhocPaymentService.getAdhocPaymentOptions(
+        req.params.id,
+        eventId
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      console.error('[COES] Adhoc payment options error:', {
+        coe_id: req.params.id,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      const status = error.message === 'COE not found' ? 404 : 400;
+      res.status(status).json({
+        success: false,
+        error: { code: 'ADHOC_OPTIONS_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/admin/adhoc-payment
+ * Admin on-spot GOAT charge for this COE (optional event scope in body).
+ */
+router.post(
+  '/:id/admin/adhoc-payment',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payload = {
+        ...req.body,
+        coe_id: req.params.id,
+      };
+      const idempotencyKey =
+        req.get('Idempotency-Key') || req.get('idempotency-key') || null;
+      const payment = await adhocPaymentService.processAdhocPayment(
+        adminId,
+        payload,
+        idempotencyKey
+      );
+      res.json({
+        success: true,
+        data: adhocPaymentService.serializePaymentForApi(payment, true),
+        message: 'On-spot payment completed',
+      });
+    } catch (error) {
+      console.error('[COES] Admin adhoc payment error:', {
+        coe_id: req.params.id,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'ADHOC_PAYMENT_FAILED', message: error.message },
+      });
+    }
+  }
+);
 
 /**
  * POST /v1/coes/:id/admin/seat-upgrade

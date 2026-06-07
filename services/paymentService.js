@@ -720,9 +720,48 @@ async function processPaymentWebhook(webhookData) {
  * @param {string} coeId - COE ID
  * @param {Object} completedPayment - Completed payment object
  */
+/**
+ * Record successful adhoc payment on COE (reporting only; does not change payment_status).
+ * @param {string} coeId
+ * @param {import('mongoose').Document} completedPayment
+ */
+async function recordAdhocPaymentCompletion(coeId, completedPayment) {
+  try {
+    if (!coeId || !completedPayment) return;
+    const coe = await COE.findById(coeId);
+    if (!coe) {
+      console.error('[PaymentService] COE not found for adhoc rollup:', coeId);
+      return;
+    }
+    const adhocPayments = await Payment.find({
+      coe_id: coeId,
+      status: 'completed',
+      payment_type: 'adhoc',
+    });
+    coe.adhoc_collected_total = adhocPayments.reduce(
+      (sum, p) => sum + (Number(p.amount) || 0),
+      0
+    );
+    await coe.save();
+    console.log('[PaymentService] Adhoc rollup updated:', {
+      coe_id: coeId,
+      adhoc_collected_total: coe.adhoc_collected_total,
+      payment_id: completedPayment._id,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[PaymentService] recordAdhocPaymentCompletion error:', err?.message || err);
+  }
+}
+
 async function updateCOEPaymentStatus(coeId, completedPayment) {
   try {
     if (!coeId) return;
+
+    if (completedPayment?.payment_type === 'adhoc') {
+      await recordAdhocPaymentCompletion(coeId, completedPayment);
+      return;
+    }
     
     const coe = await COE.findById(coeId);
     if (!coe) {
@@ -732,10 +771,11 @@ async function updateCOEPaymentStatus(coeId, completedPayment) {
     const previousPaymentStatus = coe.payment_status;
     const previousRevisionState = coe.revision_state;
 
-    // Get all completed payments for this COE
+    // Get all completed payments for this COE (exclude adhoc — on-spot extras must not affect deposit/full status)
     const payments = await Payment.find({ 
       coe_id: coeId, 
-      status: 'completed' 
+      status: 'completed',
+      payment_type: { $nin: ['adhoc'] },
     });
     
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
@@ -1099,6 +1139,22 @@ async function getPaymentHistory(coeId) {
 }
 
 /**
+ * Whether the user may view invoice/payment detail (owner or admin for on-spot charges).
+ * @param {import('mongoose').Document|object} payment
+ * @param {string} userId
+ * @param {boolean} [isAdmin]
+ * @returns {boolean}
+ */
+function canAccessPaymentRecord(payment, userId, isAdmin = false) {
+  const ownerId =
+    payment.user_id?._id?.toString?.() || payment.user_id?.toString?.();
+  if (ownerId && ownerId === userId.toString()) {
+    return true;
+  }
+  return Boolean(isAdmin && payment.payment_type === 'adhoc');
+}
+
+/**
  * Get payment by ID
  * @param {string} paymentId - Payment ID
  * @returns {Promise<Object>} Payment
@@ -1106,7 +1162,7 @@ async function getPaymentHistory(coeId) {
 async function getPaymentById(paymentId) {
   try {
     const payment = await Payment.findById(paymentId)
-      .populate('user_id', 'firstName lastName email')
+      .populate('user_id', 'firstName lastName email phone')
       .populate('coe_id', 'name total currency');
     
     if (!payment) {
@@ -1187,12 +1243,16 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
       .reduce((sum, p) => sum + (p.refund_amount || 0), 0);
     const netAmount = totalAmount - totalRefunded;
     
-    // Format payments with COE name
-    const formattedPayments = payments.map(payment => ({
-      ...payment,
-      coe_name: payment.coe_id?.name || null,
-      coe_id: payment.coe_id?._id || payment.coe_id || null
-    }));
+    const { withAdhocPaymentSummary } = require('../utils/adhocPaymentDisplay');
+
+    // Format payments with COE name and adhoc payer line when applicable
+    const formattedPayments = payments.map(payment =>
+      withAdhocPaymentSummary({
+        ...payment,
+        coe_name: payment.coe_id?.name || null,
+        coe_id: payment.coe_id?._id || payment.coe_id || null,
+      })
+    );
     
     return {
       payments: formattedPayments,
@@ -1221,8 +1281,9 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
  * @param {string} userId - User ID (for authorization)
  * @returns {Promise<Object>} Invoice data
  */
-async function getInvoiceData(paymentId, userId) {
+async function getInvoiceData(paymentId, userId, options = {}) {
   try {
+    const isAdmin = Boolean(options.isAdmin);
     // Get payment with populated data
     const payment = await Payment.findById(paymentId)
       .populate('user_id', 'firstName lastName email phone')
@@ -1239,14 +1300,20 @@ async function getInvoiceData(paymentId, userId) {
       throw new Error('Payment not found');
     }
     
-    // Verify user owns the payment
-    if (payment.user_id._id.toString() !== userId.toString()) {
+    if (!canAccessPaymentRecord(payment, userId, isAdmin)) {
       throw new Error('Unauthorized: You can only access your own invoices');
     }
     
     // Generate invoice number (using payment ID first 8 chars)
     const invoiceNumber = `INV-${payment._id.toString().substring(0, 8).toUpperCase()}`;
     
+    const {
+      formatAdhocPaidByLine,
+      getAdhocInvoiceBillTo,
+    } = require('../utils/adhocPaymentDisplay');
+    const adhocPaymentSummary = formatAdhocPaidByLine(payment);
+    const adhocBillTo = getAdhocInvoiceBillTo(payment);
+
     // Format invoice data
     const invoice = {
       invoice_number: invoiceNumber,
@@ -1254,12 +1321,13 @@ async function getInvoiceData(paymentId, userId) {
       payment_date: payment.completed_at || payment.created_at,
       status: payment.status === 'completed' ? 'paid' : payment.status,
       
-      // Bill To
-      bill_to: {
-        name: `${payment.user_id.firstName} ${payment.user_id.lastName}`,
-        email: payment.user_id.email,
-        phone: payment.user_id.phone || null
-      },
+      // Bill To — on-spot payer when adhoc; otherwise COE account owner
+      bill_to:
+        adhocBillTo || {
+          name: `${payment.user_id.firstName} ${payment.user_id.lastName}`,
+          email: payment.user_id.email,
+          phone: payment.user_id.phone || null,
+        },
       
       // COE Details
       coe: payment.coe_id ? {
@@ -1283,6 +1351,7 @@ async function getInvoiceData(paymentId, userId) {
           brand: payment.card_brand || 'N/A',
           last_four: payment.card_last_four || 'N/A'
         },
+        adhoc_payment_summary: adhocPaymentSummary || undefined,
         transaction_id: payment.gp_transaction_id || 'N/A',
         completed_at: payment.completed_at
       },
@@ -1801,9 +1870,11 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
     savedMethod.last_used_at = new Date();
     await user.save();
     
-    // Update COE if applicable
-    if (coeId) {
+    // Update COE if applicable (adhoc uses dedicated rollup only)
+    if (coeId && payment.payment_type !== 'adhoc') {
       await updateCOEPaymentStatus(coeId, payment);
+    } else if (coeId && payment.payment_type === 'adhoc') {
+      await recordAdhocPaymentCompletion(coeId, payment);
     }
 
     // Fire-and-forget: post-charge receipt email (SES). Never fail the charge response.
@@ -1995,8 +2066,10 @@ module.exports = {
   processPaymentWebhook,
   processGoatWebhook,
   updateCOEPaymentStatus,
+  recordAdhocPaymentCompletion,
   getPaymentHistory,
   getPaymentById,
+  canAccessPaymentRecord,
   getUserPaymentHistory,
   getInvoiceData,
   verifyWebhookSignature,
@@ -2009,6 +2082,9 @@ module.exports = {
   chargeSavedCard,
   removeSavedCard,
   setDefaultPaymentMethod,
-  updateSavedCard
+  updateSavedCard,
+  getCustomerDisplayName,
+  ensureGoatCustomerId,
+  detectCardBrand,
 };
 

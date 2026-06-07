@@ -361,6 +361,12 @@ const coeSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  /** Sum of completed adhoc (on-spot) charges; separate from deposit/full total_paid. */
+  adhoc_collected_total: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   payment_due_date: Date,
   payment_terms: {
     type: String,

@@ -11,6 +11,13 @@ const paymentSchema = new mongoose.Schema({
     ref: 'COE',
     index: true
   },
+  /** When adhoc charge is scoped to a specific COE event line. */
+  event_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Event',
+    index: true,
+    default: null,
+  },
   user_id: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -37,10 +44,30 @@ const paymentSchema = new mongoose.Schema({
       'full_payment',
       'full_diff',
       'subscription',
-      'refund'
+      'refund',
+      'adhoc'
     ],
     required: true
   },
+  /** Admin who executed an on-spot (adhoc) charge. */
+  created_by_admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null,
+  },
+  /** Payer identity for adhoc charges (guest vs COE client/participant). */
+  adhoc_payer: {
+    type: {
+      type: String,
+      enum: ['client', 'participant', 'guest'],
+    },
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    display_name: { type: String, trim: true },
+    email: { type: String, trim: true },
+    phone: { type: String, trim: true },
+  },
+  adhoc_note: { type: String, trim: true },
   
   // Status
   status: {
@@ -108,6 +135,8 @@ const paymentSchema = new mongoose.Schema({
 
 // Indexes for queries
 paymentSchema.index({ coe_id: 1, status: 1 });
+paymentSchema.index({ coe_id: 1, payment_type: 1 });
+paymentSchema.index({ coe_id: 1, event_id: 1 });
 paymentSchema.index({ user_id: 1, created_at: -1 });
 paymentSchema.index({ gp_transaction_id: 1 }, { unique: true, sparse: true });
 paymentSchema.index({ idempotency_key: 1 }, { unique: true, sparse: true });

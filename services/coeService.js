@@ -1098,19 +1098,19 @@ async function createCOE(coeData, createdBy) {
           `${client.firstName || ''} ${client.lastName || ''}`.trim() ||
           client.email ||
           'A client';
-        await notificationService.createAndSendNotification(
-          admin._id.toString(),
+        const notifyResults = await notificationService.notifyAllLiveAdmins(
           'coe_requested',
           {
             coe_id: coe._id,
             coe: { name: coe.name },
             sender_name: clientName,
-            sender_id: client._id
-          }
+            sender_id: client._id,
+          },
         );
-        console.log('[COE_SERVICE] coe_requested notification sent for new client request', {
-          adminId: admin._id.toString(),
-          coeId: coe._id.toString()
+        console.log('[COE_SERVICE] coe_requested notifications sent for new client request', {
+          coeId: coe._id.toString(),
+          admin_count: notifyResults.length,
+          assigned_admin_id: admin._id.toString(),
         });
       } catch (notifErr) {
         console.error('[COE_SERVICE] coe_requested notification failed:', notifErr);

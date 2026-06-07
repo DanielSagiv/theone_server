@@ -2,7 +2,12 @@
  * Post-charge receipt email (AWS SES).
  * Sent after a successful GOAT source charge; does not block the payment API response.
  */
-const { sendEmail } = require('../utils/emailService');
+const { sendEmail, sendEmailWithAttachments } = require('../utils/emailService');
+const {
+  formatAdhocPaidByLine,
+  getAdhocPayerDisplayName,
+  getAdhocReceiptRecipientEmail,
+} = require('../utils/adhocPaymentDisplay');
 const {
   renderEmailDocument,
   renderPrimaryCta,
@@ -25,18 +30,36 @@ function isReceiptEmailEnabled() {
 
 /**
  * @param {object} params
- * @param {{ email?: string, firstName?: string }} params.user
- * @param {{ _id: import('mongoose').Types.ObjectId, amount?: number, currency?: string, card_last_four?: string, gp_transaction_id?: string }} params.payment
+ * @param {{ email?: string, firstName?: string }} params.user - COE billing account (invoice owner)
+ * @param {object} params.payment
  * @param {string|null} [params.coeName]
+ * @param {string} [params.recipientEmail] - Explicit override
+ * @param {{ email?: string }|null} [params.chargeUser] - Card holder for adhoc recipient fallback
  */
-async function sendPaymentReceiptEmail({ user, payment, coeName }) {
+async function sendPaymentReceiptEmail({
+  user,
+  payment,
+  coeName,
+  recipientEmail,
+  chargeUser,
+}) {
   if (!isReceiptEmailEnabled()) {
     return;
   }
 
-  const to = user?.email;
+  const isAdhoc = payment?.payment_type === 'adhoc';
+  const to =
+    (recipientEmail && String(recipientEmail).includes('@')
+      ? String(recipientEmail).trim()
+      : null) ||
+    (isAdhoc ? getAdhocReceiptRecipientEmail(payment, chargeUser) : null) ||
+    user?.email;
+
   if (!to || typeof to !== 'string' || !to.includes('@')) {
-    console.warn('[PaymentReceiptEmail] skipped: invalid recipient');
+    console.warn('[PaymentReceiptEmail] skipped: invalid recipient', {
+      payment_id: payment?._id,
+      payment_type: payment?.payment_type,
+    });
     return;
   }
 
@@ -52,6 +75,7 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
   }).format(Number.isFinite(amountNum) ? amountNum : 0);
 
   const lastFour = payment.card_last_four ? String(payment.card_last_four) : '****';
+  const adhocPaidByLine = formatAdhocPaidByLine(payment);
   const txnRef = payment.gp_transaction_id ? String(payment.gp_transaction_id) : '—';
   const experienceLabel =
     coeName && String(coeName).trim() ? String(coeName).trim() : 'Your purchase';
@@ -62,17 +86,34 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
   const jsonUrl = base ? `${base}${jsonPath}` : null;
   const appDeepLink = `the1://invoice-view?paymentId=${encodeURIComponent(paymentId)}`;
 
-  const subject = `Payment receipt — ${experienceLabel}`;
+  const payerFirstName = isAdhoc
+    ? getAdhocPayerDisplayName(payment).split(' ')[0]
+    : user?.firstName || 'there';
+
+  const subject = isAdhoc
+    ? `Invoice — ${experienceLabel}`
+    : `Payment receipt — ${experienceLabel}`;
 
   const detailsInner = `
     <p style="margin:0 0 12px 0;font-weight:bold;color:#B4C1EA;font-size:15px;">${escapeHtml(experienceLabel)}</p>
     <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Amount:</strong> ${escapeHtml(formattedAmount)}</p>
-    <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Card:</strong> •••• ${escapeHtml(lastFour)}</p>
+    ${
+      adhocPaidByLine
+        ? `<p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Payment:</strong> ${escapeHtml(adhocPaidByLine)}</p>`
+        : `<p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Card:</strong> •••• ${escapeHtml(lastFour)}</p>`
+    }
     <p style="margin:8px 0;"><strong style="color:#ffffff;font-weight:bold;">Transaction reference:</strong><br/><span style="font-family:'Courier New',monospace;font-size:12px;word-break:break-all;">${escapeHtml(txnRef)}</span></p>
   `;
 
   const linkParagraphs = [];
-  if (pdfUrl) {
+  if (isAdhoc) {
+    linkParagraphs.push(
+      renderMutedParagraph(
+        'Your invoice is attached to this email as a PDF.',
+        { rawHtml: false }
+      )
+    );
+  } else if (pdfUrl) {
     linkParagraphs.push(
       renderMutedParagraph(
         `${escapeHtml('PDF receipt (sign in via the app to download; direct API URLs require authentication):')}<br/><a href="${escapeHtmlAttr(pdfUrl)}" style="color:#B4C1EA;">${escapeHtml(pdfUrl)}</a>`,
@@ -87,7 +128,7 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
       )
     );
   }
-  if (jsonUrl) {
+  if (!isAdhoc && jsonUrl) {
     linkParagraphs.push(
       renderMutedParagraph(
         `${escapeHtml('Invoice data (JSON):')} <a href="${escapeHtmlAttr(jsonUrl)}" style="color:#B4C1EA;">${escapeHtml(jsonUrl)}</a>`,
@@ -96,11 +137,15 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
     );
   }
 
+  const introLine = isAdhoc
+    ? `Hi ${escapeHtml(payerFirstName)}, thank you. Your payment was received.`
+    : 'Thank you. Your card was charged successfully.';
+
   const bodyHtml = [
-    renderBoldLine('Payment received'),
-    renderMutedParagraph('Thank you. Your card was charged successfully.'),
+    renderBoldLine(isAdhoc ? 'Payment received' : 'Payment received'),
+    renderMutedParagraph(introLine, { rawHtml: true }),
     renderDetailPanel(detailsInner),
-    renderPrimaryCta({ href: appDeepLink, label: 'Open receipt in THE1 app' }),
+    ...(isAdhoc ? [] : [renderPrimaryCta({ href: appDeepLink, label: 'Open receipt in THE1 app' })]),
     ...linkParagraphs,
   ].join('');
 
@@ -110,28 +155,73 @@ async function sendPaymentReceiptEmail({ user, payment, coeName }) {
   });
 
   const textParts = [
-    'THE1 — Payment received',
+    isAdhoc ? 'THE1 — Invoice' : 'THE1 — Payment received',
+    '',
+    isAdhoc ? `Hi ${payerFirstName},` : '',
+    isAdhoc ? 'Your invoice is attached as a PDF.' : '',
     '',
     `Experience: ${experienceLabel}`,
     `Amount: ${formattedAmount}`,
-    `Card: **** ${lastFour}`,
+    adhocPaidByLine ? `Payment: ${adhocPaidByLine}` : `Card: **** ${lastFour}`,
     `Transaction reference: ${txnRef}`,
-    '',
-    `Open in app: ${appDeepLink}`,
-  ];
-  if (pdfUrl) {
-    textParts.push('', `PDF (API URL; sign in via app for access): ${pdfUrl}`);
-  }
-  if (jsonUrl) {
-    textParts.push(`Invoice JSON: ${jsonUrl}`);
+  ].filter((line, i, arr) => !(line === '' && arr[i - 1] === ''));
+  if (!isAdhoc) {
+    textParts.push('', `Open in app: ${appDeepLink}`);
+    if (pdfUrl) {
+      textParts.push('', `PDF (API URL; sign in via app for access): ${pdfUrl}`);
+    }
+    if (jsonUrl) {
+      textParts.push(`Invoice JSON: ${jsonUrl}`);
+    }
   }
   textParts.push('', '— The 1');
+
+  const text = textParts.join('\n');
+
+  if (isAdhoc) {
+    try {
+      const paymentService = require('./paymentService');
+      const invoiceService = require('./invoiceService');
+      const ownerId =
+        payment.user_id?._id?.toString?.() || payment.user_id?.toString?.();
+      const invoiceData = await paymentService.getInvoiceData(paymentId, ownerId, {
+        isAdmin: true,
+      });
+      const pdfBuffer = await invoiceService.generateInvoicePDF(invoiceData);
+      const filename = `invoice-${invoiceData.invoice_number}.pdf`;
+
+      await sendEmailWithAttachments({
+        to,
+        subject,
+        html,
+        text,
+        attachments: [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: 'application/pdf',
+          },
+        ],
+      });
+      console.log('[PaymentReceiptEmail] adhoc invoice sent:', {
+        payment_id: paymentId,
+        to,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    } catch (err) {
+      console.error('[PaymentReceiptEmail] adhoc PDF attach failed, sending without attachment:', {
+        payment_id: paymentId,
+        error: err?.message || err,
+      });
+    }
+  }
 
   await sendEmail({
     to,
     subject,
     html,
-    text: textParts.join('\n'),
+    text,
   });
 }
 

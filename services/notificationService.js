@@ -347,7 +347,8 @@ async function createNotification(userId, type, data) {
             existing_notification_id: existing._id?.toString(),
             existing_created_at: existing.createdAt
           });
-          return existing; // Return existing notification instead of creating duplicate
+          existing._wasExisting = true;
+          return existing;
         }
         
         console.log('[NotificationService] 📝 Creating new coe_requested notification (no duplicate found):', {
@@ -401,7 +402,8 @@ async function createNotification(userId, type, data) {
             existing_notification_id: existing._id?.toString(),
             existing_created_at: existing.createdAt
           });
-          return existing; // Return existing notification instead of creating duplicate
+          existing._wasExisting = true;
+          return existing;
         }
         
         // Log when creating new notification for debugging
@@ -472,6 +474,7 @@ async function createNotification(userId, type, data) {
             coe_id: coeIdForQuery,
             existing_notification_id: existing._id?.toString()
           });
+          existing._wasExisting = true;
           return existing;
         }
         
@@ -648,6 +651,7 @@ async function createNotification(userId, type, data) {
           console.log('[NotificationService] ✅ Returning existing notification:', {
             existing_id: existing._id?.toString()
           });
+          existing._wasExisting = true;
           return existing;
         } else {
           console.warn('[NotificationService] ⚠️ Duplicate error but existing notification not found, retrying create...');
@@ -694,6 +698,66 @@ function buildPushDataFromNotification(notification) {
 }
 
 /**
+ * Build a single Expo push message with THE1 branding and dynamic badge.
+ * @param {string} token
+ * @param {Object} notification
+ * @param {number} badgeCount
+ * @returns {Object}
+ */
+function buildExpoPushMessage(token, notification, badgeCount) {
+  const badge = Math.max(0, Number(badgeCount) || 0);
+  return {
+    to: token,
+    sound: 'default',
+    title: notification.title,
+    body: notification.body,
+    data: buildPushDataFromNotification(notification),
+    badge,
+    priority: 'high',
+    android: {
+      channelId: 'default',
+      color: '#D4AF37',
+      priority: 'high',
+      sound: 'default',
+      vibrate: [0, 250, 250, 250],
+    },
+    ios: {
+      sound: 'default',
+      badge,
+    },
+  };
+}
+
+/**
+ * Notify every active live admin (same query as signup admin alerts).
+ * @param {string} type - Notification type
+ * @param {Object} data - Notification payload
+ * @returns {Promise<Array<{adminId: string, result: Object}>>}
+ */
+async function notifyAllLiveAdmins(type, data) {
+  const adminUsers = await User.find({
+    role: 'admin',
+    isActive: true,
+    entity_status: 'live',
+  }).select('_id');
+
+  if (!adminUsers || adminUsers.length === 0) {
+    console.warn('[NotificationService] notifyAllLiveAdmins: no live admins found');
+    return [];
+  }
+
+  const results = await Promise.all(
+    adminUsers.map(async (adminUser) => {
+      const adminId = adminUser._id.toString();
+      const result = await createAndSendNotification(adminId, type, data);
+      return { adminId, result };
+    }),
+  );
+
+  return results;
+}
+
+/**
  * Send push notification to user via FCM
  * @param {string} userId - User ID
  * @param {Object} notification - Notification document
@@ -737,7 +801,9 @@ async function sendPushNotification(userId, notification) {
       }))
     });
 
-    // Prepare FCM message
+    const badgeCount = await getUnreadCount(uid);
+
+    // Prepare FCM/APNs message template
     const message = {
       notification: {
         title: notification.title,
@@ -754,92 +820,79 @@ async function sendPushNotification(userId, notification) {
         payload: {
           aps: {
             sound: 'default',
-            badge: 1
+            badge: badgeCount
           }
         }
       }
     };
 
-    // Send to all user's devices
     const results = [];
     const expoTokens = [];
     const iosApnsTokens = [];
     const androidFcmTokens = [];
-    
-    // Track unique tokens to prevent duplicates
     const seenTokens = new Set();
-    
-    // Separate tokens by type: Expo, iOS APNs, Android FCM
+
     for (const tokenData of user.push_tokens) {
       const token = tokenData.token;
       const platform = tokenData.platform;
-      
-      // Skip if we've already seen this exact token
+
       if (seenTokens.has(token)) {
         console.warn(`[NotificationService] ⚠️ Skipping duplicate push token: ${token.substring(0, 20)}...`);
         continue;
       }
       seenTokens.add(token);
-      
+
       if (token.startsWith('ExponentPushToken[')) {
-        expoTokens.push({
-          token: token,
-          tokenData: tokenData
-        });
+        expoTokens.push({ token, tokenData });
       } else if (platform === 'ios') {
-        // iOS APNs tokens (long hex strings) - send via Firebase APNs gateway
-        iosApnsTokens.push({
-          token: token,
-          tokenData: tokenData
-        });
+        iosApnsTokens.push({ token, tokenData });
       } else {
-        // Android FCM tokens
-        androidFcmTokens.push({
-          token: token,
-          tokenData: tokenData
-        });
+        androidFcmTokens.push({ token, tokenData });
       }
     }
-    
-    console.log(`[NotificationService] Deduplicated push tokens:`, {
+
+    // One delivery channel per platform: iOS Expo only; Android FCM preferred over Expo
+    const iosExpoTokens = expoTokens.filter(({ tokenData }) => tokenData.platform !== 'android');
+    const androidExpoTokens = expoTokens.filter(({ tokenData }) => tokenData.platform === 'android');
+    const hasIosExpo = iosExpoTokens.length > 0;
+    const useAndroidFcm = androidFcmTokens.length > 0;
+    const expoTokensToSend = [
+      ...iosExpoTokens,
+      ...(useAndroidFcm ? [] : androidExpoTokens),
+    ];
+
+    if (hasIosExpo && iosApnsTokens.length > 0) {
+      const staleApns = new Set(iosApnsTokens.map(({ token }) => token));
+      user.push_tokens = user.push_tokens.filter((t) => !staleApns.has(t.token));
+      console.log('[NotificationService] Pruned stale iOS APNs tokens (Expo iOS active):', {
+        removed: staleApns.size,
+        user_id: uid?.toString(),
+      });
+    }
+
+    console.log('[NotificationService] Push routing:', {
       original_count: user.push_tokens.length,
-      unique_expo_tokens: expoTokens.length,
-      unique_ios_apns_tokens: iosApnsTokens.length,
-      unique_android_fcm_tokens: androidFcmTokens.length,
-      total_unique: expoTokens.length + iosApnsTokens.length + androidFcmTokens.length
+      ios_expo: iosExpoTokens.length,
+      android_expo: androidExpoTokens.length,
+      expo_to_send: expoTokensToSend.length,
+      ios_apns: iosApnsTokens.length,
+      android_fcm: androidFcmTokens.length,
+      skip_ios_apns: hasIosExpo,
+      skip_android_expo: useAndroidFcm,
+      badge: badgeCount,
     });
-    
+
     // Send Expo push notifications via Expo API
-    if (expoTokens.length > 0) {
+    if (expoTokensToSend.length > 0) {
       if (!expoClient) {
         initializeExpo();
       }
       
       if (expoClient) {
         try {
-          // Prepare Expo messages with THE1 branding
-          const expoMessages = expoTokens.map(({ token }) => ({
-            to: token,
-            sound: 'default',
-            title: notification.title,
-            body: notification.body,
-            data: buildPushDataFromNotification(notification),
-            badge: 1,
-            priority: 'high',
-            // Android-specific styling (THE1 branding)
-            android: {
-              channelId: 'default',
-              color: '#D4AF37', // THE1 gold color
-              priority: 'high',
-              sound: 'default',
-              vibrate: [0, 250, 250, 250],
-            },
-            // iOS-specific styling
-            ios: {
-              sound: 'default',
-              badge: 1,
-            }
-          }));
+          const expoMessages = expoTokensToSend.map(({ token }) =>
+            buildExpoPushMessage(token, notification, badgeCount),
+          );
           
           // Send via Expo API (chunks messages automatically)
           // First attempt: try sending all tokens together
@@ -917,7 +970,7 @@ async function sendPushNotification(userId, notification) {
             const ungroupedTokens = [];
             
             // First, identify which tokens belong to which project
-            for (const { token, tokenData } of expoTokens) {
+            for (const { token, tokenData } of expoTokensToSend) {
               let found = false;
               for (const [projectId, projectTokens] of Object.entries(projectGroups)) {
                 if (projectTokens.includes(token)) {
@@ -930,35 +983,16 @@ async function sendPushNotification(userId, notification) {
                 }
               }
               if (!found) {
-                // Token not in error details - might be valid, try to send separately
                 ungroupedTokens.push({ token, tokenData });
               }
             }
-            
-            // Send each project group separately
+
             for (const [projectId, projectTokenList] of Object.entries(tokensByProject)) {
               try {
                 console.log(`[NotificationService] Sending ${projectTokenList.length} token(s) for project ${projectId}`);
-                const projectMessages = projectTokenList.map(({ token }) => ({
-                  to: token,
-                  sound: 'default',
-                  title: notification.title,
-                  body: notification.body,
-                  data: buildPushDataFromNotification(notification),
-                  badge: 1,
-                  priority: 'high',
-                  android: {
-                    channelId: 'default',
-                    color: '#D4AF37',
-                    priority: 'high',
-                    sound: 'default',
-                    vibrate: [0, 250, 250, 250],
-                  },
-                  ios: {
-                    sound: 'default',
-                    badge: 1,
-                  }
-                }));
+                const projectMessages = projectTokenList.map(({ token }) =>
+                  buildExpoPushMessage(token, notification, badgeCount),
+                );
                 
                 const projectChunks = expoClient.chunkPushNotifications(projectMessages);
                 const projectTickets = [];
@@ -1005,28 +1039,8 @@ async function sendPushNotification(userId, notification) {
             // Handle ungrouped tokens (try to send them individually)
             for (const { token, tokenData } of ungroupedTokens) {
               try {
-                const message = {
-                  to: token,
-                  sound: 'default',
-                  title: notification.title,
-                  body: notification.body,
-                  data: buildPushDataFromNotification(notification),
-                  badge: 1,
-                  priority: 'high',
-                  android: {
-                    channelId: 'default',
-                    color: '#D4AF37',
-                    priority: 'high',
-                    sound: 'default',
-                    vibrate: [0, 250, 250, 250],
-                  },
-                  ios: {
-                    sound: 'default',
-                    badge: 1,
-                  }
-                };
-                
-                const ticket = await expoClient.sendPushNotificationsAsync([message]);
+                const singleMessage = buildExpoPushMessage(token, notification, badgeCount);
+                const ticket = await expoClient.sendPushNotificationsAsync([singleMessage]);
                 if (ticket[0] && ticket[0].status === 'ok') {
                   results.push({ token, success: true, messageId: ticket[0].id, method: 'expo' });
                   tokenData.last_used_at = new Date();
@@ -1051,10 +1065,9 @@ async function sendPushNotification(userId, notification) {
               }
             }
           } else {
-            // No project conflict - process results normally
-            for (let i = 0; i < expoTokens.length; i++) {
+            for (let i = 0; i < expoTokensToSend.length; i++) {
               const ticket = tickets[i];
-              const { token, tokenData } = expoTokens[i];
+              const { token, tokenData } = expoTokensToSend[i];
               
               if (ticket && ticket.status === 'ok') {
                 results.push({ token, success: true, messageId: ticket.id, method: 'expo' });
@@ -1075,20 +1088,21 @@ async function sendPushNotification(userId, notification) {
           }
         } catch (error) {
           console.error('[NotificationService] Error sending Expo notifications:', error);
-          expoTokens.forEach(({ token }) => {
+          expoTokensToSend.forEach(({ token }) => {
             results.push({ token, success: false, reason: error.message, method: 'expo' });
           });
         }
       } else {
         console.warn('[NotificationService] Expo client not initialized, skipping Expo tokens');
-        expoTokens.forEach(({ token }) => {
+        expoTokensToSend.forEach(({ token }) => {
           results.push({ token, success: false, reason: 'expo_client_not_initialized', method: 'expo' });
         });
       }
     }
-    
-    // Send iOS APNs tokens via Firebase Admin SDK (Firebase routes to Apple APNs)
-    for (const { token, tokenData } of iosApnsTokens) {
+
+    // iOS native APNs only when no Expo iOS token (legacy builds)
+    const iosApnsToSend = hasIosExpo ? [] : iosApnsTokens;
+    for (const { token, tokenData } of iosApnsToSend) {
       try {
         if (!firebaseInitialized) {
           results.push({ token, success: false, reason: 'firebase_not_initialized', method: 'apns' });
@@ -1168,8 +1182,8 @@ async function sendPushNotification(userId, notification) {
       }
     }
     
-    // Send Android FCM tokens via Firebase Admin SDK
-    for (const { token, tokenData } of androidFcmTokens) {
+    const androidFcmToSend = useAndroidFcm ? androidFcmTokens : [];
+    for (const { token, tokenData } of androidFcmToSend) {
       try {
         if (!firebaseInitialized) {
           results.push({ token, success: false, reason: 'firebase_not_initialized', method: 'fcm' });
@@ -1593,6 +1607,7 @@ module.exports = {
   createNotification,
   sendPushNotification,
   createAndSendNotification,
+  notifyAllLiveAdmins,
   getUserNotifications,
   markAsRead,
   markAsUnread,

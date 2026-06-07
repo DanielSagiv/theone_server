@@ -912,64 +912,35 @@ router.post('/push-token', authenticateToken, async (req, res) => {
       });
     }
 
-    // Check if token already exists
-    // Check for exact token match
-    const existingTokenIndex = user.push_tokens.findIndex(t => t.token === tokenStr);
-
-    if (existingTokenIndex >= 0) {
-      // Update existing token
-      console.log(`[UsersRoute] Updating existing push token for user ${req.user._id}:`, {
-        token_preview: tokenStr.substring(0, 20) + '...',
-        platform
+    if (!tokenStr || tokenStr.length === 0) {
+      console.error(`[UsersRoute] ❌ Attempted to register empty token, rejecting:`, {
+        user_id: req.user._id,
+        platform,
       });
-      user.push_tokens[existingTokenIndex].last_used_at = new Date();
-      user.push_tokens[existingTokenIndex].platform = platform;
-    } else {
-      // Check for duplicate tokens (same token string but different object)
-      // This can happen if token was registered multiple times
-      const duplicateIndex = user.push_tokens.findIndex(t => 
-        t.token && t.token.toString() === tokenStr
-      );
-      
-      if (duplicateIndex >= 0) {
-        // Found duplicate - update existing instead of adding new
-        console.log(`[UsersRoute] Found duplicate push token, updating instead of adding:`, {
-          token_preview: tokenStr.substring(0, 20) + '...',
-          platform,
-          existing_index: duplicateIndex
-        });
-        user.push_tokens[duplicateIndex].last_used_at = new Date();
-        user.push_tokens[duplicateIndex].platform = platform;
-      } else {
-        // Add new token
-        console.log(`[UsersRoute] Adding new push token for user ${req.user._id}:`, {
-          token_preview: tokenStr.substring(0, 20) + '...',
-          platform,
-          total_tokens_before: user.push_tokens.length
-        });
-        // Validate token is not empty before adding
-        if (!tokenStr || tokenStr.length === 0) {
-          console.error(`[UsersRoute] ❌ Attempted to add empty token, rejecting:`, {
-            user_id: req.user._id,
-            platform
-          });
-          return res.status(400).json({
-            success: false,
-            error: {
-              code: 'INVALID_TOKEN',
-              message: 'Token cannot be empty'
-            }
-          });
-        }
-
-        user.push_tokens.push({
-          token: tokenStr,
-          platform,
-          registered_at: new Date(),
-          last_used_at: new Date()
-        });
-      }
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Token cannot be empty',
+        },
+      });
     }
+
+    const tokensBefore = user.push_tokens.length;
+    // One active token per platform — drop stale iOS APNs / duplicate Expo+FCM pairs
+    user.push_tokens = user.push_tokens.filter((t) => t.platform !== platform);
+    user.push_tokens.push({
+      token: tokenStr,
+      platform,
+      registered_at: new Date(),
+      last_used_at: new Date(),
+    });
+    console.log(`[UsersRoute] Replaced push token for platform ${platform}:`, {
+      user_id: req.user._id,
+      tokens_before: tokensBefore,
+      tokens_after: user.push_tokens.length,
+      token_preview: tokenStr.substring(0, 20) + '...',
+    });
 
     // Clean up any duplicate tokens (defensive measure)
     const uniqueTokens = [];

@@ -5050,6 +5050,9 @@
                             <button class="tab-button" onclick="switchPaymentTab('history')" id="tab-history">
                                 <span>Payment History</span>
                             </button>
+                            <button class="tab-button" onclick="switchPaymentTab('admin-adhoc')" id="tab-admin-adhoc">
+                                <span>Admin On-spot</span>
+                            </button>
                         </div>
 
                         <!-- Tab Content -->
@@ -5092,6 +5095,84 @@
                                     </div>
                                     <div id="pricingContainer">
                                         <p class="text-muted">Loading...</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Admin on-spot payment Tab -->
+                            <div class="tab-pane" id="pane-admin-adhoc">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3>Admin on-spot payment</h3>
+                                        <p class="text-muted" style="margin:0;">GOAT adhoc charge (sandbox). Does not change COE deposit/full status.</p>
+                                    </div>
+                                    <div class="card-body" style="max-width: 640px;">
+                                        <div class="form-group">
+                                            <label for="adhocCoeId">COE ID</label>
+                                            <input type="text" id="adhocCoeId" class="form-control" placeholder="24-char COE id">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocEventId">Event ID (optional)</label>
+                                            <input type="text" id="adhocEventId" class="form-control" placeholder="24-char event id">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocAmount">Amount (USD)</label>
+                                            <input type="number" id="adhocAmount" class="form-control" min="0.01" step="0.01" placeholder="50.00">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocDescription">Description</label>
+                                            <input type="text" id="adhocDescription" class="form-control" placeholder="Mid-event extra">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocChargeMethod">Charge method</label>
+                                            <select id="adhocChargeMethod" class="form-control" onchange="toggleAdhocMethodFields()">
+                                                <option value="saved_card">Saved card (payer on COE)</option>
+                                                <option value="one_time_card">One-time card (PAN)</option>
+                                            </select>
+                                        </div>
+                                        <div id="adhocSavedCardFields">
+                                            <div class="form-group">
+                                                <label for="adhocPayerUserId">Payer user ID</label>
+                                                <input type="text" id="adhocPayerUserId" class="form-control" placeholder="Client or participant user id">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="adhocTokenId">Token ID (cardRef)</label>
+                                                <input type="text" id="adhocTokenId" class="form-control" placeholder="From saved cards">
+                                            </div>
+                                        </div>
+                                        <div id="adhocOneTimeFields" style="display:none;">
+                                            <div class="form-group">
+                                                <label for="adhocCardNumber">Card number</label>
+                                                <input type="text" id="adhocCardNumber" class="form-control" placeholder="4111111111111111">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="adhocExpiryMonth">Expiry month</label>
+                                                <input type="text" id="adhocExpiryMonth" class="form-control" placeholder="12">
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="adhocExpiryYear">Expiry year</label>
+                                                <input type="text" id="adhocExpiryYear" class="form-control" placeholder="30">
+                                            </div>
+                                            <div class="form-group">
+                                                <label><input type="checkbox" id="adhocSaveToPayer"> Save card to payer wallet</label>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocPayerType">Payer record type</label>
+                                            <select id="adhocPayerType" class="form-control">
+                                                <option value="client">client</option>
+                                                <option value="participant">participant</option>
+                                                <option value="guest">guest</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="adhocDisplayName">Display name (guest)</label>
+                                            <input type="text" id="adhocDisplayName" class="form-control" placeholder="Guest name">
+                                        </div>
+                                        <button class="btn-primary" onclick="loadAdhocPaymentOptions()">Load payers / cards</button>
+                                        <button class="btn-primary" onclick="submitAdminAdhocPayment()" style="margin-left:8px;">Charge</button>
+                                        <pre id="adhocOptionsResult" class="text-muted" style="margin-top:16px;white-space:pre-wrap;font-size:12px;"></pre>
+                                        <pre id="adhocChargeResult" class="text-muted" style="margin-top:8px;white-space:pre-wrap;font-size:12px;"></pre>
                                     </div>
                                 </div>
                             </div>
@@ -18294,6 +18375,79 @@
             }
         }
 
+        function toggleAdhocMethodFields() {
+            const method = document.getElementById('adhocChargeMethod').value;
+            document.getElementById('adhocSavedCardFields').style.display =
+                method === 'saved_card' ? 'block' : 'none';
+            document.getElementById('adhocOneTimeFields').style.display =
+                method === 'one_time_card' ? 'block' : 'none';
+        }
+
+        async function loadAdhocPaymentOptions() {
+            try {
+                const coeId = document.getElementById('adhocCoeId').value.trim();
+                if (!coeId) {
+                    showAlert('COE ID required', 'error');
+                    return;
+                }
+                const eventId = document.getElementById('adhocEventId').value.trim();
+                const qs = eventId ? `?eventId=${encodeURIComponent(eventId)}` : '';
+                const result = await makeApiRequest(
+                    `/payments/admin/coe/${coeId}/payment-options${qs}`,
+                    'GET'
+                );
+                document.getElementById('adhocOptionsResult').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                console.error('Adhoc options error:', error);
+                showAlert('Failed to load adhoc options', 'error');
+            }
+        }
+
+        async function submitAdminAdhocPayment() {
+            try {
+                const coeId = document.getElementById('adhocCoeId').value.trim();
+                const amount = parseFloat(document.getElementById('adhocAmount').value);
+                const description = document.getElementById('adhocDescription').value.trim();
+                const chargeMethod = document.getElementById('adhocChargeMethod').value;
+                if (!coeId || !amount || amount <= 0 || !description) {
+                    showAlert('COE ID, amount, and description are required', 'error');
+                    return;
+                }
+                const body = {
+                    coe_id: coeId,
+                    amount,
+                    description,
+                    charge_method: chargeMethod,
+                    adhoc_payer: {
+                        type: document.getElementById('adhocPayerType').value,
+                        display_name: document.getElementById('adhocDisplayName').value.trim() || undefined,
+                    },
+                };
+                const eventId = document.getElementById('adhocEventId').value.trim();
+                if (eventId) body.event_id = eventId;
+                if (chargeMethod === 'saved_card') {
+                    body.payer_user_id = document.getElementById('adhocPayerUserId').value.trim();
+                    body.token_id = document.getElementById('adhocTokenId').value.trim();
+                } else {
+                    body.payer_user_id = document.getElementById('adhocPayerUserId').value.trim() || undefined;
+                    body.card = {
+                        card: document.getElementById('adhocCardNumber').value.replace(/\s/g, ''),
+                        expiry_month: document.getElementById('adhocExpiryMonth').value.trim(),
+                        expiry_year: document.getElementById('adhocExpiryYear').value.trim(),
+                    };
+                    body.save_to_payer = document.getElementById('adhocSaveToPayer').checked;
+                }
+                const result = await makeApiRequest('/payments/admin/adhoc', 'POST', body);
+                document.getElementById('adhocChargeResult').textContent = JSON.stringify(result, null, 2);
+                if (result.success) {
+                    showAlert('On-spot payment completed', 'success');
+                }
+            } catch (error) {
+                console.error('Adhoc charge error:', error);
+                showAlert('Adhoc charge failed', 'error');
+            }
+        }
+
         /**
          * Load payment history for COE
          */
@@ -18317,7 +18471,7 @@
                     }
                     
                     let html = '<div class="table-container"><table class="data-table"><thead><tr>';
-                    html += '<th>ID</th><th>Type</th><th>Amount</th><th>Status</th><th>Card</th><th>Date</th>';
+                    html += '<th>ID</th><th>Type</th><th>Amount</th><th>Status</th><th>Card</th><th>Event</th><th>Payer</th><th>Date</th>';
                     html += '</tr></thead><tbody>';
                     
                     payments.forEach(payment => {
@@ -18330,6 +18484,17 @@
                         html += `<td>$${payment.amount.toFixed(2)}</td>`;
                         html += `<td><span class="${statusClass}">${payment.status.toUpperCase()}</span></td>`;
                         html += `<td>${payment.card_brand ? payment.card_brand + ' •••• ' + payment.card_last_four : 'N/A'}</td>`;
+                        const ev = payment.event_id ? String(payment.event_id).substring(0, 8) + '...' : '—';
+                        html += `<td><code>${ev}</code></td>`;
+                        const payer =
+                          payment.adhoc_payment_summary ||
+                          (payment.adhoc_payer?.display_name
+                            ? `Paid by ${payment.adhoc_payer.display_name}` +
+                              (payment.card_last_four
+                                ? ` with card ending with ${payment.card_last_four}`
+                                : '')
+                            : '—');
+                        html += `<td>${payer}</td>`;
                         html += `<td>${new Date(payment.created_at).toLocaleDateString()}</td>`;
                         html += '</tr>';
                     });

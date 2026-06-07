@@ -93,6 +93,104 @@ async function sendEmail({ to, subject, html, text }) {
 }
 
 /**
+ * Send email with one or more attachments (SES raw MIME).
+ * @param {Object} options
+ * @param {string} options.to
+ * @param {string} options.subject
+ * @param {string} options.html
+ * @param {string} [options.text]
+ * @param {Array<{ filename: string, content: Buffer, contentType?: string }>} options.attachments
+ * @returns {Promise<Object>}
+ */
+async function sendEmailWithAttachments({ to, subject, html, text, attachments = [] }) {
+  const from = process.env.FROM_EMAIL || 'noreply@the1.vip';
+  const plainText = text || stripHtml(html);
+  const mixedBoundary = `mixed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const altBoundary = `alt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+  const encodeSubject = (value) => {
+    if (/^[\x00-\x7F]*$/.test(value)) {
+      return value;
+    }
+    return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+  };
+
+  const wrapBase64 = (buffer) => {
+    const b64 = buffer.toString('base64');
+    return b64.replace(/.{1,76}/g, '$&\r\n').trim();
+  };
+
+  let raw = '';
+  raw += `From: ${from}\r\n`;
+  raw += `To: ${to}\r\n`;
+  raw += `Subject: ${encodeSubject(subject)}\r\n`;
+  raw += 'MIME-Version: 1.0\r\n';
+  raw += `Content-Type: multipart/mixed; boundary="${mixedBoundary}"\r\n\r\n`;
+
+  raw += `--${mixedBoundary}\r\n`;
+  raw += `Content-Type: multipart/alternative; boundary="${altBoundary}"\r\n\r\n`;
+
+  raw += `--${altBoundary}\r\n`;
+  raw += 'Content-Type: text/plain; charset=UTF-8\r\n';
+  raw += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+  raw += `${plainText}\r\n\r\n`;
+
+  raw += `--${altBoundary}\r\n`;
+  raw += 'Content-Type: text/html; charset=UTF-8\r\n';
+  raw += 'Content-Transfer-Encoding: 7bit\r\n\r\n';
+  raw += `${html}\r\n\r\n`;
+
+  raw += `--${altBoundary}--\r\n`;
+
+  for (const file of attachments) {
+    if (!file?.content || !file.filename) {
+      continue;
+    }
+    const contentType = file.contentType || 'application/octet-stream';
+    raw += `--${mixedBoundary}\r\n`;
+    raw += `Content-Type: ${contentType}; name="${file.filename}"\r\n`;
+    raw += 'Content-Transfer-Encoding: base64\r\n';
+    raw += `Content-Disposition: attachment; filename="${file.filename}"\r\n\r\n`;
+    raw += `${wrapBase64(file.content)}\r\n\r\n`;
+  }
+
+  raw += `--${mixedBoundary}--\r\n`;
+
+  try {
+    const result = await ses
+      .sendRawEmail({
+        Source: from,
+        Destinations: [to],
+        RawMessage: { Data: Buffer.from(raw) },
+      })
+      .promise();
+    console.log('[EMAIL_SUCCESS]', {
+      to,
+      subject,
+      messageId: result.MessageId,
+      from,
+      attachments: attachments.length,
+      timestamp: new Date().toISOString(),
+    });
+    return { messageId: result.MessageId };
+  } catch (error) {
+    console.error('[EMAIL_ERROR]', {
+      to,
+      subject,
+      from,
+      attachments: attachments.length,
+      error: {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+      },
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
+}
+
+/**
  * Send email verification email
  * @param {Object} user - User object with email, firstName
  * @param {string} code - Verification code (6-digit numeric string)
@@ -711,6 +809,7 @@ function formatCurrency(amount) {
 
 module.exports = {
   sendEmail,
+  sendEmailWithAttachments,
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendLoginOtpEmail,
