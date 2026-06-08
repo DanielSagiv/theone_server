@@ -271,13 +271,15 @@ router.post('/unmerge', authenticateToken, requireAdmin, async (req, res) => {
 
 /**
  * GET /v1/coes/my
- * Get COEs associated with the current user
+ * Get COEs for the Experiences home list.
+ * Clients/runners: COEs they are tied to. Admins: all COEs.
  * @access Authenticated users
  */
 router.get('/my', authenticateToken, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const Event = require('../models/Event');
+    const isAdmin = req.user.role === 'admin';
     
     // Ensure userId is properly formatted for comparison
     const userId = req.user._id || req.user.id;
@@ -285,15 +287,18 @@ router.get('/my', authenticateToken, async (req, res) => {
       ? userId 
       : new mongoose.Types.ObjectId(userId);
     
-    // Get COEs where user is admin, client, runner, or participant
-    let coes = await COE.find({
-      $or: [
-        { admin_id: userIdObj },
-        { client_id: userIdObj },
-        { 'runner_assignment.runner_id': userIdObj },
-        { 'participants.user_id': userIdObj }
-      ]
-    })
+    const coeListQuery = isAdmin
+      ? {}
+      : {
+          $or: [
+            { admin_id: userIdObj },
+            { client_id: userIdObj },
+            { 'runner_assignment.runner_id': userIdObj },
+            { 'participants.user_id': userIdObj }
+          ]
+        };
+
+    let coes = await COE.find(coeListQuery)
     .populate('admin_id', 'firstName lastName email')
     .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate({
@@ -304,7 +309,7 @@ router.get('/my', authenticateToken, async (req, res) => {
         select: 'name type media seats address geo description tagline'
       }
     })
-    .sort({ created_at: -1 });
+    .sort({ createdAt: -1, created_at: -1 });
 
     // Manual population fallback for events that weren't populated
     // This ensures events replaced via updateOne are properly populated
@@ -643,7 +648,7 @@ router.get('/runner/:runnerId', authenticateToken, requireAdmin, async (req, res
 
 /**
  * GET /v1/coes/my/:id
- * Get COE by ID for current user (if they have access)
+ * Get COE by ID. Admins: any COE. Others: only COEs they are tied to.
  * @access Authenticated users
  */
 router.get('/my/:id', authenticateToken, async (req, res) => {
@@ -677,15 +682,20 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       timestamp: new Date().toISOString()
     });
     
-    const coeCheck = await COE.findOne({
-      _id: id,
-      $or: [
-        { admin_id: userIdObj },
-        { client_id: userIdObj },
-        { 'runner_assignment.runner_id': userIdObj },
-        { 'participants.user_id': userIdObj }
-      ]
-    }).select('_id admin_id client_id runner_assignment.runner_id status');
+    const isAdmin = req.user.role === 'admin';
+    const coeCheck = isAdmin
+      ? await COE.findById(id).select(
+          '_id admin_id client_id runner_assignment.runner_id status',
+        )
+      : await COE.findOne({
+          _id: id,
+          $or: [
+            { admin_id: userIdObj },
+            { client_id: userIdObj },
+            { 'runner_assignment.runner_id': userIdObj },
+            { 'participants.user_id': userIdObj }
+          ]
+        }).select('_id admin_id client_id runner_assignment.runner_id status');
     
     if (
       !coeCheck ||

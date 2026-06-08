@@ -12,7 +12,7 @@ const {
   sendPaymentReceiptEmail,
   isReceiptEmailEnabled,
 } = require('./paymentReceiptEmail');
-const { assertAdhocReceiptEmailAvailable } = require('../utils/adhocPaymentDisplay');
+const { assertAdhocReceiptEmailAvailable, getAdhocReceiptRecipientEmail } = require('../utils/adhocPaymentDisplay');
 
 const PAYMENT_CONFIG = {
   currency: process.env.PAYMENT_CURRENCY || 'USD',
@@ -341,11 +341,15 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     if (!adhocPayer.display_name || !String(adhocPayer.display_name).trim()) {
       throw new Error('Guest name is required');
     }
+    const guestEmailRaw = adhocPayer.email ? String(adhocPayer.email).trim() : '';
+    if (!guestEmailRaw || !guestEmailRaw.includes('@')) {
+      throw new Error('Guest email is required');
+    }
     chargeUserId = billingUserId;
     adhocPayer = {
       type: 'guest',
       display_name: String(adhocPayer.display_name).trim(),
-      email: adhocPayer.email ? String(adhocPayer.email).trim() : undefined,
+      email: guestEmailRaw,
       phone: adhocPayer.phone ? String(adhocPayer.phone).trim() : undefined,
     };
   } else {
@@ -494,17 +498,42 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     await paymentService.recordAdhocPaymentCompletion(coeId, payment);
 
     const billingUser = await User.findById(billingUserId);
+    const paymentForEmail = await Payment.findById(payment._id).lean();
+    const receiptRecipientEmail = getAdhocReceiptRecipientEmail(
+      paymentForEmail || payment,
+      chargeUser,
+    );
+
     setImmediate(() => {
       (async () => {
         try {
+          if (!isReceiptEmailEnabled()) {
+            console.warn('[AdhocPayment] receipt email skipped — set SEND_PAYMENT_RECEIPT_EMAIL=true', {
+              payment_id: payment._id,
+              guest_email: receiptRecipientEmail || null,
+            });
+            return;
+          }
+          if (!receiptRecipientEmail) {
+            console.warn('[AdhocPayment] receipt email skipped: no recipient email on payment', {
+              payment_id: payment._id,
+              adhoc_payer_type: paymentForEmail?.adhoc_payer?.type,
+            });
+            return;
+          }
           await sendPaymentReceiptEmail({
             user: billingUser || chargeUser,
-            payment,
+            payment: paymentForEmail || payment,
             coeName: coe.name,
             chargeUser,
+            recipientEmail: receiptRecipientEmail,
           });
         } catch (err) {
-          console.error('[AdhocPayment] receipt email error:', err?.message || err);
+          console.error('[AdhocPayment] receipt email error:', {
+            payment_id: payment._id,
+            to: receiptRecipientEmail,
+            error: err?.message || err,
+          });
         }
       })();
     });

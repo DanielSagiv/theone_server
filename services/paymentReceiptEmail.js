@@ -48,17 +48,25 @@ async function sendPaymentReceiptEmail({
   }
 
   const isAdhoc = payment?.payment_type === 'adhoc';
-  const to =
-    (recipientEmail && String(recipientEmail).includes('@')
-      ? String(recipientEmail).trim()
-      : null) ||
-    (isAdhoc ? getAdhocReceiptRecipientEmail(payment, chargeUser) : null) ||
-    user?.email;
+  const isGuestAdhoc = isAdhoc && payment?.adhoc_payer?.type === 'guest';
+
+  let to = null;
+  if (recipientEmail && String(recipientEmail).includes('@')) {
+    to = String(recipientEmail).trim();
+  } else if (isAdhoc) {
+    to = getAdhocReceiptRecipientEmail(payment, chargeUser);
+  }
+  // Guest on-spot pay: never email the COE client when guest address was expected.
+  if (!to && !isGuestAdhoc) {
+    to = user?.email || null;
+  }
 
   if (!to || typeof to !== 'string' || !to.includes('@')) {
     console.warn('[PaymentReceiptEmail] skipped: invalid recipient', {
       payment_id: payment?._id,
       payment_type: payment?.payment_type,
+      adhoc_payer_type: payment?.adhoc_payer?.type,
+      adhoc_payer_email: payment?.adhoc_payer?.email || null,
     });
     return;
   }

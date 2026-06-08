@@ -104,6 +104,9 @@ function getAdhocReceiptRecipientEmail(payment, chargeUser) {
   if (fromSnapshot && String(fromSnapshot).trim().includes('@')) {
     return String(fromSnapshot).trim();
   }
+  if (payment.adhoc_payer?.type === 'guest') {
+    return null;
+  }
   if (chargeUser?.email && String(chargeUser.email).includes('@')) {
     return String(chargeUser.email).trim();
   }
