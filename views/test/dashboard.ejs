@@ -1557,6 +1557,62 @@
             max-height: 2000px;
         }
 
+        /* Create Location — searchable seat category picker */
+        #cl_seats_tbody td {
+            overflow: visible;
+            vertical-align: top;
+        }
+
+        .cl-seat-cat-picker {
+            position: relative;
+            min-width: 170px;
+        }
+
+        .cl-seat-cat-picker .cl_seat_cat_search {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #ecf0f1;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 13px;
+        }
+
+        .cl-seat-cat-picker .cl_seat_cat_menu {
+            display: none;
+            position: fixed;
+            z-index: 4000;
+            max-height: 240px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #ecf0f1;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+        }
+
+        .cl-seat-cat-picker .cl_seat_cat_option {
+            display: block;
+            width: 100%;
+            padding: 8px 10px;
+            border: none;
+            background: transparent;
+            text-align: left;
+            font-size: 13px;
+            color: #2c3e50;
+            cursor: pointer;
+        }
+
+        .cl-seat-cat-picker .cl_seat_cat_option:hover,
+        .cl-seat-cat-picker .cl_seat_cat_option:focus {
+            background: #f0f4f8;
+            outline: none;
+        }
+
+        .cl-seat-cat-picker .cl_seat_cat_empty {
+            padding: 8px 10px;
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+
         /* Seat Category Grouping */
         .location-seat-category {
             margin-bottom: 12px;
@@ -12832,6 +12888,145 @@
             }).join('');
         }
 
+        /** Escape string for HTML attribute values in seat category picker markup */
+        function escapeSeatCatAttr(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;');
+        }
+
+        /** Resolve display label for a persisted seat category value */
+        function getSeatCategoryLabelByValue(value) {
+            if (!value) return '';
+            const match = (SEAT_CATEGORY_OPTIONS || []).find(function (o) {
+                return o && o.value === value;
+            });
+            return match ? (match.label || match.value || '') : String(value);
+        }
+
+        /** Build searchable category picker markup (hidden value field keeps class cl_seat_cat) */
+        function buildSeatCategoryPickerHtml(selectedValue) {
+            const selected = selectedValue || '';
+            const label = getSeatCategoryLabelByValue(selected);
+            return (
+                '<div class="cl-seat-cat-picker">' +
+                    '<input type="hidden" class="cl_seat_cat" value="' + escapeSeatCatAttr(selected) + '" />' +
+                    '<input type="text" class="cl_seat_cat_search" placeholder="Search category..." value="' + escapeSeatCatAttr(label) + '" autocomplete="off" />' +
+                    '<div class="cl_seat_cat_menu" role="listbox"></div>' +
+                '</div>'
+            );
+        }
+
+        /** Wire search/filter UI for one seat category picker */
+        function initSeatCategoryPicker(pickerEl) {
+            if (!pickerEl || pickerEl.dataset.seatCatPickerInit === '1') return;
+            pickerEl.dataset.seatCatPickerInit = '1';
+
+            const hidden = pickerEl.querySelector('.cl_seat_cat');
+            const search = pickerEl.querySelector('.cl_seat_cat_search');
+            const menu = pickerEl.querySelector('.cl_seat_cat_menu');
+            if (!hidden || !search || !menu) return;
+
+            function positionMenu() {
+                const rect = search.getBoundingClientRect();
+                menu.style.left = rect.left + 'px';
+                menu.style.top = (rect.bottom + 2) + 'px';
+                menu.style.width = Math.max(rect.width, 200) + 'px';
+            }
+
+            function renderMenu(filterText) {
+                const q = String(filterText || '').trim().toLowerCase();
+                const items = (SEAT_CATEGORY_OPTIONS || []).filter(function (o) {
+                    if (!o) return false;
+                    if (!q) return true;
+                    const label = String(o.label || '').toLowerCase();
+                    const value = String(o.value || '').toLowerCase();
+                    return label.indexOf(q) !== -1 || value.indexOf(q) !== -1;
+                });
+
+                if (!items.length) {
+                    menu.innerHTML = '<div class="cl_seat_cat_empty">No matches</div>';
+                    return;
+                }
+
+                menu.innerHTML = items.map(function (o) {
+                    const v = escapeSeatCatAttr(o.value || '');
+                    const lab = String(o.label || o.value || '').replace(/</g, '&lt;');
+                    return '<button type="button" class="cl_seat_cat_option" data-value="' + v + '">' + lab + '</button>';
+                }).join('');
+            }
+
+            function openMenu() {
+                renderMenu(search.value);
+                positionMenu();
+                menu.style.display = 'block';
+            }
+
+            function closeMenu() {
+                menu.style.display = 'none';
+            }
+
+            function selectValue(value, label) {
+                hidden.value = value || '';
+                search.value = label || getSeatCategoryLabelByValue(value);
+                closeMenu();
+            }
+
+            search.addEventListener('focus', openMenu);
+            search.addEventListener('input', openMenu);
+            search.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    closeMenu();
+                    search.value = getSeatCategoryLabelByValue(hidden.value);
+                }
+            });
+            search.addEventListener('blur', function () {
+                window.setTimeout(function () {
+                    if (!pickerEl.contains(document.activeElement)) {
+                        search.value = getSeatCategoryLabelByValue(hidden.value);
+                        closeMenu();
+                    }
+                }, 150);
+            });
+
+            menu.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+            });
+            menu.addEventListener('click', function (e) {
+                const btn = e.target.closest('.cl_seat_cat_option');
+                if (!btn) return;
+                selectValue(btn.getAttribute('data-value') || '', btn.textContent || '');
+            });
+
+            window.addEventListener('resize', function () {
+                if (menu.style.display === 'block') positionMenu();
+            });
+            window.addEventListener('scroll', function () {
+                if (menu.style.display === 'block') positionMenu();
+            }, true);
+
+            document.addEventListener('click', function (e) {
+                if (!pickerEl.contains(e.target) && menu.style.display === 'block') {
+                    search.value = getSeatCategoryLabelByValue(hidden.value);
+                    closeMenu();
+                }
+            });
+        }
+
+        /** Set category picker value when editing an existing location seat row */
+        function setSeatCategoryPickerValue(rowOrPicker, value) {
+            const picker = rowOrPicker && rowOrPicker.classList && rowOrPicker.classList.contains('cl-seat-cat-picker')
+                ? rowOrPicker
+                : (rowOrPicker ? rowOrPicker.querySelector('.cl-seat-cat-picker') : null);
+            if (!picker) return;
+            initSeatCategoryPicker(picker);
+            const hidden = picker.querySelector('.cl_seat_cat');
+            const search = picker.querySelector('.cl_seat_cat_search');
+            if (hidden) hidden.value = value || '';
+            if (search) search.value = getSeatCategoryLabelByValue(value);
+        }
+
         async function openEditLocationFromList(locationId) {
             console.log('openEditLocationFromList called with locationId:', locationId);
             // Visual debugging
@@ -12918,9 +13113,8 @@
                     const row = document.querySelector('#cl_seats_tbody tr:last-child');
                     if (row) {
                         row.querySelector('.cl_seat_code').value = seat.code || '';
-                        const categorySelect = row.querySelector('.cl_seat_cat');
-                        if (categorySelect && seat.category) {
-                            categorySelect.value = seat.category;
+                        if (seat.category) {
+                            setSeatCategoryPickerValue(row, seat.category);
                         }
                         const the1CatInput = row.querySelector('.cl_seat_the1cat');
                         if (the1CatInput && seat.the1Category) {
@@ -13415,9 +13609,7 @@
             tr.innerHTML = `
                 <td><input class="cl_seat_code" style="width:90px"/></td>
                 <td>
-                    <select class="cl_seat_cat">
-                        ${buildSeatCategorySelectHtml()}
-                    </select>
+                    ${buildSeatCategoryPickerHtml()}
                 </td>
                 <td><input class="cl_seat_the1cat" list="cl_the1cat_datalist" placeholder="THE1 category" style="width:140px"/></td>
                 <td><input class="cl_seat_cap" type="number" min="0" style="width:80px"/></td>
@@ -13431,6 +13623,8 @@
                 </td>
                 <td><button class="btn btn-secondary" onclick="this.closest('tr').remove()">Remove</button></td>`;
             tbody.appendChild(tr);
+            const picker = tr.querySelector('.cl-seat-cat-picker');
+            if (picker) initSeatCategoryPicker(picker);
         }
         function addSeatMediaRow(button) {
             const container = button.closest('td').querySelector('.cl_seat_media_container');
