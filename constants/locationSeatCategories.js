@@ -51,6 +51,12 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'upper_club', label: 'Upper Club' },
   { value: 'upper_dance', label: 'Upper Dance' },
   { value: 'upper_dance_floor', label: 'Upper Dance Floor' },
+  { value: 'andreas_patio', label: "Andrea's Patio" },
+  { value: 'gaming', label: 'Gaming' },
+  { value: 'gaming_pov', label: 'Gaming POV' },
+  { value: 'lily_pad', label: 'Lily Pad' },
+  { value: 'lower_bungalow', label: 'Lower Bungalow' },
+  { value: 'upper_bungalow', label: 'Upper Bungalow' },
 ];
 
 const LOCATION_SEAT_CATEGORY_VALUES = LOCATION_SEAT_CATEGORY_OPTIONS.map((o) => o.value);
