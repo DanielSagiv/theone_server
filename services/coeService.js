@@ -255,17 +255,88 @@ function getNegotiatedBaseForSeat(row) {
   return Number(row.event_price) || Number(row.base_price) || 0;
 }
 
+/** Default THE1 fee % applied in pricing when seat row has no override. */
+const DEFAULT_THE1_FEE_PERCENT = 20;
+
+const NO_LOCATION_VENUE_KEY = '__no_location__';
+
 /**
- * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
- * from selected_seats using per-event Location percents. Rows without a resolved Location use global getCoeTaxRate() on B for sales tax only.
- * @param {Array<Object>} selectedSeats
- * @param {{ useCatalogBase?: boolean }} [options]
- * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
+ * THE1 fee percent for a seat row (product default 20%).
+ * @param {Object} row
+ * @returns {number}
  */
-async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}) {
-  const resolveBase = options.useCatalogBase
-    ? getCatalogBaseForSeat
-    : getNegotiatedBaseForSeat;
+function resolveThe1FeePercentForSeat(row) {
+  const fp = row?.the1_fee_percent;
+  if (fp != null && fp !== '' && Number.isFinite(Number(fp))) {
+    return pctToFraction(fp);
+  }
+  return DEFAULT_THE1_FEE_PERCENT;
+}
+
+/**
+ * Location id string for grouping seats by venue.
+ * @param {Object|null|undefined} ev
+ * @returns {string}
+ */
+function getVenueKeyFromEvent(ev) {
+  if (!ev || ev.location_id == null) {
+    return NO_LOCATION_VENUE_KEY;
+  }
+  const loc = ev.location_id;
+  if (typeof loc === 'object' && loc._id != null) {
+    return loc._id.toString();
+  }
+  if (typeof loc.toString === 'function') {
+    return loc.toString();
+  }
+  return String(loc);
+}
+
+/**
+ * Per-venue fee lines from aggregated MS and per-seat THE1 sum.
+ * VF = adminFeePercent × MS; ST = salesTaxPercent × (MS + VF); gratuity on MS; processing on MS.
+ * @param {number} ms
+ * @param {Object|null} location
+ * @param {number} the1FeeSum - Σ (seatBase × seat the1_fee%)
+ * @param {number} [processingPercent]
+ * @returns {{ ms: number, vf: number, st: number, gratuity: number, the1: number, processing: number }}
+ */
+function computeVenuePricingTotals(
+  ms,
+  location,
+  the1FeeSum,
+  processingPercent = PROCESSING_FEE_PERCENT
+) {
+  let vf = 0;
+  let st = 0;
+  let gratuity = 0;
+
+  if (location && typeof location === 'object') {
+    vf = ms * (pctToFraction(location.adminFeePercent) / 100);
+    gratuity = ms * (pctToFraction(location.gratuityPercent) / 100);
+    st = (ms + vf) * (pctToFraction(location.salesTaxPercent) / 100);
+  } else {
+    st = ms * getCoeTaxRate();
+  }
+
+  const processing = ms * (processingPercent / 100);
+
+  return {
+    ms,
+    vf,
+    st,
+    gratuity,
+    the1: the1FeeSum,
+    processing
+  };
+}
+
+/**
+ * Sum per-venue pricing groups into COE subtotal, taxes, fees, total, and fee_breakdown.
+ * @param {Array<{ ms: number, location: Object|null, the1FeeSum: number }>} venueGroups
+ * @returns {{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}}
+ */
+function computePricingTotalsFromVenueGroups(venueGroups) {
   const emptyBreakdown = () => ({
     gratuity_total: 0,
     venue_admin_fee_total: 0,
@@ -273,7 +344,8 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
     the1_fee_total: 0,
     processing_fee_total: 0
   });
-  if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) {
+
+  if (!Array.isArray(venueGroups) || venueGroups.length === 0) {
     return {
       subtotal: 0,
       taxes: 0,
@@ -283,26 +355,6 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
     };
   }
 
-  const idStr = (row) => {
-    const e = row?.event_id;
-    if (e == null) return null;
-    if (typeof e === 'object' && e._id != null) return e._id.toString();
-    if (typeof e.toString === 'function') return e.toString();
-    return String(e);
-  };
-
-  const uniqueIds = [...new Set(selectedSeats.map(idStr).filter(Boolean))];
-  const eventObjectIds = uniqueIds
-    .filter((id) => mongoose.Types.ObjectId.isValid(id))
-    .map((id) => new mongoose.Types.ObjectId(id));
-
-  const events = eventObjectIds.length
-    ? await Event.find({ _id: { $in: eventObjectIds } })
-        .populate('location_id')
-        .lean()
-    : [];
-  const eventMap = new Map(events.map((ev) => [ev._id.toString(), ev]));
-
   let subtotal = 0;
   let gratuitySum = 0;
   let adminSum = 0;
@@ -310,33 +362,16 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
   let the1Sum = 0;
   let processingSum = 0;
 
-  for (const row of selectedSeats) {
-    const B = resolveBase(row);
-    subtotal += B;
-
-    const eid = idStr(row);
-    const ev = eid ? eventMap.get(eid) : null;
-    const loc =
-      ev && ev.location_id && typeof ev.location_id === 'object'
-        ? ev.location_id
-        : null;
-
-    if (loc) {
-      gratuitySum += B * (pctToFraction(loc.gratuityPercent) / 100);
-      adminSum += B * (pctToFraction(loc.adminFeePercent) / 100);
-      salesTaxSum += B * (pctToFraction(loc.salesTaxPercent) / 100);
-    } else {
-      salesTaxSum += B * getCoeTaxRate();
-    }
-
-    // Product rule: always charge THE1 fee. If admin did not set %, default to 20.
-    const fp = row.the1_fee_percent;
-    const fPct =
-      fp != null && fp !== '' && Number.isFinite(Number(fp))
-        ? pctToFraction(fp)
-        : 20;
-    the1Sum += B * (fPct / 100);
-    processingSum += B * (PROCESSING_FEE_PERCENT / 100);
+  for (const group of venueGroups) {
+    const ms = Number(group.ms) || 0;
+    const the1FeeSum = Number(group.the1FeeSum) || 0;
+    const v = computeVenuePricingTotals(ms, group.location || null, the1FeeSum);
+    subtotal += v.ms;
+    gratuitySum += v.gratuity;
+    adminSum += v.vf;
+    salesTaxSum += v.st;
+    the1Sum += v.the1;
+    processingSum += v.processing;
   }
 
   const gratuityR = Math.round(gratuitySum * 100) / 100;
@@ -361,6 +396,93 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
       processing_fee_total: processingR
     }
   };
+}
+
+/**
+ * Group selected seats by venue (event location_id) for per-venue MS and THE1 aggregation.
+ * @param {Array<Object>} selectedSeats
+ * @param {Map<string, Object>} eventMap
+ * @param {(row: Object) => number} resolveBase
+ * @returns {Array<{ ms: number, location: Object|null, the1FeeSum: number }>}
+ */
+function buildVenueGroupsFromSelectedSeats(selectedSeats, eventMap, resolveBase) {
+  const idStr = (row) => {
+    const e = row?.event_id;
+    if (e == null) return null;
+    if (typeof e === 'object' && e._id != null) return e._id.toString();
+    if (typeof e.toString === 'function') return e.toString();
+    return String(e);
+  };
+
+  /** @type {Map<string, { ms: number, location: Object|null, the1FeeSum: number }>} */
+  const bucketMap = new Map();
+
+  for (const row of selectedSeats) {
+    const base = resolveBase(row);
+    const eid = idStr(row);
+    const ev = eid ? eventMap.get(eid) : null;
+    const venueKey = getVenueKeyFromEvent(ev);
+    const loc =
+      ev && ev.location_id && typeof ev.location_id === 'object'
+        ? ev.location_id
+        : null;
+
+    if (!bucketMap.has(venueKey)) {
+      bucketMap.set(venueKey, { ms: 0, location: loc, the1FeeSum: 0 });
+    }
+    const bucket = bucketMap.get(venueKey);
+    bucket.ms += base;
+    bucket.the1FeeSum += base * (resolveThe1FeePercentForSeat(row) / 100);
+    if (loc && !bucket.location) {
+      bucket.location = loc;
+    }
+  }
+
+  return Array.from(bucketMap.values());
+}
+
+/**
+ * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
+ * from selected_seats: per-venue MS, VF, ST on (MS+VF), then sum into COE fields.
+ * @param {Array<Object>} selectedSeats
+ * @param {{ useCatalogBase?: boolean }} [options]
+ * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
+ */
+async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}) {
+  const resolveBase = options.useCatalogBase
+    ? getCatalogBaseForSeat
+    : getNegotiatedBaseForSeat;
+
+  if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) {
+    return computePricingTotalsFromVenueGroups([]);
+  }
+
+  const idStr = (row) => {
+    const e = row?.event_id;
+    if (e == null) return null;
+    if (typeof e === 'object' && e._id != null) return e._id.toString();
+    if (typeof e.toString === 'function') return e.toString();
+    return String(e);
+  };
+
+  const uniqueIds = [...new Set(selectedSeats.map(idStr).filter(Boolean))];
+  const eventObjectIds = uniqueIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const events = eventObjectIds.length
+    ? await Event.find({ _id: { $in: eventObjectIds } })
+        .populate('location_id')
+        .lean()
+    : [];
+  const eventMap = new Map(events.map((ev) => [ev._id.toString(), ev]));
+
+  const venueGroups = buildVenueGroupsFromSelectedSeats(
+    selectedSeats,
+    eventMap,
+    resolveBase
+  );
+  return computePricingTotalsFromVenueGroups(venueGroups);
 }
 
 /**
@@ -5655,8 +5777,13 @@ module.exports = {
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,
   computePricingTotalsFromSelectedSeats,
+  computePricingTotalsFromVenueGroups,
+  computeVenuePricingTotals,
+  buildVenueGroupsFromSelectedSeats,
+  resolveThe1FeePercentForSeat,
   attachCatalogTotalDisplay,
   getCatalogBaseForSeat,
+  getNegotiatedBaseForSeat,
   DEFAULT_THE1_FEE_PERCENT_UI,
   applyPricingFromSelectedSeats,
   updateSelectedSeatsStatus,
