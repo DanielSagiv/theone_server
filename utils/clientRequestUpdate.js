@@ -2,6 +2,7 @@
  * Maps client REST request-update body to create_coe_draft tool params.
  */
 const { extractPreferenceKeywords } = require('../services/botPreferenceService');
+const { normalizeCoeDatePair } = require('./calendarDateOnly');
 
 /**
  * @param {object|undefined|null} existingSubdoc
@@ -46,9 +47,13 @@ function mergeClientOriginalRequestData(existingSubdoc, patch) {
     }
   }
   if (patch.start_date && patch.end_date) {
+    const { startDate, endDate } = normalizeCoeDatePair(
+      patch.start_date,
+      patch.end_date,
+    );
     prev.requested_dates = {
-      start_date: patch.start_date,
-      end_date: patch.end_date,
+      start_date: startDate,
+      end_date: endDate,
     };
   }
   if (patch.seat_preferences !== undefined) {

@@ -6,6 +6,11 @@ const User = require('../models/User');
 const { selectSeatsByBudgetAndCapacity } = require('./botAutoFillService');
 const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
 const { enrichCOESeatUpgradeMedia } = require('../utils/ensureImageMetadata');
+const {
+  applyCoeCalendarDates,
+  normalizeCoeDatePair,
+  syncRequestedDates,
+} = require('../utils/calendarDateOnly');
 
 /**
  * COE Service
@@ -14,7 +19,7 @@ const { enrichCOESeatUpgradeMedia } = require('../utils/ensureImageMetadata');
 
 /** Location fields returned on populated events for client map / venue detail. */
 const COE_EVENT_LOCATION_SELECT =
-  'name type media seats address geo description tagline';
+  'name type media seats address geo description tagline timezone';
 
 /**
  * Validate that all selected seats are available before COE creation
@@ -1086,10 +1091,11 @@ async function holdSeatsForCOE(coeId) {
  */
 async function createCOE(coeData, createdBy) {
   try {
-    // Validate that client and admin exist
+    const normalizedData = applyCoeCalendarDates({ ...coeData });
+
     const [client, admin] = await Promise.all([
-      User.findById(coeData.client_id),
-      User.findById(coeData.admin_id)
+      User.findById(normalizedData.client_id),
+      User.findById(normalizedData.admin_id)
     ]);
 
     if (!client) {
@@ -1099,16 +1105,14 @@ async function createCOE(coeData, createdBy) {
       throw new Error('Admin not found');
     }
 
-    // Validate selected seats before creating COE
-    if (coeData.selected_seats && coeData.selected_seats.length > 0) {
-      await validateSelectedSeats(coeData.selected_seats);
-      await enrichSelectedSeatsWithSectionCategory(coeData.selected_seats);
-      validateSelectedSeatsSimpleJointInvariants(coeData.selected_seats);
+    if (normalizedData.selected_seats && normalizedData.selected_seats.length > 0) {
+      await validateSelectedSeats(normalizedData.selected_seats);
+      await enrichSelectedSeatsWithSectionCategory(normalizedData.selected_seats);
+      validateSelectedSeatsSimpleJointInvariants(normalizedData.selected_seats);
     }
 
-    // Set creation details
     const coe = new COE({
-      ...coeData,
+      ...normalizedData,
       created_by: createdBy,
       created_method: 'manual'
     });
@@ -1911,14 +1915,13 @@ async function updateClientRequestCOE(coeId, userId, body, executeCreateCoeDraft
     buildCreateCoeDraftParamsFromClientRequest,
   } = require('../utils/clientRequestUpdate');
 
-  const startDate = new Date(body.start_date);
-  const endDate = new Date(body.end_date);
+  const { startDate, endDate } = normalizeCoeDatePair(body.start_date, body.end_date);
   const mergedOriginal = mergeClientOriginalRequestData(
     existingCOE.original_request_data,
     {
       ...body,
-      start_date: startDate.toISOString(),
-      end_date: endDate.toISOString(),
+      start_date: startDate,
+      end_date: endDate,
     },
   );
 
@@ -2043,7 +2046,13 @@ async function updateCOE(coeId, updateData) {
       throw new Error('COE not found');
     }
 
-    const payload = { ...updateData };
+    const payload = applyCoeCalendarDates(
+      { ...updateData },
+      {
+        start_date: existingCOE.start_date,
+        end_date: existingCOE.end_date,
+      },
+    );
     let originalRequestPatch = null;
     if (payload.original_request_data != null) {
       originalRequestPatch = payload.original_request_data;
@@ -2061,7 +2070,22 @@ async function updateCOE(coeId, updateData) {
     }
 
     const flatUpdate = { ...payload, updated_at: new Date() };
-    if (originalRequestPatch && typeof originalRequestPatch === 'object') {
+    if (flatUpdate.start_date || flatUpdate.end_date) {
+      const startDate = flatUpdate.start_date || existingCOE.start_date;
+      const endDate = flatUpdate.end_date || existingCOE.end_date;
+      let baseOrd = existingCOE.original_request_data;
+      if (baseOrd != null && typeof baseOrd.toObject === 'function') {
+        baseOrd = baseOrd.toObject();
+      }
+      if (originalRequestPatch && typeof originalRequestPatch === 'object') {
+        baseOrd = mergeOriginalRequestDataForUpdate(baseOrd, originalRequestPatch);
+      }
+      flatUpdate.original_request_data = syncRequestedDates(
+        baseOrd,
+        startDate,
+        endDate,
+      );
+    } else if (originalRequestPatch && typeof originalRequestPatch === 'object') {
       flatUpdate.original_request_data = mergeOriginalRequestDataForUpdate(
         existingCOE.original_request_data,
         originalRequestPatch

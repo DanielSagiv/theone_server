@@ -5,6 +5,7 @@
 const User = require('../models/User');
 const coeService = require('./coeService');
 const { formatDateRange } = require('../utils/dateParser');
+const { normalizeCoeDatePair } = require('../utils/calendarDateOnly');
 const { generateCorrelationId } = require('../utils/botUtils');
 const {
   extractPreferencesFromFormSubmission,
@@ -125,8 +126,16 @@ async function processFormSubmissionPhase24(params) {
           const raw = extractionResult.raw || {};
 
           // Build original_request_data from extracted preferences
-          const requestStartDate = raw.start_date ? new Date(raw.start_date) : null;
-          const requestEndDate = raw.end_date ? new Date(raw.end_date) : requestStartDate;
+          let requestStartDate = null;
+          let requestEndDate = null;
+          if (raw.start_date) {
+            const pair = normalizeCoeDatePair(
+              raw.start_date,
+              raw.end_date || raw.start_date,
+            );
+            requestStartDate = pair.startDate;
+            requestEndDate = pair.endDate;
+          }
 
           // Normalize budget into { max, currency } shape used by COEOriginalRequestCard and admin flows
           let normalizedBudget = null;

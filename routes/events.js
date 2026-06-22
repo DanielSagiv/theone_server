@@ -407,6 +407,10 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     // Create event
     const eventData = {
       ...value,
+      timezone:
+        (value.timezone && String(value.timezone).trim()) ||
+        (location.timezone && String(location.timezone).trim()) ||
+        'UTC',
       seats: inheritedSeats,
       units: inheritedUnits,
       total_capacity: totalCapacity,
@@ -576,6 +580,19 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       ...value,
       updated_by: req.user?.id || '507f1f77bcf86cd799439011' // TODO: Get from auth middleware
     };
+
+    const locationIdForTz = value.location_id || existingEvent.location_id;
+    if (locationIdForTz) {
+      const locationForTz = await Location.findById(locationIdForTz).select('timezone');
+      const explicitTz = value.timezone && String(value.timezone).trim();
+      if (!explicitTz || explicitTz === 'UTC') {
+        const venueTz =
+          locationForTz?.timezone && String(locationForTz.timezone).trim();
+        if (venueTz) {
+          updateData.timezone = venueTz;
+        }
+      }
+    }
 
     let event = await Event.findByIdAndUpdate(
       id,
