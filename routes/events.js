@@ -15,6 +15,7 @@ const {
 const multer = require('multer');
 const { enrichEventImageFields } = require('../utils/ensureImageMetadata');
 const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
+const { resolveVenueTimezone } = require('../utils/venueTimezone');
 
 const upload = multer({ 
   storage: multer.memoryStorage(), 
@@ -405,12 +406,14 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
                          inheritedUnits.reduce((sum, unit) => sum + (unit.occupancy || 0), 0);
 
     // Create event
+    const explicitEventTz =
+      value.timezone && String(value.timezone).trim();
     const eventData = {
       ...value,
       timezone:
-        (value.timezone && String(value.timezone).trim()) ||
-        (location.timezone && String(location.timezone).trim()) ||
-        'UTC',
+        explicitEventTz && explicitEventTz !== 'UTC'
+          ? explicitEventTz
+          : resolveVenueTimezone(location),
       seats: inheritedSeats,
       units: inheritedUnits,
       total_capacity: totalCapacity,
@@ -583,14 +586,12 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
     const locationIdForTz = value.location_id || existingEvent.location_id;
     if (locationIdForTz) {
-      const locationForTz = await Location.findById(locationIdForTz).select('timezone');
+      const locationForTz = await Location.findById(locationIdForTz).select(
+        'timezone address.city',
+      );
       const explicitTz = value.timezone && String(value.timezone).trim();
       if (!explicitTz || explicitTz === 'UTC') {
-        const venueTz =
-          locationForTz?.timezone && String(locationForTz.timezone).trim();
-        if (venueTz) {
-          updateData.timezone = venueTz;
-        }
+        updateData.timezone = resolveVenueTimezone(locationForTz);
       }
     }
 

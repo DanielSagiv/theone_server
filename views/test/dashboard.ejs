@@ -14391,17 +14391,71 @@
         let eventsTotalPages = 1;
         let eventsTotal = 0;
 
+        /** @type {Record<string, string>} */
+        const VENUE_CITY_TO_IANA = {
+            'las vegas': 'America/Los_Angeles',
+            lv: 'America/Los_Angeles',
+            miami: 'America/New_York',
+            'new york': 'America/New_York',
+            nyc: 'America/New_York',
+            'los angeles': 'America/Los_Angeles',
+            la: 'America/Los_Angeles',
+            london: 'Europe/London',
+            paris: 'Europe/Paris',
+        };
+
+        /**
+         * @param {object|null|undefined} loc
+         * @returns {string}
+         */
+        function resolveTimezoneFromLocation(loc) {
+            if (!loc) {
+                return 'UTC';
+            }
+            const direct = loc.timezone;
+            if (direct && String(direct).trim() && String(direct).trim() !== 'UTC') {
+                return String(direct).trim();
+            }
+            const city = loc.address?.city || '';
+            const key = String(city).trim().toLowerCase().split(',')[0].trim();
+            if (VENUE_CITY_TO_IANA[key]) {
+                return VENUE_CITY_TO_IANA[key];
+            }
+            if (direct && String(direct).trim()) {
+                return String(direct).trim();
+            }
+            return 'UTC';
+        }
+
         /**
          * Resolve IANA timezone for an event or location.
          * @param {object} eventOrLocation
          * @returns {string}
          */
         function getVenueTimezone(eventOrLocation) {
-            const tz =
-                eventOrLocation?.timezone ||
-                eventOrLocation?.location_id?.timezone ||
-                '';
-            return tz && String(tz).trim() ? String(tz).trim() : 'UTC';
+            if (!eventOrLocation) {
+                return 'UTC';
+            }
+            const eventTz = eventOrLocation.timezone;
+            if (eventTz && String(eventTz).trim() && String(eventTz).trim() !== 'UTC') {
+                return String(eventTz).trim();
+            }
+            if (
+                eventOrLocation.location_id &&
+                typeof eventOrLocation.location_id === 'object'
+            ) {
+                const fromLoc = resolveTimezoneFromLocation(eventOrLocation.location_id);
+                if (fromLoc !== 'UTC') {
+                    return fromLoc;
+                }
+            }
+            if (eventOrLocation.address || eventOrLocation.timezone) {
+                return resolveTimezoneFromLocation(eventOrLocation);
+            }
+            if (eventTz && String(eventTz).trim()) {
+                return String(eventTz).trim();
+            }
+            return 'UTC';
         }
 
         /**
@@ -14412,8 +14466,8 @@
             const pools = [ce_locationsCache, allLocations];
             for (const pool of pools) {
                 const loc = (pool || []).find((l) => String(l._id) === String(locationId));
-                if (loc?.timezone && String(loc.timezone).trim()) {
-                    return String(loc.timezone).trim();
+                if (loc) {
+                    return resolveTimezoneFromLocation(loc);
                 }
             }
             return 'UTC';
@@ -14430,7 +14484,10 @@
                 return new Date().toISOString();
             }
             if (!timeZone || timeZone === 'UTC') {
-                return new Date(localValue).toISOString();
+                const [datePartUtc, timePartUtc] = localValue.split('T');
+                const [yUtc, mUtc, dUtc] = datePartUtc.split('-').map(Number);
+                const [hhUtc, mmUtc] = (timePartUtc || '00:00').split(':').map(Number);
+                return new Date(Date.UTC(yUtc, mUtc - 1, dUtc, hhUtc, mmUtc, 0)).toISOString();
             }
             const [datePart, timePart] = localValue.split('T');
             const [y, m, d] = datePart.split('-').map(Number);
