@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
-
+//
 /**
  * Bot Audit Log Schema //
  * @description Tracks all bot tool calls for audit trails and compliance
