@@ -5503,8 +5503,11 @@
                             </select>
                         </div>
                         <div class="profile-field">
-                            <label>Start Date & Time</label>
+                            <label>Start Date & Time (venue local)</label>
                             <input id="ce_start_datetime" type="datetime-local" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                            <p id="ce_venue_tz_hint" style="margin:8px 0 0;font-size:12px;color:#7f8c8d;">
+                                Enter start time in the venue's local timezone (pick location in step 2).
+                            </p>
                         </div>
                     </div>
 
@@ -14382,10 +14385,137 @@
         let currentEventStep = 1;
         let allEvents = [];
         let allLocations = [];
+        let ce_locationsCache = [];
         let eventsPage = 1;
         let eventsLimit = 20;
         let eventsTotalPages = 1;
         let eventsTotal = 0;
+
+        /**
+         * Resolve IANA timezone for an event or location.
+         * @param {object} eventOrLocation
+         * @returns {string}
+         */
+        function getVenueTimezone(eventOrLocation) {
+            const tz =
+                eventOrLocation?.timezone ||
+                eventOrLocation?.location_id?.timezone ||
+                '';
+            return tz && String(tz).trim() ? String(tz).trim() : 'UTC';
+        }
+
+        /**
+         * @param {string} locationId
+         * @returns {string}
+         */
+        function getLocationTimezoneById(locationId) {
+            const pools = [ce_locationsCache, allLocations];
+            for (const pool of pools) {
+                const loc = (pool || []).find((l) => String(l._id) === String(locationId));
+                if (loc?.timezone && String(loc.timezone).trim()) {
+                    return String(loc.timezone).trim();
+                }
+            }
+            return 'UTC';
+        }
+
+        /**
+         * Interpret datetime-local wall clock as venue time → UTC ISO.
+         * @param {string} localValue - e.g. 2026-06-24T22:30
+         * @param {string} timeZone - IANA
+         * @returns {string}
+         */
+        function wallClockInVenueTzToUtcIso(localValue, timeZone) {
+            if (!localValue) {
+                return new Date().toISOString();
+            }
+            if (!timeZone || timeZone === 'UTC') {
+                return new Date(localValue).toISOString();
+            }
+            const [datePart, timePart] = localValue.split('T');
+            const [y, m, d] = datePart.split('-').map(Number);
+            const [hh, mm] = (timePart || '00:00').split(':').map(Number);
+            let candidate = Date.UTC(y, m - 1, d, hh, mm, 0);
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone,
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+            });
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+                const parts = Object.fromEntries(
+                    formatter
+                        .formatToParts(new Date(candidate))
+                        .filter((p) => p.type !== 'literal')
+                        .map((p) => [p.type, parseInt(p.value, 10)])
+                );
+                if (
+                    parts.year === y &&
+                    parts.month === m &&
+                    parts.day === d &&
+                    parts.hour === hh &&
+                    parts.minute === mm
+                ) {
+                    return new Date(candidate).toISOString();
+                }
+                const diffMinutes =
+                    (y - parts.year) * 525600 +
+                    (m - parts.month) * 43200 +
+                    (d - parts.day) * 1440 +
+                    (hh - parts.hour) * 60 +
+                    (mm - parts.minute);
+                candidate += diffMinutes * 60 * 1000;
+            }
+            return new Date(candidate).toISOString();
+        }
+
+        /**
+         * Format stored UTC instant in venue timezone for dashboard display.
+         * @param {string|Date} isoUtc
+         * @param {string} timeZone
+         * @returns {string}
+         */
+        function formatEventInstantInVenueTz(isoUtc, timeZone) {
+            if (!isoUtc) {
+                return '—';
+            }
+            const tz = timeZone && String(timeZone).trim() ? timeZone : 'UTC';
+            try {
+                return new Intl.DateTimeFormat('en-US', {
+                    timeZone: tz,
+                    month: 'numeric',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                }).format(new Date(isoUtc));
+            } catch (e) {
+                return new Date(isoUtc).toLocaleString();
+            }
+        }
+
+        /**
+         * Update hint under create-event datetime field when venue is known.
+         */
+        function updateCeVenueTzHint() {
+            const hint = document.getElementById('ce_venue_tz_hint');
+            if (!hint) {
+                return;
+            }
+            const locationId = document.getElementById('ce_location_id')?.value;
+            if (!locationId) {
+                hint.textContent =
+                    'Enter start time in the venue\'s local timezone (pick location in step 2).';
+                return;
+            }
+            const tz = getLocationTimezoneById(locationId);
+            hint.textContent = `Start time is interpreted as venue local time (${tz}).`;
+        }
 
         /**
          * Load events for the events section
@@ -14548,8 +14678,8 @@
             }
 
             tableBody.innerHTML = events.map(event => {
-                const startDate = new Date(event.start_datetime).toLocaleDateString();
-                const startTime = new Date(event.start_datetime).toLocaleTimeString();
+                const venueTz = getVenueTimezone(event);
+                const startDisplay = formatEventInstantInVenueTz(event.start_datetime, venueTz);
                 const locationName = event.location_id?.name || 'Unknown Location';
                 const statusClass = `status-${event.status}`;
                 const statusText = event.status.replace('_', ' ').toUpperCase();
@@ -14563,8 +14693,8 @@
                         <td>${locationName}</td>
                         <td>${event.type ? event.type.replace('_', ' ').toUpperCase() : 'N/A'}</td>
                         <td>
-                            ${startDate}<br>
-                            <small style="color:#666;">${startTime}</small>
+                            ${startDisplay}
+                            <br><small style="color:#666;">${venueTz}</small>
                         </td>
                         <td>
                             ${event.total_booked || 0} / ${event.total_capacity || 0}
@@ -14679,6 +14809,7 @@
                 const result = await makeApiRequest('/locations');
                 if (result.success && result.data) {
                     const locations = Array.isArray(result.data) ? result.data : result.data.data || [];
+                    ce_locationsCache = locations;
                     const locationSelect = document.getElementById('ce_location_id');
                     locationSelect.innerHTML = '<option value="">Choose a location...</option>' +
                         locations.map(loc => `<option value="${loc._id}">${loc.name} (${loc.type.replace('_', ' ')})</option>`).join('');
@@ -14873,8 +15004,10 @@
                         <p>Seats: ${location.seats?.length || 0} | Units: ${location.units?.length || 0}</p>
                         <p>Total Capacity: ${(location.seats?.reduce((sum, seat) => sum + (seat.capacity || 0), 0) || 0) + (location.units?.reduce((sum, unit) => sum + (unit.occupancy || 0), 0) || 0)}</p>
                         <p>City: ${location.address?.city || 'N/A'} | Country: ${location.address?.country || 'N/A'}</p>
+                        <p>Timezone: ${location.timezone || 'UTC'}</p>
                     `;
                     preview.style.display = 'block';
+                    updateCeVenueTzHint();
                 }
             } catch (error) {
                 console.error('Error loading location details:', error);
@@ -15013,12 +15146,16 @@
                 console.log('Uploaded media:', ce_uploadedMedia);
                 console.log('Number of media files uploaded:', ce_uploadedMedia.length);
                 
+                const locationId = document.getElementById('ce_location_id').value;
+                const venueTz = getLocationTimezoneById(locationId);
+                const localStart = document.getElementById('ce_start_datetime').value;
                 const eventData = {
                     name: document.getElementById('ce_name').value.trim(),
                     description: document.getElementById('ce_description').value.trim(),
                     type: document.getElementById('ce_type').value,
-                    location_id: document.getElementById('ce_location_id').value,
-                    start_datetime: new Date(document.getElementById('ce_start_datetime').value).toISOString(),
+                    location_id: locationId,
+                    start_datetime: wallClockInVenueTzToUtcIso(localStart, venueTz),
+                    timezone: venueTz,
                     base_price: parseFloat(document.getElementById('ce_base_price').value),
                     currency: document.getElementById('ce_currency').value,
                     price_tier: parseInt(document.getElementById('ce_price_tier').value),
@@ -15076,8 +15213,12 @@
             document.getElementById('eventDetailName').textContent = event.name;
             document.getElementById('eventDetailType').textContent = event.type.replace('_', ' ').toUpperCase();
             document.getElementById('eventDetailLocation').textContent = event.location_id?.name || 'Unknown Location';
-            document.getElementById('eventDetailStartDate').textContent = new Date(event.start_datetime).toLocaleString();
-            document.getElementById('eventDetailEndDate').textContent = event.end_datetime ? new Date(event.end_datetime).toLocaleString() : 'Not specified';
+            const venueTz = getVenueTimezone(event);
+            document.getElementById('eventDetailStartDate').textContent =
+                formatEventInstantInVenueTz(event.start_datetime, venueTz) + ` (${venueTz})`;
+            document.getElementById('eventDetailEndDate').textContent = event.end_datetime
+                ? formatEventInstantInVenueTz(event.end_datetime, venueTz) + ` (${venueTz})`
+                : 'Not specified';
             document.getElementById('eventDetailStatus').innerHTML = `<span class="status-badge status-${event.status}">${event.status.replace('_', ' ').toUpperCase()}</span>`;
             document.getElementById('eventDetailBasePrice').textContent = `${event.currency || 'USD'} ${event.base_price || 0}`;
             document.getElementById('eventDetailCapacity').textContent = event.total_capacity || 0;
