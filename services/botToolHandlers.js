@@ -39,6 +39,7 @@ const { autoSelectEventsBySentiment, normalizeEventDate } = require('./botSentim
 const { findAlternativeEventsWithSeats, autoFillCOEData, selectSeatsByBudgetAndCapacity, calculateSeatCosts } = require('./botAutoFillService');
 const { getPreferences } = require('./botPreferenceService');
 const { parseAndNormalizeDate } = require('../utils/dateParser');
+const { normalizeCoeDatePair, applyCoeCalendarDates } = require('../utils/calendarDateOnly');
 const { generateSeatUpgradeOffers } = require('./seatUpgradeService');
 
 /**
@@ -449,8 +450,18 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       end_dateType: typeof end_date
     });
     
-    const startDate = new Date(start_date);
-    const endDate = new Date(end_date);
+    let startDate;
+    let endDate;
+    try {
+      ({ startDate, endDate } = normalizeCoeDatePair(start_date, end_date));
+    } catch (dateErr) {
+      throw createError(
+        ErrorCodes.INVALID_DATE_FORMAT,
+        dateErr.message || 'Invalid date format. Dates must be in ISO 8601 format.',
+        ErrorCategories.VALIDATION,
+        false
+      );
+    }
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Parsed dates:', {
       startDate: startDate.toISOString(),
@@ -2200,8 +2211,23 @@ async function handleUpdateCOE(params, user, correlationId) {
     const updateData = {};
     if (updates.name) updateData.name = updates.name;
     if (updates.description !== undefined) updateData.description = updates.description;
-    if (updates.start_date) updateData.start_date = new Date(updates.start_date);
-    if (updates.end_date) updateData.end_date = new Date(updates.end_date);
+    if (updates.start_date || updates.end_date) {
+      const datePatch = applyCoeCalendarDates(
+        {
+          ...(updates.start_date ? { start_date: updates.start_date } : {}),
+          ...(updates.end_date ? { end_date: updates.end_date } : {}),
+        },
+        {
+          start_date: existingCOE.start_date,
+          end_date: existingCOE.end_date,
+        },
+      );
+      if (datePatch.start_date) updateData.start_date = datePatch.start_date;
+      if (datePatch.end_date) updateData.end_date = datePatch.end_date;
+      if (datePatch.original_request_data) {
+        updateData.original_request_data = datePatch.original_request_data;
+      }
+    }
     if (updates.notes !== undefined) updateData.notes = updates.notes;
     if (updates.client_notes !== undefined) updateData.client_notes = updates.client_notes;
     if (updates.events) updateData.events = updates.events;
