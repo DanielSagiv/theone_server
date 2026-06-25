@@ -4735,6 +4735,9 @@
                 <a href="#" class="nav-item" data-section="events">
                     Events
                 </a>
+                <a href="#" class="nav-item" data-section="events-import">
+                    Events Import
+                </a>
                 <a href="#" class="nav-item" data-section="coes">
                     COEs
                 </a>
@@ -4948,6 +4951,52 @@
                                 </div>
                                 <div id="eventsTotalInfo" style="color:#666;">0 total</div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Events Import Section (scrap events R&D) -->
+                <div class="content-section" id="events-importSection">
+                    <div class="section-header">
+                        <h1>Events Import</h1>
+                        <p>Scrape events from venue websites and import into THE1. R&D phase — venue by venue.</p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                            <div>
+                                <h3 style="margin:0;">LIV Las Vegas</h3>
+                                <small>Pilot venue — listing preview only (no database import yet)</small>
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <button type="button" id="livLiveEventsBtn" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="loadLivLiveEvents()">Show Live Events</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="livLiveEventsLoading" style="display:none;text-align:center;padding:24px;">
+                                <div class="spinner"></div>
+                                <p style="color:#666;margin-top:12px;">Fetching live events from LIV (may take up to a minute)...</p>
+                            </div>
+                            <div id="livLiveEventsSummary" style="display:none;color:#666;margin-bottom:16px;"></div>
+                            <div id="livLiveEventsWarnings" style="display:none;margin-bottom:16px;"></div>
+                            <div id="livLiveEventsTableWrap" style="display:none;overflow:auto;max-height:70vh;">
+                                <table class="table" id="livLiveEventsTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:90px;">Image</th>
+                                            <th>Name</th>
+                                            <th>Venue</th>
+                                            <th>Category</th>
+                                            <th>Date</th>
+                                            <th>Time</th>
+                                            <th>Source</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="livLiveEventsTableBody"></tbody>
+                                </table>
+                            </div>
+                            <p id="livLiveEventsPlaceholder" style="color:#7f8c8d;font-size:14px;margin:0;">
+                                Click <strong>Show Live Events</strong> to load the current lineup from livnightclub.com.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -14720,6 +14769,106 @@
             } catch (error) {
                 console.error('Tao Group import error:', error);
                 showAlert('Tao Group import error: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Escape HTML for safe insertion into table cells.
+         * @param {string} value
+         * @returns {string}
+         */
+        function escapeHtmlForTable(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        /**
+         * Load LIV Las Vegas live events listing into Events Import preview table (no DB writes).
+         */
+        async function loadLivLiveEvents() {
+            const btn = document.getElementById('livLiveEventsBtn');
+            const loading = document.getElementById('livLiveEventsLoading');
+            const summary = document.getElementById('livLiveEventsSummary');
+            const warningsEl = document.getElementById('livLiveEventsWarnings');
+            const tableWrap = document.getElementById('livLiveEventsTableWrap');
+            const tableBody = document.getElementById('livLiveEventsTableBody');
+            const placeholder = document.getElementById('livLiveEventsPlaceholder');
+
+            if (btn) btn.disabled = true;
+            if (loading) loading.style.display = 'block';
+            if (summary) summary.style.display = 'none';
+            if (warningsEl) { warningsEl.style.display = 'none'; warningsEl.innerHTML = ''; }
+            if (tableWrap) tableWrap.style.display = 'none';
+            if (placeholder) placeholder.style.display = 'none';
+
+            try {
+                const response = await makeApiRequest('/scrap-events/liv/events', 'GET');
+                const body = response.data || {};
+
+                if (!response.success || !body.success) {
+                    const errMsg = body.error?.details || body.error?.message || 'Failed to load live events';
+                    showAlert('LIV live events: ' + errMsg, 'error');
+                    if (placeholder) {
+                        placeholder.style.display = 'block';
+                        placeholder.textContent = errMsg;
+                    }
+                    return;
+                }
+
+                const events = Array.isArray(body.events) ? body.events : [];
+                const scrapedAt = body.scrapedAt ? new Date(body.scrapedAt).toLocaleString() : '';
+                if (summary) {
+                    summary.style.display = 'block';
+                    summary.textContent = `${body.count || events.length} events from ${body.sourceUrl || 'LIV'} (fetched ${scrapedAt})`;
+                }
+
+                if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
+                    warningsEl.style.display = 'block';
+                    warningsEl.innerHTML = body.warnings.map((w) =>
+                        `<p style="color:#856404;background:#fff3cd;padding:8px 12px;border-radius:6px;margin:0 0 8px;">${escapeHtmlForTable(w)}</p>`
+                    ).join('');
+                }
+
+                if (events.length === 0) {
+                    if (placeholder) {
+                        placeholder.style.display = 'block';
+                        placeholder.textContent = 'No events returned from the LIV listing.';
+                    }
+                    return;
+                }
+
+                tableBody.innerHTML = events.map((ev) => {
+                    const imgHtml = ev.imageUrl
+                        ? `<img src="${escapeHtmlForTable(ev.imageUrl)}" alt="${escapeHtmlForTable(ev.name)}" style="max-height:80px;max-width:80px;object-fit:cover;border-radius:6px;" loading="lazy">`
+                        : '<span style="color:#999;">—</span>';
+                    const sourceHtml = ev.detailUrl
+                        ? `<a href="${escapeHtmlForTable(ev.detailUrl)}" target="_blank" rel="noopener noreferrer">View</a>`
+                        : '—';
+                    return `<tr>
+                        <td>${imgHtml}</td>
+                        <td>${escapeHtmlForTable(ev.name)}</td>
+                        <td>${escapeHtmlForTable(ev.venueName)}</td>
+                        <td>${escapeHtmlForTable(ev.category)}</td>
+                        <td>${escapeHtmlForTable(ev.dateDisplay)}</td>
+                        <td>${escapeHtmlForTable(ev.startTime)}</td>
+                        <td>${sourceHtml}</td>
+                    </tr>`;
+                }).join('');
+
+                if (tableWrap) tableWrap.style.display = 'block';
+            } catch (error) {
+                console.error('LIV live events error:', error);
+                showAlert('LIV live events error: ' + error.message, 'error');
+                if (placeholder) {
+                    placeholder.style.display = 'block';
+                    placeholder.textContent = error.message;
+                }
+            } finally {
+                if (loading) loading.style.display = 'none';
+                if (btn) btn.disabled = false;
             }
         }
 
