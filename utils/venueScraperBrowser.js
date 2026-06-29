@@ -34,43 +34,72 @@ const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 /**
- * Click "Load More" (or similar) until exhausted or max clicks reached.
+ * Detect whether LIV listing still offers more events to load.
+ * @param {import('puppeteer-core').Page} page
+ * @returns {Promise<{ canLoadMore: boolean, noMoreText: boolean }>}
+ */
+async function getLoadMoreState(page) {
+  return page.evaluate(() => {
+    const bodyText = (document.body.innerText || '').toLowerCase();
+    const noMoreText = bodyText.includes('no more events to show');
+    const buttons = Array.from(document.querySelectorAll('button, a, span, div'));
+    const loadMore = buttons.find((b) => /^load more$/i.test((b.textContent || '').trim()));
+    return { canLoadMore: Boolean(loadMore) && !noMoreText, noMoreText };
+  });
+}
+
+/**
+ * Click "Load More" until exhausted or max clicks reached. Scrolls to bottom each attempt.
  * @param {import('puppeteer-core').Page} page
  * @param {{ maxClicks?: number, delayMs?: number, logPrefix?: string }} [options]
- * @returns {Promise<number>} number of clicks performed
+ * @returns {Promise<{ clicks: number, exhausted: boolean, hitMaxCap: boolean }>}
  */
 async function clickLoadMoreUntilDone(page, options = {}) {
-  const maxClicks = options.maxClicks ?? 20;
+  const maxClicks = options.maxClicks ?? 100;
   const delayMs = options.delayMs ?? 1500;
   const logPrefix = options.logPrefix || '[venueScraperBrowser]';
   let clicks = 0;
 
   for (let i = 0; i < maxClicks; i++) {
+    const state = await getLoadMoreState(page);
+    if (!state.canLoadMore || state.noMoreText) {
+      break;
+    }
+
     const clicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('button, a, span'));
-      const loadMore = buttons.find((b) => /load more/i.test((b.textContent || '').trim()));
-      if (loadMore) {
+      window.scrollTo(0, document.body.scrollHeight);
+      const buttons = Array.from(document.querySelectorAll('button, a, span, div'));
+      const loadMore = buttons.find((b) => /^load more$/i.test((b.textContent || '').trim()));
+      if (loadMore && typeof loadMore.click === 'function') {
         loadMore.click();
         return true;
       }
       return false;
     });
     if (!clicked) break;
+
     clicks += 1;
     await new Promise((r) => setTimeout(r, delayMs));
   }
 
-  if (clicks > 0) {
-    console.log(`${logPrefix} clickLoadMoreUntilDone: clicked ${clicks} time(s)`);
+  const finalState = await getLoadMoreState(page);
+  const exhausted = !finalState.canLoadMore || finalState.noMoreText;
+  const hitMaxCap = clicks >= maxClicks && !exhausted;
+
+  if (clicks > 0 || hitMaxCap) {
+    console.log(
+      `${logPrefix} clickLoadMoreUntilDone: clicked ${clicks} time(s), exhausted=${exhausted}, hitMaxCap=${hitMaxCap}`
+    );
   }
-  return clicks;
+
+  return { clicks, exhausted, hitMaxCap };
 }
 
 /**
  * Open URL in headless Chrome, run handler, then close browser.
  * @param {string} url
  * @param {(page: import('puppeteer-core').Page) => Promise<T>} pageHandler
- * @param {{ waitForSelector?: string, waitMs?: number, clickLoadMore?: boolean, logPrefix?: string }} [options]
+ * @param {{ waitForSelector?: string, waitMs?: number, clickLoadMore?: boolean, beforeHandler?: (page: import('puppeteer-core').Page) => Promise<void>, logPrefix?: string }} [options]
  * @returns {Promise<{ result: T|null, browserError: string|null }>}
  * @template T
  */
@@ -115,17 +144,23 @@ async function withBrowserPage(url, pageHandler, options = {}) {
       }
     }
 
-    if (options.waitForSelector) {
-      await page.waitForSelector(options.waitForSelector, { timeout: 20000 }).catch(() => {});
-    }
-    if (options.waitMs) {
-      await new Promise((r) => setTimeout(r, options.waitMs));
+    if (options.beforeHandler) {
+      await options.beforeHandler(page);
     } else {
-      await new Promise((r) => setTimeout(r, 5000));
-    }
+      if (options.waitForSelector) {
+        await page.waitForSelector(options.waitForSelector, { timeout: 20000 }).catch(() => {});
+      }
+      if (options.waitMs !== undefined) {
+        if (options.waitMs > 0) {
+          await new Promise((r) => setTimeout(r, options.waitMs));
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 5000));
+      }
 
-    if (options.clickLoadMore) {
-      await clickLoadMoreUntilDone(page, { logPrefix });
+      if (options.clickLoadMore) {
+        await clickLoadMoreUntilDone(page, { logPrefix });
+      }
     }
 
     const result = await pageHandler(page);

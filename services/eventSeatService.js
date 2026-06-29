@@ -133,10 +133,16 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
       throw new Error('Location not found');
     }
 
-    // 3. Create a map of location seats by _id for quick lookup
+    // 3. Create maps of location seats for quick lookup (_id and code fallback)
     const locationSeatMap = new Map();
-    location.seats.forEach(seat => {
-      locationSeatMap.set(seat._id.toString(), seat);
+    const locationSeatByCode = new Map();
+    (location.seats || []).forEach((seat) => {
+      if (seat?.code) {
+        locationSeatByCode.set(seat.code, seat);
+      }
+      if (seat?._id) {
+        locationSeatMap.set(seat._id.toString(), seat);
+      }
     });
 
     // When available_only, filter to seats with status 'available' before processing
@@ -148,7 +154,9 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
     const seatsWithSummaries = await Promise.all(
       seatsToProcess.map(async (eventSeat) => {
         // Find corresponding location seat to get sentiments and media
-        const locationSeat = locationSeatMap.get(eventSeat.seat_id?.toString());
+        const locationSeat =
+          locationSeatMap.get(eventSeat.seat_id?.toString()) ||
+          (eventSeat.code ? locationSeatByCode.get(eventSeat.code) : undefined);
         const sentiments = locationSeat?.sentiment || [];
 
         // Get media: prioritize event seat media, fallback to location seat media

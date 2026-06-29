@@ -165,6 +165,20 @@ const EventSchema = new mongoose.Schema({
   gxnEventDate: { type: String, trim: true }, // GXN date key (e.g., D251101) for reference
   // Tao Group integration - external event id for import idempotency
   taoEventId: { type: String, trim: true },
+  // LIV venue listing - external event code for scrap import idempotency
+  livEventCode: { type: String, trim: true },
+  // OMNIA Night Club (Booketing) - external event code for scrap import idempotency
+  omniaEventCode: { type: String, trim: true },
+  // Hakkasan Las Vegas (Booketing) - external event code for scrap import idempotency
+  hakkasanEventCode: { type: String, trim: true },
+  // TAO Beach (Booketing) - external event code for scrap import idempotency
+  taoBeachEventCode: { type: String, trim: true },
+  // Palm Tree Beach (Booketing) - external event code for scrap import idempotency
+  palmTreeBeachEventCode: { type: String, trim: true },
+  // Marquee Dayclub (Booketing) - external event code for scrap import idempotency
+  marqueeDayclubEventCode: { type: String, trim: true },
+  // Marquee Nightclub (taogroup.com) - external event id for scrap import idempotency
+  marqueeNightclubEventId: { type: String, trim: true },
   performers: [{ // Performer information (GXN codes + optional display fields)
     perfcode: { type: String, trim: true }, // Performer code (e.g., PER1242)
     importance: { type: String, trim: true }, // Performer importance level
@@ -235,6 +249,13 @@ EventSchema.index({ tags: 1 });
 EventSchema.index({ created_by: 1, status: 1 });
 EventSchema.index({ gxnEventCode: 1 }, { sparse: true }); // Index for GXN event code lookups
 EventSchema.index({ taoEventId: 1 }, { sparse: true }); // Index for Tao Group event lookups
+EventSchema.index({ livEventCode: 1 }, { sparse: true }); // Index for LIV scrap import lookups
+EventSchema.index({ omniaEventCode: 1 }, { sparse: true }); // Index for OMNIA scrap import lookups
+EventSchema.index({ hakkasanEventCode: 1 }, { sparse: true }); // Index for Hakkasan scrap import lookups
+EventSchema.index({ taoBeachEventCode: 1 }, { sparse: true }); // Index for TAO Beach scrap import lookups
+EventSchema.index({ palmTreeBeachEventCode: 1 }, { sparse: true }); // Index for Palm Tree Beach scrap import lookups
+EventSchema.index({ marqueeDayclubEventCode: 1 }, { sparse: true }); // Index for Marquee Dayclub scrap import lookups
+EventSchema.index({ marqueeNightclubEventId: 1 }, { sparse: true }); // Index for Marquee Nightclub scrap import lookups
 
 // Pre-save middleware to update availability
 EventSchema.pre('save', function(next) {

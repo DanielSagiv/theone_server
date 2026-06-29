@@ -366,7 +366,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    // Inherit seats/units from location
+    // Inherit seats/units from location (or use client-provided seats from LIV import prefill)
     const inheritedSeats = location.seats.map(seat => ({
       seat_id: seat._id,
       code: seat.code,
@@ -401,9 +401,14 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       media: []
     }));
 
+    const useProvidedSeats = Array.isArray(value.seats) && value.seats.length > 0;
+    const useProvidedUnits = Array.isArray(value.units) && value.units.length > 0;
+    const eventSeats = useProvidedSeats ? value.seats : inheritedSeats;
+    const eventUnits = useProvidedUnits ? value.units : inheritedUnits;
+
     // Calculate total capacity
-    const totalCapacity = inheritedSeats.reduce((sum, seat) => sum + (seat.capacity || 0), 0) +
-                         inheritedUnits.reduce((sum, unit) => sum + (unit.occupancy || 0), 0);
+    const totalCapacity = eventSeats.reduce((sum, seat) => sum + (seat.capacity || 0), 0) +
+                         eventUnits.reduce((sum, unit) => sum + (unit.occupancy || 0), 0);
 
     // Create event
     const explicitEventTz =
@@ -414,8 +419,15 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
         explicitEventTz && explicitEventTz !== 'UTC'
           ? explicitEventTz
           : resolveVenueTimezone(location),
-      seats: inheritedSeats,
-      units: inheritedUnits,
+      seats: eventSeats,
+      units: eventUnits,
+      livEventCode: value.livEventCode || undefined,
+      omniaEventCode: value.omniaEventCode || undefined,
+      hakkasanEventCode: value.hakkasanEventCode || undefined,
+      taoBeachEventCode: value.taoBeachEventCode || undefined,
+      palmTreeBeachEventCode: value.palmTreeBeachEventCode || undefined,
+      marqueeDayclubEventCode: value.marqueeDayclubEventCode || undefined,
+      marqueeNightclubEventId: value.marqueeNightclubEventId || undefined,
       total_capacity: totalCapacity,
       total_available: totalCapacity,
       total_booked: 0,
