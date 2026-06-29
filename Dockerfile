@@ -1,9 +1,16 @@
 # syntax=docker/dockerfile:1
 FROM node:20-alpine
 
-# Install system dependencies needed for native modules and curl
+# Native modules, health checks, and headless Chromium for scrap-events / Tao import (puppeteer-core)
 RUN apk update && \
-    apk add --no-cache python3 make g++ curl
+    apk add --no-cache \
+      python3 make g++ curl \
+      chromium \
+      nss \
+      freetype \
+      harfbuzz \
+      ca-certificates \
+      ttf-freefont
 
 WORKDIR /app
 
@@ -18,6 +25,9 @@ COPY . .
 
 # Set the default port and expose it
 ENV PORT=80
+# puppeteer-core has no bundled browser; Alpine chromium package (see venueScraperBrowser.js)
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 EXPOSE 80
 
 # Start the app

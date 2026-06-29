@@ -306,6 +306,7 @@ Make sure all required environment variables are set in your ECS Task Definition
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - Required for SES when receipt email is enabled.
 - `FROM_EMAIL` - Verified SES sender address.
 - Any other variables from your `.env` file
+- `PUPPETEER_EXECUTABLE_PATH` — **Docker image sets** `/usr/bin/chromium-browser` automatically. On ECS, **do not** override with `/usr/bin/google-chrome` (not in the image). Remove a wrong ECS value or leave unset to use the image default. Scrap-events also needs `LIV_*`, `OMNIA_*`, `HAKKASAN_*`, etc. location IDs on stage/prod task definitions.
 
 **GOAT webhooks:** Register callback URL `POST /webhooks/goat` on your public API base (same path as mounted in `server.js`). Store the signature secret in `GOAT_WEBHOOK_SIGNATURE`. Legacy `POST /webhooks/global-payments` returns HTTP 410.
 
