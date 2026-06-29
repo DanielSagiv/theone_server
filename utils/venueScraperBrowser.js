@@ -26,7 +26,9 @@ function getPuppeteer() {
 function getChromePath() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
   if (process.platform === 'darwin') return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  if (process.platform === 'linux') return '/usr/bin/google-chrome';
+  if (process.platform === 'linux') {
+    return '/usr/bin/chromium-browser';
+  }
   return null;
 }
 
@@ -133,12 +135,12 @@ async function withBrowserPage(url, pageHandler, options = {}) {
     await page.setUserAgent(DEFAULT_USER_AGENT);
 
     try {
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
     } catch (navErr) {
       if (navErr.message && navErr.message.includes('timeout')) {
-        console.log(`${logPrefix} networkidle2 timed out, retrying with load`);
-        await page.goto(url, { waitUntil: 'load', timeout: 25000 });
-        await new Promise((r) => setTimeout(r, 8000));
+        console.log(`${logPrefix} networkidle2 timed out, retrying with domcontentloaded`);
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+        await new Promise((r) => setTimeout(r, 10000));
       } else {
         throw navErr;
       }
