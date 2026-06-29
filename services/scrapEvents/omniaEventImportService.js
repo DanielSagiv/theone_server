@@ -14,6 +14,8 @@ const {
   attachScrapRemoveEligibility,
   filterScrapEventsNotInPast,
   assertScrapListingEventNotInPast,
+  SCRAP_IMPORT_EVENT_DESCRIPTION,
+  getScrapImportEventStatus,
 } = require('./scrapEventsShared');
 
 const LOG_PREFIX = '[OMNIA import]';
@@ -301,7 +303,7 @@ async function prepareOmniaEventImport(listingEvent) {
 
   const prefill = {
     name: listingEvent.name || 'Event',
-    description: detail.description || listingEvent.name || '',
+    description: SCRAP_IMPORT_EVENT_DESCRIPTION,
     type,
     location_id: locationId,
     start_datetime: startDatetime.toISOString(),
@@ -310,7 +312,7 @@ async function prepareOmniaEventImport(listingEvent) {
     base_price: basePrice,
     currency: 'USD',
     price_tier: 1,
-    status: 'draft',
+    status: getScrapImportEventStatus(),
     notes,
     policies: '',
     media,

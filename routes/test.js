@@ -46,7 +46,8 @@ router.get('/dashboard', (req, res) => {
     title: 'The1 Platform - API Test Dashboard',
     user: null,
     token: null,
-    seatCategoryOptions: LOCATION_SEAT_CATEGORY_OPTIONS
+    seatCategoryOptions: LOCATION_SEAT_CATEGORY_OPTIONS,
+    scrapEventsImportWizard: process.env.SCRAP_EVENTS_IMPORT_WIZARD === 'true',
   });
 });
 

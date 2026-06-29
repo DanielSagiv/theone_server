@@ -15717,6 +15717,9 @@
         /** @type {object|null} LIV import prefill context for Create Event modal */
         window.livImportPrefill = null;
 
+        /** When true, scrap import opens 4-step Create Event wizard (draft). Default: auto-create active. */
+        const SCRAP_EVENTS_IMPORT_WIZARD = <%= scrapEventsImportWizard ? 'true' : 'false' %>;
+
         /** @type {object|null} Last listing row clicked for Import (cache patch) */
         window.livLastImportedListingRow = null;
 
@@ -15784,13 +15787,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('LIV prepare-import warnings:', body.warnings);
-                }
-
-                window.livImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'liv', 'LIV');
             } catch (error) {
                 console.error('importLivEvent error:', error);
                 showAlert('LIV import error: ' + error.message, 'error');
@@ -16311,13 +16309,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('OMNIA prepare-import warnings:', body.warnings);
-                }
-
-                window.omniaImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'omnia', 'OMNIA');
             } catch (error) {
                 console.error('importOmniaEvent error:', error);
                 showAlert('OMNIA import error: ' + error.message, 'error');
@@ -16772,13 +16765,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('Hakkasan prepare-import warnings:', body.warnings);
-                }
-
-                window.hakkasanImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'hakkasan', 'Hakkasan');
             } catch (error) {
                 console.error('importHakkasanEvent error:', error);
                 showAlert('Hakkasan import error: ' + error.message, 'error');
@@ -17233,13 +17221,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('TAO Beach prepare-import warnings:', body.warnings);
-                }
-
-                window.taoBeachImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'taoBeach', 'TAO Beach');
             } catch (error) {
                 console.error('importTaoBeachEvent error:', error);
                 showAlert('TAO Beach import error: ' + error.message, 'error');
@@ -17700,13 +17683,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('Palm Tree Beach prepare-import warnings:', body.warnings);
-                }
-
-                window.palmTreeBeachImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'palmTreeBeach', 'Palm Tree Beach');
             } catch (error) {
                 console.error('importPalmTreeBeachEvent error:', error);
                 showAlert('Palm Tree Beach import error: ' + error.message, 'error');
@@ -18161,13 +18139,8 @@
                     return;
                 }
 
-                if (Array.isArray(body.warnings) && body.warnings.length) {
-                    console.warn('Marquee Dayclub prepare-import warnings:', body.warnings);
-                }
-
-                window.marqueeDayclubImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
-                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'marqueeDayclub', 'Marquee Dayclub');
             } catch (error) {
                 console.error('importMarqueeDayclubEvent error:', error);
                 showAlert('Marquee Dayclub import error: ' + error.message, 'error');
@@ -18457,9 +18430,8 @@
                     showAlert(`Already imported: ${body.eventName || ev.name}`, 'warning');
                     return;
                 }
-                if (body.warnings && body.warnings.length) console.warn('Marquee Nightclub prepare-import warnings:', body.warnings);
-                window.marqueeNightclubImportPrefill = body.prefill || null;
-                await openCreateEventPrefilled(body.prefill);
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'marqueeNightclub', 'Marquee Nightclub');
             } catch (error) {
                 console.error('importMarqueeNightclubEvent error:', error);
                 showAlert('Marquee Nightclub import error: ' + error.message, 'error');
@@ -18499,6 +18471,171 @@
 
 
         /**
+         * Set the active scrap-import prefill global for Create Event / direct commit.
+         * @param {object} prefill
+         */
+        function assignScrapImportPrefillGlobals(prefill) {
+            window.livImportPrefill = null;
+            window.omniaImportPrefill = null;
+            window.hakkasanImportPrefill = null;
+            window.taoBeachImportPrefill = null;
+            window.palmTreeBeachImportPrefill = null;
+            window.marqueeDayclubImportPrefill = null;
+            window.marqueeNightclubImportPrefill = null;
+
+            if (prefill.marqueeNightclubEventId) {
+                window.marqueeNightclubImportPrefill = prefill;
+            } else if (prefill.marqueeDayclubEventCode) {
+                window.marqueeDayclubImportPrefill = prefill;
+            } else if (prefill.palmTreeBeachEventCode) {
+                window.palmTreeBeachImportPrefill = prefill;
+            } else if (prefill.taoBeachEventCode) {
+                window.taoBeachImportPrefill = prefill;
+            } else if (prefill.hakkasanEventCode) {
+                window.hakkasanImportPrefill = prefill;
+            } else if (prefill.omniaEventCode) {
+                window.omniaImportPrefill = prefill;
+            } else {
+                window.livImportPrefill = prefill;
+            }
+        }
+
+        /**
+         * Build POST /events payload from scrap prepare-import prefill.
+         * @param {object} prefill
+         * @returns {object}
+         */
+        function buildEventDataFromScrapPrefill(prefill) {
+            const locationId = prefill.location_id;
+            const venueTz = prefill.timezone || getLocationTimezoneById(locationId);
+            const localStart = prefill.start_datetime_local;
+            let startDatetime = prefill.start_datetime;
+            if (!startDatetime && localStart) {
+                startDatetime = wallClockInVenueTzToUtcIso(localStart, venueTz);
+            }
+
+            const eventData = {
+                name: (prefill.name || 'Event').trim(),
+                description: prefill.description || '',
+                type: prefill.type || 'night_club',
+                location_id: locationId,
+                start_datetime: startDatetime,
+                timezone: venueTz,
+                base_price: prefill.base_price != null ? Number(prefill.base_price) : 0,
+                currency: prefill.currency || 'USD',
+                price_tier: prefill.price_tier != null ? Number(prefill.price_tier) : 1,
+                policies: prefill.policies || '',
+                notes: prefill.notes || '',
+                media: Array.isArray(prefill.media) ? prefill.media : [],
+                status: prefill.status || 'active',
+            };
+
+            if (Array.isArray(prefill.seats) && prefill.seats.length) {
+                eventData.seats = prefill.seats;
+            }
+            if (Array.isArray(prefill.units) && prefill.units.length) {
+                eventData.units = prefill.units;
+            }
+            if (prefill.livEventCode) eventData.livEventCode = prefill.livEventCode;
+            if (prefill.omniaEventCode) eventData.omniaEventCode = prefill.omniaEventCode;
+            if (prefill.hakkasanEventCode) eventData.hakkasanEventCode = prefill.hakkasanEventCode;
+            if (prefill.taoBeachEventCode) eventData.taoBeachEventCode = prefill.taoBeachEventCode;
+            if (prefill.palmTreeBeachEventCode) eventData.palmTreeBeachEventCode = prefill.palmTreeBeachEventCode;
+            if (prefill.marqueeDayclubEventCode) eventData.marqueeDayclubEventCode = prefill.marqueeDayclubEventCode;
+            if (prefill.marqueeNightclubEventId) eventData.marqueeNightclubEventId = prefill.marqueeNightclubEventId;
+
+            return eventData;
+        }
+
+        /**
+         * Clear scrap-import prefill globals after successful create.
+         */
+        function clearScrapImportPrefillGlobals() {
+            window.livImportPrefill = null;
+            window.livLastImportedListingRow = null;
+            window.omniaImportPrefill = null;
+            window.omniaLastImportedListingRow = null;
+            window.hakkasanImportPrefill = null;
+            window.hakkasanLastImportedListingRow = null;
+            window.taoBeachImportPrefill = null;
+            window.taoBeachLastImportedListingRow = null;
+            window.palmTreeBeachImportPrefill = null;
+            window.palmTreeBeachLastImportedListingRow = null;
+            window.marqueeDayclubImportPrefill = null;
+            window.marqueeDayclubLastImportedListingRow = null;
+            window.marqueeNightclubImportPrefill = null;
+            window.marqueeNightclubLastImportedListingRow = null;
+        }
+
+        /**
+         * Auto-create THE1 event from scrap prefill (no wizard).
+         * @param {object} prefill
+         * @param {string} venueKey
+         * @returns {Promise<boolean>}
+         */
+        async function commitScrapImportDirect(prefill, venueKey) {
+            const patchByVenue = {
+                liv: patchLivCacheAfterImport,
+                omnia: patchOmniaCacheAfterImport,
+                hakkasan: patchHakkasanCacheAfterImport,
+                taoBeach: patchTaoBeachCacheAfterImport,
+                palmTreeBeach: patchPalmTreeBeachCacheAfterImport,
+                marqueeDayclub: patchMarqueeDayclubCacheAfterImport,
+                marqueeNightclub: patchMarqueeNightclubCacheAfterImport,
+            };
+
+            try {
+                const eventData = buildEventDataFromScrapPrefill(prefill);
+                const result = await makeApiRequest('/events', 'POST', eventData);
+
+                if (!result.success) {
+                    showAlert('Import failed: ' + getApiErrorMessage(result), 'error');
+                    return false;
+                }
+
+                const created = result.data?.data || result.data;
+                const patchFn = patchByVenue[venueKey];
+                if (typeof patchFn === 'function') {
+                    patchFn(created);
+                }
+                clearScrapImportPrefillGlobals();
+                loadEvents();
+                showAlert(`Imported "${created?.name || prefill.name}" as active event.`, 'success');
+                return true;
+            } catch (error) {
+                console.error('commitScrapImportDirect error:', error);
+                showAlert('Import error: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        /**
+         * After successful prepare-import: wizard modal or direct active create.
+         * @param {object} body
+         * @param {string} venueKey
+         * @param {string} venueLabel
+         */
+        async function finishScrapImportAfterPrepare(body, venueKey, venueLabel) {
+            const prefill = body?.prefill;
+            if (!prefill) {
+                showAlert('No prefill data for import.', 'error');
+                return;
+            }
+
+            if (Array.isArray(body.warnings) && body.warnings.length) {
+                console.warn(`${venueLabel} prepare-import warnings:`, body.warnings);
+            }
+
+            if (SCRAP_EVENTS_IMPORT_WIZARD) {
+                assignScrapImportPrefillGlobals(prefill);
+                await openCreateEventPrefilled(prefill);
+                showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
+            } else {
+                await commitScrapImportDirect(prefill, venueKey);
+            }
+        }
+
+        /**
          * Open Create Event modal with fields pre-filled from LIV import prefill.
          * @param {object} prefill
          */
@@ -18536,62 +18673,7 @@
                 document.getElementById('ce_price_tier').value = String(prefill.price_tier || 1);
                 document.getElementById('ce_notes').value = prefill.notes || '';
 
-                if (prefill.marqueeNightclubEventId) {
-                    window.marqueeNightclubImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.omniaImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                } else if (prefill.marqueeDayclubEventCode) {
-                    window.marqueeDayclubImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.omniaImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeNightclubImportPrefill = null;
-                } else if (prefill.palmTreeBeachEventCode) {
-                    window.palmTreeBeachImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.omniaImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                    window.marqueeNightclubImportPrefill = null;
-                } else if (prefill.taoBeachEventCode) {
-                    window.taoBeachImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.omniaImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                    window.marqueeNightclubImportPrefill = null;
-                } else if (prefill.hakkasanEventCode) {
-                    window.hakkasanImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.omniaImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                    window.marqueeNightclubImportPrefill = null;
-                } else if (prefill.omniaEventCode) {
-                    window.omniaImportPrefill = prefill;
-                    window.livImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                } else {
-                    window.livImportPrefill = prefill;
-                    window.omniaImportPrefill = null;
-                    window.hakkasanImportPrefill = null;
-                    window.taoBeachImportPrefill = null;
-                    window.palmTreeBeachImportPrefill = null;
-                    window.marqueeDayclubImportPrefill = null;
-                    window.marqueeNightclubImportPrefill = null;
-                }
+                assignScrapImportPrefillGlobals(prefill);
 
                 await onCeLocationChange();
 
@@ -19245,6 +19327,10 @@
                     if (marqueeNightclubPrefill.marqueeNightclubEventId) {
                         eventData.marqueeNightclubEventId = marqueeNightclubPrefill.marqueeNightclubEventId;
                     }
+                }
+
+                if (scrapPrefill) {
+                    eventData.status = scrapPrefill.status || 'draft';
                 }
 
                 console.log('Creating event with data:', eventData);

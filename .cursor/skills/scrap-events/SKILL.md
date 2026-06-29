@@ -458,6 +458,13 @@ Show Live Events (full scrape once)
   → Remove row → DELETE /liv/import/:livEventCode → patch local cache (row back in primary)
 ```
 
+**Auto-create (default):** Unless `SCRAP_EVENTS_IMPORT_WIZARD=true` in server env, `prepare-import` is followed immediately by `POST /v1/events` with `status: active` (no 4-step Create Event modal). Prefill `status` comes from `getScrapImportEventStatus()` in `scrapEventsShared.js`. Set `SCRAP_EVENTS_IMPORT_WIZARD=true` to restore the legacy flow: open the wizard, review prefill, and create as `draft` via `submitCreateEvent()`. Manual **Create Event** is unaffected.
+
+```
+Default:  prepare-import → commitScrapImportDirect → POST /v1/events (active)
+Wizard:   prepare-import → openCreateEventPrefilled → submitCreateEvent (draft)
+```
+
 Date inputs re-filter **both** sections from `allNewEvents` / `allImportedEvents` without re-scraping.
 
 ## EJS console

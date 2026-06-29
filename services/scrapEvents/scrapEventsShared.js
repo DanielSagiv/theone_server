@@ -353,6 +353,25 @@ function assertScrapListingEventNotInPast(listingEvent, errorCode = 'SCRAP_EVENT
   }
 }
 
+/** Scrap-event imports omit venue-site description (often Booketing/Tao boilerplate). */
+const SCRAP_IMPORT_EVENT_DESCRIPTION = '';
+
+/**
+ * Whether scrap import uses the 4-step Create Event wizard (draft). Default: auto-create active.
+ * @returns {boolean}
+ */
+function isScrapEventsImportWizardEnabled() {
+  return process.env.SCRAP_EVENTS_IMPORT_WIZARD === 'true';
+}
+
+/**
+ * Event status for scrap-import prefill: draft when wizard enabled, active otherwise.
+ * @returns {'draft'|'active'}
+ */
+function getScrapImportEventStatus() {
+  return isScrapEventsImportWizardEnabled() ? 'draft' : 'active';
+}
+
 module.exports = {
   parseIsoDateFromUrvenueEventCode,
   parseScrapDateQueryParam,
@@ -371,4 +390,7 @@ module.exports = {
   isScrapEventInPast,
   filterScrapEventsNotInPast,
   assertScrapListingEventNotInPast,
+  SCRAP_IMPORT_EVENT_DESCRIPTION,
+  isScrapEventsImportWizardEnabled,
+  getScrapImportEventStatus,
 };
