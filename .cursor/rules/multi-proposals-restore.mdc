@@ -1,0 +1,26 @@
+---
+description: Active initiative — multi proposals restore (phased COE propose/re-propose/revision parity)
+globs:
+  - "**/coe-detail.js"
+  - "**/proposalGroup*"
+  - "**/AdminCoeDetail*"
+  - "**/ClientCoeDetail*"
+  - "**/routes/coes.js"
+  - "**/coeService.js"
+  - "**/proposalGroupService.js"
+  - "**/MULTI-PROPOSALS-RESTORE.md"
+alwaysApply: false
+---
+
+# Multi proposals restore
+
+**Task name:** `multi proposals restore`
+
+Phased restoration of **re-propose**, **multi-proposals**, and **propose after deposit/full** (revision) after the Figma COE detail redesign. Entry points were moved to admin `⋯` menu and client/admin footers — not removed from backend.
+
+**Before changing propose/revision/proposal-group behavior:**
+
+1. Read the living tracker: [`server/docs/MD_files/MULTI-PROPOSALS-RESTORE.md`](../../docs/MD_files/MULTI-PROPOSALS-RESTORE.md) — check **current phase** and status.
+2. Work **only the active phase**; do not start the next phase until the user verifies the current one.
+3. Label work in chat/commits as: `multi proposals restore — Phase N`.
+4. Preserve existing behavior per design-preserve-logic rules; prefer additive/restoration over rewrites.

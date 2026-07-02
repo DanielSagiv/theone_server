@@ -640,6 +640,257 @@ router.post('/tokenize', authenticateToken, async (req, res) => {
 });
 
 /**
+ * POST /v1/payments/admin/clients/:clientId/tokenize
+ * Admin: tokenize and save card on a client's account
+ */
+router.post(
+  '/admin/clients/:clientId/tokenize',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { error, value } = tokenizeCardSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: error.details[0].message,
+          },
+        });
+      }
+
+      const User = require('../models/User');
+      const client = await User.findById(req.params.clientId);
+      if (!client) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'CLIENT_NOT_FOUND',
+            message: 'Client not found',
+          },
+        });
+      }
+
+      if (client.role !== 'client') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_TARGET_USER',
+            message: 'Cards can only be added for client accounts',
+          },
+        });
+      }
+
+      const { cardDetails, setAsDefault } = value;
+      const result = await paymentService.tokenizeAndSaveCard(
+        client._id,
+        cardDetails,
+        setAsDefault,
+      );
+
+      console.log('Admin card tokenization on behalf:', {
+        admin_id: req.user._id,
+        client_id: client._id,
+        token_id: result.token_id,
+        action: result.action,
+        timestamp: new Date().toISOString(),
+      });
+
+      const message =
+        result.action === 'updated'
+          ? 'Payment method updated successfully'
+          : 'Payment method added successfully';
+
+      res.json({
+        success: true,
+        data: result,
+        message,
+      });
+    } catch (err) {
+      console.error('Admin on-behalf tokenization error:', {
+        admin_id: req.user._id,
+        client_id: req.params.clientId,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'TOKENIZATION_FAILED',
+          message: err.message,
+        },
+      });
+    }
+  },
+);
+
+/**
+ * Serialize saved payment methods for API (no sensitive data).
+ * @param {import('../models/User')} user
+ * @returns {{ saved_cards: object[], default_payment_method: string|null }}
+ */
+function serializeUserSavedCards(user) {
+  const savedCards = (user.saved_payment_methods || []).map(method => ({
+    token_id: method.token_id,
+    card_brand: method.card_brand,
+    card_last_four: method.card_last_four,
+    expiry_month: method.expiry_month,
+    expiry_year: method.expiry_year,
+    is_default: method.is_default,
+    nickname: method.nickname,
+    created_at: method.created_at,
+    last_used_at: method.last_used_at,
+  }));
+
+  return {
+    saved_cards: savedCards,
+    default_payment_method: user.default_payment_method || null,
+  };
+}
+
+/**
+ * GET /v1/payments/admin/clients/:clientId/saved-cards
+ * Admin: list a client's saved payment methods
+ */
+router.get(
+  '/admin/clients/:clientId/saved-cards',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const User = require('../models/User');
+      const client = await User.findById(req.params.clientId);
+      if (!client) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'CLIENT_NOT_FOUND',
+            message: 'Client not found',
+          },
+        });
+      }
+
+      if (client.role !== 'client') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_TARGET_USER',
+            message: 'Saved cards are only available for client accounts',
+          },
+        });
+      }
+
+      res.json({
+        success: true,
+        data: serializeUserSavedCards(client),
+      });
+    } catch (err) {
+      console.error('Admin get client saved cards error:', {
+        admin_id: req.user._id,
+        client_id: req.params.clientId,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'SAVED_CARDS_FAILED',
+          message: err.message,
+        },
+      });
+    }
+  },
+);
+
+/**
+ * POST /v1/payments/admin/coe/:coeId/intent
+ * Admin: charge client's saved card for COE payment
+ */
+router.post(
+  '/admin/coe/:coeId/intent',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { error, value } = createPaymentSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: error.details[0].message,
+          },
+        });
+      }
+
+      const COE = require('../models/COE');
+      const coe = await COE.findById(req.params.coeId).select('client_id');
+      if (!coe) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'COE_NOT_FOUND',
+            message: 'Experience not found',
+          },
+        });
+      }
+
+      const clientId = coe.client_id?._id || coe.client_id;
+      if (!clientId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'COE_CLIENT_MISSING',
+            message: 'Experience has no associated client',
+          },
+        });
+      }
+
+      const { paymentType, tokenId } = value;
+
+      const result = await paymentService.createPaymentIntent(
+        req.params.coeId,
+        clientId,
+        paymentType,
+        { tokenId },
+      );
+
+      console.log('Admin pay on behalf intent:', {
+        admin_id: req.user._id,
+        client_id: clientId,
+        coe_id: req.params.coeId,
+        payment_type: paymentType,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Payment intent created successfully',
+      });
+    } catch (err) {
+      console.error('Admin pay on behalf intent error:', {
+        admin_id: req.user._id,
+        coe_id: req.params.coeId,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'PAYMENT_INTENT_FAILED',
+          message: err.message,
+        },
+      });
+    }
+  },
+);
+
+/**
  * POST /v1/payments/saved-card/:tokenId/charge
  * Charge a saved payment method
  */

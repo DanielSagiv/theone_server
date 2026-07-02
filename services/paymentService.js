@@ -1825,8 +1825,10 @@ async function chargeSavedCard(userId, tokenId, amount, description, coeId = nul
         goatErr.response?.data?.error_message ||
         goatErr.response?.data?.message ||
         'Payment failed. Please try again.';
-      // Only append generic migration hint for GOAT HTTP errors; local checks (e.g. source length) already include instructions.
-      if (
+      if (/timeout/i.test(msg)) {
+        msg =
+          'Payment gateway timed out. Please try again in a moment.';
+      } else if (
         goatErr.response &&
         /validation|invalid|source|token|not found|unauthoriz/i.test(msg) &&
         !/GOAT_SOURCE_KEY/i.test(msg)

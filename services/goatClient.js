@@ -46,9 +46,10 @@ function getBasicAuthHeader() {
  * @returns {import('axios').AxiosInstance}
  */
 function createGoatAxios() {
+  const timeoutMs = Number(process.env.GOAT_REQUEST_TIMEOUT_MS) || 90000;
   return axios.create({
     baseURL: getGoatApiRoot(),
-    timeout: 45000,
+    timeout: timeoutMs,
     headers: {
       Authorization: getBasicAuthHeader(),
       'Content-Type': 'application/json',

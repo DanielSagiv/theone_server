@@ -19,7 +19,7 @@ const {
 
 /** Location fields returned on populated events for client map / venue detail. */
 const COE_EVENT_LOCATION_SELECT =
-  'name type media seats address geo description tagline timezone';
+  'name type media seats address geo description tagline timezone adminFeePercent gratuityPercent salesTaxPercent';
 
 /**
  * Validate that all selected seats are available before COE creation
