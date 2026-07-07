@@ -2469,6 +2469,23 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
         });
       }
 
+      // Multi-proposal groups (N >= 2) own the payment timer at the group level.
+      // Mirror the PUT /:id/status guard so re-propose cannot set a per-COE timer.
+      const reproposePgid =
+        coe.proposal_group_id != null && String(coe.proposal_group_id).trim() !== ''
+          ? String(coe.proposal_group_id).trim()
+          : '';
+      if (reproposePgid) {
+        const reproposeMemberCount = await proposalGroupService.countMembersInGroup(reproposePgid);
+        if (reproposeMemberCount >= 2) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'This experience is part of a multi-proposal group. Set or change the payment timer from the group (proposal-groups timer endpoints), not per experience.',
+          });
+        }
+      }
+
       coe.payment_deadline_hours = payment_deadline_hours;
       if (payment_deadline_hours > 0) {
         const now = new Date();
