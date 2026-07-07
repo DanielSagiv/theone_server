@@ -27,6 +27,13 @@ const LOC_B = {
   gratuityPercent: 15,
 };
 
+const ENCORE_BEACH = {
+  _id: 'encore_beach',
+  adminFeePercent: 15,
+  gratuityPercent: 15,
+  salesTaxPercent: 8.375,
+};
+
 function testSingleVenueExample() {
   const the1FeeSum = 3000 * 0.25;
   const r = computePricingTotalsFromVenueGroups([
@@ -38,10 +45,10 @@ function testSingleVenueExample() {
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 286.6);
   assert.strictEqual(r.fee_breakdown.gratuity_total, 450);
   assert.strictEqual(r.fee_breakdown.the1_fee_total, 750);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 90);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 147.2);
   assert.strictEqual(r.taxes, 286.6);
-  assert.strictEqual(r.fees, 1710);
-  assert.strictEqual(r.total, 4996.6);
+  assert.strictEqual(r.fees, 1767.2);
+  assert.strictEqual(r.total, 5053.8);
 }
 
 function testMultiVenueSum() {
@@ -63,8 +70,8 @@ function testMultiVenueSum() {
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 271.53);
   assert.strictEqual(r.fee_breakdown.gratuity_total, 450);
   assert.strictEqual(r.fee_breakdown.the1_fee_total, 650);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 90);
-  assert.strictEqual(r.total, 4801.53);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 141.35);
+  assert.strictEqual(r.total, 4852.88);
 }
 
 function testMixedThe1PercentSameVenue() {
@@ -105,8 +112,8 @@ function testNoLocationFallback() {
     assert.strictEqual(r.fee_breakdown.venue_admin_fee_total, 0);
     assert.strictEqual(r.fee_breakdown.gratuity_total, 0);
     assert.strictEqual(r.fee_breakdown.the1_fee_total, 200);
-    assert.strictEqual(r.fee_breakdown.processing_fee_total, 30);
-    assert.strictEqual(r.total, 1530);
+    assert.strictEqual(r.fee_breakdown.processing_fee_total, 45);
+    assert.strictEqual(r.total, 1545);
   } finally {
     if (prev !== undefined) {
       process.env.COE_TAX_RATE = prev;
@@ -140,13 +147,29 @@ function testCatalogBaseGrouping() {
   assert.strictEqual(r.subtotal, 4000);
   assert.strictEqual(r.fee_breakdown.venue_admin_fee_total, 560);
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 382.13);
-  assert.strictEqual(r.total, 6662.13);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 196.26);
+  assert.strictEqual(r.total, 6738.39);
+}
+
+function testEncoreBeachEightThousandMinSpend() {
+  const r = computePricingTotalsFromVenueGroups([
+    { ms: 8000, location: ENCORE_BEACH, the1FeeSum: 8000 * 0.15 },
+  ]);
+
+  assert.strictEqual(r.subtotal, 8000);
+  assert.strictEqual(r.fee_breakdown.venue_admin_fee_total, 1200);
+  assert.strictEqual(r.fee_breakdown.gratuity_total, 1200);
+  assert.strictEqual(r.fee_breakdown.sales_tax_total, 770.5);
+  assert.strictEqual(r.fee_breakdown.the1_fee_total, 1200);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 371.12);
+  assert.strictEqual(r.total, 12741.62);
 }
 
 function testVenuePricingHelperStFormula() {
   const v = computeVenuePricingTotals(3000, LOC_A, 750);
   assert.strictEqual(Math.round(v.vf * 100) / 100, 420);
   assert.strictEqual(Math.round(v.st * 100) / 100, 286.6);
+  assert.strictEqual(Math.round(v.processing * 100) / 100, 147.2);
 }
 
 function testDefaultThe1FeePercent() {
@@ -159,7 +182,7 @@ function testDepositIsTwentyPercentOfTotal() {
     { ms: 3000, location: LOC_A, the1FeeSum: 750 },
   ]);
   const deposit = Math.round(r.total * 0.2 * 100) / 100;
-  assert.strictEqual(deposit, 999.32);
+  assert.strictEqual(deposit, 1010.76);
 }
 
 try {
@@ -168,6 +191,7 @@ try {
   testMixedThe1PercentSameVenue();
   testNoLocationFallback();
   testCatalogBaseGrouping();
+  testEncoreBeachEightThousandMinSpend();
   testVenuePricingHelperStFormula();
   testDefaultThe1FeePercent();
   testDepositIsTwentyPercentOfTotal();

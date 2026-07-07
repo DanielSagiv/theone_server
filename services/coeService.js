@@ -299,7 +299,8 @@ function getVenueKeyFromEvent(ev) {
 
 /**
  * Per-venue fee lines from aggregated MS and per-seat THE1 sum.
- * VF = adminFeePercent × MS; ST = salesTaxPercent × (MS + VF); gratuity on MS; processing on MS.
+ * VF = adminFeePercent × MS; gratuity on MS; ST = salesTaxPercent × (MS + VF);
+ * processing = processingPercent × (MS + VF + ST + gratuity + THE1 sum).
  * @param {number} ms
  * @param {Object|null} location
  * @param {number} the1FeeSum - Σ (seatBase × seat the1_fee%)
@@ -324,20 +325,24 @@ function computeVenuePricingTotals(
     st = ms * getCoeTaxRate();
   }
 
-  const processing = ms * (processingPercent / 100);
+  const the1 = the1FeeSum;
+  const pricingSubtotal = ms + vf;
+  const processingBase = pricingSubtotal + st + gratuity + the1;
+  const processing = processingBase * (processingPercent / 100);
 
   return {
     ms,
     vf,
     st,
     gratuity,
-    the1: the1FeeSum,
+    the1,
     processing
   };
 }
 
 /**
  * Sum per-venue pricing groups into COE subtotal, taxes, fees, total, and fee_breakdown.
+ * Processing per venue = processingPercent × (MS + VF + ST + gratuity + THE1).
  * @param {Array<{ ms: number, location: Object|null, the1FeeSum: number }>} venueGroups
  * @returns {{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}}
  */
@@ -447,8 +452,8 @@ function buildVenueGroupsFromSelectedSeats(selectedSeats, eventMap, resolveBase)
 }
 
 /**
- * Compute subtotal, taxes (sales tax only), fees (gratuity + venue admin + THE1 fee + processing fee), total, and fee_breakdown
- * from selected_seats: per-venue MS, VF, ST on (MS+VF), then sum into COE fields.
+ * Compute subtotal (MS only), taxes (sales tax), fees (gratuity + venue admin + THE1 + processing), total, and fee_breakdown
+ * from selected_seats: per-venue MS, VF, ST on (MS+VF), processing on (MS+VF+ST+gratuity+THE1), then sum into COE fields.
  * @param {Array<Object>} selectedSeats
  * @param {{ useCatalogBase?: boolean }} [options]
  * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
