@@ -342,14 +342,17 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
       throw new Error('Guest name is required');
     }
     const guestEmailRaw = adhocPayer.email ? String(adhocPayer.email).trim() : '';
-    if (!guestEmailRaw || !guestEmailRaw.includes('@')) {
+    if (
+      chargeMethod !== 'cash' &&
+      (!guestEmailRaw || !guestEmailRaw.includes('@'))
+    ) {
       throw new Error('Guest email is required');
     }
     chargeUserId = billingUserId;
     adhocPayer = {
       type: 'guest',
       display_name: String(adhocPayer.display_name).trim(),
-      email: guestEmailRaw,
+      email: guestEmailRaw || undefined,
       phone: adhocPayer.phone ? String(adhocPayer.phone).trim() : undefined,
     };
   } else {
@@ -406,11 +409,22 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   assertAdhocReceiptEmailAvailable(
     adhocPayer,
     chargeUser,
-    isReceiptEmailEnabled()
+    chargeMethod !== 'cash' && isReceiptEmailEnabled()
   );
 
   try {
-    if (chargeMethod === 'saved_card') {
+    if (chargeMethod === 'cash') {
+      if (!payerUserId) {
+        throw new Error('payer_user_id is required for cash payments');
+      }
+      payment.payment_channel = 'cash';
+      payment.recorded_by_admin_id = adminUserId;
+      payment.finance_sync_status = 'pending';
+      payment.cash_note = adhocNote ? String(adhocNote).trim() : undefined;
+      payment.status = 'completed';
+      payment.completed_at = new Date();
+      await payment.save();
+    } else if (chargeMethod === 'saved_card') {
       if (!tokenId) {
         throw new Error('token_id is required for saved card charges');
       }

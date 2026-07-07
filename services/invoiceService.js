@@ -20,6 +20,12 @@ function generateInvoiceNumber(paymentId) {
  * @returns {string}
  */
 function formatInvoicePaymentMethodLine(payment) {
+  if (payment?.payment_channel === 'cash') {
+    if (payment?.adhoc_payment_summary) {
+      return payment.adhoc_payment_summary;
+    }
+    return 'Cash';
+  }
   if (payment?.adhoc_payment_summary) {
     return payment.adhoc_payment_summary;
   }

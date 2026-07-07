@@ -23,6 +23,17 @@ const createPaymentSchema = Joi.object({
   tokenId: Joi.string().optional()
 });
 
+const recordCashCoePaymentSchema = Joi.object({
+  paymentType: Joi.string().valid(
+    'deposit',
+    'deposit_diff',
+    'final_payment',
+    'full_payment',
+    'full_diff'
+  ).required(),
+  cash_note: Joi.string().trim().max(500).optional(),
+});
+
 const refundSchema = Joi.object({
   amount: Joi.number().positive().optional(),
   reason: Joi.string().required()
@@ -49,14 +60,25 @@ const adhocPayerSchema = Joi.object({
   phone: Joi.string().trim().allow('', null).optional(),
 });
 
+const adhocPayerSchemaCashGuest = Joi.object({
+  type: Joi.string().valid('client', 'participant', 'guest').required(),
+  display_name: Joi.string().trim().when('type', {
+    is: 'guest',
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  email: Joi.string().email().allow('', null).optional(),
+  phone: Joi.string().trim().allow('', null).optional(),
+});
+
 const adminAdhocPaymentSchema = Joi.object({
   coe_id: Joi.string().hex().length(24).required(),
   event_id: Joi.string().hex().length(24).optional(),
   amount: Joi.number().positive().required(),
   description: Joi.string().trim().min(1).max(500).required(),
-  charge_method: Joi.string().valid('saved_card', 'one_time_card').required(),
+  charge_method: Joi.string().valid('saved_card', 'one_time_card', 'cash').required(),
   payer_user_id: Joi.string().hex().length(24).when('charge_method', {
-    is: 'saved_card',
+    is: Joi.valid('saved_card', 'cash'),
     then: Joi.required(),
     otherwise: Joi.optional(),
   }),
@@ -75,7 +97,11 @@ const adminAdhocPaymentSchema = Joi.object({
     otherwise: Joi.forbidden(),
   }),
   save_to_payer: Joi.boolean().optional(),
-  adhoc_payer: adhocPayerSchema.optional(),
+  adhoc_payer: Joi.when('charge_method', {
+    is: 'cash',
+    then: adhocPayerSchemaCashGuest.optional(),
+    otherwise: adhocPayerSchema.optional(),
+  }),
   adhoc_note: Joi.string().trim().max(500).optional(),
 });
 
@@ -883,6 +909,99 @@ router.post(
         success: false,
         error: {
           code: 'PAYMENT_INTENT_FAILED',
+          message: err.message,
+        },
+      });
+    }
+  },
+);
+
+/**
+ * POST /v1/payments/admin/coe/:coeId/record-cash
+ * Admin: record COE lifecycle payment as cash (no GOAT).
+ */
+router.post(
+  '/admin/coe/:coeId/record-cash',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { error, value } = recordCashCoePaymentSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: error.details[0].message,
+          },
+        });
+      }
+
+      const COE = require('../models/COE');
+      const coe = await COE.findById(req.params.coeId).select('client_id');
+      if (!coe) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'COE_NOT_FOUND',
+            message: 'Experience not found',
+          },
+        });
+      }
+
+      const clientId = coe.client_id?._id || coe.client_id;
+      if (!clientId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'COE_CLIENT_MISSING',
+            message: 'Experience has no associated client',
+          },
+        });
+      }
+
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const result = await paymentService.recordCashCoePayment(
+        adminId,
+        req.params.coeId,
+        clientId,
+        value.paymentType,
+        { cash_note: value.cash_note },
+      );
+
+      if (result.coe_updated) {
+        return res.json({
+          success: true,
+          data: result,
+          message: result.message,
+        });
+      }
+
+      console.log('Admin cash COE payment recorded:', {
+        admin_id: adminId,
+        client_id: clientId,
+        coe_id: req.params.coeId,
+        payment_type: value.paymentType,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Cash payment recorded successfully',
+      });
+    } catch (err) {
+      console.error('Admin record cash COE payment error:', {
+        admin_id: req.user._id,
+        coe_id: req.params.coeId,
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'CASH_PAYMENT_FAILED',
           message: err.message,
         },
       });

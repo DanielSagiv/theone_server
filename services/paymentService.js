@@ -170,207 +170,333 @@ function detectCardBrand(cardNumber) {
  * @param {Object} options - { saveCard: boolean, cardDetails: Object, tokenId: string }
  * @returns {Promise<Object>} Payment intent with payment_url
  */
-async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
-  try {
-    const { saveCard = false, cardDetails = null, tokenId = null } = options;
-    
-    // Get COE
-    let coe = await COE.findById(coeId).populate('client_id');
-    if (!coe) {
-      throw new Error('COE not found');
-    }
-    
-    // Verify user is client
-    if (coe.client_id._id.toString() !== userId.toString()) {
-      throw new Error('Unauthorized: You can only pay for your own COEs');
-    }
+/**
+ * Validate COE payment eligibility and compute charge amounts (shared by card intent and cash recording).
+ * @param {string} coeId
+ * @param {string} userId - COE client user id
+ * @param {string} paymentType
+ * @returns {Promise<
+ *   | { kind: 'coe_updated', coe_updated: true, previous_total: number, new_total: number, total_zero: boolean, unavailable_event_names: string[], message: string }
+ *   | { kind: 'charge', coe: import('mongoose').Document, userId: string, paymentType: string, experienceChargeAmount: number, subscriptionChargeAmount: number, totalDueNow: number, deductionContext: object, quoteBreakdown: object, description: string }
+ * >}
+ */
+async function prepareCoePaymentCharge(coeId, userId, paymentType) {
+  let coe = await COE.findById(coeId).populate('client_id');
+  if (!coe) {
+    throw new Error('COE not found');
+  }
 
-    const isRevisionDiffPayment = paymentType === 'deposit_diff' || paymentType === 'full_diff';
+  if (coe.client_id._id.toString() !== userId.toString()) {
+    throw new Error('Unauthorized: You can only pay for your own COEs');
+  }
 
-    // Check COE status (allow approved, accepted_not_paid, or pending_pay)
-    // For revision payments we gate by `revision_state` instead.
-    if (!isRevisionDiffPayment) {
-      if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
-        throw new Error(`Cannot pay for COE in status: ${coe.status}`);
-      }
-    } else {
-      if (coe.revision_state !== 'accepted') {
-        throw new Error('Revision must be accepted before paying diff amounts');
-      }
+  const isRevisionDiffPayment =
+    paymentType === 'deposit_diff' || paymentType === 'full_diff';
+
+  if (!isRevisionDiffPayment) {
+    if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
+      throw new Error(`Cannot pay for COE in status: ${coe.status}`);
     }
+  } else if (coe.revision_state !== 'accepted') {
+    throw new Error('Revision must be accepted before paying diff amounts');
+  }
 
-    // Enforce payment deadline if configured
-    const deadlineAt = isRevisionDiffPayment ? coe.revision_deadline_at : coe.payment_deadline_at;
-    if (deadlineAt) {
-      const now = new Date();
-      if (deadlineAt <= now) {
-        if (!isRevisionDiffPayment) {
-          // Optionally sync status to expired (defensive, cron should also handle this)
-          try {
-            const coeService = require('./coeService');
-            await coeService.updateCOEStatus(coeId, 'expired', null);
-          } catch (deadlineErr) {
-            console.error('[PaymentService] Failed to update COE to expired after deadline:', deadlineErr.message);
-          }
-          throw new Error('Payment window expired for this experience');
+  const deadlineAt = isRevisionDiffPayment
+    ? coe.revision_deadline_at
+    : coe.payment_deadline_at;
+  if (deadlineAt) {
+    const now = new Date();
+    if (deadlineAt <= now) {
+      if (!isRevisionDiffPayment) {
+        try {
+          const coeService = require('./coeService');
+          await coeService.updateCOEStatus(coeId, 'expired', null);
+        } catch (deadlineErr) {
+          console.error(
+            '[PaymentService] Failed to update COE to expired after deadline:',
+            deadlineErr.message,
+          );
         }
-
-        throw new Error('Revision payment window expired for this experience');
+        throw new Error('Payment window expired for this experience');
       }
+      throw new Error('Revision payment window expired for this experience');
     }
+  }
 
-    // Pre-payment: check seat availability and same-section fallback. If any event has no seats in section,
-    // reduce COE, notify user (no tables, contact The1, total updated from X to Y), and return so client
-    // can show the message and let user complete payment with the new amount on next attempt.
-    if (!isRevisionDiffPayment) {
-      const coeService = require('./coeService');
-      const prepared = await coeService.preparePaymentForCOE(coeId);
-      if (prepared && prepared.coe_updated) {
-        return {
-          coe_updated: true,
-          previous_total: prepared.previous_total,
-          new_total: prepared.new_total,
-          total_zero: prepared.new_total === 0,
-          unavailable_event_names: prepared.unavailable_event_names,
-          message: prepared.message
-        };
-      }
+  if (!isRevisionDiffPayment) {
+    const coeService = require('./coeService');
+    const prepared = await coeService.preparePaymentForCOE(coeId);
+    if (prepared && prepared.coe_updated) {
+      return {
+        kind: 'coe_updated',
+        coe_updated: true,
+        previous_total: prepared.previous_total,
+        new_total: prepared.new_total,
+        total_zero: prepared.new_total === 0,
+        unavailable_event_names: prepared.unavailable_event_names,
+        message: prepared.message,
+      };
     }
+  }
 
-    // Update status to pending_pay if currently approved or accepted_not_paid
-    if (!isRevisionDiffPayment && (coe.status === 'approved' || coe.status === 'accepted_not_paid')) {
-      const coeService = require('./coeService');
-      await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
-      // Reload coe after status update
-      coe = await COE.findById(coeId).populate('client_id');
-    }
+  if (
+    !isRevisionDiffPayment &&
+    (coe.status === 'approved' || coe.status === 'accepted_not_paid')
+  ) {
+    const coeService = require('./coeService');
+    await coeService.updateCOEStatus(coeId, 'pending_pay', userId);
+    coe = await COE.findById(coeId).populate('client_id');
+  }
 
-    const clientUser = !isRevisionDiffPayment
-      ? await User.findById(userId).select(
-        'role first_coe_deduction_enabled first_coe_deduction_consumed first_coe_deduction_amount'
+  const clientUser = !isRevisionDiffPayment
+    ? await User.findById(userId).select(
+        'role first_coe_deduction_enabled first_coe_deduction_consumed first_coe_deduction_amount',
       )
-      : null;
-    let deductionContext = !isRevisionDiffPayment
-      ? getFirstCoeDeductionContext({ user: clientUser, coe, paymentType })
-      : {
+    : null;
+  let deductionContext = !isRevisionDiffPayment
+    ? getFirstCoeDeductionContext({ user: clientUser, coe, paymentType })
+    : {
         isEligible: false,
         grossAmount: roundCurrency(coe.total || 0),
         deductionAmount: 0,
         subscriptionChargeAmount: 0,
         experienceNetAmount: roundCurrency(coe.total || 0),
       };
-    if (!isRevisionDiffPayment && deductionContext.isEligible === false && clientUser) {
-      const canRecoverLegacyConsumedFlag = clientUser.first_coe_deduction_enabled === true &&
-        coe.subscription_deduction_applied !== true &&
-        (coe.payment_status || 'unpaid') === 'unpaid';
-      if (canRecoverLegacyConsumedFlag) {
-        const actuallyConsumed = await shouldTreatFirstCoeDeductionAsConsumed({
-          userId,
-          isConsumedFlag: clientUser.first_coe_deduction_consumed === true,
+  if (!isRevisionDiffPayment && deductionContext.isEligible === false && clientUser) {
+    const canRecoverLegacyConsumedFlag =
+      clientUser.first_coe_deduction_enabled === true &&
+      coe.subscription_deduction_applied !== true &&
+      (coe.payment_status || 'unpaid') === 'unpaid';
+    if (canRecoverLegacyConsumedFlag) {
+      const actuallyConsumed = await shouldTreatFirstCoeDeductionAsConsumed({
+        userId,
+        isConsumedFlag: clientUser.first_coe_deduction_consumed === true,
+      });
+      if (!actuallyConsumed) {
+        const overrideUser = {
+          ...clientUser.toObject(),
+          first_coe_deduction_consumed: false,
+        };
+        deductionContext = getFirstCoeDeductionContext({
+          user: overrideUser,
+          coe,
+          paymentType,
         });
-        if (!actuallyConsumed) {
-          const overrideUser = {
-            ...clientUser.toObject(),
-            first_coe_deduction_consumed: false,
-          };
-          deductionContext = getFirstCoeDeductionContext({
-            user: overrideUser,
-            coe,
-            paymentType,
-          });
-        }
       }
     }
+  }
 
-    // Calculate amount based on payment type (total = subtotal + taxes + fees)
-    let amount;
-    if (paymentType === 'deposit') {
-      if (coe.payment_status && coe.payment_status !== 'unpaid') {
-        throw new Error('Deposit already paid');
-      }
-      if (deductionContext.isEligible) {
-        const depositPercent =
-          typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
-        amount = roundCurrency(deductionContext.experienceNetAmount * (depositPercent / 100));
-      } else {
-        const pricing = computeInitialDepositPricing(coe);
-        amount = pricing.total;
-      }
-      coe.deposit_amount = amount;
-    } else if (paymentType === 'final_payment') {
-      if (coe.payment_status !== 'deposit_paid') {
-        throw new Error('Deposit must be paid first');
-      }
-      amount = coe.total - (coe.total_paid || 0);
-      coe.final_amount = amount;
-    } else if (paymentType === 'full_payment') {
-      if (coe.payment_status && coe.payment_status !== 'unpaid') {
-        throw new Error('Payment already processed');
-      }
-      amount = deductionContext.isEligible
-        ? deductionContext.experienceNetAmount
-        : coe.total;
-    } else if (paymentType === 'deposit_diff') {
-      if (coe.revision_state !== 'accepted') {
-        throw new Error('Revision must be accepted before paying deposit diff');
-      }
-
-      // Allow after full pay (Flow 3 hybrid): new total may require more than total_paid toward deposit cap.
-      if (coe.payment_status !== 'deposit_paid' && coe.payment_status !== 'paid') {
-        throw new Error('Deposit diff is only available for deposit_paid or paid experiences in revision');
-      }
-
-      const depositPercentFrozen =
-        typeof coe.revision_deposit_percent_frozen === 'number'
-          ? coe.revision_deposit_percent_frozen
-          : (coe.deposit_percent || 20);
-
-      const plainCap =
-        typeof coe.toObject === 'function'
-          ? coe.toObject()
-          : { ...coe };
-      plainCap.deposit_percent = depositPercentFrozen;
-      const currentDepositAmount = computeInitialDepositPricing(plainCap).total;
-      const paid = coe.total_paid || 0;
-      amount = Math.max(0, currentDepositAmount - Math.min(paid, currentDepositAmount));
-      coe.deposit_amount = amount;
-
-      if (amount <= 0) {
-        throw new Error('No deposit difference is currently due for this revision');
-      }
-    } else if (paymentType === 'full_diff') {
-      if (coe.revision_state !== 'accepted') {
-        throw new Error('Revision must be accepted before paying full diff');
-      }
-
-      amount = Math.max(0, (coe.total || 0) - (coe.total_paid || 0));
-      if (amount <= 0) {
-        throw new Error('No remaining amount is currently due for this revision');
-      }
+  let amount;
+  if (paymentType === 'deposit') {
+    if (coe.payment_status && coe.payment_status !== 'unpaid') {
+      throw new Error('Deposit already paid');
+    }
+    if (deductionContext.isEligible) {
+      const depositPercent =
+        typeof coe.deposit_percent === 'number' ? coe.deposit_percent : 20;
+      amount = roundCurrency(
+        deductionContext.experienceNetAmount * (depositPercent / 100),
+      );
     } else {
-      throw new Error('Invalid payment type');
+      const pricing = computeInitialDepositPricing(coe);
+      amount = pricing.total;
     }
-    
-    // Validate amount
+    coe.deposit_amount = amount;
+  } else if (paymentType === 'final_payment') {
+    if (coe.payment_status !== 'deposit_paid') {
+      throw new Error('Deposit must be paid first');
+    }
+    amount = coe.total - (coe.total_paid || 0);
+    coe.final_amount = amount;
+  } else if (paymentType === 'full_payment') {
+    if (coe.payment_status && coe.payment_status !== 'unpaid') {
+      throw new Error('Payment already processed');
+    }
+    amount = deductionContext.isEligible
+      ? deductionContext.experienceNetAmount
+      : coe.total;
+  } else if (paymentType === 'deposit_diff') {
+    if (coe.revision_state !== 'accepted') {
+      throw new Error('Revision must be accepted before paying deposit diff');
+    }
+    if (coe.payment_status !== 'deposit_paid' && coe.payment_status !== 'paid') {
+      throw new Error(
+        'Deposit diff is only available for deposit_paid or paid experiences in revision',
+      );
+    }
+    const depositPercentFrozen =
+      typeof coe.revision_deposit_percent_frozen === 'number'
+        ? coe.revision_deposit_percent_frozen
+        : coe.deposit_percent || 20;
+    const plainCap =
+      typeof coe.toObject === 'function' ? coe.toObject() : { ...coe };
+    plainCap.deposit_percent = depositPercentFrozen;
+    const currentDepositAmount = computeInitialDepositPricing(plainCap).total;
+    const paid = coe.total_paid || 0;
+    amount = Math.max(0, currentDepositAmount - Math.min(paid, currentDepositAmount));
+    coe.deposit_amount = amount;
     if (amount <= 0) {
-      throw new Error('Invalid payment amount');
+      throw new Error('No deposit difference is currently due for this revision');
     }
-    
-    const experienceChargeAmount = roundCurrency(amount);
-    const subscriptionChargeAmount = roundCurrency(deductionContext.subscriptionChargeAmount || 0);
-    const totalDueNow = roundCurrency(subscriptionChargeAmount + experienceChargeAmount);
+  } else if (paymentType === 'full_diff') {
+    if (coe.revision_state !== 'accepted') {
+      throw new Error('Revision must be accepted before paying full diff');
+    }
+    amount = Math.max(0, (coe.total || 0) - (coe.total_paid || 0));
+    if (amount <= 0) {
+      throw new Error('No remaining amount is currently due for this revision');
+    }
+  } else {
+    throw new Error('Invalid payment type');
+  }
+
+  if (amount <= 0) {
+    throw new Error('Invalid payment amount');
+  }
+
+  const experienceChargeAmount = roundCurrency(amount);
+  const subscriptionChargeAmount = roundCurrency(
+    deductionContext.subscriptionChargeAmount || 0,
+  );
+  const totalDueNow = roundCurrency(subscriptionChargeAmount + experienceChargeAmount);
+  const description = `${coe.name} - ${paymentType.replace('_', ' ')}`;
+  const quoteBreakdown = {
+    subscription_charge_amount: subscriptionChargeAmount,
+    experience_gross_amount: roundCurrency(deductionContext.grossAmount || coe.total || 0),
+    first_coe_deduction_amount: roundCurrency(deductionContext.deductionAmount || 0),
+    experience_net_amount: roundCurrency(
+      deductionContext.experienceNetAmount || coe.total || 0,
+    ),
+    deposit_amount: paymentType === 'deposit' ? experienceChargeAmount : null,
+    experience_charge_amount: experienceChargeAmount,
+    total_due_now: totalDueNow,
+    first_coe_dual_charge_applies: deductionContext.isEligible === true,
+  };
+
+  return {
+    kind: 'charge',
+    coe,
+    userId,
+    paymentType,
+    experienceChargeAmount,
+    subscriptionChargeAmount,
+    totalDueNow,
+    deductionContext,
+    quoteBreakdown,
+    description,
+  };
+}
+
+/**
+ * Admin: record COE lifecycle payment as cash (no GOAT); same COE accounting as card.
+ * @param {string} adminUserId
+ * @param {string} coeId
+ * @param {string} clientUserId
+ * @param {string} paymentType
+ * @param {{ cash_note?: string }} [options]
+ * @returns {Promise<object>}
+ */
+async function recordCashCoePayment(
+  adminUserId,
+  coeId,
+  clientUserId,
+  paymentType,
+  options = {},
+) {
+  const prepared = await prepareCoePaymentCharge(coeId, clientUserId, paymentType);
+  if (prepared.kind === 'coe_updated') {
+    return prepared;
+  }
+
+  const {
+    coe,
+    experienceChargeAmount,
+    subscriptionChargeAmount,
+    deductionContext,
+    quoteBreakdown,
+    description,
+  } = prepared;
+
+  if (
+    deductionContext.isEligible &&
+    subscriptionChargeAmount > 0
+  ) {
+    throw new Error('First COE subscription must be collected by card');
+  }
+
+  const payment = new Payment({
+    coe_id: coeId,
+    user_id: clientUserId,
+    amount: experienceChargeAmount,
+    currency: coe.currency || PAYMENT_CONFIG.currency,
+    payment_type: paymentType,
+    payment_channel: 'cash',
+    recorded_by_admin_id: adminUserId,
+    created_by_admin_id: adminUserId,
+    cash_note: options.cash_note ? String(options.cash_note).trim().slice(0, 500) : undefined,
+    finance_sync_status: 'pending',
+    status: 'completed',
+    description,
+    completed_at: new Date(),
+  });
+  await payment.save();
+
+  await updateCOEPaymentStatus(coeId, payment);
+
+  const clientUser = await User.findById(clientUserId);
+  setImmediate(() => {
+    (async () => {
+      try {
+        await sendPaymentReceiptEmail({
+          user: clientUser,
+          payment,
+          coeName: coe.name,
+        });
+      } catch (err) {
+        console.error('[PaymentReceiptEmail] cash COE payment async error:', err?.message || err);
+      }
+    })();
+  });
+
+  console.log('[PaymentService] Cash COE payment recorded:', {
+    admin_id: adminUserId,
+    client_id: clientUserId,
+    coe_id: coeId,
+    payment_id: payment._id,
+    payment_type: paymentType,
+    amount: experienceChargeAmount,
+    payment_channel: 'cash',
+    timestamp: new Date().toISOString(),
+  });
+
+  return {
+    payment_id: payment._id,
+    amount: experienceChargeAmount,
+    currency: coe.currency || PAYMENT_CONFIG.currency,
+    status: payment.status,
+    breakdown: quoteBreakdown,
+  };
+}
+
+async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
+  try {
+    const { tokenId = null } = options;
+
+    const prepared = await prepareCoePaymentCharge(coeId, userId, paymentType);
+    if (prepared.kind === 'coe_updated') {
+      return prepared;
+    }
+
+    const {
+      coe,
+      experienceChargeAmount,
+      subscriptionChargeAmount,
+      totalDueNow,
+      deductionContext,
+      quoteBreakdown,
+      description,
+    } = prepared;
     const deductionMarker = `first-coe-deduction:${coeId}`;
-    const description = `${coe.name} - ${paymentType.replace('_', ' ')}`;
-    const quoteBreakdown = {
-      subscription_charge_amount: subscriptionChargeAmount,
-      experience_gross_amount: roundCurrency(deductionContext.grossAmount || coe.total || 0),
-      first_coe_deduction_amount: roundCurrency(deductionContext.deductionAmount || 0),
-      experience_net_amount: roundCurrency(deductionContext.experienceNetAmount || coe.total || 0),
-      deposit_amount: paymentType === 'deposit' ? experienceChargeAmount : null,
-      experience_charge_amount: experienceChargeAmount,
-      total_due_now: totalDueNow,
-      first_coe_dual_charge_applies: deductionContext.isEligible === true,
-    };
     
     // If using saved token, charge it directly (Phase 2) – no duplicate Payment record
     if (tokenId) {
@@ -516,6 +642,10 @@ async function processRefund(paymentId, amount = null, reason = '') {
     
     if (!['completed'].includes(payment.status)) {
       throw new Error(`Cannot refund payment in status: ${payment.status}`);
+    }
+
+    if (payment.payment_channel === 'cash') {
+      throw new Error('Cash payments cannot be refunded through the gateway; reverse manually');
     }
     
     const refundAmount = amount || payment.amount;
@@ -1347,9 +1477,10 @@ async function getInvoiceData(paymentId, userId, options = {}) {
         amount: payment.amount,
         currency: payment.currency || 'USD',
         payment_type: payment.payment_type,
+        payment_channel: payment.payment_channel || 'card',
         payment_method: {
-          brand: payment.card_brand || 'N/A',
-          last_four: payment.card_last_four || 'N/A'
+          brand: payment.payment_channel === 'cash' ? 'Cash' : (payment.card_brand || 'N/A'),
+          last_four: payment.payment_channel === 'cash' ? '' : (payment.card_last_four || 'N/A')
         },
         adhoc_payment_summary: adhocPaymentSummary || undefined,
         transaction_id: payment.gp_transaction_id || 'N/A',
@@ -2064,6 +2195,8 @@ async function updateSavedCard(userId, tokenId, updates = {}) {
 
 module.exports = {
   createPaymentIntent,
+  prepareCoePaymentCharge,
+  recordCashCoePayment,
   processRefund,
   processPaymentWebhook,
   processGoatWebhook,

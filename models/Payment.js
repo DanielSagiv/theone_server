@@ -68,6 +68,31 @@ const paymentSchema = new mongoose.Schema({
     phone: { type: String, trim: true },
   },
   adhoc_note: { type: String, trim: true },
+
+  /** How the payment was collected: card (GOAT) or admin-recorded cash. */
+  payment_channel: {
+    type: String,
+    enum: ['card', 'cash'],
+    default: 'card',
+    index: true,
+  },
+  /** Admin who recorded a cash payment (lifecycle or adhoc). */
+  recorded_by_admin_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+    default: null,
+  },
+  /** Optional admin note for cash (receipt ref, drawer ID, etc.). */
+  cash_note: { type: String, trim: true, maxlength: 500 },
+  /** Hook for future finance/ERP sync. */
+  finance_sync_status: {
+    type: String,
+    enum: ['pending', 'synced', 'skipped'],
+    default: 'pending',
+    index: true,
+  },
+  finance_external_id: { type: String, trim: true, default: null },
   
   // Status
   status: {
@@ -140,6 +165,7 @@ paymentSchema.index({ coe_id: 1, event_id: 1 });
 paymentSchema.index({ user_id: 1, created_at: -1 });
 paymentSchema.index({ gp_transaction_id: 1 }, { unique: true, sparse: true });
 paymentSchema.index({ idempotency_key: 1 }, { unique: true, sparse: true });
+paymentSchema.index({ payment_channel: 1, completed_at: -1 });
 
 module.exports = mongoose.model('Payment', paymentSchema);
 

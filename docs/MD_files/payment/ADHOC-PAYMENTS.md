@@ -1,8 +1,8 @@
 # Admin on-spot (adhoc) payments
 
 **Status**: Implemented  
-**Last updated**: June 2026  
-**Gateway**: GOAT (see [GoatSkill.md](../../../GoatSkill.md))
+**Last updated**: July 2026  
+**Gateway**: GOAT for card methods (see [GoatSkill.md](../../../GoatSkill.md)); **cash** skips GOAT — see [CASH-PAYMENTS.md](./CASH-PAYMENTS.md)
 
 ## Purpose
 
@@ -50,10 +50,21 @@ One-time card:
 }
 ```
 
+Cash (no GOAT; guest email optional):
+
+```json
+{
+  "charge_method": "cash",
+  "payer_user_id": "...",
+  "adhoc_payer": { "type": "client", "display_name": "Jane Client" },
+  "adhoc_note": "Drawer A"
+}
+```
+
 ## Data model
 
-- **Payment** `payment_type: 'adhoc'`, optional `event_id`, `created_by_admin_id`, `adhoc_payer`, `adhoc_note`
-- API and invoices expose **`adhoc_payment_summary`**: `Paid by <name> with card ending with <last4>` (from `adhoc_payer.display_name` + `card_last_four`)
+- **Payment** `payment_type: 'adhoc'`, optional `event_id`, `created_by_admin_id`, `adhoc_payer`, `adhoc_note`, `payment_channel` (`card` | `cash`)
+- API and invoices expose **`adhoc_payment_summary`**: card — `Paid by <name> with card ending with <last4>`; cash — `Paid by <name> in cash`
 - **COE** `adhoc_collected_total` — sum of completed adhoc payments (reporting only)
 - **`total_paid` / `payment_status`** — adhoc payments are **excluded** from `updateCOEPaymentStatus` aggregation
 
@@ -69,4 +80,4 @@ Payments & Subscriptions → **Admin On-spot** tab mirrors the API for sandbox v
 
 ## Refunds
 
-Use existing `POST /v1/payments/:paymentId/refund` (admin) on completed adhoc payments.
+Use existing `POST /v1/payments/:paymentId/refund` (admin) on completed **card** adhoc payments. **Cash** adhoc payments cannot be refunded via the gateway — reverse manually.

@@ -45,6 +45,9 @@ function formatAdhocPaidByLine(payment) {
     return null;
   }
   const name = getAdhocPayerDisplayName(payment);
+  if (payment.payment_channel === 'cash') {
+    return `Paid by ${name} in cash`;
+  }
   const last4 = getAdhocCardLastFour(payment);
   return `Paid by ${name} with card ending with ${last4}`;
 }
