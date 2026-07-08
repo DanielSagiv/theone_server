@@ -86,7 +86,7 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     .populate('client_id', 'firstName lastName email phone')
     .lean();
   if (!coe) {
-    throw new Error('COE not found');
+    throw new Error('Experience not found');
   }
   if (eventId && !coeHasEventId(coe, eventId)) {
     throw new Error('Event not found on this experience');
@@ -190,13 +190,13 @@ function buildAdhocGoatChargeFields(payment, chargeUser, coe, adhocPayer) {
 
   const coeId = coe._id.toString();
   const coeLabel =
-    (coe.name && String(coe.name).trim()) || `COE ${coeId.slice(-6)}`;
+    (coe.name && String(coe.name).trim()) || `Experience ${coeId.slice(-6)}`;
   const guestName = String(adhocPayer.display_name).trim();
   const guestEmail = adhocPayer.email ? String(adhocPayer.email).trim() : undefined;
 
   return {
     customerName: guestName,
-    description: `[${coeLabel}] ${baseDescription} | COE ${coeId}`.slice(0, 500),
+    description: `[${coeLabel}] ${baseDescription}`.slice(0, 500),
     orderNumber: `coe-${coeId}-${payment._id}`.slice(0, 120),
     customerEmail: guestEmail || chargeUser.email || undefined,
     customerIdentifier: `coe:${coeId}`,
@@ -322,7 +322,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
 
   const coe = await COE.findById(coeId);
   if (!coe) {
-    throw new Error('COE not found');
+    throw new Error('Experience not found');
   }
   if (eventId && !coeHasEventId(coe, eventId)) {
     throw new Error('Event not found on this experience');
@@ -331,7 +331,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   const billingUserId =
     coe.client_id?._id?.toString?.() || coe.client_id?.toString?.();
   if (!billingUserId) {
-    throw new Error('COE has no primary client');
+    throw new Error('Experience has no primary client');
   }
 
   let chargeUserId = payerUserId || billingUserId;

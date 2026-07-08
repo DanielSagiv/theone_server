@@ -429,7 +429,7 @@ router.get('/my', authenticateToken, async (req, res) => {
     console.error('Error fetching user COEs:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch user COEs'
+      error: 'Failed to fetch user experiences'
     });
   }
 });
@@ -483,7 +483,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
     console.error('Error getting COEs:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get COEs',
+      message: 'Failed to get experiences',
       error: error.message
     });
   }
@@ -506,7 +506,7 @@ router.get('/statistics', authenticateToken, requireAdmin, async (req, res) => {
     console.error('Error getting COE statistics:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get COE statistics',
+      message: 'Failed to get experience statistics',
       error: error.message
     });
   }
@@ -608,7 +608,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
     console.error('Error getting COEs by client:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get client COEs',
+      message: 'Failed to get client experiences',
       error: error.message
     });
   }
@@ -640,7 +640,7 @@ router.get('/runner/:runnerId', authenticateToken, requireAdmin, async (req, res
     console.error('Error getting COEs by runner:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to get runner COEs',
+      message: 'Failed to get runner experiences',
       error: error.message
     });
   }
@@ -665,7 +665,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -716,7 +716,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       
       return res.status(404).json({
         success: false,
-        error: 'COE not found or access denied'
+        error: 'Experience not found or access denied'
       });
     }
     
@@ -743,7 +743,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       if (!coeRaw) {
         return res.status(404).json({
           success: false,
-          error: 'COE not found or access denied'
+          error: 'Experience not found or access denied'
         });
       }
       
@@ -821,7 +821,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       console.error('[GET /coes/my/:id] Error stack:', getError.stack);
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch COE',
+        error: 'Failed to fetch experience',
         details: process.env.NODE_ENV === 'development' ? getError.message : undefined
       });
     }
@@ -829,7 +829,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found or access denied'
+        error: 'Experience not found or access denied'
       });
     }
 
@@ -1120,7 +1120,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     console.error('[GET /coes/my/:id] Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch COE',
+      error: 'Failed to fetch experience',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -1137,7 +1137,7 @@ router.put('/my/:id/request', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format',
+        message: 'Invalid Experience ID format',
       });
     }
 
@@ -1161,7 +1161,7 @@ router.put('/my/:id/request', authenticateToken, async (req, res) => {
     if (!coeCheck) {
       return res.status(404).json({
         success: false,
-        message: 'COE not found',
+        message: 'Experience not found',
       });
     }
 
@@ -1289,7 +1289,7 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
 
     const coe = await COE.findById(coeId);
     if (!coe) {
-      return res.status(404).json({ success: false, error: 'COE not found' });
+      return res.status(404).json({ success: false, error: 'Experience not found' });
     }
 
     if (coe.status !== 'request') {
@@ -1302,7 +1302,7 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
     if (!coe.client_id) {
       return res.status(400).json({
         success: false,
-        error: 'COE is missing client information',
+        error: 'Experience is missing client information',
       });
     }
 
@@ -1312,7 +1312,7 @@ router.post('/:coeId/build-experience-form', authenticateToken, requireAdmin, as
     const toolResult = await executeTool('open_create_coe_for_client', toolParams, user, correlationId);
 
     if (!toolResult.success || !toolResult.data) {
-      const message = toolResult.error?.message || 'Failed to open Create COE form for client';
+      const message = toolResult.error?.message || 'Failed to open Create experience form for client';
       return res.status(400).json({ success: false, error: message });
     }
 
@@ -1615,7 +1615,7 @@ router.post('/:id/add-proposal', authenticateToken, requireAdmin, async (req, re
   try {
     const { id } = req.params;
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({ success: false, message: 'Invalid COE ID format' });
+      return res.status(400).json({ success: false, message: 'Invalid Experience ID format' });
     }
     const coe = await proposalGroupService.duplicateCoeAsProposal(id, req.user.id);
     res.json({ success: true, data: coe });
@@ -1647,7 +1647,7 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -1662,13 +1662,13 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Failed to get COE',
+      message: 'Failed to get experience',
       error: error.message
     });
   }
@@ -1686,7 +1686,7 @@ router.get('/:id/history', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -1696,7 +1696,7 @@ router.get('/:id/history', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -1756,7 +1756,7 @@ router.get('/:id/history', authenticateToken, async (req, res) => {
     console.error('Error getting COE history:', error);
     return res.status(500).json({
       success: false,
-      message: 'Failed to get COE history',
+      message: 'Failed to get experience history',
       error: error.message
     });
   }
@@ -1783,7 +1783,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'COE created successfully',
+      message: 'Experience created successfully',
       data: coe
     });
   } catch (error) {
@@ -1797,7 +1797,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'Failed to create COE',
+      message: 'Failed to create experience',
       error: error.message
     });
   }
@@ -1815,7 +1815,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -1833,7 +1833,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'COE updated successfully',
+      message: 'Experience updated successfully',
       data: coe
     });
   } catch (error) {
@@ -1841,13 +1841,13 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Failed to update COE',
+      message: 'Failed to update experience',
       error: error.message
     });
   }
@@ -1865,7 +1865,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -1873,20 +1873,20 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'COE deleted successfully'
+      message: 'Experience deleted successfully'
     });
   } catch (error) {
     console.error('Error deleting COE:', error);
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Failed to delete COE',
+      message: 'Failed to delete experience',
       error: error.message
     });
   }
@@ -1904,7 +1904,7 @@ router.post('/:id/events', authenticateToken, requireAdmin, async (req, res) => 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -1922,7 +1922,7 @@ router.post('/:id/events', authenticateToken, requireAdmin, async (req, res) => 
 
     res.json({
       success: true,
-      message: 'Event added to COE successfully',
+      message: 'Event added to experience successfully',
       data: coe
     });
   } catch (error) {
@@ -1936,7 +1936,7 @@ router.post('/:id/events', authenticateToken, requireAdmin, async (req, res) => 
 
     res.status(500).json({
       success: false,
-      message: 'Failed to add event to COE',
+      message: 'Failed to add event to experience',
       error: error.message
     });
   }
@@ -1962,7 +1962,7 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
 
     res.json({
       success: true,
-      message: 'Event removed from COE successfully',
+      message: 'Event removed from experience successfully',
       data: coe
     });
   } catch (error) {
@@ -1988,7 +1988,7 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
 
     res.status(500).json({
       success: false,
-      message: 'Failed to remove event from COE',
+      message: 'Failed to remove event from experience',
       error: error.message
     });
   }
@@ -2006,7 +2006,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2025,7 +2025,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -2042,7 +2042,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     if (!isAdmin && !clientCancelAllowed) {
       return res.status(403).json({
         success: false,
-        message: 'Permission denied. Only admins can change COE status, or clients can cancel their own COEs before payment.',
+        message: 'Permission denied. Only admins can change experience status, or clients can cancel their own experiences before payment.',
         error: {
           code: 'PERMISSION_DENIED',
           current_status: coe.status,
@@ -2100,7 +2100,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'COE status updated successfully',
+      message: 'Experience status updated successfully',
       data: updatedCoe
     });
   } catch (error) {
@@ -2108,7 +2108,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -2121,7 +2121,7 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'Failed to update COE status',
+      message: 'Failed to update experience status',
       error: error.message
     });
   }
@@ -2139,7 +2139,7 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2155,7 +2155,7 @@ router.post('/:id/repropose', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -2588,7 +2588,7 @@ router.post('/:id/revision/expire', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2639,7 +2639,7 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format',
+        message: 'Invalid Experience ID format',
       });
     }
 
@@ -2647,7 +2647,7 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        message: 'COE not found',
+        message: 'Experience not found',
       });
     }
 
@@ -2739,14 +2739,14 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
     if (coe.status !== 'approved') {
       return res.status(400).json({
         success: false,
-        message: 'COE must be in approved status to be accepted',
+        message: 'Experience must be in approved status to be accepted',
       });
     }
 
     if (coe.payment_status !== 'unpaid') {
       return res.status(400).json({
         success: false,
-        message: 'COE payment must be unpaid to be accepted',
+        message: 'Experience payment must be unpaid to be accepted',
       });
     }
 
@@ -2816,7 +2816,7 @@ router.post('/:id/runners', authenticateToken, requireAdmin, async (req, res) =>
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2834,7 +2834,7 @@ router.post('/:id/runners', authenticateToken, requireAdmin, async (req, res) =>
 
     res.json({
       success: true,
-      message: 'Runner assigned to COE successfully',
+      message: 'Runner assigned to experience successfully',
       data: coe
     });
   } catch (error) {
@@ -2842,7 +2842,7 @@ router.post('/:id/runners', authenticateToken, requireAdmin, async (req, res) =>
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -2855,7 +2855,7 @@ router.post('/:id/runners', authenticateToken, requireAdmin, async (req, res) =>
 
     res.status(500).json({
       success: false,
-      message: 'Failed to assign runner to COE',
+      message: 'Failed to assign runner to experience',
       error: error.message
     });
   }
@@ -2873,7 +2873,7 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2899,7 +2899,7 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
     if (error.message === 'COE not found') {
       return res.status(404).json({
         success: false,
-        message: 'COE not found'
+        message: 'Experience not found'
       });
     }
 
@@ -2931,7 +2931,7 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid COE ID format'
+        message: 'Invalid Experience ID format'
       });
     }
 
@@ -2947,7 +2947,7 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -2957,7 +2957,7 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
     if (!permissionCheck.canEdit) {
       return res.status(403).json({
         success: false,
-        error: permissionCheck.reason || 'You do not have permission to edit this COE'
+        error: permissionCheck.reason || 'You do not have permission to edit this experience'
       });
     }
 
@@ -2972,7 +2972,7 @@ router.post('/:id/seat-upgrades/accept', authenticateToken, async (req, res) => 
   } catch (error) {
     console.error('Error accepting seat upgrade:', error);
     if (error.message === 'COE not found') {
-      return res.status(404).json({ success: false, message: 'COE not found' });
+      return res.status(404).json({ success: false, message: 'Experience not found' });
     }
     if (error.message.includes('not found') || error.message.includes('only be accepted')) {
       return res.status(400).json({ success: false, message: error.message });
@@ -3091,7 +3091,7 @@ router.post('/:id/admin/seat-upgrade', authenticateToken, requireAdmin, async (r
     console.error('[COES] Error in admin seat upgrade:', error);
 
     if (error.message === 'COE not found') {
-      return res.status(404).json({ success: false, message: 'COE not found' });
+      return res.status(404).json({ success: false, message: 'Experience not found' });
     }
     if (error.message === 'Event not found') {
       return res.status(404).json({ success: false, message: 'Event not found' });
@@ -3130,7 +3130,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3153,7 +3153,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found or access denied'
+        error: 'Experience not found or access denied'
       });
     }
 
@@ -3161,7 +3161,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
     if (coe.status === 'draft' || coe.status === 'request') {
       return res.status(403).json({
         success: false,
-        error: 'COE must be approved by admin before payment'
+        error: 'Experience must be approved by admin before payment'
       });
     }
 
@@ -3169,7 +3169,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
     if (coe.payment_status === 'paid') {
       return res.status(400).json({
         success: false,
-        error: 'COE is already paid'
+        error: 'Experience is already paid'
       });
     }
 
@@ -3179,7 +3179,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
       userId,
       token_id,
       coe.total,
-      `COE Payment - ${coe.name}`,
+      `Experience Payment - ${coe.name}`,
       id,
       'full_payment'
     );
@@ -3193,7 +3193,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'COE payment processed successfully',
+      message: 'Experience payment processed successfully',
       data: {
         payment_id: payment._id,
         amount: coe.total,
@@ -3204,7 +3204,7 @@ router.post('/:id/payments/full', authenticateToken, async (req, res) => {
     console.error('Error processing COE payment:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to process COE payment'
+      error: 'Failed to process experience payment'
     });
   }
 });
@@ -3222,7 +3222,7 @@ router.get('/:id/payments/status', authenticateToken, async (req, res) => {
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3238,7 +3238,7 @@ router.get('/:id/payments/status', authenticateToken, async (req, res) => {
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found or access denied'
+        error: 'Experience not found or access denied'
       });
     }
 
@@ -3273,7 +3273,7 @@ router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req,
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3296,7 +3296,7 @@ router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req,
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3304,7 +3304,7 @@ router.post('/:id/payments/refund', authenticateToken, requireAdmin, async (req,
     if (coe.payment_status !== 'paid') {
       return res.status(400).json({
         success: false,
-        error: 'Only paid COEs can be refunded'
+        error: 'Only paid experiences can be refunded'
       });
     }
 
@@ -3378,7 +3378,7 @@ router.get('/:id/payments/refund-status', authenticateToken, requireAdmin, async
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3387,7 +3387,7 @@ router.get('/:id/payments/refund-status', authenticateToken, requireAdmin, async
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3428,7 +3428,7 @@ router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, r
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3443,7 +3443,7 @@ router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, r
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3451,7 +3451,7 @@ router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, r
     if (amount > coe.total) {
       return res.status(400).json({
         success: false,
-        error: `Covered amount cannot exceed COE total of $${coe.total.toLocaleString()}`
+        error: `Covered amount cannot exceed experience total of $${coe.total.toLocaleString()}`
       });
     }
 
@@ -3464,7 +3464,7 @@ router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, r
 
     res.json({
       success: true,
-      message: 'COE covered amount updated successfully',
+      message: 'Experience covered amount updated successfully',
       data: {
         coe_id: coe._id,
         covered_amount: amount,
@@ -3478,7 +3478,7 @@ router.put('/:id/covered-amount', authenticateToken, requireAdmin, async (req, r
     console.error('Error updating COE covered amount:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to update COE covered amount'
+      error: 'Failed to update experience covered amount'
     });
   }
 });
@@ -3495,7 +3495,7 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid COE ID format'
+        error: 'Invalid Experience ID format'
       });
     }
 
@@ -3503,7 +3503,7 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3516,7 +3516,7 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
 
     res.json({
       success: true,
-      message: 'COE set as fully covered by THE1',
+      message: 'Experience set as fully covered by THE1',
       data: {
         coe_id: coe._id,
         covered_amount: coe.total,
@@ -3530,7 +3530,7 @@ router.put('/:id/covered-all', authenticateToken, requireAdmin, async (req, res)
     console.error('Error setting COE as fully covered:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to set COE as fully covered'
+      error: 'Failed to set experience as fully covered'
     });
   }
 });
@@ -3557,7 +3557,7 @@ router.delete('/:coeId/events', authenticateToken, requireAdmin, async (req, res
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3623,14 +3623,14 @@ router.delete('/:coeId/events', authenticateToken, requireAdmin, async (req, res
 
     res.json({
       success: true,
-      message: `Successfully removed ${event_ids.length} event(s) from COE`,
+      message: `Successfully removed ${event_ids.length} event(s) from experience`,
       data: updatedCoe
     });
   } catch (error) {
     console.error('Error removing events from COE:', error);
     res.status(400).json({
       success: false,
-      error: error.message || 'Failed to remove events from COE'
+      error: error.message || 'Failed to remove events from experience'
     });
   }
 });
@@ -3657,7 +3657,7 @@ router.post('/:coeId/events/remove', authenticateToken, requireAdmin, async (req
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3722,14 +3722,14 @@ router.post('/:coeId/events/remove', authenticateToken, requireAdmin, async (req
 
     res.json({
       success: true,
-      message: `Successfully removed ${event_ids.length} event(s) from COE`,
+      message: `Successfully removed ${event_ids.length} event(s) from experience`,
       data: updatedCoe
     });
   } catch (error) {
     console.error('Error removing events from COE:', error);
     res.status(400).json({
       success: false,
-      error: error.message || 'Failed to remove events from COE'
+      error: error.message || 'Failed to remove events from experience'
     });
   }
 });
@@ -3765,7 +3765,7 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3774,7 +3774,7 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     if (!coeForPermission) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3784,7 +3784,7 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     if (!permissionCheck.canEdit) {
       return res.status(403).json({
         success: false,
-        error: permissionCheck.reason || 'You do not have permission to edit this COE'
+        error: permissionCheck.reason || 'You do not have permission to edit this experience'
       });
     }
 
@@ -3797,7 +3797,7 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({
         success: false,
-        error: 'You do not have permission to modify this COE'
+        error: 'You do not have permission to modify this experience'
       });
     }
 
@@ -3817,7 +3817,7 @@ router.put('/:coeId/events/:oldEventId', authenticateToken, async (req, res) => 
     console.error('Error replacing event in COE:', error);
     res.status(400).json({
       success: false,
-      error: error.message || 'Failed to replace event in COE'
+      error: error.message || 'Failed to replace event in experience'
     });
   }
 });
@@ -3833,7 +3833,7 @@ router.get('/:coeId/events/available-to-add', authenticateToken, requireAdmin, a
     const { coeId } = req.params;
     const coe = await COE.findById(coeId);
     if (!coe) {
-      return res.status(404).json({ success: false, error: 'COE not found' });
+      return res.status(404).json({ success: false, error: 'Experience not found' });
     }
     if (coeService.isRevisionStructurallyLocked(coe)) {
       return res.status(400).json({
@@ -3903,7 +3903,7 @@ router.get('/:coeId/events/:eventId/alternatives', authenticateToken, async (req
     if (!coe) {
       return res.status(404).json({
         success: false,
-        error: 'COE not found'
+        error: 'Experience not found'
       });
     }
 
@@ -3914,7 +3914,7 @@ router.get('/:coeId/events/:eventId/alternatives', authenticateToken, async (req
     if (!isAdmin && !isOwner) {
       return res.status(403).json({
         success: false,
-        error: 'You do not have permission to view this COE'
+        error: 'You do not have permission to view this experience'
       });
     }
 

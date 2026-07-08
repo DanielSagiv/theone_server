@@ -183,11 +183,11 @@ function detectCardBrand(cardNumber) {
 async function prepareCoePaymentCharge(coeId, userId, paymentType) {
   let coe = await COE.findById(coeId).populate('client_id');
   if (!coe) {
-    throw new Error('COE not found');
+    throw new Error('Experience not found');
   }
 
   if (coe.client_id._id.toString() !== userId.toString()) {
-    throw new Error('Unauthorized: You can only pay for your own COEs');
+    throw new Error('Unauthorized: You can only pay for your own experiences');
   }
 
   const isRevisionDiffPayment =
@@ -195,7 +195,7 @@ async function prepareCoePaymentCharge(coeId, userId, paymentType) {
 
   if (!isRevisionDiffPayment) {
     if (!['approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status)) {
-      throw new Error(`Cannot pay for COE in status: ${coe.status}`);
+      throw new Error(`Cannot pay for experience in status: ${coe.status}`);
     }
   } else if (coe.revision_state !== 'accepted') {
     throw new Error('Revision must be accepted before paying diff amounts');
@@ -421,7 +421,7 @@ async function recordCashCoePayment(
     deductionContext.isEligible &&
     subscriptionChargeAmount > 0
   ) {
-    throw new Error('First COE subscription must be collected by card');
+    throw new Error('First experience subscription must be collected by card');
   }
 
   const payment = new Payment({
@@ -502,9 +502,9 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
     if (tokenId) {
       if (deductionContext.isEligible) {
         const subscriptionDescription =
-          `Required annual subscription (first COE deduction flow) [${deductionMarker}]`;
+          `Required annual subscription (first experience deduction flow) [${deductionMarker}]`;
         const experienceDescription =
-          `${description} (first COE deduction applied: $${roundCurrency(deductionContext.deductionAmount).toFixed(2)}) [${deductionMarker}]`;
+          `${description} (first experience deduction applied: $${roundCurrency(deductionContext.deductionAmount).toFixed(2)}) [${deductionMarker}]`;
 
         let chargedSubscriptionInThisRequest = false;
         let subscriptionPayment = await Payment.findOne({
@@ -575,7 +575,7 @@ async function createPaymentIntent(coeId, userId, paymentType, options = {}) {
             $set: {
               subscription_deduction_applied: true,
               subscription_deduction_amount: deductionContext.deductionAmount,
-              subscription_deduction_note: 'First COE dual-charge deduction applied',
+              subscription_deduction_note: 'First experience dual-charge deduction applied',
             },
           }
         );

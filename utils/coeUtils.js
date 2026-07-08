@@ -30,7 +30,7 @@ function canClientEditCOE(coe, userId, user) {
     if (isClientCreator && isClientOwner) {
       return { 
         canEdit: false, 
-        reason: 'You cannot edit this COE until it is approved by an admin' 
+        reason: 'You cannot edit this experience until it is approved by an admin' 
       };
     }
     
@@ -38,7 +38,7 @@ function canClientEditCOE(coe, userId, user) {
     const { isClientCOEEditingEnabled } = require('./featureFlags');
     return { 
       canEdit: isClientCOEEditingEnabled(),
-      reason: isClientCOEEditingEnabled() ? undefined : 'Client COE editing is disabled'
+      reason: isClientCOEEditingEnabled() ? undefined : 'Client experience editing is disabled'
     };
   }
   
@@ -46,7 +46,7 @@ function canClientEditCOE(coe, userId, user) {
   const { isClientCOEEditingEnabled } = require('./featureFlags');
   return { 
     canEdit: isClientCOEEditingEnabled(),
-    reason: isClientCOEEditingEnabled() ? undefined : 'Client COE editing is disabled'
+    reason: isClientCOEEditingEnabled() ? undefined : 'Client experience editing is disabled'
   };
 }
 
