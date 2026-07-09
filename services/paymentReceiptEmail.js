@@ -2,7 +2,7 @@
  * Post-charge receipt email (AWS SES).
  * Sent after a successful GOAT source charge; does not block the payment API response.
  */
-const { sendEmail, sendEmailWithAttachments } = require('../utils/emailService');
+const { sendEmail, sendEmailWithAttachments, getAccountingEmail } = require('../utils/emailService');
 const {
   formatAdhocPaidByLine,
   getAdhocPayerDisplayName,
@@ -188,10 +188,12 @@ async function sendPaymentReceiptEmail({
   }
 
   const { html, text } = buildReceiptEmail(Boolean(pdfAttachment));
+  const accountingBcc = getAccountingEmail();
 
   if (pdfAttachment) {
     await sendEmailWithAttachments({
       to,
+      bcc: accountingBcc,
       subject,
       html,
       text,
@@ -201,6 +203,7 @@ async function sendPaymentReceiptEmail({
       payment_id: paymentId,
       payment_channel: payment.payment_channel || 'card',
       to,
+      bcc: accountingBcc,
       attachment: pdfAttachment.filename,
       timestamp: new Date().toISOString(),
     });
@@ -209,6 +212,7 @@ async function sendPaymentReceiptEmail({
 
   await sendEmail({
     to,
+    bcc: accountingBcc,
     subject,
     html,
     text,

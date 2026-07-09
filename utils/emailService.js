@@ -31,6 +31,39 @@ AWS.config.update({
 // Create SES service instance
 const ses = new AWS.SES({ apiVersion: '2010-12-01' });
 
+/** Default accounting inbox for invoice/receipt BCC copies. */
+const DEFAULT_ACCOUNTING_EMAIL = 'accounting@the1.vip';
+
+/**
+ * Normalize one or more email addresses into a deduped list.
+ * @param {string|string[]|null|undefined} value
+ * @returns {string[]}
+ */
+function normalizeEmailList(value) {
+  if (!value) return [];
+  const raw = Array.isArray(value) ? value : [value];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const email = String(item || '').trim();
+    if (!email.includes('@')) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(email);
+  }
+  return out;
+}
+
+/**
+ * Accounting inbox for invoice/receipt email copies (BCC).
+ * @returns {string}
+ */
+function getAccountingEmail() {
+  const configured = String(process.env.ACCOUNTING_EMAIL || '').trim();
+  return configured || DEFAULT_ACCOUNTING_EMAIL;
+}
+
 /**
  * CORE FUNCTION: Send any email
  * @param {Object} options - Email options
@@ -38,15 +71,23 @@ const ses = new AWS.SES({ apiVersion: '2010-12-01' });
  * @param {string} options.subject - Email subject
  * @param {string} options.html - HTML content
  * @param {string} [options.text] - Plain text content (optional)
+ * @param {string|string[]} [options.bcc] - BCC recipient(s)
  * @returns {Promise<Object>} Send result with messageId
  */
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, bcc }) {
   try {
+    const bccList = normalizeEmailList(bcc).filter(
+      (addr) => addr.toLowerCase() !== String(to || '').trim().toLowerCase(),
+    );
+    const destination = {
+      ToAddresses: [to],
+    };
+    if (bccList.length > 0) {
+      destination.BccAddresses = bccList;
+    }
     const params = {
       Source: process.env.FROM_EMAIL || 'noreply@the1.vip',
-      Destination: {
-        ToAddresses: [to]
-      },
+      Destination: destination,
       Message: {
         Subject: {
           Data: subject,
@@ -68,6 +109,7 @@ async function sendEmail({ to, subject, html, text }) {
     const result = await ses.sendEmail(params).promise();
     console.log('[EMAIL_SUCCESS]', {
       to,
+      bcc: bccList,
       subject,
       messageId: result.MessageId,
       from: params.Source,
@@ -77,6 +119,7 @@ async function sendEmail({ to, subject, html, text }) {
   } catch (error) {
     console.error('[EMAIL_ERROR]', {
       to,
+      bcc: normalizeEmailList(bcc),
       subject,
       from: process.env.FROM_EMAIL || 'noreply@the1.vip',
       error: {
@@ -100,11 +143,15 @@ async function sendEmail({ to, subject, html, text }) {
  * @param {string} options.html
  * @param {string} [options.text]
  * @param {Array<{ filename: string, content: Buffer, contentType?: string }>} options.attachments
+ * @param {string|string[]} [options.bcc] - BCC recipient(s)
  * @returns {Promise<Object>}
  */
-async function sendEmailWithAttachments({ to, subject, html, text, attachments = [] }) {
+async function sendEmailWithAttachments({ to, subject, html, text, attachments = [], bcc }) {
   const from = process.env.FROM_EMAIL || 'noreply@the1.vip';
   const plainText = text || stripHtml(html);
+  const bccList = normalizeEmailList(bcc).filter(
+    (addr) => addr.toLowerCase() !== String(to || '').trim().toLowerCase(),
+  );
   const mixedBoundary = `mixed_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const altBoundary = `alt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -123,6 +170,9 @@ async function sendEmailWithAttachments({ to, subject, html, text, attachments =
   let raw = '';
   raw += `From: ${from}\r\n`;
   raw += `To: ${to}\r\n`;
+  if (bccList.length > 0) {
+    raw += `Bcc: ${bccList.join(', ')}\r\n`;
+  }
   raw += `Subject: ${encodeSubject(subject)}\r\n`;
   raw += 'MIME-Version: 1.0\r\n';
   raw += `Content-Type: multipart/mixed; boundary="${mixedBoundary}"\r\n\r\n`;
@@ -157,15 +207,17 @@ async function sendEmailWithAttachments({ to, subject, html, text, attachments =
   raw += `--${mixedBoundary}--\r\n`;
 
   try {
+    const destinations = [to, ...bccList];
     const result = await ses
       .sendRawEmail({
         Source: from,
-        Destinations: [to],
+        Destinations: destinations,
         RawMessage: { Data: Buffer.from(raw) },
       })
       .promise();
     console.log('[EMAIL_SUCCESS]', {
       to,
+      bcc: bccList,
       subject,
       messageId: result.MessageId,
       from,
@@ -176,6 +228,7 @@ async function sendEmailWithAttachments({ to, subject, html, text, attachments =
   } catch (error) {
     console.error('[EMAIL_ERROR]', {
       to,
+      bcc: bccList,
       subject,
       from,
       attachments: attachments.length,
@@ -810,6 +863,8 @@ function formatCurrency(amount) {
 module.exports = {
   sendEmail,
   sendEmailWithAttachments,
+  getAccountingEmail,
+  normalizeEmailList,
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendLoginOtpEmail,

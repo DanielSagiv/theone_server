@@ -72,6 +72,7 @@ const createLocationSchema = Joi.object({
   gratuityPercent: Joi.number().min(0).max(100).optional(),
   adminFeePercent: Joi.number().min(0).max(100).optional(),
   salesTaxPercent: Joi.number().min(0).max(100).optional(),
+  fixedProcFee: Joi.number().min(0).optional(),
   gxnVenueCode: Joi.string().allow('').optional(),
   timezone: Joi.string().allow('').optional(),
   tagline: Joi.string().allow('').optional(),

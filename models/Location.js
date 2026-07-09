@@ -87,6 +87,8 @@ const LocationSchema = new mongoose.Schema({
   adminFeePercent: { type: Number, min: 0, max: 100 },
   /** Sales tax as percentage 0–100; optional for legacy venues. */
   salesTaxPercent: { type: Number, min: 0, max: 100 },
+  /** Fixed processing fee in USD; optional for legacy venues. */
+  fixedProcFee: { type: Number, min: 0 },
   // GXN integration field
   gxnVenueCode: { type: String, trim: true }, // GXN venue code (e.g., VEN505115) - sparse index defined below
   // Tao Group integration - external venue id for import idempotency

@@ -298,6 +298,48 @@ function getVenueKeyFromEvent(ev) {
 }
 
 /**
+ * Flat USD processing fee from location (venue catalog total only).
+ * @param {Object|null|undefined} location
+ * @returns {number}
+ */
+function resolveLocationFixedProcFee(location) {
+  if (!location || typeof location !== 'object') {
+    return 0;
+  }
+  const n = Number(location.fixedProcFee);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+/**
+ * Venue catalog (strikethrough) fee lines: MS, VF, ST, gratuity, flat fixedProcFee.
+ * No THE1 fee and no percentage processing fee.
+ * @param {number} ms
+ * @param {Object|null} location
+ * @returns {{ ms: number, vf: number, st: number, gratuity: number, fixedProc: number }}
+ */
+function computeVenueCatalogPricingTotals(ms, location) {
+  let vf = 0;
+  let st = 0;
+  let gratuity = 0;
+
+  if (location && typeof location === 'object') {
+    vf = ms * (pctToFraction(location.adminFeePercent) / 100);
+    gratuity = ms * (pctToFraction(location.gratuityPercent) / 100);
+    st = (ms + vf) * (pctToFraction(location.salesTaxPercent) / 100);
+  } else {
+    st = ms * getCoeTaxRate();
+  }
+
+  return {
+    ms,
+    vf,
+    st,
+    gratuity,
+    fixedProc: resolveLocationFixedProcFee(location),
+  };
+}
+
+/**
  * Per-venue fee lines from aggregated MS and per-seat THE1 sum.
  * VF = adminFeePercent × MS; gratuity on MS; ST = salesTaxPercent × (MS + VF);
  * processing = processingPercent × (MS + VF + ST + gratuity + THE1 sum).
@@ -409,6 +451,70 @@ function computePricingTotalsFromVenueGroups(venueGroups) {
 }
 
 /**
+ * Sum per-venue catalog pricing into venue grand total (strikethrough display).
+ * Uses flat location.fixedProcFee per venue instead of THE1 fee and % processing.
+ * @param {Array<{ ms: number, location: Object|null, the1FeeSum: number }>} venueGroups
+ * @returns {{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}}
+ */
+function computeCatalogPricingTotalsFromVenueGroups(venueGroups) {
+  const emptyBreakdown = () => ({
+    gratuity_total: 0,
+    venue_admin_fee_total: 0,
+    sales_tax_total: 0,
+    the1_fee_total: 0,
+    processing_fee_total: 0,
+  });
+
+  if (!Array.isArray(venueGroups) || venueGroups.length === 0) {
+    return {
+      subtotal: 0,
+      taxes: 0,
+      fees: 0,
+      total: 0,
+      fee_breakdown: emptyBreakdown(),
+    };
+  }
+
+  let subtotal = 0;
+  let gratuitySum = 0;
+  let adminSum = 0;
+  let salesTaxSum = 0;
+  let fixedProcSum = 0;
+
+  for (const group of venueGroups) {
+    const ms = Number(group.ms) || 0;
+    const v = computeVenueCatalogPricingTotals(ms, group.location || null);
+    subtotal += v.ms;
+    gratuitySum += v.gratuity;
+    adminSum += v.vf;
+    salesTaxSum += v.st;
+    fixedProcSum += v.fixedProc;
+  }
+
+  const gratuityR = Math.round(gratuitySum * 100) / 100;
+  const adminR = Math.round(adminSum * 100) / 100;
+  const taxes = Math.round(salesTaxSum * 100) / 100;
+  const fixedProcR = Math.round(fixedProcSum * 100) / 100;
+  const fees = Math.round((gratuityR + adminR + fixedProcR) * 100) / 100;
+  const subR = Math.round(subtotal * 100) / 100;
+  const total = Math.round((subR + taxes + fees) * 100) / 100;
+
+  return {
+    subtotal: subR,
+    taxes,
+    fees,
+    total,
+    fee_breakdown: {
+      gratuity_total: gratuityR,
+      venue_admin_fee_total: adminR,
+      sales_tax_total: taxes,
+      the1_fee_total: 0,
+      processing_fee_total: fixedProcR,
+    },
+  };
+}
+
+/**
  * Group selected seats by venue (event location_id) for per-venue MS and THE1 aggregation.
  * @param {Array<Object>} selectedSeats
  * @param {Map<string, Object>} eventMap
@@ -492,6 +598,9 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
     eventMap,
     resolveBase
   );
+  if (options.useCatalogBase) {
+    return computeCatalogPricingTotalsFromVenueGroups(venueGroups);
+  }
   return computePricingTotalsFromVenueGroups(venueGroups);
 }
 
@@ -5807,7 +5916,10 @@ module.exports = {
   sumSelectedSeatsSubtotal,
   computePricingTotalsFromSelectedSeats,
   computePricingTotalsFromVenueGroups,
+  computeCatalogPricingTotalsFromVenueGroups,
   computeVenuePricingTotals,
+  computeVenueCatalogPricingTotals,
+  resolveLocationFixedProcFee,
   buildVenueGroupsFromSelectedSeats,
   resolveThe1FeePercentForSeat,
   attachCatalogTotalDisplay,

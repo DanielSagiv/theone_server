@@ -5,7 +5,9 @@
 const assert = require('assert');
 const {
   computePricingTotalsFromVenueGroups,
+  computeCatalogPricingTotalsFromVenueGroups,
   computeVenuePricingTotals,
+  computeVenueCatalogPricingTotals,
   buildVenueGroupsFromSelectedSeats,
   getCatalogBaseForSeat,
   getNegotiatedBaseForSeat,
@@ -143,12 +145,89 @@ function testCatalogBaseGrouping() {
   assert.strictEqual(groups[0].ms, 4000);
   assert.strictEqual(groups[0].the1FeeSum, 1000);
 
-  const r = computePricingTotalsFromVenueGroups(groups);
+  const r = computeCatalogPricingTotalsFromVenueGroups(groups);
   assert.strictEqual(r.subtotal, 4000);
   assert.strictEqual(r.fee_breakdown.venue_admin_fee_total, 560);
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 382.13);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 196.26);
-  assert.strictEqual(r.total, 6738.39);
+  assert.strictEqual(r.fee_breakdown.gratuity_total, 600);
+  assert.strictEqual(r.fee_breakdown.the1_fee_total, 0);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 0);
+  assert.strictEqual(r.total, 5542.13);
+}
+
+function testVenueCatalogGrandTotalWithFixedProcFee() {
+  const r = computeCatalogPricingTotalsFromVenueGroups([
+    {
+      ms: 40000,
+      location: {
+        adminFeePercent: 14,
+        gratuityPercent: 15,
+        salesTaxPercent: 8.38,
+        fixedProcFee: 15,
+      },
+      the1FeeSum: 0,
+    },
+  ]);
+
+  assert.strictEqual(r.subtotal, 40000);
+  assert.strictEqual(r.fee_breakdown.venue_admin_fee_total, 5600);
+  assert.strictEqual(r.fee_breakdown.gratuity_total, 6000);
+  assert.strictEqual(r.fee_breakdown.the1_fee_total, 0);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 15);
+  assert.strictEqual(r.fee_breakdown.sales_tax_total, 3821.28);
+  assert.strictEqual(r.total, 55436.28);
+}
+
+function testMultiVenueCatalogAddsEachFixedProcFee() {
+  const r = computeCatalogPricingTotalsFromVenueGroups([
+    {
+      ms: 2000,
+      location: { ...LOC_B, fixedProcFee: 10 },
+      the1FeeSum: 0,
+    },
+    {
+      ms: 1000,
+      location: { ...LOC_A, fixedProcFee: 5 },
+      the1FeeSum: 0,
+    },
+  ]);
+
+  const venueA = computeVenueCatalogPricingTotals(2000, { ...LOC_B, fixedProcFee: 10 });
+  const venueB = computeVenueCatalogPricingTotals(1000, { ...LOC_A, fixedProcFee: 5 });
+
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 15);
+  assert.strictEqual(r.fee_breakdown.the1_fee_total, 0);
+  assert.strictEqual(
+    r.total,
+    Math.round(
+      (venueA.ms +
+        venueB.ms +
+        venueA.st +
+        venueB.st +
+        venueA.vf +
+        venueB.vf +
+        venueA.gratuity +
+        venueB.gratuity +
+        venueA.fixedProc +
+        venueB.fixedProc) *
+        100,
+    ) / 100,
+  );
+}
+
+function testNegotiatedTotalStillUsesPercentageProcessing() {
+  const negotiated = computePricingTotalsFromVenueGroups([
+    { ms: 40000, location: { ...LOC_A, fixedProcFee: 15 }, the1FeeSum: 10000 },
+  ]);
+  const catalog = computeCatalogPricingTotalsFromVenueGroups([
+    { ms: 40000, location: { ...LOC_A, fixedProcFee: 15 }, the1FeeSum: 10000 },
+  ]);
+
+  assert.ok(negotiated.fee_breakdown.the1_fee_total > 0);
+  assert.ok(negotiated.fee_breakdown.processing_fee_total > 15);
+  assert.strictEqual(catalog.fee_breakdown.the1_fee_total, 0);
+  assert.strictEqual(catalog.fee_breakdown.processing_fee_total, 15);
+  assert.ok(catalog.total < negotiated.total);
 }
 
 function testEncoreBeachEightThousandMinSpend() {
@@ -191,6 +270,9 @@ try {
   testMixedThe1PercentSameVenue();
   testNoLocationFallback();
   testCatalogBaseGrouping();
+  testVenueCatalogGrandTotalWithFixedProcFee();
+  testMultiVenueCatalogAddsEachFixedProcFee();
+  testNegotiatedTotalStillUsesPercentageProcessing();
   testEncoreBeachEightThousandMinSpend();
   testVenuePricingHelperStFormula();
   testDefaultThe1FeePercent();
