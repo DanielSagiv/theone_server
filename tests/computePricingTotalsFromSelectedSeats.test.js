@@ -13,6 +13,7 @@ const {
   getNegotiatedBaseForSeat,
   resolveThe1FeePercentForSeat,
   getCoeTaxRate,
+  roundProcessingFeeUpWholeDollars,
 } = require('../services/coeService');
 
 const LOC_A = {
@@ -47,10 +48,10 @@ function testSingleVenueExample() {
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 286.6);
   assert.strictEqual(r.fee_breakdown.gratuity_total, 450);
   assert.strictEqual(r.fee_breakdown.the1_fee_total, 750);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 147.2);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 148);
   assert.strictEqual(r.taxes, 286.6);
-  assert.strictEqual(r.fees, 1767.2);
-  assert.strictEqual(r.total, 5053.8);
+  assert.strictEqual(r.fees, 1768);
+  assert.strictEqual(r.total, 5054.6);
 }
 
 function testMultiVenueSum() {
@@ -72,8 +73,8 @@ function testMultiVenueSum() {
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 271.53);
   assert.strictEqual(r.fee_breakdown.gratuity_total, 450);
   assert.strictEqual(r.fee_breakdown.the1_fee_total, 650);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 141.35);
-  assert.strictEqual(r.total, 4852.88);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 142);
+  assert.strictEqual(r.total, 4853.53);
 }
 
 function testMixedThe1PercentSameVenue() {
@@ -240,8 +241,8 @@ function testEncoreBeachEightThousandMinSpend() {
   assert.strictEqual(r.fee_breakdown.gratuity_total, 1200);
   assert.strictEqual(r.fee_breakdown.sales_tax_total, 770.5);
   assert.strictEqual(r.fee_breakdown.the1_fee_total, 1200);
-  assert.strictEqual(r.fee_breakdown.processing_fee_total, 371.12);
-  assert.strictEqual(r.total, 12741.62);
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 372);
+  assert.strictEqual(r.total, 12742.5);
 }
 
 function testVenuePricingHelperStFormula() {
@@ -261,7 +262,25 @@ function testDepositIsTwentyPercentOfTotal() {
     { ms: 3000, location: LOC_A, the1FeeSum: 750 },
   ]);
   const deposit = Math.round(r.total * 0.2 * 100) / 100;
-  assert.strictEqual(deposit, 1010.76);
+  assert.strictEqual(deposit, 1010.92);
+}
+
+function testProcessingFeeCeilWholeDollars() {
+  assert.strictEqual(roundProcessingFeeUpWholeDollars(841.2), 842);
+  assert.strictEqual(roundProcessingFeeUpWholeDollars(45), 45);
+  assert.strictEqual(roundProcessingFeeUpWholeDollars(0), 0);
+  assert.strictEqual(roundProcessingFeeUpWholeDollars(-1), 0);
+
+  const r = computePricingTotalsFromVenueGroups([
+    { ms: 3000, location: LOC_A, the1FeeSum: 750 },
+  ]);
+  const rawProcessing = 147.2;
+  assert.strictEqual(r.fee_breakdown.processing_fee_total, 148);
+  assert.strictEqual(r.fee_breakdown.the1_fee_total, 750);
+
+  const feesWithRaw = Math.round((450 + 420 + 750 + rawProcessing) * 100) / 100;
+  const totalWithRaw = Math.round((3000 + 286.6 + feesWithRaw) * 100) / 100;
+  assert.strictEqual(r.total, totalWithRaw + 0.8);
 }
 
 try {
@@ -277,6 +296,7 @@ try {
   testVenuePricingHelperStFormula();
   testDefaultThe1FeePercent();
   testDepositIsTwentyPercentOfTotal();
+  testProcessingFeeCeilWholeDollars();
   console.log('computePricingTotalsFromSelectedSeats: all passed');
 } catch (e) {
   console.error(e);

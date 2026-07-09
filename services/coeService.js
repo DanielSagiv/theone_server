@@ -213,6 +213,19 @@ const DEFAULT_THE1_FEE_PERCENT_UI = 20;
 const PROCESSING_FEE_PERCENT = 3;
 
 /**
+ * Round negotiated processing fee up to nearest whole dollar for persisted totals.
+ * @param {unknown} amount
+ * @returns {number}
+ */
+function roundProcessingFeeUpWholeDollars(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) {
+    return 0;
+  }
+  return Math.ceil(n);
+}
+
+/**
  * @param {unknown} n
  * @returns {number}
  */
@@ -430,7 +443,7 @@ function computePricingTotalsFromVenueGroups(venueGroups) {
   const adminR = Math.round(adminSum * 100) / 100;
   const taxes = Math.round(salesTaxSum * 100) / 100;
   const the1R = Math.round(the1Sum * 100) / 100;
-  const processingR = Math.round(processingSum * 100) / 100;
+  const processingR = roundProcessingFeeUpWholeDollars(processingSum);
   const fees = Math.round((gratuityR + adminR + the1R + processingR) * 100) / 100;
   const subR = Math.round(subtotal * 100) / 100;
   const total = Math.round((subR + taxes + fees) * 100) / 100;
@@ -5920,6 +5933,7 @@ module.exports = {
   computeVenuePricingTotals,
   computeVenueCatalogPricingTotals,
   resolveLocationFixedProcFee,
+  roundProcessingFeeUpWholeDollars,
   buildVenueGroupsFromSelectedSeats,
   resolveThe1FeePercentForSeat,
   attachCatalogTotalDisplay,
