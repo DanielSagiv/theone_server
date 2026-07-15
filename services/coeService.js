@@ -1529,9 +1529,17 @@ async function createCOE(coeData, createdBy) {
  * @param {string} coeId - COE ID
  * @returns {Promise<Object>} COE with populated data
  */
-async function getCOEById(coeId) {
+/**
+ * Load a COE by id with standard population.
+ * Soft-deleted COEs throw not found unless includeDeleted is true.
+ * @param {string} coeId
+ * @param {{ includeDeleted?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+async function getCOEById(coeId, options = {}) {
   try {
     const mongoose = require('mongoose');
+    const includeDeleted = options.includeDeleted === true;
     
     // Load COE with population - schema now has defaults for base_price/total_price so validation should pass
     const coe = await COE.findById(coeId)
@@ -1553,6 +1561,10 @@ async function getCOEById(coeId) {
       .populate('events.runner_assignment.runner_id', 'firstName lastName email phone avatarUrl');
 
     if (!coe) {
+      throw new Error('COE not found');
+    }
+
+    if (coe.status === 'deleted' && !includeDeleted) {
       throw new Error('COE not found');
     }
 
@@ -2455,6 +2467,14 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
     // 'proposal' is treated as 'approved' internally
     const normalizedStatus = status === 'proposal' ? 'approved' : status;
 
+    // Soft-delete only when unpaid (deposit or full payment blocks delete)
+    if (normalizedStatus === 'deleted') {
+      const paymentStatus = (coe.payment_status || 'unpaid').toString().trim().toLowerCase();
+      if (paymentStatus === 'deposit_paid' || paymentStatus === 'paid') {
+        throw new Error('Cannot delete an experience that has a deposit or full payment');
+      }
+    }
+
     // Multi-proposal: cancel sibling options when committing from approved (accept, deposit, or full pay).
     if (
       !skipMultiProposalResolution &&
@@ -2468,16 +2488,17 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
 
     // Validate status transition
     const validTransitions = {
-      'draft': ['approved', 'cancelled'],
-      'request': ['approved', 'cancelled'],
-      'approved': ['accepted_not_paid', 'pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
-      'accepted_not_paid': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled'],
-      'pending_pay': ['paid', 'rejected', 'expired', 'cancelled'],
+      'draft': ['approved', 'cancelled', 'deleted'],
+      'request': ['approved', 'cancelled', 'deleted'],
+      'approved': ['accepted_not_paid', 'pending_pay', 'paid', 'rejected', 'expired', 'cancelled', 'deleted'],
+      'accepted_not_paid': ['pending_pay', 'paid', 'rejected', 'expired', 'cancelled', 'deleted'],
+      'pending_pay': ['paid', 'rejected', 'expired', 'cancelled', 'deleted'],
       'paid': ['completed', 'cancelled'],
-      'rejected': ['draft', 'request'],
-      'expired': ['draft', 'request'],
+      'rejected': ['draft', 'request', 'deleted'],
+      'expired': ['draft', 'request', 'deleted'],
       'completed': [],
-      'cancelled': []
+      'cancelled': [],
+      'deleted': []
     };
 
     if (!validTransitions[coe.status]?.includes(normalizedStatus)) {
@@ -2499,13 +2520,13 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
         });
         await coe.save();
       }
-    } else if (['cancelled', 'rejected', 'expired'].includes(normalizedStatus)) {
-      // When COE is cancelled/rejected/expired, seats are released
+    } else if (['cancelled', 'rejected', 'expired', 'deleted'].includes(normalizedStatus)) {
+      // When COE is cancelled/rejected/expired/deleted, seats are released
       await releaseSelectedSeats(coeId);
     }
     
-    // Send notifications for status changes
-    if (!suppressNotifications) {
+    // Send notifications for status changes (skip soft-delete — COE is hidden)
+    if (!suppressNotifications && normalizedStatus !== 'deleted') {
     try {
       const notificationService = require('./notificationService');
       const updatedCoe = await getCOEById(coeId);
@@ -2781,7 +2802,9 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
       console.error('[updateCOEStatus] Failed to log history incident:', historyErr.message);
     }
 
-    return await getCOEById(coeId);
+    return await getCOEById(coeId, {
+      includeDeleted: normalizedStatus === 'deleted',
+    });
   } catch (error) {
     console.error('Error updating COE status:', error);
     throw error;

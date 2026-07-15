@@ -90,7 +90,8 @@ const coeSchema = new mongoose.Schema({
       'rejected',
       'expired',
       'completed',
-      'cancelled'
+      'cancelled',
+      'deleted'
     ],
     default: 'draft',
     index: true

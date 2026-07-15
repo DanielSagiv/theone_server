@@ -544,7 +544,8 @@ const updateCOEStatusSchema = Joi.object({
       'rejected',
       'expired',
       'completed',
-      'cancelled'
+      'cancelled',
+      'deleted'
     )
     .required(),
   // Optional deposit percentage (1–100) when proposing an experience

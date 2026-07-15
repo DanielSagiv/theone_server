@@ -288,8 +288,9 @@ router.get('/my', authenticateToken, async (req, res) => {
       : new mongoose.Types.ObjectId(userId);
     
     const coeListQuery = isAdmin
-      ? {}
+      ? { status: { $ne: 'deleted' } }
       : {
+          status: { $ne: 'deleted' },
           $or: [
             { admin_id: userIdObj },
             { client_id: userIdObj },
@@ -533,6 +534,7 @@ router.get('/client/:clientId', authenticateToken, requireAdmin, async (req, res
     
     // Get COEs with proper population (same pattern as /coes/my)
     const coes = await COE.find({ 
+      status: { $ne: 'deleted' },
       $or: [
         { client_id: clientId },
         { 'participants.user_id': clientId }
@@ -699,6 +701,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     
     if (
       !coeCheck ||
+      coeCheck.status === 'deleted' ||
       (req.user.role === 'client' &&
         !coeService.isCoeHomeListVisibleToClient(coeCheck.status))
     ) {
@@ -1997,7 +2000,7 @@ router.delete('/:id/events/:eventId', authenticateToken, requireAdmin, async (re
 /**
  * PUT /v1/coes/:id/status
  * Update COE status
- * @access Admin or Client (can cancel their own COEs before payment)
+ * @access Admin or Client (can cancel or soft-delete their own unpaid COEs)
  */
 router.put('/:id/status', authenticateToken, async (req, res) => {
   try {
@@ -2029,20 +2032,42 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       });
     }
 
-    // Authorization check: Admin can change any status, Client can only cancel their own COEs
+    // Authorization check: Admin can change any status, Client can cancel or soft-delete own unpaid COEs
     const isAdmin = req.user.role === 'admin';
     const isClientOwner = (coe.client_id?._id?.toString() || coe.client_id?.toString()) === req.user.id.toString();
+    const paymentStatus = (coe.payment_status || 'unpaid').toString().trim().toLowerCase();
+    const isUnpaid = paymentStatus !== 'deposit_paid' && paymentStatus !== 'paid';
+    const clientMutableStatuses = ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'];
+
+    // Soft-delete requires unpaid (deposit or full payment blocks)
+    if (value.status === 'deleted' && !isUnpaid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete an experience that has a deposit or full payment',
+        error: {
+          code: 'COE_NOT_DELETABLE_PAID',
+          payment_status: coe.payment_status,
+        },
+      });
+    }
     
     // Allow client cancellation from specific statuses
     const clientCancelAllowed = !isAdmin && 
                                 isClientOwner &&
                                 value.status === 'cancelled' &&
-                                ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'].includes(coe.status);
+                                clientMutableStatuses.includes(coe.status);
+
+    const clientDeleteAllowed =
+      !isAdmin &&
+      isClientOwner &&
+      value.status === 'deleted' &&
+      isUnpaid &&
+      clientMutableStatuses.includes(coe.status);
     
-    if (!isAdmin && !clientCancelAllowed) {
+    if (!isAdmin && !clientCancelAllowed && !clientDeleteAllowed) {
       return res.status(403).json({
         success: false,
-        message: 'Permission denied. Only admins can change experience status, or clients can cancel their own experiences before payment.',
+        message: 'Permission denied. Only admins can change experience status, or clients can cancel or delete their own unpaid experiences.',
         error: {
           code: 'PERMISSION_DENIED',
           current_status: coe.status,
@@ -2116,6 +2141,14 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: error.message
+      });
+    }
+
+    if (error.message.includes('Cannot delete')) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        error: { code: 'COE_NOT_DELETABLE_PAID' },
       });
     }
 

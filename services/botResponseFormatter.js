@@ -838,15 +838,19 @@ function createCOEActions(coe, userRole) {
     });
   }
 
-  // Cancel - available for clients on their own COEs (request, draft, approved, pending_pay)
-  // Admin can cancel any COE (except completed)
-  const isClientOwner = coe.client_id?.toString() === (userRole === 'client' ? coe.client_id?.toString() : null);
-  const cancelableStatusesForClient = ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'];
-  if ((userRole === 'admin' && status !== 'completed') ||
-      (userRole === 'client' && cancelableStatusesForClient.includes(status))) {
+  // Delete - unpaid only (no deposit or full payment); admin or client on cancelable statuses
+  const paymentStatus = (coe.payment_status || 'unpaid').toString().trim().toLowerCase();
+  const isUnpaid = paymentStatus !== 'deposit_paid' && paymentStatus !== 'paid';
+  const deletableStatusesForClient = ['request', 'draft', 'approved', 'accepted_not_paid', 'pending_pay'];
+  const isNotTerminal = !['completed', 'cancelled', 'deleted'].includes(status);
+  if (
+    isUnpaid &&
+    ((userRole === 'admin' && isNotTerminal) ||
+      (userRole === 'client' && deletableStatusesForClient.includes(status)))
+  ) {
     actions.push({
-      label: 'Cancel',
-      action: 'cancel_draft',
+      label: 'Delete',
+      action: 'delete_coe',
       coe_id: coeId,
       type: 'button',
       confirm: true
