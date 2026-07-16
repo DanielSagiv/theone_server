@@ -30,8 +30,9 @@ function isJointEventAdminEnabled() {
 }
 
 /**
- * When true (default), new client signups require admin approval (pendingApproval).
- * Set VERIFY_USER=false to auto-approve clients at signup.
+ * When true (default), historically gated client signup approval.
+ * Self-signup always uses pendingApproval now (see authService.registerUser).
+ * Kept for any callers / ops docs; prefer not using VERIFY_USER=false for signup.
  * @returns {boolean}
  */
 function isClientRegistrationApprovalRequired() {

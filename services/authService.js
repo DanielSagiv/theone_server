@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const emailService = require('../utils/emailService');
-const { isClientRegistrationApprovalRequired } = require('../utils/featureFlags');
 
 /**
  * Same eligibility rules as password sign-in (verified email, active, entity status).
@@ -115,8 +114,9 @@ const registerUser = async (userData) => {
     const verificationExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
     const role = userData.role || 'client';
-    const autoApproveClient =
-      role === 'client' && !isClientRegistrationApprovalRequired();
+    // Self-signup clients always wait for admin approval (after legal consent on mobile).
+    // Admin-created clients use createClientByAdmin (live). VERIFY_USER no longer auto-approves signup.
+    const entityStatus = role === 'client' ? 'pendingApproval' : 'live';
 
     // Create new user with verification fields (entity_status owned by server, not signup body)
     const user = new User({
@@ -125,14 +125,7 @@ const registerUser = async (userData) => {
       emailVerificationCode: verificationCode,
       emailVerificationExpires: verificationExpires,
       emailVerificationSentAt: new Date(),
-      entity_status: autoApproveClient ? 'live' : 'pendingApproval',
-      ...(autoApproveClient
-        ? {
-            first_coe_deduction_enabled: false,
-            first_coe_deduction_consumed: false,
-            first_coe_deduction_amount: 1000,
-          }
-        : {}),
+      entity_status: entityStatus,
     });
     await user.save();
 
