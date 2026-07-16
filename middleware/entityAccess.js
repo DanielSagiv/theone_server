@@ -84,6 +84,7 @@ function requireClientApprovedForApi(req, res, next) {
     const allowedPendingRoutes = new Set([
       'GET:/v1/auth/validate',
       'POST:/v1/auth/logout',
+      'POST:/v1/auth/accept-legal',
       'GET:/v1/users/profile',
       'GET:/v1/features',
       'GET:/v1/notifications',
