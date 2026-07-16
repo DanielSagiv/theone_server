@@ -666,6 +666,61 @@ router.post('/resend-verification', async (req, res) => {
 });
 
 /**
+ * POST /v1/auth/accept-legal
+ * Record client acceptance of Terms of Use, Privacy Policy, and Refund Policy.
+ */
+router.post('/accept-legal', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found',
+        },
+      });
+    }
+
+    const now = new Date();
+    if (!user.termsAcceptedAt) {
+      user.termsAcceptedAt = now;
+    }
+    if (!user.privacyConsentAt) {
+      user.privacyConsentAt = now;
+    }
+    await user.save();
+
+    console.log('[AUTH] Legal agreements accepted', {
+      userId: user._id?.toString(),
+      email: user.email,
+      timestamp: now.toISOString(),
+    });
+
+    res.json({
+      success: true,
+      data: {
+        user: user.getProfile(),
+      },
+      message: 'Legal agreements accepted',
+    });
+  } catch (error) {
+    console.error('Accept legal error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'ACCEPT_LEGAL_FAILED',
+        message: 'Failed to record legal acceptance',
+      },
+    });
+  }
+});
+
+/**
  * GET /v1/auth/validate
  * Validate current session
  */

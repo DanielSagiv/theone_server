@@ -1,0 +1,117 @@
+THE 1 VIP LLC DBA The 1 Privacy Policy
+This Privacy Policy (“Policy”) explains how The 1 VIP, LLC (“DBA The 1,” “we,” “us,” or “our”) collects, uses, processes, stores, and discloses Personal Data (as defined below) in connection with your access to and use of The 1’s websites, applications, digital platforms, membership services, and any other online offerings (collectively, the “Sites”). This Policy applies to all consumer users of our Sites (“you”).
+Other third parties including, without limitation, venues, partners, concierge services, hospitality providers, and social platforms you may use in connection with our Sites may also collect, use, or share information about you. This Policy does not govern such third parties. Please refer directly to their privacy policies for information regarding their practices. This Policy does, however, cover our disclosure of your Personal Data to our service providers and participating venues who engage with us to deliver services.
+
+1. INFORMATION WE COLLECT
+We collect Personal Data in various ways when you use our Sites. We use this information to operate, personalize, and enhance The 1 experience, communicate with members, process reservations, and ensure platform safety and security. Examples of Personal Data we may collect include:
+Name, email address, postal address, and phone number
+Billing details and payment information
+Date of birth
+Membership information and preferences
+Reservation history, venue selections, and special requests
+Survey responses, demographics, and usage patterns
+Contact information of individuals you include in reservations
+Account passwords and authentication data
+Mobile device ID, IP address, location data, and device information
+Data obtained from linked third-party platforms (social media, payment providers, etc.)
+This information, including identifiers such as name, location data, online identifiers, and other personal attributes, is collectively referred to as “Personal Data.”
+Automatically Collected Information
+When you access our Sites, we automatically collect certain data, including:
+Device information, IP address, browser type, and operating system
+Location data (if enabled)
+Access times and pages viewed
+Referring websites
+Usage data through cookies, web beacons, and similar technologies
+Cookies & Web Beacons
+We may use cookies and web beacons to:
+Store preferences
+Track usage and analytics
+Improve user experience
+Measure marketing effectiveness
+Deliver personalized content and advertising
+You may disable cookies in your browser, but doing so may impact Site functionality.
+Do Not Track
+We do not currently respond to “Do Not Track” browser signals.
+
+2. HOW WE USE PERSONAL DATA
+We use the Personal Data collected through our Sites to:
+Process reservations, orders, and membership services
+Operate, maintain, and improve our Sites
+Personalize your experience and provide tailored recommendations
+Communicate with you about your membership, confirmations, updates, and support
+Send offers, promotions, event announcements, and partner communications
+Authenticate payments and prevent fraud
+Enforce our terms, policies, and legal rights
+Protect the safety and integrity of The 1 community
+Combine Personal Data with third-party data to better serve you
+By providing your mobile number, you consent to receiving calls and text messages relating to your membership and services.
+
+3. HOW WE SHARE PERSONAL DATA
+With Venues & Partners
+When you make reservations or purchase services through The 1, we share relevant Personal Data with participating venues and partners. This may include:
+Contact details
+Reservation information
+Preferences or special requests
+History or feedback
+Partners may use this information according to their own privacy practices.
+Payment Information
+To use certain services, you may be required to provide credit or debit card details. By submitting payment information, you consent to sharing this data with:
+Payment processors
+Venues
+Fraud detection or verification partners
+The 1 does not store credit card information directly.
+Social Sharing
+You may connect or interact with third-party platforms. Any information you share externally is governed by those platforms’ policies.
+Other Sharing Circumstances
+We may also share Personal Data:
+At your direction or with your consent
+With service providers who assist in operations, analytics, marketing, or security
+In aggregated or de-identified form
+To comply with laws, legal requests, or protect rights and safety
+In connection with mergers, acquisitions, financing, or corporate transactions
+
+4. SECURITY OF YOUR PERSONAL DATA
+The 1 employs reasonable technical and organizational measures to protect your data. Sensitive payment details transmitted through our Sites are encrypted.
+Although we implement safeguards, no system can guarantee absolute security. You are responsible for maintaining the confidentiality of your account credentials.
+Please contact us immediately if you suspect unauthorized use of your account.
+
+5. YOUR INFORMATION CHOICES
+Email Preferences
+You may opt out of promotional emails at any time. Operational communications will still be sent.
+Cookie Settings
+Most browsers allow you to block or delete cookies. Doing so may impact certain Site features.
+Location Services
+You may disable location sharing at the device level. Some services may not function without location access.
+Access, Correction, or Deletion
+You may request to:
+Access your Personal Data
+Update or correct information
+Delete your account or Personal Data
+We will comply unless legal or operational reasons require retention.
+
+6. CONTACTING THE 1
+For questions regarding your Personal Data or this Policy, please contact:
+The 1 – Privacy OfficeEmail: privacy@the1.vip
+
+7. NOTICE TO CALIFORNIA RESIDENTS
+California residents have certain rights under the California Consumer Privacy Act (CCPA) and California Civil Code §1798.83. These include rights to:
+Request details about data shared with third parties
+Opt out of data sharing for marketing purposes
+Requests may be submitted using the contact information above.
+
+8. NOTICE TO EU/UK RESIDENTS (GDPR)
+If you are located in the EU or UK, you may have additional rights, including:
+Access to your Personal Data
+Correction or deletion
+Restriction or objection to processing
+Data portability
+Withdrawal of consent at any time
+We process Personal Data under the following legal bases:
+Consent
+Performance of a contract
+Compliance with legal obligations
+Legitimate business interests
+To exercise these rights, please contact us using the details above.
+
+9. CHANGES TO THIS POLICY
+The 1 may update or revise this Policy from time to time. When changes occur, we will update the “Last Updated” date. Continued use of the Sites constitutes acceptance of the revised Policy.
