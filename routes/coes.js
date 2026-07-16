@@ -31,6 +31,12 @@ const {
   parseTimeRangeQuery,
   buildCoeListTimeRangeMatch,
 } = require('../utils/coeListTimeRange');
+const {
+  LIST_EVENT_POPULATE_SELECT,
+  LIST_LOCATION_POPULATE_SELECT,
+  batchPopulateMissingListEvents,
+  serializeCoeForList,
+} = require('../utils/coeListSerialization');
 
 function roundCurrency(amount) {
   return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
@@ -329,66 +335,21 @@ router.get('/my', authenticateToken, async (req, res) => {
     .populate('client_id', 'firstName lastName email avatarUrl avatar_thumb_url')
     .populate({
       path: 'events.event_id',
-      select: 'name description start_datetime end_datetime location_id media seats performers type timezone',
+      select: LIST_EVENT_POPULATE_SELECT,
       populate: {
         path: 'location_id',
-        select: 'name type media seats address geo description tagline timezone adminFeePercent gratuityPercent salesTaxPercent'
-      }
+        select: LIST_LOCATION_POPULATE_SELECT,
+      },
     })
     .sort({ createdAt: -1, created_at: -1 });
 
-    // Manual population fallback for events that weren't populated
-    // This ensures events replaced via updateOne are properly populated
-    for (const coe of coes) {
-      if (coe.events && Array.isArray(coe.events)) {
-        for (let i = 0; i < coe.events.length; i++) {
-          const eventItem = coe.events[i];
-          if (eventItem.event_id) {
-            // Check if event_id is not populated (it's an ObjectId or string, not an object with name)
-            const isPopulated = eventItem.event_id && 
-                               typeof eventItem.event_id === 'object' && 
-                               eventItem.event_id.name !== undefined;
-            
-            if (!isPopulated) {
-              // Extract the event ID (could be ObjectId, string, or object with _id)
-              let eventIdValue;
-              if (eventItem.event_id._id) {
-                eventIdValue = eventItem.event_id._id;
-              } else if (eventItem.event_id instanceof mongoose.Types.ObjectId) {
-                eventIdValue = eventItem.event_id;
-              } else if (typeof eventItem.event_id === 'string') {
-                eventIdValue = eventItem.event_id;
-              } else {
-                eventIdValue = eventItem.event_id;
-              }
-              
-              try {
-                const populatedEvent = await Event.findById(eventIdValue)
-                  .populate('location_id', 'name type media seats address geo description tagline timezone adminFeePercent gratuityPercent salesTaxPercent')
-                  .select('name description location_id start_datetime end_datetime media seats performers type timezone');
-                if (populatedEvent) {
-                  eventItem.event_id = populatedEvent;
-                  console.log('[GET /coes/my] Manually populated event:', populatedEvent.name, 'for COE:', coe._id);
-                } else {
-                  console.warn('[GET /coes/my] Event not found for manual population:', eventIdValue, 'in COE:', coe._id);
-                }
-              } catch (populateError) {
-                console.warn('[GET /coes/my] Failed to manually populate event:', populateError.message, 'for event_id:', eventIdValue, 'in COE:', coe._id);
-              }
-            }
-          }
-        }
-      }
+    await batchPopulateMissingListEvents(coes, Event, mongoose);
 
-      // CRITICAL FIX: Filter selected_seats to only include seats matching events currently in the COE
-      // This ensures seats from replaced events (if not fully cleaned from DB) are not returned to client
-      // This prevents incorrect cost breakdown calculation on client side
+    for (const coe of coes) {
       coeService.filterSelectedSeatsByEvents(coe, '[GET /coes/my]');
-      const deductionPreviewUser = await resolveClientUserForDeductionPreview(coe, req.user);
-      if (deductionPreviewUser) {
-        await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
+      if (coe.catalog_total == null || coe.catalog_total === undefined) {
+        await coeService.attachCatalogTotalDisplay(coe);
       }
-      await coeService.attachCatalogTotalDisplay(coe);
     }
 
     // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
@@ -426,21 +387,8 @@ router.get('/my', authenticateToken, async (req, res) => {
       }
     }
 
-    // Plain JSON with explicit proposal_group_id so mobile can group (undefined keys are omitted by JSON)
-    const data = coes.map((doc) => {
-      const o = typeof doc.toObject === 'function' ? doc.toObject() : {...doc};
-      return {
-        ...o,
-        proposal_group_id:
-          o.proposal_group_id != null && String(o.proposal_group_id).trim() !== ''
-            ? String(o.proposal_group_id)
-            : null,
-        proposal_label:
-          o.proposal_label != null && String(o.proposal_label).trim() !== ''
-            ? String(o.proposal_label)
-            : null,
-      };
-    });
+    // Slim list JSON: top-level COE fields preserved; nested events/seats trimmed for mobile + EJS.
+    const data = coes.map((doc) => serializeCoeForList(doc));
 
     res.json({
       success: true,
