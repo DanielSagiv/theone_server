@@ -782,6 +782,11 @@ const updateClientRequestCOESchema = Joi.object({
   rebuild_events: Joi.boolean().default(false),
 });
 
+/** GET /coes/my query */
+const getMyCOEsQuerySchema = Joi.object({
+  time_range: Joi.string().valid('upcoming', 'past', 'all').optional(),
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -817,4 +822,5 @@ module.exports = {
   loginOtpRequestSchema,
   loginOtpVerifySchema,
   updateClientRequestCOESchema,
+  getMyCOEsQuerySchema,
 };

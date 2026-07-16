@@ -637,6 +637,11 @@ coeSchema.index({ admin_id: 1, status: 1 });
 coeSchema.index({ 'runner_assignment.runner_id': 1, status: 1 });
 coeSchema.index({ start_date: 1, end_date: 1 });
 coeSchema.index({ created_method: 1, status: 1 });
+coeSchema.index({ client_id: 1, status: 1, end_date: -1, createdAt: -1 });
+coeSchema.index({ admin_id: 1, status: 1, end_date: -1, createdAt: -1 });
+coeSchema.index({ 'runner_assignment.runner_id': 1, status: 1, end_date: -1, createdAt: -1 });
+coeSchema.index({ 'participants.user_id': 1, status: 1, end_date: -1, createdAt: -1 });
+coeSchema.index({ status: 1, end_date: -1, createdAt: -1 });
 
 // Virtual for total events count
 coeSchema.virtual('events_count').get(function() {

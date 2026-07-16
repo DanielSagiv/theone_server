@@ -22,10 +22,15 @@ const {
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema,
   updateClientRequestCOESchema,
+  getMyCOEsQuerySchema,
 } = require('../utils/validationSchemas');
 const { canClientEditOwnRequest } = require('../utils/coeUtils');
 const proposalGroupService = require('../services/proposalGroupService');
 const adhocPaymentService = require('../services/adhocPaymentService');
+const {
+  parseTimeRangeQuery,
+  buildCoeListTimeRangeMatch,
+} = require('../utils/coeListTimeRange');
 
 function roundCurrency(amount) {
   return Math.round((Number(amount || 0) + Number.EPSILON) * 100) / 100;
@@ -280,6 +285,18 @@ router.get('/my', authenticateToken, async (req, res) => {
     const mongoose = require('mongoose');
     const Event = require('../models/Event');
     const isAdmin = req.user.role === 'admin';
+    const isClient = req.user.role === 'client';
+
+    const { error: queryError, value: queryValue } = getMyCOEsQuerySchema.validate(req.query);
+    if (queryError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: queryError.details[0].message,
+        },
+      });
+    }
+    const timeRange = parseTimeRangeQuery(queryValue.time_range);
     
     // Ensure userId is properly formatted for comparison
     const userId = req.user._id || req.user.id;
@@ -287,10 +304,14 @@ router.get('/my', authenticateToken, async (req, res) => {
       ? userId 
       : new mongoose.Types.ObjectId(userId);
     
+    const statusMatch = isClient
+      ? { $in: coeService.CLIENT_HOME_LIST_STATUS_ALLOWLIST }
+      : { $ne: 'deleted' };
+
     const coeListQuery = isAdmin
-      ? { status: { $ne: 'deleted' } }
+      ? { status: statusMatch }
       : {
-          status: { $ne: 'deleted' },
+          status: statusMatch,
           $or: [
             { admin_id: userIdObj },
             { client_id: userIdObj },
@@ -298,6 +319,10 @@ router.get('/my', authenticateToken, async (req, res) => {
             { 'participants.user_id': userIdObj }
           ]
         };
+    const timeRangeMatch = buildCoeListTimeRangeMatch(timeRange);
+    if (Object.keys(timeRangeMatch).length > 0) {
+      coeListQuery.$and = [...(coeListQuery.$and || []), timeRangeMatch];
+    }
 
     let coes = await COE.find(coeListQuery)
     .populate('admin_id', 'firstName lastName email')
@@ -383,11 +408,6 @@ router.get('/my', authenticateToken, async (req, res) => {
           coe.set('proposal_group_id', String(fromDb));
         }
       }
-    }
-
-    // Business rule: clients only see allowlisted statuses (no draft/admin work; no cancelled/rejected/expired noise)
-    if (req.user.role === 'client') {
-      coes = coes.filter((c) => coeService.isCoeHomeListVisibleToClient(c.status));
     }
 
     if (req.user.role === 'client' && coes.length > 0) {
