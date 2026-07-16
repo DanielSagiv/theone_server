@@ -260,6 +260,7 @@ function extractPreferencesFromFormSubmission(message) {
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
     prioritized_event_ids: /Prioritized event IDs:\s*([^\n]+?)(?:\n|$)/i,
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
+    event_party_sizes: /Event party sizes:\s*([^\n]+?)(?:\n|$)/i,
     selected_simple_joint_prices:
       /Simple joint line prices:\s*([^\n]+?)(?:\n|$)/i,
     selected_the1_negotiated_pricing:
@@ -415,6 +416,24 @@ function extractPreferencesFromFormSubmission(message) {
   }
   preferences.selected_seat_categories = selected_seat_categories;
 
+  // Extract per-event party sizes (optional): "eventId1:4, eventId2:6"
+  let event_party_sizes = [];
+  const eventPartySizesMatch = message.match(patterns.event_party_sizes);
+  if (eventPartySizesMatch && eventPartySizesMatch[1]) {
+    const parts = eventPartySizesMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    for (const part of parts) {
+      const colonIdx = part.indexOf(':');
+      if (colonIdx > 0) {
+        const event_id = part.slice(0, colonIdx).trim();
+        const size = parseInt(part.slice(colonIdx + 1).trim(), 10);
+        if (event_id && !Number.isNaN(size) && size >= 1) {
+          event_party_sizes.push({ event_id, party_size: size });
+        }
+      }
+    }
+  }
+  preferences.event_party_sizes = event_party_sizes;
+
   let selected_simple_joint_prices = [];
   const sjPricesMatch = message.match(patterns.selected_simple_joint_prices);
   if (sjPricesMatch && sjPricesMatch[1]) {
@@ -550,6 +569,7 @@ function extractPreferencesFromFormSubmission(message) {
       specific_preferences: preferences.specific_preferences,
       selected_events: preferences.selected_events,
       selected_seat_categories: preferences.selected_seat_categories,
+      event_party_sizes: preferences.event_party_sizes,
       selected_simple_joint_prices: preferences.selected_simple_joint_prices,
       selected_the1_negotiated_pricing: preferences.selected_the1_negotiated_pricing,
       admin_create_mode: preferences.admin_create_mode,

@@ -1065,6 +1065,15 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           ...conversationPreferences,
           structuredPreferences: eventData.sentiment_match?.structuredPreferences || null
         };
+        const eventParty =
+          eventData.party_size != null &&
+          Number.isFinite(Number(eventData.party_size)) &&
+          Number(eventData.party_size) >= 1
+            ? Math.floor(Number(eventData.party_size))
+            : null;
+        if (eventParty != null) {
+          preferencesWithStructured.party_size = eventParty;
+        }
         
         const budgetForSelection = conversationPreferences.budget?.max || 
                                   conversationPreferences.budget_range?.max || 
@@ -1605,6 +1614,45 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       initialStatus: initialStatus,
       isClientCreated: user.role === 'client'
     });
+
+    // Re-apply per-event party sizes from preferences map (survives auto-select remaps).
+    const partySizeByEventId = new Map();
+    const partySizeRows = [
+      ...(Array.isArray(conversationPreferences?.event_party_sizes)
+        ? conversationPreferences.event_party_sizes
+        : []),
+      ...(Array.isArray(preferences?.event_party_sizes)
+        ? preferences.event_party_sizes
+        : []),
+    ];
+    for (const row of partySizeRows) {
+      const id = String(row?.event_id ?? '')
+        .trim()
+        .toLowerCase();
+      const n = Number(row?.party_size);
+      if (id && Number.isFinite(n) && n >= 1) {
+        partySizeByEventId.set(id, Math.floor(n));
+      }
+    }
+    if (Array.isArray(finalEvents)) {
+      for (const e of finalEvents) {
+        const id = String(e?.event_id?._id ?? e?.event_id ?? '')
+          .trim()
+          .toLowerCase();
+        const fromEvent = Number(e?.party_size);
+        if (id && Number.isFinite(fromEvent) && fromEvent >= 1) {
+          partySizeByEventId.set(id, Math.floor(fromEvent));
+        }
+      }
+      finalEvents = finalEvents.map(e => {
+        const id = String(e?.event_id?._id ?? e?.event_id ?? '')
+          .trim()
+          .toLowerCase();
+        const ps = id ? partySizeByEventId.get(id) : null;
+        if (ps == null) return e;
+        return {...e, party_size: ps};
+      });
+    }
     
     // Build base COE data
     const baseCoeData = {
@@ -1625,7 +1673,12 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         total_price: 0,
         sequence: finalEvents.indexOf(e) + 1,
         // Phase 2.5: Store sentiment match data in event item (will be preserved in COE)
-        sentiment_match: e.sentiment_match || null
+        sentiment_match: e.sentiment_match || null,
+        ...(e.party_size != null &&
+        Number.isFinite(Number(e.party_size)) &&
+        Number(e.party_size) >= 1
+          ? { party_size: Math.floor(Number(e.party_size)) }
+          : {}),
       })),
       selected_seats: validatedSeats, // Use validated seats
       participants: [],

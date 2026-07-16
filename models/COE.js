@@ -50,6 +50,12 @@ const COEItemSchema = new mongoose.Schema({
   // Ordering
   sequence: { type: Number, required: true }, // Order within COE
 
+  /**
+   * Optional guests for this event line. When unset, UI/seat-fit fall back to
+   * original_request_data.party_size / preferences.party_size.
+   */
+  party_size: { type: Number, min: 1, required: false },
+
   /** True when this line is a joint-table share (deposit uses full line amount, see paymentService). */
   is_joint_allocation: { type: Boolean, default: false },
   /** UUID linking all clients sharing the same physical table for this event line. */

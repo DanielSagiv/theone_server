@@ -332,6 +332,10 @@ async function processFormSubmissionPhase24(params) {
             },
             location_preferences: extractionResult.raw.city ? [extractionResult.raw.city] : [],
             party_size: extractionResult.raw.party_size,
+            // Per-event guests from "Event party sizes:" line (applied onto COE.events[]).
+            event_party_sizes: Array.isArray(extractionResult.raw.event_party_sizes)
+              ? extractionResult.raw.event_party_sizes
+              : [],
             preferences: extractPreferenceKeywords(
               extractionResult.raw.seat_preferences || '',
               extractionResult.raw.specific_preferences || ''
@@ -357,6 +361,23 @@ async function processFormSubmissionPhase24(params) {
             for (const { event_id, seat_category } of extractionResult.raw.selected_seat_categories) {
               const id = (event_id && event_id.toString && event_id.toString()) || event_id;
               if (id) categoryByEventId[id] = seat_category;
+            }
+          }
+          const partySizeByEventId = {};
+          if (
+            extractionResult.raw.event_party_sizes &&
+            Array.isArray(extractionResult.raw.event_party_sizes)
+          ) {
+            for (const { event_id, party_size } of extractionResult.raw.event_party_sizes) {
+              const id = String(
+                (event_id && event_id.toString && event_id.toString()) || event_id || '',
+              )
+                .trim()
+                .toLowerCase();
+              const n = Number(party_size);
+              if (id && Number.isFinite(n) && n >= 1) {
+                partySizeByEventId[id] = Math.floor(n);
+              }
             }
           }
           const jointByEventId = {};
@@ -408,9 +429,21 @@ async function processFormSubmissionPhase24(params) {
             }
           }
           toolParams.events = extractionResult.raw.selected_events.map(eventId => {
-            const id = (eventId && eventId.toString && eventId.toString()) || eventId;
-            const jp = jointByEventId[id];
-            const t1 = the1ByEventId[id];
+            const id = String(
+              (eventId && eventId.toString && eventId.toString()) || eventId || '',
+            )
+              .trim()
+              .toLowerCase();
+            const jp = jointByEventId[id] || jointByEventId[String(eventId)];
+            const t1 = the1ByEventId[id] || the1ByEventId[String(eventId)];
+            const category =
+              categoryByEventId[id] ||
+              categoryByEventId[String(eventId)] ||
+              null;
+            const eventParty =
+              partySizeByEventId[id] ||
+              partySizeByEventId[String(eventId)] ||
+              null;
             const jpManual =
               jp && typeof jp === 'object'
                 ? jp.manual_price
@@ -424,7 +457,8 @@ async function processFormSubmissionPhase24(params) {
             return {
               event_id: eventId,
               selected_seats: [],
-              preferred_seat_category: categoryByEventId[id] || null,
+              preferred_seat_category: category,
+              party_size: eventParty,
               simple_joint_manual_price:
                 jpManual != null && Number.isFinite(jpManual) && jpManual >= 0
                   ? jpManual

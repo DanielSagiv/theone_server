@@ -133,6 +133,12 @@ function buildCreateCoeDraftParamsFromClientRequest(body, coeId) {
                     : 20,
               }
             : null,
+        party_size:
+          row.party_size != null &&
+          Number.isFinite(Number(row.party_size)) &&
+          Number(row.party_size) >= 1
+            ? Math.floor(Number(row.party_size))
+            : null,
       };
     });
   }

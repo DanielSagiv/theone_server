@@ -119,7 +119,12 @@ const toolRegistry = {
                   },
                   required: ['seat_id', 'seat_code', 'capacity']
                 }
-              }
+              },
+              party_size: {
+                type: 'number',
+                description:
+                  'Optional guests for this event; falls back to preferences.party_size when omitted',
+              },
             },
             required: ['event_id']
           }

@@ -5694,6 +5694,8 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
     let basePrice = eventData.base_price ?? seat.base_price ?? seatPrice;
 
     const newSequence = (coe.events?.length || 0) + 1;
+    const { normalizeOptionalPartySize } = require('../utils/coeEventPartySize');
+    const eventPartySize = normalizeOptionalPartySize(eventData.party_size);
     const coeItem = {
       coe_id: coeId,
       event_id: event._id,
@@ -5706,6 +5708,7 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
       notes: eventData.notes || '',
       client_notes: eventData.client_notes || '',
       sequence: newSequence,
+      ...(eventPartySize != null ? { party_size: eventPartySize } : {}),
     };
 
     const availFrom = event.start_datetime || new Date();
