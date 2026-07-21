@@ -158,6 +158,14 @@ async function processFormSubmissionPhase24(params) {
             }
           }
 
+          const derivedPartyFromEvents = Array.isArray(raw.event_party_sizes)
+            ? Math.max(
+                0,
+                ...raw.event_party_sizes
+                  .map(e => Number(e?.party_size))
+                  .filter(n => Number.isFinite(n) && n >= 1),
+              )
+            : 0;
           const originalRequestData = {
             original_request_text: prompt,
             budget: normalizedBudget,
@@ -165,7 +173,9 @@ async function processFormSubmissionPhase24(params) {
               start_date: requestStartDate,
               end_date: requestEndDate,
             },
-            party_size: raw.party_size || null,
+            party_size:
+              raw.party_size ||
+              (derivedPartyFromEvents >= 1 ? derivedPartyFromEvents : null),
             seat_preferences: raw.seat_preferences || '',
             general_preferences: raw.specific_preferences || '',
             city: raw.city || null,

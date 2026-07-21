@@ -33,6 +33,14 @@ function mergeClientOriginalRequestData(existingSubdoc, patch) {
     if (!Number.isNaN(ps) && ps >= 1) {
       prev.party_size = Math.floor(ps);
     }
+  } else if (Array.isArray(patch.event_selections) && patch.event_selections.length > 0) {
+    const fromEvents = patch.event_selections
+      .map(row => Number(row?.party_size))
+      .filter(n => Number.isFinite(n) && n >= 1)
+      .map(n => Math.floor(n));
+    if (fromEvents.length > 0) {
+      prev.party_size = Math.max(...fromEvents);
+    }
   }
   if (patch.budget && typeof patch.budget === 'object') {
     prev.budget = { ...(prev.budget || {}) };
@@ -74,11 +82,31 @@ function mergeClientOriginalRequestData(existingSubdoc, patch) {
 function buildCreateCoeDraftParamsFromClientRequest(body, coeId) {
   const budgetMax =
     body.budget?.max != null ? Number(body.budget.max) : null;
+
+  const selections = Array.isArray(body.event_selections)
+    ? body.event_selections
+    : [];
+  let partySize =
+    body.party_size != null &&
+    Number.isFinite(Number(body.party_size)) &&
+    Number(body.party_size) >= 1
+      ? Math.floor(Number(body.party_size))
+      : null;
+  if (partySize == null && selections.length > 0) {
+    const fromEvents = selections
+      .map(row => Number(row?.party_size))
+      .filter(n => Number.isFinite(n) && n >= 1)
+      .map(n => Math.floor(n));
+    if (fromEvents.length > 0) {
+      partySize = Math.max(...fromEvents);
+    }
+  }
+
   const preferences = {
     city: body.city || null,
     budget_range: budgetMax != null ? { max: budgetMax } : undefined,
     location_preferences: body.city ? [body.city] : [],
-    party_size: body.party_size,
+    party_size: partySize,
     preferences: extractPreferenceKeywords(
       body.seat_preferences || '',
       body.specific_preferences || '',
@@ -96,9 +124,6 @@ function buildCreateCoeDraftParamsFromClientRequest(body, coeId) {
     manual_event_selection: true,
   };
 
-  const selections = Array.isArray(body.event_selections)
-    ? body.event_selections
-    : [];
   if (selections.length > 0) {
     toolParams.events = selections.map(row => {
       const eventId = row.event_id;
@@ -138,7 +163,7 @@ function buildCreateCoeDraftParamsFromClientRequest(body, coeId) {
           Number.isFinite(Number(row.party_size)) &&
           Number(row.party_size) >= 1
             ? Math.floor(Number(row.party_size))
-            : null,
+            : partySize,
       };
     });
   }

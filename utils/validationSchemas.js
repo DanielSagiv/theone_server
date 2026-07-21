@@ -772,7 +772,7 @@ const updateClientRequestCOESchema = Joi.object({
   start_date: Joi.date().required(),
   end_date: Joi.date().min(Joi.ref('start_date')).required(),
   city: Joi.string().min(1).max(200).required(),
-  party_size: Joi.number().integer().min(1).required(),
+  party_size: Joi.number().integer().min(1).optional(),
   budget: Joi.object({
     max: Joi.number().min(0).required(),
     currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD'),
@@ -784,6 +784,34 @@ const updateClientRequestCOESchema = Joi.object({
     .items(Joi.string().hex().length(24))
     .optional(),
   rebuild_events: Joi.boolean().default(false),
+}).custom((value, helpers) => {
+  const selections = Array.isArray(value.event_selections)
+    ? value.event_selections
+    : [];
+  const topLevel =
+    value.party_size != null &&
+    Number.isFinite(Number(value.party_size)) &&
+    Number(value.party_size) >= 1;
+
+  if (selections.length === 0) {
+    if (!topLevel) {
+      return helpers.message(
+        'party_size is required when no events are selected',
+      );
+    }
+    return value;
+  }
+
+  const allEventsHaveParty = selections.every(row => {
+    const n = Number(row?.party_size);
+    return Number.isFinite(n) && n >= 1;
+  });
+  if (!allEventsHaveParty && !topLevel) {
+    return helpers.message(
+      'Each event_selection must include party_size, or provide top-level party_size',
+    );
+  }
+  return value;
 });
 
 /** GET /coes/my query */

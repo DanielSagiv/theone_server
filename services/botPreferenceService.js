@@ -434,6 +434,16 @@ function extractPreferencesFromFormSubmission(message) {
   }
   preferences.event_party_sizes = event_party_sizes;
 
+  // Derive COE-level party_size from per-event sizes when "Number of people" is omitted.
+  if (
+    (preferences.party_size == null || preferences.party_size < 1) &&
+    event_party_sizes.length > 0
+  ) {
+    preferences.party_size = Math.max(
+      ...event_party_sizes.map(e => Number(e.party_size)).filter(n => n >= 1),
+    );
+  }
+
   let selected_simple_joint_prices = [];
   const sjPricesMatch = message.match(patterns.selected_simple_joint_prices);
   if (sjPricesMatch && sjPricesMatch[1]) {
