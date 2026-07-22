@@ -10,6 +10,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
+/** Legacy hardcoded fallback; treat as empty for UI (do not re-serve from cache). */
+const LEGACY_EMPTY_FALLBACK = 'Premium seating option with excellent amenities';
+
 // In-memory cache for recommendations
 const recommendationCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -51,6 +54,10 @@ function getCacheKey(locationId, seatCode, sentiments, userPreferences) {
 function getCachedRecommendation(cacheKey) {
   const cached = recommendationCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (cached.recommendation === LEGACY_EMPTY_FALLBACK) {
+      recommendationCache.delete(cacheKey);
+      return null;
+    }
     return cached.recommendation;
   }
   // Clean up expired cache entry
@@ -111,10 +118,10 @@ async function generateSeatRecommendation(seatData, sentiments, locationId, user
     }
   }
 
-  // If OpenAI client not available, return fallback
+  // If OpenAI client not available, return empty fallback
   if (!openaiClient) {
     console.warn('[SEAT_RECOMMENDATION] OpenAI client not available, using fallback');
-    return 'Premium seating option with excellent amenities';
+    return '';
   }
 
   try {
@@ -187,7 +194,7 @@ Generate the recommendation now:`;
     const completion = await Promise.race([apiPromise, timeoutPromise]);
 
     const recommendation = completion.choices[0]?.message?.content?.trim() ||
-                          'Premium seating option with excellent amenities';
+                          '';
 
     // Truncate to 150 characters if needed
     const finalRecommendation = recommendation.length > 150 
@@ -211,13 +218,13 @@ Generate the recommendation now:`;
   } catch (error) {
     if (error.message === 'Request timeout') {
       console.warn('[SEAT_RECOMMENDATION] Request timeout, using fallback');
-      return 'Premium seating option with excellent amenities';
+      return '';
     }
     console.error('[SEAT_RECOMMENDATION] Error generating recommendation:', {
       error: error.message,
       seatCode: seatData.code
     });
-    return 'Premium seating option with excellent amenities';
+    return '';
   }
 }
 
@@ -259,7 +266,7 @@ async function generateSeatRecommendations(seats, userPreferences = {}, options 
         });
         return {
           seat_code: seatData.code || seatData.seat_code,
-          recommendation: 'Premium seating option with excellent amenities',
+          recommendation: '',
           generated_at: new Date(),
           version: 1
         };

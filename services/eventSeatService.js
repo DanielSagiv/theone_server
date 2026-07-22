@@ -179,7 +179,7 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
         };
 
         // Generate AI summary
-        let sentimentSummary = 'Premium seating option with excellent amenities';
+        let sentimentSummary = '';
         if (sentiments.length > 0) {
           try {
             const locId = event.location_id._id?.toString() || event.location_id?.toString() || locationId.toString();
@@ -195,7 +195,7 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
               seatCode: eventSeat.code,
               error: error.message
             });
-            // Use fallback text
+            // Use empty fallback (backward-compatible: field still returned)
           }
         }
 
