@@ -155,10 +155,10 @@ function testFilterScrapEventsNotInPast() {
   assert.deepStrictEqual(upcoming.map((r) => r.eventCode), ['EVE2', 'EVE3']);
 }
 
-function testOmniaBalconySmallMapsToBalconyLarge() {
+function testOmniaBalconySmallMapsToBalconySmall() {
   const key = normalizeOmniaTableName('Main Room Balcony Small 10 Arrive by 12:00am Small Balcony');
   const { seatCode } = resolveOmniaSeatMapping(key, 'night_club');
-  assert.strictEqual(seatCode, 'Main Room Balcony Large');
+  assert.strictEqual(seatCode, 'Main Room Balcony Small');
 }
 
 function testOmniaDayclubTableMappings() {
@@ -552,7 +552,7 @@ function run() {
   testApplyInventoryPreservesLocationMinSpend();
   testApplyInventoryUnmatchedSeatUnchanged();
   testFilterScrapEventsNotInPast();
-  testOmniaBalconySmallMapsToBalconyLarge();
+  testOmniaBalconySmallMapsToBalconySmall();
   testOmniaDayclubTableMappings();
   testOmniaVenueConfigScope();
   testOmniaDayclubInventoryApply();

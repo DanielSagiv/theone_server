@@ -26,7 +26,7 @@ const OMNIA_NIGHT_TABLE_TO_SEAT_CODE = {
   'main room 2nd tier': 'Main Room 2nd Tier',
   'main room 3rd tier': 'Main Room 3rd Tier',
   'main room balcony large': 'Main Room Balcony Large',
-  'main room balcony small': 'Main Room Balcony Large',
+  'main room balcony small': 'Main Room Balcony Small',
   'main room sky box': 'Main Room Sky Box',
   'heart owners': 'Heart Owners',
   'heart dance floor': 'Heart Dance Floor',

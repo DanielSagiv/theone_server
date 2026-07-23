@@ -6,6 +6,7 @@
 const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'second_row_balcony', label: '2nd Row Balcony' },
   { value: 'second_row_premium_terrace', label: '2nd Row Premium Terrace' },
+  { value: '2nd_row_premium_upper_club', label: '2nd Row Premium Upper Club' },
   { value: 'third_tier_couch', label: '3rd Tier Couch' },
   { value: 'third_tier_section', label: '3rd Tier Section' },
   { value: 'third_tier_main_room', label: 'Third Tier Main Room' },
@@ -33,6 +34,7 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'dance_floor', label: 'Dance Floor' },
   { value: 'dance_floor_section', label: 'Dance Floor Section' },
   { value: 'daybeds', label: 'Daybeds' },
+  { value: 'driftwood_den', label: 'Driftwood Den' },
   { value: 'entry_level', label: 'Entry Level' },
   { value: 'large_3rd_tier_couch', label: 'Large 3rd Tier Couch' },
   { value: 'large_3rd_tier_section', label: 'Large 3rd Tier Section' },
@@ -115,6 +117,7 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'main_room_2nd_tier', label: 'Main Room 2nd Tier' },
   { value: 'main_room_3rd_tier', label: 'Main Room 3rd Tier' },
   { value: 'main_room_balcony_large', label: 'Main Room Balcony Large' },
+  { value: 'main_room_balcony_small', label: 'Main Room Balcony Small' },
   { value: 'main_room_sky_box', label: 'Main Room Sky Box' },
   { value: 'main_room_3rd_4th_rows', label: 'Main Room 3rd/4th Rows' },
   { value: 'mezzanine_center', label: 'Mezzanine Center' },
