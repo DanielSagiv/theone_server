@@ -5787,6 +5787,53 @@
                             <pre id="toolsCleanResult" style="display:none;background:#f8f9fa;padding:12px;border-radius:8px;font-size:12px;overflow:auto;max-height:240px;"></pre>
                         </div>
                     </div>
+                    <div class="card" style="margin-top:20px;">
+                        <div class="card-body">
+                            <h2 style="margin:0 0 8px;font-size:18px;">Section image AI</h2>
+                            <p style="color:#555;margin:0 0 16px;max-width:720px;">
+                                Select a section slot, then either <strong>Process with AI</strong> (from the current image or a local file) or <strong>load a local image</strong> as-is.
+                                Then <strong>Replace in bucket</strong> so that section uses the new image going forward.
+                                Process and Replace store a <strong>4:3 ~1536×1152</strong> JPEG sized for app section/seat cards (no black letterboxing).
+                            </p>
+                            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px;">
+                                <div class="form-group" style="margin:0;">
+                                    <label for="toolsSectionImageLocation">Location</label>
+                                    <select id="toolsSectionImageLocation" style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;min-width:280px;" onchange="onToolsSectionImageLocationChange()">
+                                        <option value="">Select location...</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn" style="padding:10px 16px;border-radius:8px;" onclick="loadToolsSectionImageLocations()">Refresh locations</button>
+                                <div class="form-group" style="margin:0;">
+                                    <label for="toolsSectionImageLocalFile">Load local image (replace as-is or AI source)</label>
+                                    <input type="file" id="toolsSectionImageLocalFile" accept="image/*" style="display:block;max-width:320px;" onchange="onToolsSectionImageLocalFileChange(event)" />
+                                </div>
+                            </div>
+                            <div id="toolsSectionImageGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px;"></div>
+                            <div id="toolsSectionImageActions" style="display:none;margin-bottom:16px;">
+                                <div class="form-group" style="margin:0 0 12px;max-width:720px;">
+                                    <label for="toolsSectionImageExtraPrompt" style="display:block;margin-bottom:4px;">Extra prompt (optional)</label>
+                                    <div style="font-size:12px;color:#777;margin-bottom:6px;">
+                                        Always applied first: remove text (if any), sharpen, and fill a landscape frame edge-to-edge (no borders or letterboxing). Output is normalized to 4:3 ~1536×1152. Your note is appended, e.g. &quot;Make it brighter.&quot;
+                                    </div>
+                                    <textarea id="toolsSectionImageExtraPrompt" rows="2" maxlength="500" placeholder="Make it brighter." style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;resize:vertical;font-family:inherit;font-size:14px;"></textarea>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                                    <button type="button" id="toolsSectionImageProcessBtn" class="btn" style="padding:10px 16px;border-radius:8px;background:#2980b9;color:#fff;border:none;" onclick="processToolsSectionImage()">Process with AI</button>
+                                    <button type="button" id="toolsSectionImageApplyBtn" class="btn" style="padding:10px 16px;border-radius:8px;background:#27ae60;color:#fff;border:none;display:none;" onclick="applyToolsSectionImage()">Replace in bucket</button>
+                                    <span id="toolsSectionImageStatus" style="color:#666;font-size:13px;"></span>
+                                </div>
+                            </div>                            <div id="toolsSectionImagePreview" style="display:none;gap:16px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:220px;">
+                                    <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#555;">Original</div>
+                                    <img id="toolsSectionImageOriginal" alt="Original" style="max-width:100%;max-height:320px;border-radius:8px;border:1px solid #ddd;background:#111;" />
+                                </div>
+                                <div style="flex:1;min-width:220px;">
+                                    <div id="toolsSectionImageNewLabel" style="font-size:12px;font-weight:600;margin-bottom:6px;color:#555;">New image</div>
+                                    <img id="toolsSectionImageAi" alt="New image" style="max-width:100%;max-height:320px;border-radius:8px;border:1px solid #ddd;background:#111;" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Settings Section -->
@@ -7057,6 +7104,9 @@
             }
             if (sectionName === 'coes') {
                 loadCOEs();
+            }
+            if (sectionName === 'tools' && currentUser?.role === 'admin') {
+                loadToolsSectionImageLocations();
             }
             if (sectionName === 'payments') {
                 loadPaymentsSection();
@@ -11501,6 +11551,358 @@
                     pre.style.display = 'block';
                     pre.textContent = JSON.stringify(payload, null, 2);
                 }
+            }
+        }
+
+        /** @type {{ locationId: string, seatCode: string, mediaIndex: number, url: string, thumb_url: string } | null} */
+        let toolsSectionImageSelection = null;
+        /** What Replace uploads: AI result or local file as-is. */
+        /** @type {{ previewBase64: string, mime: string, from?: string } | null} */
+        let toolsSectionImagePreviewData = null;
+        /** Optional local file (AI source and/or direct Replace candidate). */
+        /** @type {{ sourceBase64: string, mime: string, dataUrl: string } | null} */
+        let toolsSectionImageLocalData = null;
+
+        /**
+         * Clear optional local file and file input.
+         */
+        function clearToolsSectionImageLocalSource() {
+            toolsSectionImageLocalData = null;
+            const fileInput = document.getElementById('toolsSectionImageLocalFile');
+            if (fileInput) fileInput.value = '';
+        }
+
+        /**
+         * Set the right-hand preview label.
+         * @param {string} text
+         */
+        function setToolsSectionImageNewLabel(text) {
+            const el = document.getElementById('toolsSectionImageNewLabel');
+            if (el) el.textContent = text || 'New image';
+        }
+
+        /**
+         * Load a local image for the selected section: ready to Replace as-is, or Process with AI first.
+         * @param {Event} event
+         */
+        function onToolsSectionImageLocalFileChange(event) {
+            const input = event && event.target;
+            const file = input && input.files && input.files[0];
+            const statusEl = document.getElementById('toolsSectionImageStatus');
+            const orig = document.getElementById('toolsSectionImageOriginal');
+            const ai = document.getElementById('toolsSectionImageAi');
+            const applyBtn = document.getElementById('toolsSectionImageApplyBtn');
+            const preview = document.getElementById('toolsSectionImagePreview');
+            if (!file) {
+                return;
+            }
+            if (!toolsSectionImageSelection) {
+                showAlert('Select a section image first (the slot to update), then load a local image.', 'error');
+                if (input) input.value = '';
+                return;
+            }
+            if (!String(file.type || '').startsWith('image/')) {
+                showAlert('Please choose an image file.', 'error');
+                if (input) input.value = '';
+                return;
+            }
+            const maxBytes = 12 * 1024 * 1024;
+            if (file.size > maxBytes) {
+                showAlert('Local image is too large (max ~12MB).', 'error');
+                if (statusEl) statusEl.textContent = 'Local image is too large (max ~12MB).';
+                if (input) input.value = '';
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function () {
+                const dataUrl = String(reader.result || '');
+                const comma = dataUrl.indexOf(',');
+                const sourceBase64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+                if (!sourceBase64) {
+                    showAlert('Could not read local image.', 'error');
+                    return;
+                }
+                toolsSectionImageLocalData = {
+                    sourceBase64: sourceBase64,
+                    mime: file.type || 'image/png',
+                    dataUrl: dataUrl,
+                };
+                // Ready to Replace as-is (no AI required). Process will overwrite this with AI output.
+                toolsSectionImagePreviewData = {
+                    previewBase64: sourceBase64,
+                    mime: file.type || 'image/png',
+                    from: 'local',
+                };
+                if (preview) preview.style.display = 'flex';
+                if (orig) orig.src = toolsSectionImageSelection.url || toolsSectionImageSelection.thumb_url;
+                if (ai) ai.src = dataUrl;
+                setToolsSectionImageNewLabel('Local image (ready to replace)');
+                if (applyBtn) applyBtn.style.display = 'inline-block';
+                if (statusEl) {
+                    statusEl.textContent =
+                        'Local image ready for ' +
+                        toolsSectionImageSelection.seatCode +
+                        ' [' +
+                        toolsSectionImageSelection.mediaIndex +
+                        '] — Replace as-is, or Process with AI first.';
+                }
+            };
+            reader.onerror = function () {
+                showAlert('Failed to read local image.', 'error');
+                if (input) input.value = '';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * Populate Tools section-image location dropdown from /locations.
+         */
+        async function loadToolsSectionImageLocations() {
+            if (currentUser?.role !== 'admin') {
+                return;
+            }
+            const sel = document.getElementById('toolsSectionImageLocation');
+            if (!sel) return;
+            const prev = sel.value;
+            sel.innerHTML = '<option value="">Loading...</option>';
+            try {
+                const result = await makeApiRequest('/locations');
+                const list = result.success && result.data
+                    ? (Array.isArray(result.data) ? result.data : (result.data.data || []))
+                    : [];
+                sel.innerHTML = '<option value="">Select location...</option>';
+                list
+                    .slice()
+                    .sort(function (a, b) {
+                        return String(a.name || '').localeCompare(String(b.name || ''));
+                    })
+                    .forEach(function (loc) {
+                        const opt = document.createElement('option');
+                        opt.value = loc._id;
+                        opt.textContent = loc.name || loc._id;
+                        sel.appendChild(opt);
+                    });
+                if (prev && Array.from(sel.options).some(function (o) { return o.value === prev; })) {
+                    sel.value = prev;
+                }
+            } catch (err) {
+                console.error('loadToolsSectionImageLocations', err);
+                sel.innerHTML = '<option value="">Failed to load locations</option>';
+            }
+        }
+
+        /**
+         * Load seat/section images for the selected Tools location.
+         */
+        async function onToolsSectionImageLocationChange() {
+            clearToolsSectionImageLocalSource();
+            toolsSectionImageSelection = null;
+            toolsSectionImagePreviewData = null;
+            const grid = document.getElementById('toolsSectionImageGrid');
+            const actions = document.getElementById('toolsSectionImageActions');
+            const preview = document.getElementById('toolsSectionImagePreview');
+            const applyBtn = document.getElementById('toolsSectionImageApplyBtn');
+            const statusEl = document.getElementById('toolsSectionImageStatus');
+            if (actions) actions.style.display = 'none';
+            if (preview) preview.style.display = 'none';
+            if (applyBtn) applyBtn.style.display = 'none';
+            if (statusEl) statusEl.textContent = '';
+            setToolsSectionImageNewLabel('New image');
+            const sel = document.getElementById('toolsSectionImageLocation');
+            const locationId = sel ? sel.value : '';
+            if (!grid) return;
+            if (!locationId) {
+                grid.innerHTML = '';
+                return;
+            }
+            grid.innerHTML = '<div style="grid-column:1/-1;color:#666;">Loading images...</div>';
+            const result = await makeApiRequest('/admin/tools/section-images?locationId=' + encodeURIComponent(locationId));
+            const payload = result.data || {};
+            const data = payload.data || payload;
+            if (!result.success || payload.success === false) {
+                grid.innerHTML = '<div style="grid-column:1/-1;color:#c0392b;">' +
+                    (payload.message || payload.error || 'Failed to load section images') + '</div>';
+                return;
+            }
+            const items = Array.isArray(data.items) ? data.items : [];
+            if (!items.length) {
+                grid.innerHTML = '<div style="grid-column:1/-1;color:#7f8c8d;">No seat/section images for this location.</div>';
+                return;
+            }
+            grid.innerHTML = items.map(function (item, i) {
+                const label = [item.seatCode, item.category, item.caption].filter(Boolean).join(' · ');
+                // Use full media.url (same as Locations UI). Preferring thumb_url breaks
+                // many stage tiles because thumbs/enriched/* often return 403.
+                const thumb = item.url || item.list_thumb_url || item.thumb_url;
+                return (
+                    '<button type="button" class="tools-section-img-tile" data-idx="' + i + '" ' +
+                    'onclick="selectToolsSectionImage(' + i + ')" ' +
+                    'style="text-align:left;padding:0;border:2px solid #ddd;border-radius:10px;overflow:hidden;background:#fff;cursor:pointer;">' +
+                    '<img src="' + String(thumb).replace(/"/g, '&quot;') + '" alt="" style="width:100%;height:120px;object-fit:cover;display:block;" />' +
+                    '<div style="padding:8px;font-size:11px;line-height:1.3;color:#333;">' +
+                    String(label).replace(/</g, '&lt;') +
+                    '</div></button>'
+                );
+            }).join('');
+            window._toolsSectionImageItems = items;
+            window._toolsSectionImageLocationId = locationId;
+        }
+
+        /**
+         * Highlight selected tile and enable Process / local load.
+         * @param {number} index
+         */
+        function selectToolsSectionImage(index) {
+            const items = window._toolsSectionImageItems || [];
+            const item = items[index];
+            if (!item) return;
+            clearToolsSectionImageLocalSource();
+            toolsSectionImageSelection = {
+                locationId: window._toolsSectionImageLocationId,
+                seatCode: item.seatCode,
+                mediaIndex: item.mediaIndex,
+                url: item.url,
+                thumb_url: item.url || item.thumb_url,
+            };
+            toolsSectionImagePreviewData = null;
+            document.querySelectorAll('.tools-section-img-tile').forEach(function (el, i) {
+                el.style.borderColor = i === index ? '#2980b9' : '#ddd';
+            });
+            const actions = document.getElementById('toolsSectionImageActions');
+            const preview = document.getElementById('toolsSectionImagePreview');
+            const applyBtn = document.getElementById('toolsSectionImageApplyBtn');
+            const orig = document.getElementById('toolsSectionImageOriginal');
+            const ai = document.getElementById('toolsSectionImageAi');
+            const statusEl = document.getElementById('toolsSectionImageStatus');
+            if (actions) {
+                actions.style.display = 'block';
+            }
+            if (applyBtn) applyBtn.style.display = 'none';
+            if (preview) preview.style.display = 'flex';
+            if (orig) orig.src = toolsSectionImageSelection.url || toolsSectionImageSelection.thumb_url;
+            if (ai) ai.removeAttribute('src');
+            setToolsSectionImageNewLabel('New image');
+            if (statusEl) {
+                statusEl.textContent =
+                    'Selected: ' +
+                    item.seatCode +
+                    ' [' +
+                    item.mediaIndex +
+                    '] — Process with AI, or load a local image to Replace.';
+            }
+        }
+
+        /**
+         * Call OpenAI process for selected seat (DB image or optional local source).
+         */
+        async function processToolsSectionImage() {
+            if (!toolsSectionImageSelection) {
+                showAlert('Select a section image first (the slot to update).', 'error');
+                return;
+            }
+            const hasLocal = Boolean(toolsSectionImageLocalData);
+            const btn = document.getElementById('toolsSectionImageProcessBtn');
+            const statusEl = document.getElementById('toolsSectionImageStatus');
+            const applyBtn = document.getElementById('toolsSectionImageApplyBtn');
+            if (btn) btn.disabled = true;
+            if (statusEl) statusEl.textContent = 'Processing with AI (may take a minute)...';
+            try {
+                const body = hasLocal
+                    ? {
+                        sourceBase64: toolsSectionImageLocalData.sourceBase64,
+                        mime: toolsSectionImageLocalData.mime,
+                        extraPrompt: (document.getElementById('toolsSectionImageExtraPrompt')?.value || '').trim(),
+                    }
+                    : {
+                        locationId: toolsSectionImageSelection.locationId,
+                        seatCode: toolsSectionImageSelection.seatCode,
+                        mediaIndex: toolsSectionImageSelection.mediaIndex,
+                        extraPrompt: (document.getElementById('toolsSectionImageExtraPrompt')?.value || '').trim(),
+                    };
+                const result = await makeApiRequest('/admin/tools/section-images/process', 'POST', body);
+                const payload = result.data || {};
+                const data = payload.data || payload;
+                if (!result.success || payload.success === false || !data.previewBase64) {
+                    const errMsg = payload.message || payload.error || 'Process failed';
+                    showAlert(errMsg, 'error');
+                    if (statusEl) statusEl.textContent = errMsg;
+                    return;
+                }
+                toolsSectionImagePreviewData = {
+                    previewBase64: data.previewBase64,
+                    mime: data.mime || 'image/png',
+                    from: 'ai',
+                };
+                const ai = document.getElementById('toolsSectionImageAi');
+                const preview = document.getElementById('toolsSectionImagePreview');
+                if (ai) {
+                    ai.src = 'data:' + toolsSectionImagePreviewData.mime + ';base64,' + toolsSectionImagePreviewData.previewBase64;
+                }
+                if (preview) preview.style.display = 'flex';
+                setToolsSectionImageNewLabel('AI processed');
+                if (applyBtn) applyBtn.style.display = 'inline-block';
+                if (statusEl) {
+                    statusEl.textContent =
+                        'AI ready — Replace updates ' +
+                        toolsSectionImageSelection.seatCode +
+                        ' [' +
+                        toolsSectionImageSelection.mediaIndex +
+                        '].';
+                }
+                showAlert('AI preview ready.', 'success');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        /**
+         * Upload AI result or local image and replace the seat media URL in Mongo/S3.
+         */
+        async function applyToolsSectionImage() {
+            if (!toolsSectionImageSelection || !toolsSectionImagePreviewData) {
+                showAlert('Process with AI or load a local image first.', 'error');
+                return;
+            }
+            const fromLocal = toolsSectionImagePreviewData.from === 'local';
+            const confirmMsg = fromLocal
+                ? 'Replace this section image in S3 / Mongo with your local file (no AI)? Previous object is kept (new key uploaded).'
+                : 'Replace the current section image in S3 / Mongo with the AI result? The previous object is kept (new key uploaded).';
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+            const btn = document.getElementById('toolsSectionImageApplyBtn');
+            const statusEl = document.getElementById('toolsSectionImageStatus');
+            if (btn) btn.disabled = true;
+            if (statusEl) statusEl.textContent = 'Uploading and updating...';
+            try {
+                const result = await makeApiRequest('/admin/tools/section-images/apply', 'POST', {
+                    locationId: toolsSectionImageSelection.locationId,
+                    seatCode: toolsSectionImageSelection.seatCode,
+                    mediaIndex: toolsSectionImageSelection.mediaIndex,
+                    previewBase64: toolsSectionImagePreviewData.previewBase64,
+                    mime: toolsSectionImagePreviewData.mime,
+                });
+                const payload = result.data || {};
+                const data = payload.data || payload;
+                if (!result.success || payload.success === false) {
+                    const errMsg = payload.message || payload.error || 'Apply failed';
+                    showAlert(errMsg, 'error');
+                    if (statusEl) statusEl.textContent = errMsg;
+                    return;
+                }
+                const media = data.media || {};
+                showAlert('Section image replaced.', 'success');
+                if (statusEl) statusEl.textContent = 'Replaced. New URL saved.';
+                toolsSectionImagePreviewData = null;
+                clearToolsSectionImageLocalSource();
+                if (btn) btn.style.display = 'none';
+                await onToolsSectionImageLocationChange();
+                if (media.url || media.thumb_url) {
+                    const orig = document.getElementById('toolsSectionImageOriginal');
+                    if (orig) orig.src = media.url || media.thumb_url;
+                }
+            } finally {
+                if (btn) btn.disabled = false;
             }
         }
 

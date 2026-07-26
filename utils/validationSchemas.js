@@ -778,7 +778,7 @@ const updateClientRequestCOESchema = Joi.object({
     currency: Joi.string().valid('USD', 'EUR', 'GBP').default('USD'),
   }).required(),
   seat_preferences: Joi.string().max(2000).allow(''),
-  specific_preferences: Joi.string().max(2000).allow(''),
+  specific_preferences: Joi.string().min(1).max(2000).required(),
   event_selections: Joi.array().items(clientRequestEventSelectionSchema).default([]),
   prioritized_event_ids: Joi.array()
     .items(Joi.string().hex().length(24))

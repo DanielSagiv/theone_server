@@ -1,6 +1,6 @@
 /**
  * Admin-only dashboard utilities (test / dev tooling).
- * @description Secured CLEAN operations for selected Mongo collections.
+ * @description Secured CLEAN operations and section-image AI tools.
  */
 
 const express = require('express');
@@ -12,6 +12,7 @@ const Notification = require('../models/Notification');
 const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const coeService = require('../services/coeService');
+const sectionImageAiService = require('../services/sectionImageAiService');
 
 /** Hard-coded tools password (dashboard Tools tab); validate on every request. */
 const TOOLS_CLEAN_PASSWORD = 'sagsag';
@@ -159,6 +160,115 @@ router.post('/clean', authenticateToken, requireAdmin, async (req, res) => {
       success: false,
       message: 'Clean operation failed',
       error: error.message || 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /v1/admin/tools/section-images?locationId=
+ * List seat/section image media for one location.
+ */
+router.get('/section-images', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.query?.locationId;
+    const data = await sectionImageAiService.listLocationSectionImages(locationId);
+    return res.json({ success: true, data });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error('[adminTools] GET /section-images error:', error.message);
+    return res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to list section images',
+      error: error.message || 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /v1/admin/tools/section-images/process
+ * AI-edit: either seat media from DB, or a local image (sourceBase64, preview only).
+ * @body {string} [locationId]
+ * @body {string} [seatCode]
+ * @body {number} [mediaIndex]
+ * @body {string} [sourceBase64] local image (raw base64 or data URL)
+ * @body {string} [mime]
+ * @body {string} [extraPrompt] optional note appended to the fixed base prompt
+ */
+router.post('/section-images/process', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { locationId, seatCode, mediaIndex, sourceBase64, mime, extraPrompt } =
+      req.body || {};
+    const hasLocal = Boolean(String(sourceBase64 || '').trim());
+    const hasSeat =
+      Boolean(locationId) && Boolean(seatCode) && mediaIndex != null;
+
+    if (!hasLocal && !hasSeat) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Provide sourceBase64 (local image) or locationId, seatCode, and mediaIndex',
+      });
+    }
+
+    const result = hasLocal
+      ? await sectionImageAiService.processLocalSectionImage({
+          sourceBase64,
+          mime,
+          extraPrompt,
+        })
+      : await sectionImageAiService.processSectionImage({
+          locationId,
+          seatCode,
+          mediaIndex: Number(mediaIndex),
+          extraPrompt,
+        });
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error('[adminTools] POST /section-images/process error:', error.message);
+    return res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to process section image',
+      error: error.message || 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /v1/admin/tools/section-images/apply
+ * Upload processed image to S3 and replace the seat media slot.
+ * @body {string} locationId
+ * @body {string} seatCode
+ * @body {number} mediaIndex
+ * @body {string} previewBase64
+ * @body {string} [mime]
+ */
+router.post('/section-images/apply', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { locationId, seatCode, mediaIndex, previewBase64, mime } = req.body || {};
+    if (!locationId || !seatCode || mediaIndex == null || !previewBase64) {
+      return res.status(400).json({
+        success: false,
+        message: 'locationId, seatCode, mediaIndex, and previewBase64 are required',
+      });
+    }
+    const userId = req.user?._id || req.user?.id || 'admin';
+    const media = await sectionImageAiService.applyProcessedSectionImage({
+      locationId,
+      seatCode,
+      mediaIndex: Number(mediaIndex),
+      previewBase64,
+      mime,
+      userId: String(userId),
+    });
+    return res.json({ success: true, data: { media } });
+  } catch (error) {
+    const status = error.statusCode || 500;
+    console.error('[adminTools] POST /section-images/apply error:', error.message);
+    return res.status(status).json({
+      success: false,
+      message: error.message || 'Failed to apply section image',
+      error: error.message || 'Unknown error',
     });
   }
 });

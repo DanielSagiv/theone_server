@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { updateProfileSchema, updateEntityStatusSchema, adminCreateClientSchema, updateRoleSchema, updateVisibilityStatusSchema, updateUserTierSchema } = require('../utils/validationSchemas');
@@ -219,6 +220,116 @@ router.post('/profile/avatar', authenticateToken, (req, res, next) => {
     });
   } catch (error) {
     console.error('Upload avatar error:', { error: error.message, timestamp: new Date().toISOString() });
+    return res.status(500).json({
+      success: false,
+      error: { code: 'AVATAR_UPLOAD_FAILED', message: 'Failed to upload avatar' }
+    });
+  }
+});
+
+/**
+ * POST /v1/users/:id/avatar
+ * Admin-only: upload a profile image for another user (typically a client).
+ */
+router.post('/:id/avatar', authenticateToken, requireAdmin, (req, res, next) => {
+  upload.single('avatar')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'FILE_TOO_LARGE', message: 'File size too large. Maximum size is 50MB.' }
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: { code: 'UPLOAD_ERROR', message: 'File upload error: ' + err.message }
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const targetId = String(req.params.id || '').trim();
+    if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_USER_ID', message: 'Valid user id is required' }
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'NO_FILE', message: 'No file uploaded. Use field name "avatar".' }
+      });
+    }
+
+    const mime = req.file.mimetype || 'application/octet-stream';
+    if (!mime.startsWith('image/')) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_FILE_TYPE', message: 'Only image files are allowed.' }
+      });
+    }
+
+    const target = await User.findById(targetId).select('role');
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' }
+      });
+    }
+    if (target.role === 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'CLIENT_AVATAR_ONLY',
+          message: 'Admins can only upload profile images for clients'
+        }
+      });
+    }
+
+    const uploaded = await uploadMediaWithMetadata(
+      req.file,
+      `avatars/${targetId}`,
+      targetId
+    );
+
+    const updated = await User.findByIdAndUpdate(
+      targetId,
+      {
+        avatarUrl: uploaded.url,
+        avatar_width: uploaded.width,
+        avatar_height: uploaded.height,
+        avatar_byte_size: uploaded.byte_size,
+        avatar_thumb_url: uploaded.thumb_url
+      },
+      { new: true }
+    );
+
+    console.log('[users] admin uploaded client avatar', {
+      at: new Date().toISOString(),
+      adminId: req.user?._id?.toString?.(),
+      targetId,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        avatarUrl: updated.avatarUrl,
+        avatar_width: updated.avatar_width,
+        avatar_height: updated.avatar_height,
+        avatar_byte_size: updated.avatar_byte_size,
+        avatar_thumb_url: updated.avatar_thumb_url
+      },
+      message: 'Avatar updated successfully'
+    });
+  } catch (error) {
+    console.error('Admin upload client avatar error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      targetId: req.params?.id,
+    });
     return res.status(500).json({
       success: false,
       error: { code: 'AVATAR_UPLOAD_FAILED', message: 'Failed to upload avatar' }
