@@ -257,6 +257,7 @@ function extractPreferencesFromFormSubmission(message) {
     party_size: /Number of people:\s*(\d+)/i,
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
+    open_to_join_events: /Open to join events:\s*(yes|no)/i,
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
     prioritized_event_ids: /Prioritized event IDs:\s*([^\n]+?)(?:\n|$)/i,
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,
@@ -374,6 +375,12 @@ function extractPreferencesFromFormSubmission(message) {
   } else {
     preferences.specific_preferences = '';
   }
+
+  const openToJoinMatch = message.match(patterns.open_to_join_events);
+  preferences.open_to_join_events =
+    openToJoinMatch && openToJoinMatch[1]
+      ? openToJoinMatch[1].trim().toLowerCase() === 'yes'
+      : false;
 
   // Extract selected event IDs (optional)
   const selectedEventsMatch = message.match(patterns.selected_event_ids);
@@ -577,6 +584,7 @@ function extractPreferencesFromFormSubmission(message) {
       party_size: preferences.party_size,
       seat_preferences: preferences.seat_preferences,
       specific_preferences: preferences.specific_preferences,
+      open_to_join_events: preferences.open_to_join_events === true,
       selected_events: preferences.selected_events,
       selected_seat_categories: preferences.selected_seat_categories,
       event_party_sizes: preferences.event_party_sizes,

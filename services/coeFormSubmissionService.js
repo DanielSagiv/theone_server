@@ -179,6 +179,7 @@ async function processFormSubmissionPhase24(params) {
             seat_preferences: raw.seat_preferences || '',
             general_preferences: raw.specific_preferences || '',
             city: raw.city || null,
+            open_to_join_events: raw.open_to_join_events === true,
             requested_at: new Date(),
           };
 
@@ -353,7 +354,8 @@ async function processFormSubmissionPhase24(params) {
             notes: `${extractionResult.raw.seat_preferences || ''}\n${extractionResult.raw.specific_preferences || ''}`.trim(),
             // Include full preference data for Phase 2.3 sentiment matching
             seat_preferences: extractionResult.raw.seat_preferences || '',
-            specific_preferences: extractionResult.raw.specific_preferences || ''
+            specific_preferences: extractionResult.raw.specific_preferences || '',
+            open_to_join_events: extractionResult.raw.open_to_join_events === true,
           }
         };
         

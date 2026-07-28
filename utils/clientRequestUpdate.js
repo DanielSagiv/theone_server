@@ -70,6 +70,9 @@ function mergeClientOriginalRequestData(existingSubdoc, patch) {
   if (patch.specific_preferences !== undefined) {
     prev.general_preferences = patch.specific_preferences || '';
   }
+  if (patch.open_to_join_events !== undefined) {
+    prev.open_to_join_events = patch.open_to_join_events === true;
+  }
 
   return prev;
 }

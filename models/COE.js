@@ -253,6 +253,9 @@ const coeSchema = new mongoose.Schema({
     general_preferences: { type: String, trim: true }, // specific_preferences
     city: { type: String, trim: true },
     
+    /** Client opted in to shared-table / join events when available. */
+    open_to_join_events: { type: Boolean, default: false },
+    
     // When this request was made
     requested_at: { type: Date, default: Date.now }
   },
