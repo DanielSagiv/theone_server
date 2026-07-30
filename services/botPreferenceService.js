@@ -257,7 +257,7 @@ function extractPreferencesFromFormSubmission(message) {
     party_size: /Number of people:\s*(\d+)/i,
     seat_preferences: /Seat\/Table preferences:\s*(.+?)(?:\n|$)/i,
     specific_preferences: /Specific preferences:\s*(.+?)(?:\n|$)/i,
-    open_to_join_events: /Open to join events:\s*(yes|no)/i,
+    open_to_join_events: /Open to (?:join|joint) events:\s*(yes|no)/i,
     selected_event_ids: /Selected event IDs:\s*([^\n]+?)(?:\n|$)/i,
     prioritized_event_ids: /Prioritized event IDs:\s*([^\n]+?)(?:\n|$)/i,
     selected_seat_categories: /Selected seat categories:\s*([^\n]+?)(?:\n|$)/i,

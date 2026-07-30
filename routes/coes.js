@@ -731,7 +731,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       // This queries fresh from the database
       coe = await COE.findById(id)
         .lean()
-        .populate('client_id', 'firstName lastName email phone')
+        .populate('client_id', 'firstName lastName email phone avatarUrl avatar_thumb_url')
         .populate('admin_id', 'firstName lastName email')
         .populate('created_by', 'firstName lastName email')
         .populate('participants.user_id', 'firstName lastName email phone')
