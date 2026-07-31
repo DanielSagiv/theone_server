@@ -961,12 +961,17 @@ function calculateSeatCosts(selectedSeats) {
       seat_code: seat.seat_code,
       event_price: seat.event_price,
       base_price: seat.base_price,
-      price_used: seat.event_price || seat.base_price || 0
+      price_used: Number.isFinite(Number(seat.event_price))
+        ? Number(seat.event_price)
+        : Number(seat.base_price) || 0
     });
   });
   
   const subtotal = selectedSeats.reduce((sum, seat) => {
-    const price = seat.event_price || seat.base_price || 0;
+    const ep = Number(seat.event_price);
+    const price = Number.isFinite(ep)
+      ? ep
+      : Number(seat.base_price) || 0;
     console.log('[CALCULATE_COSTS] Adding price:', price, 'Running sum:', sum + price);
     return sum + price;
   }, 0);
