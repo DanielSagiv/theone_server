@@ -1122,13 +1122,85 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         });
         
         // Handle both old format (array) and new format (object with seats/diagnostics)
-        const autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
+        let autoSeats = Array.isArray(seatResult) ? seatResult : (seatResult.seats || []);
         const seatDiagnostics = Array.isArray(seatResult) ? null : (seatResult.diagnostics || null);
         
         // Store diagnostics for later use in error handling
         if (seatDiagnostics) {
           eventData.seat_diagnostics = seatDiagnostics;
           eventDiagnostics.push(seatDiagnostics);
+        }
+
+        // When admin/client set a preferred section + negotiated price (including $0),
+        // do not drop the section if inventory is booked/held — mobile allows picking
+        // sections with 0 available seats. Attach any matching category seat so
+        // selected_seats (and thus the section label) persist.
+        const hasNegotiatedPrice =
+          (eventData.the1_pricing &&
+            eventData.the1_pricing.the1_base_price != null &&
+            Number.isFinite(Number(eventData.the1_pricing.the1_base_price))) ||
+          (eventData.simple_joint_manual_price != null &&
+            eventData.simple_joint_manual_price !== '' &&
+            Number.isFinite(Number(eventData.simple_joint_manual_price)));
+        const preferredCat =
+          preferredCategory && typeof preferredCategory === 'string'
+            ? preferredCategory.trim()
+            : '';
+        if (
+          autoSeats.length === 0 &&
+          preferredCat &&
+          hasNegotiatedPrice &&
+          Array.isArray(event.seats) &&
+          event.seats.length > 0
+        ) {
+          const categoryMatches = event.seats.filter(
+            s => String(s?.category || s?.section || 'General').trim() === preferredCat
+          );
+          const forcedSeat =
+            categoryMatches.find(s => s.status === 'available') ||
+            categoryMatches[0] ||
+            null;
+          if (forcedSeat && forcedSeat._id) {
+            console.warn(
+              '[BOT] [COE_CREATION_FULL_DEBUG] Force-attaching preferred category seat (negotiated price set, auto-select empty):',
+              {
+                eventId: eventId.toString(),
+                preferredCategory: preferredCat,
+                seatId: forcedSeat._id.toString(),
+                seatCode: forcedSeat.code,
+                inventoryStatus: forcedSeat.status,
+                the1_base_price: eventData.the1_pricing?.the1_base_price,
+                simple_joint_manual_price: eventData.simple_joint_manual_price
+              }
+            );
+            autoSeats = [
+              {
+                seat_id: forcedSeat._id,
+                seat_code: forcedSeat.code,
+                capacity: forcedSeat.capacity,
+                base_price: forcedSeat.min_spend || 0,
+                event_price:
+                  forcedSeat.event_price || forcedSeat.min_spend || 0,
+                available_from: event.start_datetime,
+                available_until:
+                  event.end_datetime || event.start_datetime,
+                status: 'selected'
+              }
+            ];
+          } else {
+            console.error(
+              '[BOT] [COE_CREATION_FULL_DEBUG] Preferred category + negotiated price but no inventory seat in category:',
+              {
+                eventId: eventId.toString(),
+                preferredCategory: preferredCat,
+                eventCategories: [
+                  ...new Set(
+                    event.seats.map(s => s.category || s.section || 'General')
+                  )
+                ]
+              }
+            );
+          }
         }
         
         eventData.selected_seats = autoSeats;

@@ -111,7 +111,8 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
     const event = await Event.findById(eventId)
       .populate({
         path: 'location_id',
-        select: 'name type address geo media sentiment'
+        select:
+          'name type address geo media sentiment adminFeePercent gratuityPercent salesTaxPercent',
       })
       .lean();
 
@@ -239,7 +240,20 @@ async function getEventSeatsWithSummaries(eventId, options = {}) {
         name: event.location_id.name,
         type: event.location_id.type,
         address: event.location_id.address || null,
-        media: event.location_id.media || []
+        media: event.location_id.media || [],
+        // Additive: venue fee %s for admin pre-create totals preview (same as Location model)
+        adminFeePercent:
+          event.location_id.adminFeePercent != null
+            ? event.location_id.adminFeePercent
+            : null,
+        gratuityPercent:
+          event.location_id.gratuityPercent != null
+            ? event.location_id.gratuityPercent
+            : null,
+        salesTaxPercent:
+          event.location_id.salesTaxPercent != null
+            ? event.location_id.salesTaxPercent
+            : null,
       }
     };
 
