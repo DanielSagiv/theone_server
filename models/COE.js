@@ -612,6 +612,64 @@ const coeSchema = new mongoose.Schema({
       type: Date 
     } // Optional: offers expire when COE moves out of draft
   }],
+  /**
+   * Admin paid-COE seat upgrades (pending until on-spot payment, then applied).
+   * Does not replace draft seat_upgrade_offers flow.
+   */
+  paid_seat_upgrades: [{
+    event_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: ['pending_payment', 'applied', 'cancelled', 'expired'],
+      default: 'pending_payment',
+      index: true,
+    },
+    current_seat_id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    current_seat_code: { type: String, trim: true },
+    current_category: { type: String, trim: true },
+    current_event_price: { type: Number, min: 0 },
+    current_base_price: { type: Number, min: 0 },
+    current_the1_fee_percent: { type: Number, min: 0, max: 100, default: null },
+    current_line_total_with_fees: { type: Number, min: 0, required: true },
+    target_seat_id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    target_seat_code: { type: String, trim: true },
+    target_category: { type: String, trim: true },
+    venue_catalog_price: { type: Number, min: 0, default: null },
+    the1_fee_percent: { type: Number, min: 0, max: 100, default: null },
+    event_price: { type: Number, min: 0, required: true },
+    base_price: { type: Number, min: 0, required: true },
+    is_simple_joint: { type: Boolean, default: false },
+    simple_joint_manual_price: { type: Number, min: 0, default: null },
+    upgrade_delta_with_fees: { type: Number, min: 0, required: true },
+    payment_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Payment',
+      default: null,
+    },
+    /** Snapshot of adhoc payer after apply (for totals UI without extra join). */
+    adhoc_payer: {
+      type: {
+        type: String,
+        enum: ['client', 'participant', 'guest'],
+      },
+      user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      display_name: { type: String, trim: true },
+      email: { type: String, trim: true },
+      phone: { type: String, trim: true },
+    },
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    expires_at: { type: Date },
+    applied_at: { type: Date },
+    created_at: { type: Date, default: Date.now },
+  }],
   policies: { 
     type: String, 
     trim: true,

@@ -311,6 +311,8 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     save_to_payer: saveToPayer,
     adhoc_payer: adhocPayerInput,
     adhoc_note: adhocNote,
+    seat_upgrade_id: seatUpgradeId,
+    adhoc_kind: adhocKindInput,
   } = payload;
 
   if (!amount || amount <= 0) {
@@ -326,6 +328,18 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   }
   if (eventId && !coeHasEventId(coe, eventId)) {
     throw new Error('Event not found on this experience');
+  }
+
+  const paidSeatUpgradeService = require('./paidSeatUpgradeService');
+  let resolvedAdhocKind = adhocKindInput || 'general';
+  if (seatUpgradeId) {
+    paidSeatUpgradeService.assertPendingUpgradeForCharge(
+      coe,
+      seatUpgradeId,
+      amount,
+      eventId
+    );
+    resolvedAdhocKind = 'upgrade';
   }
 
   const billingUserId =
@@ -393,6 +407,8 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     created_by_admin_id: adminUserId,
     adhoc_payer: adhocPayer,
     adhoc_note: adhocNote ? String(adhocNote).trim() : undefined,
+    seat_upgrade_id: seatUpgradeId || undefined,
+    adhoc_kind: resolvedAdhocKind,
     idempotency_key: idempotencyKey || undefined,
   });
   await payment.save();
@@ -510,6 +526,25 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     }
 
     await paymentService.recordAdhocPaymentCompletion(coeId, payment);
+
+    if (seatUpgradeId) {
+      try {
+        await paidSeatUpgradeService.applyPaidSeatUpgradeAfterPayment(
+          coeId,
+          seatUpgradeId,
+          payment
+        );
+      } catch (applyErr) {
+        console.error('[AdhocPayment] paid seat upgrade apply failed:', {
+          payment_id: payment._id,
+          upgrade_id: seatUpgradeId,
+          error: applyErr.message,
+        });
+        throw new Error(
+          `Payment succeeded but upgrade apply failed: ${applyErr.message}`
+        );
+      }
+    }
 
     const billingUser = await User.findById(billingUserId);
     const paymentForEmail = await Payment.findById(payment._id).lean();

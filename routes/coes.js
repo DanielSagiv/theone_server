@@ -3059,6 +3059,95 @@ router.post(
 );
 
 /**
+ * POST /v1/coes/:id/admin/paid-seat-upgrade
+ * Admin: create pending paid-COE seat upgrade (apply after on-spot payment).
+ * Body: { event_id, seat_category, event_price|the1_base_price, the1_fee_percent?, venue_catalog_price?, is_simple_joint? }
+ */
+router.post(
+  '/:id/admin/paid-seat-upgrade',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const paidSeatUpgradeService = require('../services/paidSeatUpgradeService');
+      const result = await paidSeatUpgradeService.createPaidSeatUpgrade(
+        req.params.id,
+        adminId,
+        req.body || {}
+      );
+      res.json({
+        success: true,
+        message: 'Pending seat upgrade created',
+        data: {
+          coe: result.coe,
+          upgrade: result.upgrade,
+        },
+      });
+    } catch (error) {
+      console.error('[COES] paid-seat-upgrade create error:', {
+        coe_id: req.params.id,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      const status =
+        error.message === 'COE not found' || error.message === 'Event not found'
+          ? 404
+          : 400;
+      res.status(status).json({
+        success: false,
+        error: {
+          code: 'PAID_SEAT_UPGRADE_FAILED',
+          message: error.message,
+        },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/admin/paid-seat-upgrade/:upgradeId/cancel
+ * Admin: cancel pending paid seat upgrade and release hold.
+ */
+router.post(
+  '/:id/admin/paid-seat-upgrade/:upgradeId/cancel',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const paidSeatUpgradeService = require('../services/paidSeatUpgradeService');
+      const coe = await paidSeatUpgradeService.cancelPaidSeatUpgrade(
+        req.params.id,
+        req.params.upgradeId
+      );
+      res.json({
+        success: true,
+        message: 'Pending seat upgrade cancelled',
+        data: coe,
+      });
+    } catch (error) {
+      console.error('[COES] paid-seat-upgrade cancel error:', {
+        coe_id: req.params.id,
+        upgrade_id: req.params.upgradeId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      const status =
+        error.message === 'COE not found' || error.message === 'Upgrade not found'
+          ? 404
+          : 400;
+      res.status(status).json({
+        success: false,
+        error: {
+          code: 'PAID_SEAT_UPGRADE_CANCEL_FAILED',
+          message: error.message,
+        },
+      });
+    }
+  }
+);
+
+/**
  * POST /v1/coes/:id/admin/seat-upgrade
  * Admin-only: replace a selected seat with any available seat from the same event.
  * Body: { current_seat_id, new_seat_id, event_id }

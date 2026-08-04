@@ -69,6 +69,19 @@ const paymentSchema = new mongoose.Schema({
   },
   adhoc_note: { type: String, trim: true },
 
+  /** Links on-spot charge to a paid_seat_upgrades entry when charging an upgrade delta. */
+  seat_upgrade_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    index: true,
+  },
+  /** Narrows adhoc purpose without changing payment_type (still 'adhoc'). */
+  adhoc_kind: {
+    type: String,
+    enum: ['general', 'upgrade'],
+    default: 'general',
+  },
+
   /** How the payment was collected: card (GOAT) or admin-recorded cash. */
   payment_channel: {
     type: String,

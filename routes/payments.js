@@ -103,6 +103,8 @@ const adminAdhocPaymentSchema = Joi.object({
     otherwise: adhocPayerSchema.optional(),
   }),
   adhoc_note: Joi.string().trim().max(500).optional(),
+  seat_upgrade_id: Joi.string().hex().length(24).optional(),
+  adhoc_kind: Joi.string().valid('general', 'upgrade').optional(),
 });
 
 /**
