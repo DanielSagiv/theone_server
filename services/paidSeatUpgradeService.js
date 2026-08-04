@@ -124,6 +124,8 @@ async function holdTargetSeat(coe, eventSeat, eventId) {
 
 /**
  * Resolve target event seat for upgrade (same section keep; else available in section).
+ * Admin may select any section; if the target has no free inventory, keep the current
+ * physical seat and apply the requested category/pricing on the COE seat row.
  * @param {object} event
  * @param {object} currentSelected
  * @param {string} targetCategory
@@ -154,7 +156,7 @@ function resolveTargetEventSeat(event, currentSelected, targetCategory) {
     return (Number(s.capacity) || 0) >= needCap;
   });
   if (available.length === 0) {
-    throw new Error('No available tables in the selected section');
+    return currentEventSeat;
   }
   available.sort((a, b) => {
     const pa = Number(a.event_price) || Number(a.min_spend) || 0;
@@ -264,7 +266,7 @@ async function createPaidSeatUpgrade(coeId, adminUserId, body) {
   const proposedRow = buildProposedSeatRow(currentSelected, {
     seat_id: targetSeatId,
     seat_code: targetEventSeat.code || currentSelected.seat_code,
-    category: seatSectionLabel(targetEventSeat),
+    category: targetCategory,
     capacity: targetEventSeat.capacity || currentSelected.capacity,
     base_price:
       Number(targetEventSeat.min_spend) ||
@@ -313,7 +315,7 @@ async function createPaidSeatUpgrade(coeId, adminUserId, body) {
     current_line_total_with_fees: currentLineTotal,
     target_seat_id: targetSeatId,
     target_seat_code: targetEventSeat.code || currentSelected.seat_code,
-    target_category: seatSectionLabel(targetEventSeat),
+    target_category: targetCategory,
     venue_catalog_price: proposedRow.venue_catalog_price,
     the1_fee_percent: the1FeePercent,
     event_price: negotiatedBase,
