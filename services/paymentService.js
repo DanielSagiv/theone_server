@@ -3,7 +3,7 @@ const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const User = require('../models/User');
 const Event = require('../models/Event');
-const { getCoeTaxRate } = require('./coeService');
+const { getCoeTaxRate, ceilCurrencyToWholeDollar } = require('./coeService');
 const goatClient = require('./goatClient');
 const { sendPaymentReceiptEmail } = require('./paymentReceiptEmail');
 
@@ -91,7 +91,7 @@ function computeInitialDepositPricing(coe) {
     subtotalPreTax,
     tax,
     fees: feesAlloc,
-    total,
+    total: ceilCurrencyToWholeDollar(total),
     usesSeatSplit,
   };
 }

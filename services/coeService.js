@@ -226,6 +226,24 @@ function roundProcessingFeeUpWholeDollars(amount) {
 }
 
 /**
+ * Ceil a currency amount up to the next whole dollar (cent-stable).
+ * @param {unknown} amount
+ * @returns {number}
+ */
+function ceilCurrencyToWholeDollar(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) {
+    return 0;
+  }
+  const cents = Math.round(n * 100);
+  const rem = cents % 100;
+  if (rem === 0) {
+    return cents / 100;
+  }
+  return (cents + (100 - rem)) / 100;
+}
+
+/**
  * @param {unknown} n
  * @returns {number}
  */
@@ -442,11 +460,20 @@ function computePricingTotalsFromVenueGroups(venueGroups) {
   const gratuityR = Math.round(gratuitySum * 100) / 100;
   const adminR = Math.round(adminSum * 100) / 100;
   const taxes = Math.round(salesTaxSum * 100) / 100;
-  const the1R = Math.round(the1Sum * 100) / 100;
+  let the1R = Math.round(the1Sum * 100) / 100;
   const processingR = roundProcessingFeeUpWholeDollars(processingSum);
-  const fees = Math.round((gratuityR + adminR + the1R + processingR) * 100) / 100;
+  let fees = Math.round((gratuityR + adminR + the1R + processingR) * 100) / 100;
   const subR = Math.round(subtotal * 100) / 100;
-  const total = Math.round((subR + taxes + fees) * 100) / 100;
+  let total = Math.round((subR + taxes + fees) * 100) / 100;
+
+  // Absorb fractional TOTAL cents into THE ONE FEE so grand total is a whole dollar.
+  const totalCeil = ceilCurrencyToWholeDollar(total);
+  const totalPad = Math.round((totalCeil - total) * 100) / 100;
+  if (totalPad > 0) {
+    the1R = Math.round((the1R + totalPad) * 100) / 100;
+    fees = Math.round((fees + totalPad) * 100) / 100;
+    total = totalCeil;
+  }
 
   return {
     subtotal: subR,
@@ -5960,6 +5987,7 @@ module.exports = {
   computeVenueCatalogPricingTotals,
   resolveLocationFixedProcFee,
   roundProcessingFeeUpWholeDollars,
+  ceilCurrencyToWholeDollar,
   buildVenueGroupsFromSelectedSeats,
   resolveThe1FeePercentForSeat,
   attachCatalogTotalDisplay,
