@@ -670,6 +670,40 @@ const coeSchema = new mongoose.Schema({
     applied_at: { type: Date },
     created_at: { type: Date, default: Date.now },
   }],
+  /**
+   * Completed general on-spot (adhoc) charges for admin totals UI.
+   * Upgrade adhoc is not stored here (see paid_seat_upgrades).
+   */
+  on_spot_charges: [{
+    event_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true,
+    },
+    payment_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Payment',
+      required: true,
+    },
+    description: { type: String, trim: true, required: true, maxlength: 500 },
+    amount: { type: Number, min: 0, required: true },
+    adhoc_payer: {
+      type: {
+        type: String,
+        enum: ['client', 'participant', 'guest'],
+      },
+      user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      display_name: { type: String, trim: true },
+      email: { type: String, trim: true },
+      phone: { type: String, trim: true },
+    },
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    created_at: { type: Date, default: Date.now },
+  }],
   policies: { 
     type: String, 
     trim: true,

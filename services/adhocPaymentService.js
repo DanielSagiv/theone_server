@@ -527,6 +527,42 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
 
     await paymentService.recordAdhocPaymentCompletion(coeId, payment);
 
+    const isUpgradeCharge =
+      !!seatUpgradeId || resolvedAdhocKind === 'upgrade';
+    if (!isUpgradeCharge && eventId) {
+      try {
+        const coeForLine = await COE.findById(coeId);
+        if (coeForLine) {
+          const payerSnap = payment.adhoc_payer
+            ? {
+                type: payment.adhoc_payer.type,
+                user_id: payment.adhoc_payer.user_id || undefined,
+                display_name: payment.adhoc_payer.display_name || undefined,
+                email: payment.adhoc_payer.email || undefined,
+                phone: payment.adhoc_payer.phone || undefined,
+              }
+            : undefined;
+          coeForLine.on_spot_charges = coeForLine.on_spot_charges || [];
+          coeForLine.on_spot_charges.push({
+            event_id: eventId,
+            payment_id: payment._id,
+            description: String(payment.description || '').trim(),
+            amount: Number(payment.amount) || 0,
+            adhoc_payer: payerSnap,
+            created_by: adminUserId,
+            created_at: new Date(),
+          });
+          await coeForLine.save();
+        }
+      } catch (lineErr) {
+        console.error('[AdhocPayment] on_spot_charges append failed:', {
+          payment_id: payment._id,
+          coe_id: coeId,
+          error: lineErr?.message || lineErr,
+        });
+      }
+    }
+
     if (seatUpgradeId) {
       try {
         await paidSeatUpgradeService.applyPaidSeatUpgradeAfterPayment(
