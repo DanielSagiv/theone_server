@@ -22,44 +22,95 @@ const COE_EVENT_LOCATION_SELECT =
   'name type media seats address geo description tagline timezone adminFeePercent gratuityPercent salesTaxPercent';
 
 /**
- * Validate that all selected seats are available before COE creation
- * @param {Array} selectedSeats - Array of seat data
- * @throws {Error} If any seat is not available
+ * Normalize an id-like value to string for Map keys.
+ * @param {unknown} id
+ * @returns {string|null}
  */
-async function validateSelectedSeats(selectedSeats) {
+function normalizeIdToString(id) {
+  if (id == null) return null;
+  if (typeof id === 'object' && id._id != null) return id._id.toString();
+  if (typeof id.toString === 'function') return id.toString();
+  return String(id);
+}
+
+/**
+ * Batch-load Events by id into a Map keyed by id string.
+ * Replaces N+1 Event.findById loops on create/update paths.
+ * @param {Array<unknown>} ids
+ * @param {{ populate?: object|string|Array, select?: string, lean?: boolean }} [options]
+ * @returns {Promise<Map<string, object>>}
+ */
+async function loadEventsMapByIds(ids, options = {}) {
+  const unique = [
+    ...new Set((ids || []).map(normalizeIdToString).filter(Boolean)),
+  ];
+  const objectIds = unique
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  /** @type {Map<string, object>} */
+  const map = new Map();
+  if (objectIds.length === 0) return map;
+
+  let q = Event.find({ _id: { $in: objectIds } });
+  if (options.select) q = q.select(options.select);
+  if (options.populate) q = q.populate(options.populate);
+  if (options.lean) q = q.lean();
+  const events = await q;
+  for (const ev of events) {
+    const key = ev._id?.toString?.() || String(ev._id);
+    map.set(key, ev);
+  }
+  return map;
+}
+
+/**
+ * Validate that all selected seats exist (and are available unless admin bypass).
+ * Uses one Event $in query (or a preloaded map) instead of per-seat findById.
+ * @param {Array} selectedSeats - Array of seat data
+ * @param {Map<string, object>|null} [eventMap] - Optional preloaded Events by id
+ * @param {{ allowUnavailable?: boolean }} [options] - When allowUnavailable, skip inventory status check (admin only)
+ * @throws {Error} If seat/event missing, or seat unavailable for non-admin
+ */
+async function validateSelectedSeats(selectedSeats, eventMap = null, options = {}) {
   try {
+    if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) return;
+
+    const allowUnavailable = options.allowUnavailable === true;
+    const map =
+      eventMap ||
+      (await loadEventsMapByIds(selectedSeats.map((s) => s.event_id)));
+
     for (const seatData of selectedSeats) {
-      // Validate event_id exists
       if (!seatData.event_id) {
         throw new Error(`Seat data missing event_id: ${JSON.stringify(seatData)}`);
       }
-      
-      // Validate seat_id exists
+
       if (!seatData.seat_id) {
         throw new Error(`Seat data missing seat_id: ${JSON.stringify(seatData)}`);
       }
-      
-      const event = await Event.findById(seatData.event_id);
-      
+
+      const eid = normalizeIdToString(seatData.event_id);
+      const event = eid ? map.get(eid) : null;
+
       if (!event) {
         throw new Error(`Event ${seatData.event_id} not found`);
       }
-      
-      // Normalize seat_id for comparison (handle both ObjectId and string)
+
       const seatIdStr = seatData.seat_id.toString();
-      const seat = event.seats.find(s => {
+      const seats = event.seats || [];
+      const seat = seats.find((s) => {
         if (!s._id) return false;
-        const sIdStr = s._id.toString();
-        return sIdStr === seatIdStr;
+        return s._id.toString() === seatIdStr;
       });
-      
+
       if (!seat) {
-        // Provide helpful error message with available seat IDs
-        const availableSeatIds = event.seats.map(s => s._id?.toString()).filter(Boolean);
-        throw new Error(`Seat ${seatIdStr} not found in event ${event.name}. Available seat IDs: ${availableSeatIds.join(', ')}`);
+        const availableSeatIds = seats.map((s) => s._id?.toString()).filter(Boolean);
+        throw new Error(
+          `Seat ${seatIdStr} not found in event ${event.name}. Available seat IDs: ${availableSeatIds.join(', ')}`
+        );
       }
-      
-      if (seat.status !== 'available') {
+
+      if (!allowUnavailable && seat.status !== 'available') {
         throw new Error(`Seat ${seat.code} is ${seat.status} and cannot be selected`);
       }
     }
@@ -73,20 +124,39 @@ async function validateSelectedSeats(selectedSeats) {
  * Set selected_seats[].category from Event embedded seat (section / tier label) when missing.
  * Mutates rows in place. Used when saving COEs so clients can show "selected section" after reload.
  * @param {Array<Object>} selectedSeats COE selected_seats rows (event_id, seat_id)
+ * @param {Map<string, object>|null} [eventMap] - Optional preloaded Events by id
  * @returns {Promise<void>}
  */
-async function enrichSelectedSeatsWithSectionCategory(selectedSeats) {
+async function enrichSelectedSeatsWithSectionCategory(selectedSeats, eventMap = null) {
   if (!Array.isArray(selectedSeats) || selectedSeats.length === 0) return;
+
+  const needFetch = selectedSeats.some((row) => {
+    const existing =
+      (row.category && String(row.category).trim()) ||
+      (row.seat_category && String(row.seat_category).trim());
+    return !existing && row.event_id && row.seat_id;
+  });
+
+  const map =
+    eventMap ||
+    (needFetch
+      ? await loadEventsMapByIds(
+          selectedSeats.map((s) => s.event_id),
+          { select: 'seats', lean: true }
+        )
+      : new Map());
+
   for (const row of selectedSeats) {
     const existing =
       (row.category && String(row.category).trim()) ||
       (row.seat_category && String(row.seat_category).trim());
     if (existing) continue;
     if (!row.event_id || !row.seat_id) continue;
-    const event = await Event.findById(row.event_id).select('seats').lean();
+    const eid = normalizeIdToString(row.event_id);
+    const event = eid ? map.get(eid) : null;
     if (!event?.seats?.length) continue;
     const sid = row.seat_id.toString();
-    const evSeat = event.seats.find(s => s._id && s._id.toString() === sid);
+    const evSeat = event.seats.find((s) => s._id && s._id.toString() === sid);
     if (evSeat) {
       const label = evSeat.category || evSeat.section;
       if (label) row.category = label;
@@ -601,7 +671,7 @@ function buildVenueGroupsFromSelectedSeats(selectedSeats, eventMap, resolveBase)
  * Compute subtotal (MS only), taxes (sales tax), fees (gratuity + venue admin + THE1 + processing), total, and fee_breakdown
  * from selected_seats: per-venue MS, VF, ST on (MS+VF), processing on (MS+VF+ST+gratuity+THE1), then sum into COE fields.
  * @param {Array<Object>} selectedSeats
- * @param {{ useCatalogBase?: boolean }} [options]
+ * @param {{ useCatalogBase?: boolean, eventMap?: Map<string, object> }} [options]
  * @returns {Promise<{subtotal:number,taxes:number,fees:number,total:number,fee_breakdown:object}>}
  */
 async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}) {
@@ -621,17 +691,20 @@ async function computePricingTotalsFromSelectedSeats(selectedSeats, options = {}
     return String(e);
   };
 
-  const uniqueIds = [...new Set(selectedSeats.map(idStr).filter(Boolean))];
-  const eventObjectIds = uniqueIds
-    .filter((id) => mongoose.Types.ObjectId.isValid(id))
-    .map((id) => new mongoose.Types.ObjectId(id));
+  let eventMap = options.eventMap;
+  if (!eventMap) {
+    const uniqueIds = [...new Set(selectedSeats.map(idStr).filter(Boolean))];
+    const eventObjectIds = uniqueIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
 
-  const events = eventObjectIds.length
-    ? await Event.find({ _id: { $in: eventObjectIds } })
-        .populate('location_id')
-        .lean()
-    : [];
-  const eventMap = new Map(events.map((ev) => [ev._id.toString(), ev]));
+    const events = eventObjectIds.length
+      ? await Event.find({ _id: { $in: eventObjectIds } })
+          .populate('location_id')
+          .lean()
+      : [];
+    eventMap = new Map(events.map((ev) => [ev._id.toString(), ev]));
+  }
 
   const venueGroups = buildVenueGroupsFromSelectedSeats(
     selectedSeats,
@@ -739,7 +812,12 @@ async function applyPricingFromSelectedSeats(coe) {
     syncCoeEventLineItemsFromSelectedSeats(coe);
     return;
   }
-  const r = await computePricingTotalsFromSelectedSeats(seats);
+  // One Event load for both negotiated and catalog totals.
+  const eventMap = await loadEventsMapByIds(
+    seats.map((s) => s.event_id),
+    { populate: 'location_id', lean: true }
+  );
+  const r = await computePricingTotalsFromSelectedSeats(seats, { eventMap });
   coe.subtotal = r.subtotal;
   coe.taxes = r.taxes;
   coe.fees = r.fees;
@@ -747,6 +825,7 @@ async function applyPricingFromSelectedSeats(coe) {
   coe.fee_breakdown = r.fee_breakdown;
   const catalogR = await computePricingTotalsFromSelectedSeats(seats, {
     useCatalogBase: true,
+    eventMap,
   });
   coe.catalog_total = catalogR.total;
   if (typeof coe.markModified === 'function') {
@@ -1241,11 +1320,16 @@ async function holdSeatsForCOE(coeId) {
  * Create a new COE
  * @param {Object} coeData - COE data
  * @param {string} createdBy - ID of user creating the COE
+ * @param {{ actorRole?: string }} [options] - Authenticated actor role; admin may select unavailable seats
  * @returns {Promise<Object>} Created COE
  */
-async function createCOE(coeData, createdBy) {
+async function createCOE(coeData, createdBy, options = {}) {
   try {
     const normalizedData = applyCoeCalendarDates({ ...coeData });
+    const actorRole = (options.actorRole != null ? String(options.actorRole) : '')
+      .trim()
+      .toLowerCase();
+    const allowUnavailable = actorRole === 'admin';
 
     const [client, admin] = await Promise.all([
       User.findById(normalizedData.client_id),
@@ -1260,19 +1344,51 @@ async function createCOE(coeData, createdBy) {
     }
 
     if (normalizedData.selected_seats && normalizedData.selected_seats.length > 0) {
-      await validateSelectedSeats(normalizedData.selected_seats);
-      await enrichSelectedSeatsWithSectionCategory(normalizedData.selected_seats);
+      const eventMap = await loadEventsMapByIds(
+        normalizedData.selected_seats.map((s) => s.event_id)
+      );
+      await validateSelectedSeats(normalizedData.selected_seats, eventMap, {
+        allowUnavailable,
+      });
+      await enrichSelectedSeatsWithSectionCategory(
+        normalizedData.selected_seats,
+        eventMap
+      );
       validateSelectedSeatsSimpleJointInvariants(normalizedData.selected_seats);
+    }
+
+    // Pre-assign _id so events/seats can stamp coe_id before a single save.
+    const coeId = new mongoose.Types.ObjectId();
+    if (Array.isArray(normalizedData.events)) {
+      normalizedData.events = normalizedData.events.map((event) => ({
+        ...event,
+        coe_id: coeId,
+      }));
+    }
+    if (Array.isArray(normalizedData.selected_seats)) {
+      normalizedData.selected_seats = normalizedData.selected_seats.map((seat) => ({
+        ...seat,
+        coe_id: coeId,
+        status: seat.status || 'selected',
+      }));
     }
 
     const coe = new COE({
       ...normalizedData,
+      _id: coeId,
       created_by: createdBy,
       created_method: 'manual'
     });
 
     if (coe.selected_seats && coe.selected_seats.length > 0) {
       await applyPricingFromSelectedSeats(coe);
+      coe.selected_seats.forEach((seat) => {
+        if (seat.ai_recommendation) {
+          seat.markModified('ai_recommendation');
+          seat.markModified('recommendation_generated_at');
+          seat.markModified('recommendation_version');
+        }
+      });
     }
 
     // Log pricing before save
@@ -1285,7 +1401,7 @@ async function createCOE(coeData, createdBy) {
     });
 
     await coe.save();
-    
+
     // Log pricing after save
     console.log('[COE_SERVICE] Pricing in COE after save:', {
       subtotal: coe.subtotal,
@@ -1294,32 +1410,7 @@ async function createCOE(coeData, createdBy) {
       total: coe.total,
       deposit_required: coe.deposit_required
     });
-    
-    // Set coe_id for all events and selected_seats after COE is created
-    if (coe.events && coe.events.length > 0) {
-      coe.events.forEach(event => {
-        event.coe_id = coe._id;
-      });
-    }
-    
-    if (coe.selected_seats && coe.selected_seats.length > 0) {
-      coe.selected_seats.forEach(seat => {
-        seat.coe_id = coe._id;
-        // Ensure status is set (defaults to 'selected' in schema)
-        if (!seat.status) {
-          seat.status = 'selected';
-        }
-        // Explicitly mark ai_recommendation as modified to ensure it's preserved during save
-        if (seat.ai_recommendation) {
-          seat.markModified('ai_recommendation');
-          seat.markModified('recommendation_generated_at');
-          seat.markModified('recommendation_version');
-        }
-      });
-    }
-    
-    await coe.save();
-    
+
     // Log recommendations after save for debugging
     const seatsWithRecsAfterSave = (coe.selected_seats || []).filter(s => s.ai_recommendation);
     console.log('[COE_SERVICE] Recommendations after COE save:', {
@@ -2202,15 +2293,21 @@ async function notifyAdminClientRequestUpdated(coe, clientUser) {
  * Update COE
  * @param {string} coeId - COE ID
  * @param {Object} updateData - Update data
+ * @param {{ actorRole?: string }} [options] - Authenticated actor role; admin may select unavailable seats
  * @returns {Promise<Object>} Updated COE
  */
-async function updateCOE(coeId, updateData) {
+async function updateCOE(coeId, updateData, options = {}) {
   try {
     // Get the existing COE to compare seat changes
     const existingCOE = await COE.findById(coeId);
     if (!existingCOE) {
       throw new Error('COE not found');
     }
+
+    const actorRole = (options.actorRole != null ? String(options.actorRole) : '')
+      .trim()
+      .toLowerCase();
+    const allowUnavailable = actorRole === 'admin';
 
     const payload = applyCoeCalendarDates(
       { ...updateData },
@@ -2229,8 +2326,10 @@ async function updateCOE(coeId, updateData) {
     if (payload.selected_seats) {
       // Release old seats back to available (in case they were held from a prior payment)
       await releaseSelectedSeats(coeId);
-      // Validate new seat availability
-      await validateSelectedSeats(payload.selected_seats);
+      // Validate new seat availability (admin may use booked/held tables)
+      await validateSelectedSeats(payload.selected_seats, null, {
+        allowUnavailable,
+      });
       validateSelectedSeatsSimpleJointInvariants(payload.selected_seats);
       // Seats are set to held only when COE is paid (see paymentService.updateCOEPaymentStatus / holdSeatsForCOE)
     }
@@ -5977,6 +6076,7 @@ module.exports = {
   validateSelectedSeatsSimpleJointInvariants,
   applySimpleJointToSeatRow,
   enrichSelectedSeatsCategoryFromPopulatedEvents,
+  loadEventsMapByIds,
   filterSelectedSeatsByEvents,
   getCoeTaxRate,
   sumSelectedSeatsSubtotal,

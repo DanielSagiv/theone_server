@@ -123,15 +123,64 @@ async function holdTargetSeat(coe, eventSeat, eventId) {
 }
 
 /**
+ * Party size for an event line on a COE (event → request → preferences → 1).
+ * @param {object} coe
+ * @param {string} eventId
+ * @returns {number}
+ */
+function getPartySizeForEvent(coe, eventId) {
+  const line = (coe.events || []).find(
+    (ev) => normalizeEventId(ev.event_id) === eventId
+  );
+  const fromLine = Number(line?.party_size);
+  if (Number.isFinite(fromLine) && fromLine >= 1) return Math.floor(fromLine);
+  const fromOrd = Number(coe.original_request_data?.party_size);
+  if (Number.isFinite(fromOrd) && fromOrd >= 1) return Math.floor(fromOrd);
+  const fromPrefs = Number(
+    coe.preferences?.party_size != null
+      ? coe.preferences.party_size
+      : coe.preferences?.partySize
+  );
+  if (Number.isFinite(fromPrefs) && fromPrefs >= 1) return Math.floor(fromPrefs);
+  return 1;
+}
+
+/**
+ * Representative capacity for a section (smallest table that fits party, else any).
+ * @param {object} event
+ * @param {string} category
+ * @param {number} partySize
+ * @returns {number|null}
+ */
+function representativeCapacityForCategory(event, category, partySize) {
+  const needCap = Math.max(1, Number(partySize) || 1);
+  const inSection = (event.seats || []).filter((s) =>
+    sameSection(seatSectionLabel(s), category)
+  );
+  if (inSection.length === 0) return null;
+  const fitting = inSection.filter((s) => (Number(s.capacity) || 0) >= needCap);
+  const pool = fitting.length > 0 ? fitting : inSection;
+  pool.sort((a, b) => (Number(a.capacity) || 0) - (Number(b.capacity) || 0));
+  const cap = Number(pool[0].capacity);
+  return Number.isFinite(cap) && cap > 0 ? cap : null;
+}
+
+/**
  * Resolve target event seat for upgrade (same section keep; else available in section).
- * Admin may select any section; if the target has no free inventory, keep the current
- * physical seat and apply the requested category/pricing on the COE seat row.
+ * Admin may select any section; if the target has no free inventory that fits party size,
+ * keep the current physical seat and apply the requested category/pricing on the COE seat row.
  * @param {object} event
  * @param {object} currentSelected
  * @param {string} targetCategory
- * @returns {object} event.seats element
+ * @param {number} [partySize=1]
+ * @returns {{ seat: object, inventoryFallback: boolean }}
  */
-function resolveTargetEventSeat(event, currentSelected, targetCategory) {
+function resolveTargetEventSeat(
+  event,
+  currentSelected,
+  targetCategory,
+  partySize = 1
+) {
   const currentSeatId = idStr(currentSelected.seat_id);
   let currentEventSeat = event.seats.id(currentSeatId);
   if (!currentEventSeat) {
@@ -146,24 +195,28 @@ function resolveTargetEventSeat(event, currentSelected, targetCategory) {
   const currentCat =
     currentSelected.category || seatSectionLabel(currentEventSeat);
   if (sameSection(targetCategory, currentCat)) {
-    return currentEventSeat;
+    return { seat: currentEventSeat, inventoryFallback: false };
   }
 
-  const needCap = Number(currentSelected.capacity) || 1;
+  const needCap = Math.max(1, Number(partySize) || 1);
   const available = (event.seats || []).filter((s) => {
     if (s.status !== 'available') return false;
     if (!sameSection(seatSectionLabel(s), targetCategory)) return false;
     return (Number(s.capacity) || 0) >= needCap;
   });
   if (available.length === 0) {
-    return currentEventSeat;
+    return { seat: currentEventSeat, inventoryFallback: true };
   }
+  // Prefer smallest fitting table, then lowest price.
   available.sort((a, b) => {
+    const ca = Number(a.capacity) || 0;
+    const cb = Number(b.capacity) || 0;
+    if (ca !== cb) return ca - cb;
     const pa = Number(a.event_price) || Number(a.min_spend) || 0;
     const pb = Number(b.event_price) || Number(b.min_spend) || 0;
     return pa - pb;
   });
-  return available[0];
+  return { seat: available[0], inventoryFallback: false };
 }
 
 /**
@@ -246,11 +299,15 @@ async function createPaidSeatUpgrade(coeId, adminUserId, body) {
   const event = await Event.findById(eventId);
   if (!event) throw new Error('Event not found');
 
-  const targetEventSeat = resolveTargetEventSeat(
+  const partySize = getPartySizeForEvent(coe, eventId);
+  const resolved = resolveTargetEventSeat(
     event,
     currentSelected,
-    targetCategory
+    targetCategory,
+    partySize
   );
+  const targetEventSeat = resolved.seat;
+  const inventoryFallback = resolved.inventoryFallback === true;
   const targetSeatId = targetEventSeat._id;
   const samePhysical =
     idStr(targetSeatId) === idStr(currentSelected.seat_id);
@@ -263,11 +320,21 @@ async function createPaidSeatUpgrade(coeId, adminUserId, body) {
     currentSelected,
   ]);
 
+  const fallbackCapacity = inventoryFallback
+    ? representativeCapacityForCategory(event, targetCategory, partySize)
+    : null;
+  const resolvedCapacity =
+    (inventoryFallback
+      ? fallbackCapacity
+      : Number(targetEventSeat.capacity)) ||
+    Number(currentSelected.capacity) ||
+    1;
+
   const proposedRow = buildProposedSeatRow(currentSelected, {
     seat_id: targetSeatId,
     seat_code: targetEventSeat.code || currentSelected.seat_code,
     category: targetCategory,
-    capacity: targetEventSeat.capacity || currentSelected.capacity,
+    capacity: resolvedCapacity,
     base_price:
       Number(targetEventSeat.min_spend) ||
       Number(targetEventSeat.event_min_spend) ||
@@ -316,6 +383,7 @@ async function createPaidSeatUpgrade(coeId, adminUserId, body) {
     target_seat_id: targetSeatId,
     target_seat_code: targetEventSeat.code || currentSelected.seat_code,
     target_category: targetCategory,
+    target_inventory_fallback: inventoryFallback,
     venue_catalog_price: proposedRow.venue_catalog_price,
     the1_fee_percent: the1FeePercent,
     event_price: negotiatedBase,
@@ -362,6 +430,7 @@ function serializeUpgrade(upgrade) {
     target_seat_id: idStr(u.target_seat_id),
     target_seat_code: u.target_seat_code,
     target_category: u.target_category,
+    target_inventory_fallback: u.target_inventory_fallback === true,
     venue_catalog_price: u.venue_catalog_price,
     the1_fee_percent: u.the1_fee_percent,
     event_price: u.event_price,
@@ -507,13 +576,33 @@ async function applyPaidSeatUpgradeAfterPayment(coeId, upgradeId, payment) {
   }
 
   const negotiated = Number(upgrade.event_price);
-  coe.selected_seats[idx] = {
+  const inventoryFallback = upgrade.target_inventory_fallback === true;
+  const partySize = getPartySizeForEvent(coe, eventId);
+  const fallbackCapacity = inventoryFallback
+    ? representativeCapacityForCategory(
+        event,
+        upgrade.target_category || seatSectionLabel(targetSeat),
+        partySize
+      )
+    : null;
+  const writtenCategory =
+    upgrade.target_category || seatSectionLabel(targetSeat);
+  const writtenCapacity =
+    (inventoryFallback
+      ? fallbackCapacity
+      : Number(targetSeat.capacity)) ||
+    Number(existingSeat.capacity) ||
+    1;
+  const writtenSeatCode = inventoryFallback
+    ? 'TBD'
+    : upgrade.target_seat_code || targetSeat.code || existingSeat.seat_code;
+
+  const nextSeatRow = {
     event_id: existingSeat.event_id,
     seat_id: upgrade.target_seat_id,
-    seat_code:
-      upgrade.target_seat_code || targetSeat.code || existingSeat.seat_code,
-    category: upgrade.target_category || seatSectionLabel(targetSeat),
-    capacity: targetSeat.capacity || existingSeat.capacity,
+    seat_code: writtenSeatCode,
+    category: writtenCategory,
+    capacity: writtenCapacity,
     base_price: Number(upgrade.base_price) || negotiated,
     event_price: negotiated,
     available_from: existingSeat.available_from,
@@ -542,6 +631,15 @@ async function applyPaidSeatUpgradeAfterPayment(coeId, upgradeId, payment) {
       upgrade.the1_fee_percent != null ? Number(upgrade.the1_fee_percent) : null,
   };
 
+  if (typeof coe.selected_seats.set === 'function') {
+    coe.selected_seats.set(idx, nextSeatRow);
+  } else {
+    coe.selected_seats[idx] = nextSeatRow;
+  }
+  if (typeof coe.markModified === 'function') {
+    coe.markModified('selected_seats');
+  }
+
   await applyPricingFromSelectedSeats(coe);
 
   upgrade.status = 'applied';
@@ -559,6 +657,18 @@ async function applyPaidSeatUpgradeAfterPayment(coeId, upgradeId, payment) {
 
   await coe.save();
 
+  console.log('[paidSeatUpgrade] applied', {
+    coe: idStr(coeId),
+    event: eventId,
+    from_category: upgrade.current_category || null,
+    target_category: upgrade.target_category || null,
+    written_category: writtenCategory,
+    from_seat: idStr(upgrade.current_seat_id),
+    to_seat: idStr(upgrade.target_seat_id),
+    same_physical: samePhysical,
+    inventory_fallback: inventoryFallback,
+  });
+
   try {
     const { logIncident } = require('./coeHistoryService');
     await logIncident({
@@ -572,8 +682,10 @@ async function applyPaidSeatUpgradeAfterPayment(coeId, upgradeId, payment) {
           field: 'seat',
           label: 'Table',
           from: upgrade.current_seat_code,
-          to: upgrade.target_seat_code,
-          message: `Paid upgrade applied (${upgrade.current_seat_code} → ${upgrade.target_seat_code})`,
+          to: writtenSeatCode,
+          message: `Paid upgrade applied (${upgrade.current_seat_code} → ${writtenSeatCode}${
+            inventoryFallback ? ', table TBD' : ''
+          })`,
         },
       ],
     });

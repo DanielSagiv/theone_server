@@ -1006,6 +1006,14 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Processing events for seat selection:', {
       eventsCount: finalEvents.length
     });
+
+    // Batch-load all events once (replaces per-event findById in the loop below).
+    const finalEventIds = (finalEvents || [])
+      .map((e) => e?.event_id)
+      .filter(Boolean);
+    const eventsById = await coeService.loadEventsMapByIds(finalEventIds, {
+      populate: { path: 'location_id', select: 'seats' },
+    });
     
     for (const eventData of finalEvents) {
       console.log('[BOT] [COE_CREATION_FULL_DEBUG] Processing event:', {
@@ -1023,14 +1031,16 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         continue; // Skip events without event_id
       }
       
-      // Fetch event with location populated (including seats for sentiment checking)
-      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Fetching event from DB:', {
-        eventId: eventData.event_id.toString(),
+      const eventIdKey =
+        eventData.event_id?._id?.toString?.() ||
+        eventData.event_id?.toString?.() ||
+        String(eventData.event_id);
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Resolving event from batch map:', {
+        eventId: eventIdKey,
         eventIdType: typeof eventData.event_id
       });
       
-      const event = await Event.findById(eventData.event_id)
-        .populate('location_id', 'seats');
+      const event = eventsById.get(eventIdKey);
         
       if (!event) {
         console.error('[BOT] [COE_CREATION_FULL_DEBUG] ERROR: Event not found in DB:', {
@@ -1978,10 +1988,14 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       const preserveRequestStatus =
         roleNorm === 'client' && existingRequestCoe?.status === 'request';
 
-      coe = await coeService.updateCOE(request_coe_id, {
-        ...coeData,
-        status: preserveRequestStatus ? 'request' : coeData.status || 'draft',
-      });
+      coe = await coeService.updateCOE(
+        request_coe_id,
+        {
+          ...coeData,
+          status: preserveRequestStatus ? 'request' : coeData.status || 'draft',
+        },
+        { actorRole: user.role }
+      );
       coeService.filterSelectedSeatsByEvents(
         coe,
         '[create_coe_draft request_coe_id]'
@@ -1991,7 +2005,9 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       }
     } else {
       // Default behaviour: create a new draft/request COE as before.
-      coe = await coeService.createCOE(coeData, user._id);
+      coe = await coeService.createCOE(coeData, user._id, {
+        actorRole: user.role,
+      });
     }
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] COE created successfully:', {
@@ -2359,7 +2375,9 @@ async function handleUpdateCOE(params, user, correlationId) {
     if (updates.selected_seats) updateData.selected_seats = updates.selected_seats;
 
     // Update COE
-    const updatedCOE = await coeService.updateCOE(coe_id, updateData);
+    const updatedCOE = await coeService.updateCOE(coe_id, updateData, {
+      actorRole: user.role,
+    });
 
     // Get populated COE for response
     const populatedCOE = await coeService.getCOEById(updatedCOE._id);

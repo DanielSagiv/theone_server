@@ -638,6 +638,11 @@ const coeSchema = new mongoose.Schema({
     target_seat_id: { type: mongoose.Schema.Types.ObjectId, required: true },
     target_seat_code: { type: String, trim: true },
     target_category: { type: String, trim: true },
+    /**
+     * True when target section had no free table that fits party size;
+     * physical seat kept, category/pricing still updated to the requested section.
+     */
+    target_inventory_fallback: { type: Boolean, default: false },
     venue_catalog_price: { type: Number, min: 0, default: null },
     the1_fee_percent: { type: Number, min: 0, max: 100, default: null },
     event_price: { type: Number, min: 0, required: true },

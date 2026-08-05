@@ -875,6 +875,49 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
                 mediaCount: eventSeat.media?.length || 0,
                 imageCount: eventSeat.media?.filter(m => m && m.type === 'image').length || 0,
               });
+
+              // Paid upgrade inventory fallback: COE row category may differ from the
+              // physical table. Prefer media from any seat in the row's target section.
+              const rowCategory = (selectedSeat.category || '').toString().trim();
+              const physicalCategory = (
+                eventSeat.category ||
+                eventSeat.section ||
+                ''
+              )
+                .toString()
+                .trim();
+              const categoryMismatch =
+                rowCategory &&
+                physicalCategory &&
+                rowCategory.toLowerCase() !== physicalCategory.toLowerCase();
+              if (categoryMismatch) {
+                const sameSection = (a, b) =>
+                  String(a || '')
+                    .trim()
+                    .toLowerCase() ===
+                  String(b || '')
+                    .trim()
+                    .toLowerCase();
+                const sectionSeat = event.seats.find(s => {
+                  const cat = s.category || s.section || '';
+                  if (!sameSection(cat, rowCategory)) return false;
+                  return (
+                    Array.isArray(s.media) &&
+                    s.media.some(m => m && m.type === 'image')
+                  );
+                });
+                if (sectionSeat?.media?.length) {
+                  const images = sectionSeat.media.filter(
+                    m => m && m.type === 'image'
+                  );
+                  if (images.length > 0) {
+                    console.log(
+                      '[GET /coes/my/:id] ✅ Added images from target section seat (category mismatch)'
+                    );
+                    return { ...selectedSeat, media: images };
+                  }
+                }
+              }
               
               if (eventSeat.media && Array.isArray(eventSeat.media) && eventSeat.media.length > 0) {
                 console.log('[GET /coes/my/:id] ✅ Added media from event seat');
@@ -1750,7 +1793,9 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    const coe = await coeService.createCOE(value, req.user.id);
+    const coe = await coeService.createCOE(value, req.user.id, {
+      actorRole: req.user.role,
+    });
 
     res.status(201).json({
       success: true,
@@ -1800,7 +1845,9 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
-    const coe = await coeService.updateCOE(id, value);
+    const coe = await coeService.updateCOE(id, value, {
+      actorRole: req.user.role,
+    });
 
     res.json({
       success: true,

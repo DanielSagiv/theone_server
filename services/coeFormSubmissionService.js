@@ -224,7 +224,9 @@ async function processFormSubmissionPhase24(params) {
             original_request_data: originalRequestData,
           };
 
-          const coe = await coeService.createCOE(requestCoeData, user._id);
+          const coe = await coeService.createCOE(requestCoeData, user._id, {
+            actorRole: user.role,
+          });
 
           console.log('[BOT] Phase 2.4: Request-only COE created:', {
             coeId: coe._id?.toString(),
