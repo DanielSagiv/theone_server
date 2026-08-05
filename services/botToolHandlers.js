@@ -1563,8 +1563,14 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       throw new Error('All selected seats are missing event_id. Cannot create COE.');
     }
 
+    // Admin create/propose is optimized for speed: skip optional OpenAI enrichment
+    // (seat recommendation tips + upgrade-offer generation). Pricing, seats, deposit,
+    // and approve are unaffected. Client/bot flows keep AI enrichment unchanged.
+    const skipAiEnrichmentForCreate =
+      (user.role != null ? String(user.role) : '').toLowerCase() === 'admin';
+
     // Phase 3: Generate AI recommendations for selected seats
-    if (validatedSeats.length > 0) {
+    if (validatedSeats.length > 0 && !skipAiEnrichmentForCreate) {
       try {
         console.log('[BOT] Generating AI recommendations for selected seats...');
         
@@ -1684,6 +1690,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         console.error('[BOT] Error generating seat recommendations:', error);
         // Don't fail COE creation if recommendations fail
       }
+    } else if (validatedSeats.length > 0 && skipAiEnrichmentForCreate) {
+      console.log('[BOT] Skipping AI seat recommendations for admin create (speed).');
     }
 
     // Determine initial status based on creator role
@@ -2043,8 +2051,13 @@ async function handleCreateCOEDraft(params, user, correlationId) {
 
     // Admin push for client `request` COEs is sent from coeService.createCOE (single place).
 
-    // Generate seat upgrade offers for draft or request COEs
-    if (populatedCOE.status === 'draft' || populatedCOE.status === 'request') {
+    // Generate seat upgrade offers for draft or request COEs.
+    // Skipped on admin create/propose for speed (fans out per-seat + OpenAI per alternative).
+    // Admins still have the manual paid seat upgrade flow post-create.
+    if (
+      (populatedCOE.status === 'draft' || populatedCOE.status === 'request') &&
+      !skipAiEnrichmentForCreate
+    ) {
       try {
         console.log('[BOT] Generating seat upgrade offers for COE:', populatedCOE._id);
         const totalBudget = conversationPreferences.budget?.max || conversationPreferences.budget_range?.max || null;
@@ -2070,6 +2083,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
         console.error('[BOT] Error generating upgrade offers:', error);
         // Don't fail COE creation if offers fail
       }
+    } else if (skipAiEnrichmentForCreate) {
+      console.log('[BOT] Skipping seat upgrade offer generation for admin create (speed).');
     }
 
     /**
