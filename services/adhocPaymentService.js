@@ -13,6 +13,9 @@ const {
   isReceiptEmailEnabled,
 } = require('./paymentReceiptEmail');
 const { assertAdhocReceiptEmailAvailable, getAdhocReceiptRecipientEmail } = require('../utils/adhocPaymentDisplay');
+const {
+  computeOnSpotChargeTotalWithFees,
+} = require('../utils/eventLineFeeTotal');
 
 const PAYMENT_CONFIG = {
   currency: process.env.PAYMENT_CURRENCY || 'USD',
@@ -140,6 +143,39 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     selectedEvent = eventLines.find((e) => e.event_id === eventId) || null;
   }
 
+  /** Fee rates for on-spot preview (mobile enters base; server charges base+fees). */
+  let onSpotFeeContext = null;
+  if (eventId) {
+    try {
+      const { loadEventLocation } = require('../utils/eventLineFeeTotal');
+      const { resolveThe1FeePercentForSeat } = require('./coeService');
+      const location = await loadEventLocation(eventId);
+      const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
+      const eid = String(eventId);
+      let the1Pct = resolveThe1FeePercentForSeat({});
+      for (const row of seats) {
+        const rowEid =
+          row?.event_id?._id?.toString?.() ||
+          row?.event_id?.toString?.() ||
+          '';
+        if (rowEid === eid) {
+          the1Pct = resolveThe1FeePercentForSeat(row);
+          break;
+        }
+      }
+      onSpotFeeContext = {
+        the1_fee_percent: the1Pct,
+        processing_fee_percent: 3,
+        admin_fee_percent: location?.adminFeePercent ?? null,
+        gratuity_percent: location?.gratuityPercent ?? null,
+        sales_tax_percent: location?.salesTaxPercent ?? null,
+      };
+    } catch (feeCtxErr) {
+      console.warn('[AdhocPayment] on_spot fee context unavailable:', feeCtxErr?.message);
+      onSpotFeeContext = null;
+    }
+  }
+
   return {
     coe: {
       id: coe._id.toString(),
@@ -151,6 +187,7 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     payers,
     events: eventLines,
     selected_event: selectedEvent,
+    on_spot_fee_context: onSpotFeeContext,
   };
 }
 
@@ -332,6 +369,10 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
 
   const paidSeatUpgradeService = require('./paidSeatUpgradeService');
   let resolvedAdhocKind = adhocKindInput || 'general';
+  /** Base amount for on_spot_charges line (fee-exclusive). Charge amount may include fees. */
+  let onSpotBaseAmount = null;
+  let chargeAmount = Math.round((Number(amount) + Number.EPSILON) * 100) / 100;
+
   if (seatUpgradeId) {
     paidSeatUpgradeService.assertPendingUpgradeForCharge(
       coe,
@@ -340,6 +381,15 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
       eventId
     );
     resolvedAdhocKind = 'upgrade';
+  } else if (eventId) {
+    // On-spot: amount is base (e.g. bottle $100); charge fee-inclusive like upgrades.
+    const priced = await computeOnSpotChargeTotalWithFees(coe, eventId, amount);
+    if (!(priced.total > 0)) {
+      throw new Error('Amount must be greater than zero');
+    }
+    onSpotBaseAmount = priced.base;
+    chargeAmount = priced.total;
+    resolvedAdhocKind = resolvedAdhocKind === 'upgrade' ? 'general' : resolvedAdhocKind;
   }
 
   const billingUserId =
@@ -399,7 +449,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     coe_id: coeId,
     event_id: eventId || undefined,
     user_id: billingUserId,
-    amount: Math.round((Number(amount) + Number.EPSILON) * 100) / 100,
+    amount: chargeAmount,
     currency: coe.currency || PAYMENT_CONFIG.currency,
     payment_type: 'adhoc',
     status: 'pending',
@@ -547,7 +597,12 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
             event_id: eventId,
             payment_id: payment._id,
             description: String(payment.description || '').trim(),
-            amount: Number(payment.amount) || 0,
+            // Store fee-exclusive base so UI lines match TABLE/BOTTLE breakdown;
+            // payment.amount is fee-inclusive (collected into adhoc_collected_total).
+            amount:
+              onSpotBaseAmount != null
+                ? onSpotBaseAmount
+                : Number(payment.amount) || 0,
             adhoc_payer: payerSnap,
             created_by: adminUserId,
             created_at: new Date(),

@@ -81,6 +81,75 @@ async function computeEventLineTotalWithFees(eventId, seatRows) {
 }
 
 /**
+ * Resolve THE1 fee percent for on-spot charge from COE seats on that event.
+ * @param {object} coe
+ * @param {string} eventId
+ * @returns {number}
+ */
+function resolveThe1PercentForOnSpot(coe, eventId) {
+  const eid = normalizeEventId(eventId);
+  const seats = Array.isArray(coe?.selected_seats) ? coe.selected_seats : [];
+  for (const row of seats) {
+    const rowEid = normalizeEventId(row?.event_id);
+    if (rowEid && eid && rowEid === eid) {
+      return resolveThe1FeePercentForSeat(row);
+    }
+  }
+  return resolveThe1FeePercentForSeat({});
+}
+
+/**
+ * Fee-inclusive total for an on-spot base amount (same stack as seat MS / upgrade delta).
+ * Charge this total; store `base` on on_spot_charges for display.
+ * @param {object} coe
+ * @param {string} eventId
+ * @param {number} baseAmount
+ * @returns {Promise<{
+ *   base: number,
+ *   salesTax: number,
+ *   gratuity: number,
+ *   venueAdmin: number,
+ *   the1Fee: number,
+ *   processingFee: number,
+ *   total: number,
+ * }>}
+ */
+async function computeOnSpotChargeTotalWithFees(coe, eventId, baseAmount) {
+  const base = round2(Number(baseAmount) || 0);
+  if (!(base > 0)) {
+    return {
+      base: 0,
+      salesTax: 0,
+      gratuity: 0,
+      venueAdmin: 0,
+      the1Fee: 0,
+      processingFee: 0,
+      total: 0,
+    };
+  }
+  const location = await loadEventLocation(eventId);
+  const the1Pct = resolveThe1PercentForOnSpot(coe, eventId);
+  const v = computeVenuePricingTotals(base, location, base * (the1Pct / 100));
+  const salesTax = round2(v.st);
+  const gratuity = round2(v.gratuity);
+  const venueAdmin = round2(v.vf);
+  const the1Fee = round2(v.the1);
+  const processingFee = round2(v.processing);
+  const total = round2(
+    base + salesTax + gratuity + venueAdmin + the1Fee + processingFee,
+  );
+  return {
+    base,
+    salesTax,
+    gratuity,
+    venueAdmin,
+    the1Fee,
+    processingFee,
+    total,
+  };
+}
+
+/**
  * Build a hypothetical selected_seats row for fee preview / apply.
  * @param {object} baseRow - existing selected_seats entry
  * @param {object} patch - fields to overlay (event_price, the1_fee_percent, seat_id, …)
@@ -100,6 +169,7 @@ module.exports = {
   normalizeEventId,
   computeSeatRowsLineTotalWithFees,
   computeEventLineTotalWithFees,
+  computeOnSpotChargeTotalWithFees,
   loadEventLocation,
   buildProposedSeatRow,
 };
