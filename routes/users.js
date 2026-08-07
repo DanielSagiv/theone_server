@@ -595,6 +595,109 @@ router.get('/:id/profile', authenticateToken, requireAdmin, async (req, res) => 
 });
 
 /**
+ * PUT /v1/users/:id/profile
+ * Admin-only: update a client user's profile fields (no emails sent).
+ */
+router.put('/:id/profile', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const targetId = String(req.params.id || '').trim();
+    if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_USER_ID', message: 'Valid user id is required' },
+      });
+    }
+
+    const { error, value } = updateProfileSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: error.details[0].message,
+        },
+      });
+    }
+
+    const target = await User.findById(targetId);
+    if (!target) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
+      });
+    }
+
+    if (target.role !== 'client') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'CLIENT_PROFILE_ONLY',
+          message: 'Admins can only edit client profiles',
+        },
+      });
+    }
+
+    const patch = { ...value };
+    if (patch.email) {
+      patch.email = String(patch.email).toLowerCase().trim();
+    }
+
+    if (patch.email && patch.email !== target.email) {
+      const existingUser = await User.findOne({ email: patch.email });
+      if (existingUser && existingUser._id.toString() !== targetId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'EMAIL_EXISTS',
+            message: 'Email already exists',
+          },
+        });
+      }
+      // Keep account usable without sending verification mail.
+      patch.emailVerified = true;
+      patch.emailVerifiedAt = new Date();
+    }
+
+    try {
+      await enrichUserAvatarFields(patch);
+    } catch (enrichErr) {
+      console.warn('[users] admin profile avatar enrich:', enrichErr.message);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(targetId, patch, {
+      new: true,
+      runValidators: true,
+    });
+
+    console.log('[users] admin updated client profile', {
+      adminId: req.user._id?.toString?.(),
+      clientId: targetId,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.json({
+      success: true,
+      data: updatedUser.getProfile(),
+      message: 'Profile updated successfully',
+    });
+  } catch (error) {
+    console.error('Admin update client profile error:', {
+      error: error.message,
+      userId: req.params.id,
+      timestamp: new Date().toISOString(),
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'PROFILE_UPDATE_FAILED',
+        message: 'Failed to update profile',
+      },
+    });
+  }
+});
+
+/**
  * GET /v1/users/:id
  * Get specific user by ID (admin only or own profile)
  */
