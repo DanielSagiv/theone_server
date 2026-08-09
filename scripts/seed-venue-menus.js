@@ -55,6 +55,26 @@ const MENU_FILES = [
     file: 'encore-beach-club-menu.json',
     fallbackPdf: '/menus/encore-beach-club-menu.pdf',
   },
+  {
+    key: 'encore-beach-club-at-night',
+    file: 'encore-beach-club-at-night-menu.json',
+    fallbackPdf: '/menus/encore-beach-club-at-night-menu.pdf',
+  },
+  {
+    key: 'tao-beach',
+    file: 'tao-beach-menu.json',
+    fallbackPdf: '/menus/tao-beach-menu.pdf',
+  },
+  {
+    key: 'palm-tree-beach',
+    file: 'palm-tree-beach-menu.json',
+    fallbackPdf: '/menus/palm-tree-beach-menu.pdf',
+  },
+  {
+    key: 'hakkasan-nightclub',
+    file: 'hakkasan-nightclub-menu.json',
+    fallbackPdf: '/menus/hakkasan-nightclub-menu.pdf',
+  },
 ];
 
 /**

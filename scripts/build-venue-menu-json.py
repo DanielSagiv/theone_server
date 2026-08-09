@@ -71,10 +71,10 @@ HEADER_MAP = {
     "CHAMPAGNE-A-RITA": "Champagne-A-Rita",
     "PETALS&PEARLS": "Petals & Pearls",
     "WHERETHEWILDTHINGSARE": "Where The Wild Things Are",
+    "CHAMPAGNEPARADES": "Champagne Parades",
     "LITERS": "Liters",
     "MAGNUMS": "Magnums",
     "JEROBOAMS(3L)": "Jeroboams (3L)",
-    "MAGNUM-1.5L": "Magnum - 1.5L",
     "MAGNUM-1.5L": "Magnum - 1.5L",
     "JEROBOAM-3L": "Jeroboam - 3L",
     "METHUSELAH-6L": "Methuselah - 6L",
@@ -209,9 +209,14 @@ def split_name_price_inline(line: str):
 PACKAGE_START_RE = re.compile(
     r"^(ENERGY|GENESIS|FREQUENCY|SPACE|CROWD|BRONZE|COPPER|SILVER|GOLD|PLATINUM|"
     r"POP TRIO|THREE PILLARS|NIRVANA|DIAMOND|COLD AS ICE|HEADLINER|FLOWER POWER|"
-    r"A CASE OF ACE|THE BEAUTIFUL ERA|TEN OUT OF TEN|I.?M WITH THE DJ|"
+    r"A CASE OF ACE|CASE OF ACE|THE BEAUTIFUL ERA|TEN OUT OF TEN|I.?M WITH THE DJ|"
     r"DRIFT|BLOOM|SOL|AURORA|HORIZON|ARTIST MEET|"
-    r"ELITE|PRESTIGE|ICON|PLUS-?UP)\b",
+    r"ELITE|PRESTIGE|ICON|PLUS-?UP|"
+    r"TENDAI|PJ PARTY|THREE JEWELS|SUNRISE|ISLAND RITUAL|MAKE IT RAIN|"
+    r"CASTAWAY|BEACH PARTY|WET\s*&\s*WILD|DESTINATION UNKNOWN|ISLAND BOUNTY|"
+    r"HIDDEN TREASURE|LOST IN PARADISE|"
+    r"LOTUS|KENSHO|KOMODO|SUTRA|EMPEROR|"
+    r"ALEX ETERNAL)\b",
     re.I,
 )
 
@@ -416,7 +421,7 @@ def parse_tao_style(text: str, title: str, pdf_url: str, notes: str, location_ma
     }
 
 
-def parse_encore(text: str):
+def parse_encore(text: str, title: str, pdf_url: str, notes: str, location_match: dict):
     lines = [clean_line(l) for l in text.splitlines()]
     lines = [l for l in lines if l and not PAGE_RE.match(l)]
 
@@ -569,12 +574,12 @@ def parse_encore(text: str):
         if its:
             cleaned.append(make_section(s["name"], its, len(cleaned)))
     return {
-        "title": "Encore Beach Club Menu",
+        "title": title,
         "status": "active",
         "currency": "USD",
-        "sourcePdfUrl": "/menus/encore-beach-club-menu.pdf",
-        "notes": "Nevada state sales tax, venue fee and gratuity are applicable to all sales. Source menu dated 02/10/26.",
-        "locationMatch": {"nameRegex": "Encore Beach Club", "preferType": "day_club"},
+        "sourcePdfUrl": pdf_url,
+        "notes": notes,
+        "locationMatch": location_match,
         "sections": cleaned,
     }
 
@@ -594,14 +599,34 @@ def main():
         "omnia-night": MENUS / "omnia-nightclub-menu.pdf",
         "marquee-night": MENUS / "marquee-nightclub-menu.pdf",
         "encore-beach": MENUS / "encore-beach-club-menu.pdf",
+        "encore-beach-night": MENUS / "encore-beach-club-at-night-menu.pdf",
+        "tao-beach": MENUS / "tao-beach-menu.pdf",
+        "palm-tree": MENUS / "palm-tree-beach-menu.pdf",
+        "hakkasan": MENUS / "hakkasan-nightclub-menu.pdf",
     }
     texts = {}
     for key, pdf in pdfs.items():
+        if not pdf.exists():
+            print(f"SKIP missing pdf: {pdf}")
+            continue
         text = extract_pdf_text(pdf)
         (EXTRACT_DIR / f"{key}.txt").write_text(text)
         texts[key] = text
 
-    encore = parse_encore(texts["encore-beach"])
+    encore = parse_encore(
+        texts["encore-beach"],
+        "Encore Beach Club Menu",
+        "/menus/encore-beach-club-menu.pdf",
+        "Nevada state sales tax, venue fee and gratuity are applicable to all sales. Source menu dated 02/10/26.",
+        {"nameRegex": "^Encore Beach Club$", "preferType": "day_club"},
+    )
+    encore_night = parse_encore(
+        texts["encore-beach-night"],
+        "Encore Beach Club At Night Menu",
+        "/menus/encore-beach-club-at-night-menu.pdf",
+        "Nevada state sales tax, venue fee and gratuity are applicable to all sales. Source menu dated 02/10/26.",
+        {"nameRegex": "^Encore Beach Club At Night$", "preferType": "day_club"},
+    )
     omnia_day = parse_tao_style(
         texts["omnia-day"],
         "OMNIA Dayclub Menu",
@@ -625,11 +650,37 @@ def main():
         "An 8.375% sales tax and 14% admin fee are automatically added to all table service. Source menu dated 26.07.09.",
         {"nameRegex": "Marquee Nightclub", "preferType": "night_club"},
     )
+    tao_beach = parse_tao_style(
+        texts["tao-beach"],
+        "TAO Beach Menu",
+        "/menus/tao-beach-menu.pdf",
+        "An 8.375% sales tax and 14% admin fee are automatically added to all table service. Source menu dated 26.07.06.",
+        {"nameRegex": "^TAO Beach$", "preferType": "night_club"},
+    )
+    palm_tree = parse_tao_style(
+        texts["palm-tree"],
+        "Palm Tree Beach Club Menu",
+        "/menus/palm-tree-beach-menu.pdf",
+        "An 8.375% sales tax and 14% admin fee are automatically added to all table service. Source menu dated 26.07.06.",
+        {"nameRegex": "^Palm Tree Beach Club$", "preferType": "day_club"},
+    )
+    hakkasan = parse_tao_style(
+        texts["hakkasan"],
+        "Hakkasan Nightclub Menu",
+        "/menus/hakkasan-nightclub-menu.pdf",
+        "An 8.375% sales tax and 14% admin fee are automatically added to all table service. "
+        "Failure to meet contracted table minimums will be assessed as a table fee. Source menu dated 26.02.02.",
+        {"nameRegex": "^Hakkasan Nightclub$", "preferType": "night_club"},
+    )
 
     write_json(DATA / "encore-beach-club-menu.json", encore)
+    write_json(DATA / "encore-beach-club-at-night-menu.json", encore_night)
     write_json(DATA / "omnia-dayclub-menu.json", omnia_day)
     write_json(DATA / "omnia-nightclub-menu.json", omnia_night)
     write_json(DATA / "marquee-nightclub-menu.json", marquee)
+    write_json(DATA / "tao-beach-menu.json", tao_beach)
+    write_json(DATA / "palm-tree-beach-menu.json", palm_tree)
+    write_json(DATA / "hakkasan-nightclub-menu.json", hakkasan)
 
 
 if __name__ == "__main__":
