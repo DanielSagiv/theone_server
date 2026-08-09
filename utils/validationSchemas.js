@@ -820,6 +820,35 @@ const getMyCOEsQuerySchema = Joi.object({
   time_range: Joi.string().valid('upcoming', 'past', 'all').optional(),
 });
 
+const venueMenuItemSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(200).required(),
+  description: Joi.string().trim().allow('').max(2000).optional(),
+  price: Joi.number().min(0).allow(null).optional(),
+  priceLabel: Joi.string().trim().allow('').max(80).optional(),
+  sortOrder: Joi.number().integer().min(0).optional(),
+  available: Joi.boolean().optional(),
+  _id: Joi.any().optional(),
+});
+
+const venueMenuSectionSchema = Joi.object({
+  name: Joi.string().trim().min(1).max(200).required(),
+  sortOrder: Joi.number().integer().min(0).optional(),
+  items: Joi.array().items(venueMenuItemSchema).default([]),
+  _id: Joi.any().optional(),
+});
+
+/**
+ * Upsert venue menu body (PUT /v1/locations/:id/menu).
+ */
+const upsertVenueMenuSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(200).optional(),
+  status: Joi.string().valid('draft', 'active').optional(),
+  currency: Joi.string().trim().max(8).optional(),
+  sourcePdfUrl: Joi.string().trim().allow('').max(500).optional(),
+  notes: Joi.string().trim().allow('').max(5000).optional(),
+  sections: Joi.array().items(venueMenuSectionSchema).default([]),
+});
+
 module.exports = {
   signupSchema,
   signinSchema,
@@ -856,4 +885,5 @@ module.exports = {
   loginOtpVerifySchema,
   updateClientRequestCOESchema,
   getMyCOEsQuerySchema,
+  upsertVenueMenuSchema,
 };

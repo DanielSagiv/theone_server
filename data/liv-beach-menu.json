@@ -1,0 +1,1531 @@
+{
+  "title": "LIV Beach Menu",
+  "status": "active",
+  "currency": "USD",
+  "sourcePdfUrl": "/menus/liv-beach-menu.pdf",
+  "notes": "Price subject to change. 8.375% Sales Tax, 14% Venue Fee and 15% Gratuity included on all checks. Source menu dated 02/26/24.",
+  "sections": [
+    {
+      "name": "Bottle Packages",
+      "sortOrder": 0,
+      "items": [
+        {
+          "name": "DROPS OF LIQUID GOLD",
+          "description": "2 Bottles of Dom P\u00e9rignon Brut\n2 Bottles of Dom P\u00e9rignon Ros\u00e9",
+          "price": 6500,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "FOREVER SUMMER",
+          "description": "The sun never sets when you\u2019re the star of the show.\n8 Bottles of Perrier-Jou\u00ebt Ros\u00e9",
+          "price": 10000,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "MEET ME IN MONACO",
+          "description": "All aboard as the beautiful LIV Vixens dock table side in the Van Dutch yacht.\n12 Bottles of Dom P\u00e9rignon Brut",
+          "price": 15000,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "LIV BEACH BLAST OFF",
+          "description": "All systems are go - hit the switch and fire the cannons.\nMethuselah (6L) of Perrier-Jou\u00ebt Ros\u00e9",
+          "price": 25000,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "TAKE MY MONEY",
+          "description": "Still waiting on that Tesla Cyber Truck pre-order? No worries, we got you!\nMethuselah (6L) of Dom P\u00e9rignon Brut\nJeroboam (3L) Dom P\u00e9rignon Ros\u00e9",
+          "price": 50000,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Vodka",
+      "sortOrder": 1,
+      "items": [
+        {
+          "name": "Absolut Citron",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Absolut Elyx",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "Bottle $750 / Magnum $1350",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Aspen Vodka",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Belvedere",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "Bottle $795 / Magnum $1450",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Belvedere 10",
+          "description": "",
+          "price": 1100.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Ciroc",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Ciroc Limonata",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Ciroc Peach",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Grey Goose",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "Bottle $795 / Magnum $1450",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Grey Goose Altius",
+          "description": "",
+          "price": 1110.0,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Grey Goose Essences",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 10,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Tequila",
+      "sortOrder": 2,
+      "items": [
+        {
+          "name": "Avion Cristalino",
+          "description": "",
+          "price": 1050.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Avion Reserva 44",
+          "description": "",
+          "price": 1050.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Casa Del Sol Blanco",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Casa Del Sol Reposado",
+          "description": "",
+          "price": 950.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Casa Dragones Joven",
+          "description": "",
+          "price": 2500.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Casa Dragones Blanco",
+          "description": "",
+          "price": 950.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Casamigos Blanco",
+          "description": "",
+          "price": 950.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Casamigos Cristalino",
+          "description": "",
+          "price": 1100.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Casamigos Reposado",
+          "description": "",
+          "price": 1050.0,
+          "priceLabel": "Bottle $1050 / Magnum $2000",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Cincoro Reposado",
+          "description": "",
+          "price": 1000.0,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Cincoro A\u00f1ejo",
+          "description": "",
+          "price": 1250.0,
+          "priceLabel": "Bottle $1250 / Magnum $2500",
+          "sortOrder": 10,
+          "available": true
+        },
+        {
+          "name": "Clase Azul Reposado",
+          "description": "",
+          "price": 2500.0,
+          "priceLabel": "Bottle $2500 / Magnum $5000",
+          "sortOrder": 11,
+          "available": true
+        },
+        {
+          "name": "Clase Azul Ultra",
+          "description": "",
+          "price": 7500.0,
+          "priceLabel": "Bottle $7500 / Magnum $18000",
+          "sortOrder": 12,
+          "available": true
+        },
+        {
+          "name": "C\u00f3digo Blanco",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 13,
+          "available": true
+        },
+        {
+          "name": "C\u00f3digo Reposado",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 14,
+          "available": true
+        },
+        {
+          "name": "Dos Hombres Mezcal",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 15,
+          "available": true
+        },
+        {
+          "name": "Don Julio 1942",
+          "description": "",
+          "price": 2200.0,
+          "priceLabel": "Bottle $2200 / Magnum $4500",
+          "sortOrder": 16,
+          "available": true
+        },
+        {
+          "name": "Don Julio 70",
+          "description": "",
+          "price": 1200.0,
+          "priceLabel": "",
+          "sortOrder": 17,
+          "available": true
+        },
+        {
+          "name": "Don Julio Blanco",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 18,
+          "available": true
+        },
+        {
+          "name": "Don Julio Reposado",
+          "description": "",
+          "price": 1050.0,
+          "priceLabel": "",
+          "sortOrder": 19,
+          "available": true
+        },
+        {
+          "name": "Don Julio Rosado",
+          "description": "",
+          "price": 1100.0,
+          "priceLabel": "",
+          "sortOrder": 20,
+          "available": true
+        },
+        {
+          "name": "El Tesoro Blanco",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 21,
+          "available": true
+        },
+        {
+          "name": "El Tesoro Paradiso",
+          "description": "",
+          "price": 995.0,
+          "priceLabel": "",
+          "sortOrder": 22,
+          "available": true
+        },
+        {
+          "name": "Fletcha Azul Blanco",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 23,
+          "available": true
+        },
+        {
+          "name": "Fletcha Azul Reposado",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 24,
+          "available": true
+        },
+        {
+          "name": "Herradura Ultra",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 25,
+          "available": true
+        },
+        {
+          "name": "Hornitos",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 26,
+          "available": true
+        },
+        {
+          "name": "Komos Cristalino",
+          "description": "",
+          "price": 1250.0,
+          "priceLabel": "",
+          "sortOrder": 27,
+          "available": true
+        },
+        {
+          "name": "Komos Reposado Rosa",
+          "description": "",
+          "price": 1200.0,
+          "priceLabel": "",
+          "sortOrder": 28,
+          "available": true
+        },
+        {
+          "name": "Lobos A\u00f1ejo",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 29,
+          "available": true
+        },
+        {
+          "name": "Lobos Reposado",
+          "description": "",
+          "price": 800.0,
+          "priceLabel": "",
+          "sortOrder": 30,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n Cristalino",
+          "description": "",
+          "price": 825.0,
+          "priceLabel": "",
+          "sortOrder": 31,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n El Alto Reposado",
+          "description": "",
+          "price": 1400.0,
+          "priceLabel": "",
+          "sortOrder": 32,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n El Cielo",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 33,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n Platinum",
+          "description": "",
+          "price": 1375.0,
+          "priceLabel": "Bottle $1375 / Magnum $2500",
+          "sortOrder": 34,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n Reposado",
+          "description": "",
+          "price": 800.0,
+          "priceLabel": "",
+          "sortOrder": 35,
+          "available": true
+        },
+        {
+          "name": "Patr\u00f3n Silver",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 36,
+          "available": true
+        },
+        {
+          "name": "Tres Generaciones Plata",
+          "description": "",
+          "price": 800.0,
+          "priceLabel": "",
+          "sortOrder": 37,
+          "available": true
+        },
+        {
+          "name": "Tres Generaciones Reposado",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 38,
+          "available": true
+        },
+        {
+          "name": "Volcan Blanco Tahona",
+          "description": "",
+          "price": 1250.0,
+          "priceLabel": "",
+          "sortOrder": 39,
+          "available": true
+        },
+        {
+          "name": "Volcan Reposado",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 40,
+          "available": true
+        },
+        {
+          "name": "Volcan XA",
+          "description": "",
+          "price": 1500.0,
+          "priceLabel": "Bottle $1500 / Magnum $3000",
+          "sortOrder": 41,
+          "available": true
+        },
+        {
+          "name": "818 Reposado",
+          "description": "",
+          "price": 950.0,
+          "priceLabel": "",
+          "sortOrder": 42,
+          "available": true
+        },
+        {
+          "name": "Haku",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 43,
+          "available": true
+        },
+        {
+          "name": "Ketel One",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "Bottle $795 / Magnum $1450",
+          "sortOrder": 44,
+          "available": true
+        },
+        {
+          "name": "Ketel One Citron",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 45,
+          "available": true
+        },
+        {
+          "name": "Ketel One Botanicals",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 46,
+          "available": true
+        },
+        {
+          "name": "Skyy Strawberry",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 47,
+          "available": true
+        },
+        {
+          "name": "Tito\u2019s Handmade Vodka",
+          "description": "",
+          "price": 825.0,
+          "priceLabel": "Bottle $825 / Magnum $1450",
+          "sortOrder": 48,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Gin",
+      "sortOrder": 3,
+      "items": [
+        {
+          "name": "Bombay Sapphire",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Hendrick\u2019s",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Monkey 47",
+          "description": "",
+          "price": 850.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Tanqueray",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "The Botanist",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Bourbon",
+      "sortOrder": 4,
+      "items": [
+        {
+          "name": "Angel\u2019s Envy",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Bulleit",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Maker\u2019s Mark",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Woodford Reserve",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Rum",
+      "sortOrder": 5,
+      "items": [
+        {
+          "name": "Bacardi",
+          "description": "",
+          "price": 725.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Bacardi Spiced",
+          "description": "",
+          "price": 725.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Captain Morgan",
+          "description": "",
+          "price": 725.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Malibu",
+          "description": "",
+          "price": 725.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Mount Gay Eclipse",
+          "description": "",
+          "price": 725.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Whiskey",
+      "sortOrder": 6,
+      "items": [
+        {
+          "name": "Crown Apple",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Crown Royal",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Gentleman Jack",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Hibiki Harmony",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Jack Daniel\u2019s",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Jack Daniel\u2019s Honey",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Jameson",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Jameson Orange",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Southern Comfort",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Woodinville",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Cognac",
+      "sortOrder": 7,
+      "items": [
+        {
+          "name": "D\u2019uss\u00e9 VSOP",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Hennessy VS",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Hennessy VSOP",
+          "description": "",
+          "price": 895.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Hennessy X.O. LA Carafe",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Hennessy Paradis",
+          "description": "",
+          "price": 6000.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Remy Martin XO",
+          "description": "",
+          "price": 1250.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Remy Martin Louis XIII",
+          "description": "",
+          "price": 11000.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Scotch",
+      "sortOrder": 8,
+      "items": [
+        {
+          "name": "Chivas Regal 12",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Chivas Regal 18",
+          "description": "",
+          "price": 1250.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Glenlivet 12",
+          "description": "",
+          "price": 795.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Glenlivet 18",
+          "description": "",
+          "price": 1450.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Johnny Walker Black",
+          "description": "",
+          "price": 775.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Johnny Walker Blue",
+          "description": "",
+          "price": 1495.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Macallan 12",
+          "description": "",
+          "price": 895.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Macallan 18",
+          "description": "",
+          "price": 1600.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Macallan 25",
+          "description": "",
+          "price": 9000.0,
+          "priceLabel": "",
+          "sortOrder": 8,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Champagne",
+      "sortOrder": 14,
+      "items": [
+        {
+          "name": "Ace of Spades Brut",
+          "description": "",
+          "price": 2150.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Ace of Spades Ros\u00e9",
+          "description": "",
+          "price": 3150.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Louis Roederer Cristal Brut",
+          "description": "",
+          "price": 1950.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Dom P\u00e9rignon Brut",
+          "description": "",
+          "price": 1295.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Dom P\u00e9rignon Ros\u00e9",
+          "description": "",
+          "price": 1850.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Imperial Brut",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Ice Ros\u00e9",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Krug Grande Cuv\u00e9e",
+          "description": "",
+          "price": 2495.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Ice Brut",
+          "description": "",
+          "price": 1350.0,
+          "priceLabel": "",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Nectar Ros\u00e9",
+          "description": "",
+          "price": 1600.0,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Perrier-Jou\u00ebt, Belanc de Blanc",
+          "description": "",
+          "price": 2495.0,
+          "priceLabel": "",
+          "sortOrder": 10,
+          "available": true
+        },
+        {
+          "name": "Perrier-Jou\u00ebt, Belle \u00c9poque Brut",
+          "description": "",
+          "price": 1650.0,
+          "priceLabel": "",
+          "sortOrder": 11,
+          "available": true
+        },
+        {
+          "name": "Perrier-Jou\u00ebt, Belle \u00c9poque Ros\u00e9",
+          "description": "",
+          "price": 3400.0,
+          "priceLabel": "",
+          "sortOrder": 12,
+          "available": true
+        },
+        {
+          "name": "Veuve Clicquot, Ros\u00e9",
+          "description": "",
+          "price": 2250.0,
+          "priceLabel": "",
+          "sortOrder": 13,
+          "available": true
+        },
+        {
+          "name": "Veuve Clicquot, Yellow Label Brut",
+          "description": "",
+          "price": 1695.0,
+          "priceLabel": "",
+          "sortOrder": 14,
+          "available": true
+        },
+        {
+          "name": "Telmont Brut",
+          "description": "",
+          "price": 900.0,
+          "priceLabel": "",
+          "sortOrder": 15,
+          "available": true
+        },
+        {
+          "name": "Telmont Ros\u00e9",
+          "description": "",
+          "price": 1050.0,
+          "priceLabel": "",
+          "sortOrder": 16,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Champagne Add-Ons",
+      "sortOrder": 15,
+      "items": [
+        {
+          "name": "Caviar Bumps",
+          "description": "4oz tin of Golden Osetra Caviar To Compliment Your Bubbly",
+          "price": 300,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Champagne Showers \u2014 5 Bottles",
+          "description": "",
+          "price": 1250,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Champagne Showers \u2014 10 Bottles",
+          "description": "",
+          "price": 2500,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Methuselah (6L)",
+      "sortOrder": 16,
+      "items": [
+        {
+          "name": "Ace of Spades Brut",
+          "description": "",
+          "price": 35000.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Balthazar (12L)",
+      "sortOrder": 17,
+      "items": [
+        {
+          "name": "Ace of Spades Brut",
+          "description": "",
+          "price": 60000.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Nebuchadnezzar (15L)",
+      "sortOrder": 18,
+      "items": [
+        {
+          "name": "Ace of Spades Brut",
+          "description": "",
+          "price": 100000.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Jeroboam (3L)",
+      "sortOrder": 19,
+      "items": [
+        {
+          "name": "Ace of Spades Brut",
+          "description": "",
+          "price": 15000.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Ace of Spades Ros\u00e9",
+          "description": "",
+          "price": 25000.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Dom P\u00e9rignon Luminous",
+          "description": "",
+          "price": 10000.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Dom P\u00e9rignon Luminous Ros\u00e9",
+          "description": "",
+          "price": 15000.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Imperial Brut",
+          "description": "",
+          "price": 3800.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Mo\u00ebt Chandon Imperial Ice",
+          "description": "",
+          "price": 4000.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Sake",
+      "sortOrder": 21,
+      "items": [
+        {
+          "name": "Soto Junmai Sake",
+          "description": "",
+          "price": 750.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "N/A Beverage",
+      "sortOrder": 22,
+      "items": [
+        {
+          "name": "BODYARMOR FLASH I.V. (Strawberry Kiwi & Tropical Punch)",
+          "description": "",
+          "price": 14.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Retail",
+      "sortOrder": 25,
+      "items": [
+        {
+          "name": "LIV Beach Tee",
+          "description": "",
+          "price": 40.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "LIV Beach Snapback Hat",
+          "description": "",
+          "price": 35.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "LIV Beach Melin\u00ae Hat",
+          "description": "",
+          "price": 80.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "LIV Beach Bucket Hat",
+          "description": "",
+          "price": 30.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Tote Bag",
+          "description": "",
+          "price": 30.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "Sunglasses",
+          "description": "",
+          "price": 30.0,
+          "priceLabel": "",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Portable Phone Charger",
+          "description": "",
+          "price": 75.0,
+          "priceLabel": "",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Sunscreen",
+          "description": "",
+          "price": 40.0,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Lip Balm",
+          "description": "",
+          "price": 5.0,
+          "priceLabel": "",
+          "sortOrder": 8,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "Specialty Cocktails",
+      "sortOrder": 30,
+      "items": [
+        {
+          "name": "John Daily",
+          "description": "Belvedere Vodka, Tamarind, Lemonade",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Endless Summer Nights",
+          "description": "Absolut Elyx Vodka, Lime Juice, Passionfruit Puree,\nVanilla, Sprite",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Cool Hand Melon",
+          "description": "Effen Cucumber Vodka, Lime Sour, Watermelon Liqueur,\nWatermelon Juice, Sprite",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Prickly Paradise",
+          "description": "Tito\u2019s Handmade Vodka, Cointreau, Prickly Pear,\nLime Sour, Sprite & Club Soda",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Punch Perfect",
+          "description": "C\u00eeroc Vodka Limonata, Red Bull Yellow Edition,\nLemonade, Sprite",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 4,
+          "available": true
+        },
+        {
+          "name": "The Rose Identity",
+          "description": "Ketel One Botanical Grapefruit & Rose Vodka,\nLychee Puree, Cointreau, Lime Sour & Sprite\nWhite Strawberry Lemonade\nSkyy Strawberry, St. Germaine, Lemonade Srawberries",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 5,
+          "available": true
+        },
+        {
+          "name": "Espresso Royale",
+          "description": "Grey Goose Vodka, Espresso Mix, Kahl\u00faa Liqueur",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Paloma Fiction",
+          "description": "C\u00f3digo Blanco Tequila, Fresh Lime Juice, Agave,\nFever Tree Grapefruit, Taj\u00edn Rim\nVolcan Mule\nVolcan Reposado Tequila, Fever Tree Ginger Beer,\nCointreau, Fresh Lime Juice",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Spice It Up",
+          "description": "Casamigos Blanco Tequila, Cointreau, Spicy Bitters,\nRipe Margarita, Taj\u00edn Rim\nWatermelon Story\nPatron Reposado Tequila, Watermelon Juice,\nLime Sour, Red Bull Red Edition",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Viva Las Micheladas",
+          "description": "Dos Hombres Mango, Bloody Mary Mix,\nMexican Lager, Taj\u00edn Rim",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Orange Solstice",
+          "description": "Don Julio Blanco Tequila, Aperol Lime Sour,\nCarrot & Orange Juice Mix",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 10,
+          "available": true
+        },
+        {
+          "name": "Cucumber Sky",
+          "description": "The Botanist Gin, St. Germain Elderflower Liqueur,\nClub Soda & Sour",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 11,
+          "available": true
+        },
+        {
+          "name": "Top Wave",
+          "description": "Bacardi Rum, Blue Cura\u00e7ao, Peach, White Cranberry Juice",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 12,
+          "available": true
+        },
+        {
+          "name": "Twise and Shout",
+          "description": "Malibu Rum, Tango Juice, Triple Sec, Sprite",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 13,
+          "available": true
+        },
+        {
+          "name": "Jack\u2019s Wild Ride",
+          "description": "Jack Daniel\u2019s Tennessee Honey, Blackberry, Lime Sour, Sprite\nHennessy Hustle\nHennessy VS, Peach Schnapps, Red Sangria Mix,\nMango juice, Cranberry juice",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 14,
+          "available": true
+        },
+        {
+          "name": "Apple of My Eye",
+          "description": "Belle de Brillet Pear, Apple Liqueur,\nFresh Lime Juice, Sprite",
+          "price": null,
+          "priceLabel": "Souvenir $61 \u2022 Pitcher $99",
+          "sortOrder": 15,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "La C\u00f4te \u2014 Shareables",
+      "sortOrder": 40,
+      "items": [
+        {
+          "name": "Chips & Salsa",
+          "description": "Salsa Tatemada, Salsa Fresca, Salsa Guacatillo, Guacamole",
+          "price": 82.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Exotic Seasonal Fruit",
+          "description": "Tahitian Vanilla Yogurt, Calamansi Syrup",
+          "price": 72.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "La C\u00f4te \u2014 Greens",
+      "sortOrder": 41,
+      "items": [
+        {
+          "name": "Greek Salad",
+          "description": "Mixed Lettuce, Persian Cucumber, Tomato, Olives, Feta,\nLemon Vinaigrette",
+          "price": 68.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "La C\u00f4te Caesar Salad",
+          "description": "Baby Gem Lettuce, Endive, Parmesan, Garlic Crouton",
+          "price": 65.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Protein Add-Ons",
+          "description": "Protein Add-Ons",
+          "price": null,
+          "priceLabel": "See description",
+          "sortOrder": 2,
+          "available": true
+        },
+        {
+          "name": "Chicken $42 | Shrimp $54 | Mahi Mahi",
+          "description": "",
+          "price": 54.0,
+          "priceLabel": "",
+          "sortOrder": 3,
+          "available": true
+        },
+        {
+          "name": "Falafel Fritters $36 | Ahi Tuna",
+          "description": "",
+          "price": 60.0,
+          "priceLabel": "",
+          "sortOrder": 4,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "La C\u00f4te \u2014 Handhelds",
+      "sortOrder": 42,
+      "items": [
+        {
+          "name": "Grilled Chicken Club (6 halves)",
+          "description": "Bacon, Lettuce, Tomato, Avocado, Dijonnaise, Ciabatta,\nServed with Fries",
+          "price": 120.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "La C\u00f4te Double Cheeseburger (6 halves)",
+          "description": "Two 4 oz. Patties, Lettuce, Heirloom Tomato, Pickles,\nAmerican Cheese, Garlic Aioli, Served with Fries",
+          "price": 132.0,
+          "priceLabel": "",
+          "sortOrder": 1,
+          "available": true
+        }
+      ]
+    },
+    {
+      "name": "La C\u00f4te \u2014 From Land and Sea",
+      "sortOrder": 43,
+      "items": [
+        {
+          "name": "Achiote Marinated Steak Tacos (12)",
+          "description": "Tomatillo Salsa, Grilled Scallion, Escabeche",
+          "price": 128.0,
+          "priceLabel": "",
+          "sortOrder": 0,
+          "available": true
+        },
+        {
+          "name": "Grilled Kebabs",
+          "description": "Order of 6 Kebabs (Mix & Match)\nBurnt Citrus, Turmeric, Fragrant Rice Pilaf, Chermoula\nChicken $26 | Mahi Mahi $30 | Shrimp $32",
+          "price": null,
+          "priceLabel": "Mix & Match \u2014 see description",
+          "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Chickie Tendies",
+          "description": "Fresh Celery, Carrot, Buttermilk Ranch, BBQ Sauce, Buffalo Sauce,\nServed with Fries",
+          "price": 120.0,
+          "priceLabel": "",
+          "sortOrder": 2,
+          "available": true
+        }
+      ]
+    }
+  ]
+}

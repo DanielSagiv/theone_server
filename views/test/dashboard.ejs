@@ -6637,6 +6637,20 @@
                         </div>
                     </div>
 
+                    <!-- Venue Menu -->
+                    <div class="detail-section">
+                        <h3>Venue Menu</h3>
+                        <div class="detail-grid">
+                            <div class="detail-item" style="grid-column: 1 / -1;">
+                                <label>Menu:</label>
+                                <span id="locationMenuLinkWrap">
+                                    <a href="#" id="locationMenuEditLink" style="color:#3498db;font-weight:600;">View / Edit menu</a>
+                                    <span id="locationMenuStatus" style="margin-left:10px;color:#7f8c8d;"></span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Attributes Section -->
                     <div class="detail-section">
                         <h3>Attributes</h3>
@@ -12117,6 +12131,37 @@
             document.getElementById('locationContactPhone').textContent = contact.phone || '-';
             document.getElementById('locationContactEmail').textContent = contact.email || '-';
             document.getElementById('locationContactWebsite').textContent = contact.website || '-';
+
+            // Venue menu link (preserve dashboard auth query params)
+            const menuLink = document.getElementById('locationMenuEditLink');
+            const menuStatus = document.getElementById('locationMenuStatus');
+            if (menuLink && location?._id) {
+                const authParams = new URLSearchParams(window.location.search);
+                const q = new URLSearchParams();
+                if (authParams.get('token')) q.set('token', authParams.get('token'));
+                if (authParams.get('user')) q.set('user', authParams.get('user'));
+                const qs = q.toString();
+                menuLink.href = `/test/location-menu/${location._id}${qs ? `?${qs}` : ''}`;
+                menuLink.textContent = 'View / Edit menu';
+                menuStatus.textContent = 'Loading…';
+                makeApiRequest(`/locations/${location._id}/menu`)
+                    .then(result => {
+                        const errCode = result.data?.error?.code;
+                        if (result.success) {
+                            const sections = result.data?.data?.menu?.sections?.length
+                              || result.data?.menu?.sections?.length
+                              || 0;
+                            menuStatus.textContent = `Menu on file (${sections} section${sections === 1 ? '' : 's'})`;
+                        } else if (errCode === 'MENU_NOT_FOUND') {
+                            menuStatus.textContent = 'No menu yet — click to create';
+                        } else {
+                            menuStatus.textContent = '';
+                        }
+                    })
+                    .catch(() => {
+                        menuStatus.textContent = '';
+                    });
+            }
             
             // Attributes
             displayLocationAttributes(location.attributes || {}, location.type);

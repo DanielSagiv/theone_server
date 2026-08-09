@@ -187,4 +187,15 @@ router.get('/email-test', async (req, res) => {
   }
 });
 
+/**
+ * GET /test/location-menu/:locationId
+ * Venue menu editor for a location.
+ */
+router.get('/location-menu/:locationId', (req, res) => {
+  res.render('test/location-menu', {
+    title: 'Venue Menu Editor - The1 Platform',
+    locationId: req.params.locationId,
+  });
+});
+
 module.exports = router;

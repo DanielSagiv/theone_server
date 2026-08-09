@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 26px; color: #f8fafc; }
+    .sub { color: #94a3b8; margin-bottom: 16px; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-bottom: 16px;
+    }
+    .btn {
+      border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; cursor: pointer;
+      background: #2563eb; color: #fff;
+    }
+    .btn.secondary { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+    .btn.danger { background: #7f1d1d; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .card {
+      background: #0b1220; border: 1px solid #1e293b; border-radius: 12px;
+      padding: 14px; margin-bottom: 12px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 18px; color: #a3e635; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+    label { display: block; font-size: 12px; color: #93c5fd; margin-bottom: 4px; }
+    input, select, textarea {
+      width: 100%; padding: 8px 10px; border-radius: 8px;
+      border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+    }
+    textarea { min-height: 56px; resize: vertical; }
+    .field { flex: 1 1 160px; min-width: 140px; }
+    .field.wide { flex: 2 1 280px; }
+    .item {
+      border: 1px solid #1e293b; border-radius: 10px; padding: 10px;
+      margin-bottom: 8px; background: #0f172a;
+    }
+    .muted { color: #94a3b8; }
+    .alert {
+      display: none; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px;
+    }
+    .alert.show { display: block; }
+    .alert.ok { background: #14532d; border: 1px solid #166534; color: #bbf7d0; }
+    .alert.err { background: #7f1d1d; border: 1px solid #b91c1c; color: #fecaca; }
+    .section-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    a { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <a class="btn secondary" id="backLink" href="/test/dashboard">Back to dashboard</a>
+      <button class="btn" id="saveBtn" type="button">Save menu</button>
+      <button class="btn secondary" id="addSectionBtn" type="button">Add section</button>
+      <label class="btn secondary" style="display:inline-flex;align-items:center;gap:8px;margin:0;">
+        Upload PDF
+        <input id="pdfInput" type="file" accept="application/pdf,.pdf" style="display:none;" />
+      </label>
+      <a id="pdfLink" class="muted" href="#" target="_blank" rel="noopener" style="display:none;">Open source PDF</a>
+    </div>
+
+    <h1 id="pageTitle">Venue Menu</h1>
+    <p class="sub" id="pageSub">Loading…</p>
+    <div id="alert" class="alert"></div>
+
+    <div class="card">
+      <h2>Menu details</h2>
+      <div class="row">
+        <div class="field wide">
+          <label for="menuTitle">Title</label>
+          <input id="menuTitle" type="text" placeholder="LIV Beach Menu" />
+        </div>
+        <div class="field">
+          <label for="menuStatus">Status</label>
+          <select id="menuStatus">
+            <option value="active">active</option>
+            <option value="draft">draft</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="menuCurrency">Currency</label>
+          <input id="menuCurrency" type="text" value="USD" />
+        </div>
+      </div>
+      <div class="field wide">
+        <label for="menuNotes">Notes</label>
+        <textarea id="menuNotes" placeholder="Fees / caveats"></textarea>
+      </div>
+    </div>
+
+    <div id="sectionsRoot"></div>
+  </div>
+
+  <script>
+    const locationId = <%- JSON.stringify(locationId) %>;
+    const authParams = new URLSearchParams(window.location.search);
+    const token = authParams.get('token');
+    const userParam = authParams.get('user');
+
+    /** @type {{ title: string, status: string, currency: string, notes: string, sourcePdfUrl?: string, sections: any[] }} */
+    let menuState = {
+      title: '',
+      status: 'active',
+      currency: 'USD',
+      notes: '',
+      sourcePdfUrl: '',
+      sections: [],
+    };
+
+    /**
+     * Show alert banner.
+     * @param {string} message
+     * @param {'ok'|'err'} kind
+     */
+    function showAlert(message, kind) {
+      const el = document.getElementById('alert');
+      el.className = 'alert show ' + kind;
+      el.textContent = message;
+    }
+
+    /**
+     * Authenticated JSON API helper against /v1.
+     * @param {string} path
+     * @param {string} [method]
+     * @param {object|null} [body]
+     */
+    async function api(path, method = 'GET', body = null) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const opts = { method, headers, cache: 'no-store' };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch('/v1' + path, opts);
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    /**
+     * Preserve dashboard auth query on back link.
+     */
+    function wireBackLink() {
+      const q = new URLSearchParams();
+      if (token) q.set('token', token);
+      if (userParam) q.set('user', userParam);
+      const qs = q.toString();
+      document.getElementById('backLink').href = '/test/dashboard' + (qs ? '?' + qs : '');
+    }
+
+    /**
+     * Render editable sections/items.
+     */
+    function renderSections() {
+      const root = document.getElementById('sectionsRoot');
+      root.innerHTML = '';
+      if (!menuState.sections.length) {
+        root.innerHTML = '<div class="card muted">No sections yet. Click “Add section”.</div>';
+        return;
+      }
+      menuState.sections.forEach((section, sIdx) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="row">
+            <div class="field wide">
+              <label>Section name</label>
+              <input data-s="${sIdx}" data-k="name" class="sec-field" value="${escapeAttr(section.name || '')}" />
+            </div>
+            <div class="field">
+              <label>Sort</label>
+              <input data-s="${sIdx}" data-k="sortOrder" class="sec-field" type="number" value="${Number(section.sortOrder || sIdx)}" />
+            </div>
+          </div>
+          <div class="items" data-section="${sIdx}"></div>
+          <div class="section-actions">
+            <button type="button" class="btn secondary" data-add-item="${sIdx}">Add item</button>
+            <button type="button" class="btn danger" data-del-section="${sIdx}">Remove section</button>
+          </div>
+        `;
+        root.appendChild(card);
+        const itemsWrap = card.querySelector('.items');
+        (section.items || []).forEach((it, iIdx) => {
+          const row = document.createElement('div');
+          row.className = 'item';
+          row.innerHTML = `
+            <div class="row">
+              <div class="field wide">
+                <label>Item name</label>
+                <input data-s="${sIdx}" data-i="${iIdx}" data-k="name" class="item-field" value="${escapeAttr(it.name || '')}" />
+              </div>
+              <div class="field">
+                <label>Price</label>
+                <input data-s="${sIdx}" data-i="${iIdx}" data-k="price" class="item-field" type="number" step="0.01" value="${it.price == null ? '' : it.price}" />
+              </div>
+              <div class="field">
+                <label>Price label</label>
+                <input data-s="${sIdx}" data-i="${iIdx}" data-k="priceLabel" class="item-field" value="${escapeAttr(it.priceLabel || '')}" />
+              </div>
+              <div class="field">
+                <label>Sort</label>
+                <input data-s="${sIdx}" data-i="${iIdx}" data-k="sortOrder" class="item-field" type="number" value="${Number(it.sortOrder || iIdx)}" />
+              </div>
+            </div>
+            <div class="field wide">
+              <label>Description</label>
+              <textarea data-s="${sIdx}" data-i="${iIdx}" data-k="description" class="item-field">${escapeHtml(it.description || '')}</textarea>
+            </div>
+            <div class="section-actions">
+              <label style="display:flex;align-items:center;gap:6px;color:#cbd5e1;">
+                <input data-s="${sIdx}" data-i="${iIdx}" data-k="available" class="item-field" type="checkbox" ${it.available === false ? '' : 'checked'} />
+                Available
+              </label>
+              <button type="button" class="btn danger" data-del-item="${sIdx}:${iIdx}">Remove item</button>
+            </div>
+          `;
+          itemsWrap.appendChild(row);
+        });
+      });
+
+      root.querySelectorAll('.sec-field').forEach(el => {
+        el.addEventListener('change', onSectionField);
+        el.addEventListener('input', onSectionField);
+      });
+      root.querySelectorAll('.item-field').forEach(el => {
+        el.addEventListener('change', onItemField);
+        el.addEventListener('input', onItemField);
+      });
+      root.querySelectorAll('[data-add-item]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sIdx = Number(btn.getAttribute('data-add-item'));
+          menuState.sections[sIdx].items = menuState.sections[sIdx].items || [];
+          menuState.sections[sIdx].items.push({
+            name: 'New item',
+            description: '',
+            price: null,
+            priceLabel: '',
+            sortOrder: menuState.sections[sIdx].items.length,
+            available: true,
+          });
+          renderSections();
+        });
+      });
+      root.querySelectorAll('[data-del-section]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sIdx = Number(btn.getAttribute('data-del-section'));
+          if (!confirm('Remove this section?')) return;
+          menuState.sections.splice(sIdx, 1);
+          renderSections();
+        });
+      });
+      root.querySelectorAll('[data-del-item]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const [sIdx, iIdx] = btn.getAttribute('data-del-item').split(':').map(Number);
+          menuState.sections[sIdx].items.splice(iIdx, 1);
+          renderSections();
+        });
+      });
+    }
+
+    function onSectionField(e) {
+      const el = e.target;
+      const sIdx = Number(el.getAttribute('data-s'));
+      const key = el.getAttribute('data-k');
+      let val = el.value;
+      if (key === 'sortOrder') val = Number(val || 0);
+      menuState.sections[sIdx][key] = val;
+    }
+
+    function onItemField(e) {
+      const el = e.target;
+      const sIdx = Number(el.getAttribute('data-s'));
+      const iIdx = Number(el.getAttribute('data-i'));
+      const key = el.getAttribute('data-k');
+      let val;
+      if (key === 'available') val = el.checked;
+      else if (key === 'price') val = el.value === '' ? null : Number(el.value);
+      else if (key === 'sortOrder') val = Number(el.value || 0);
+      else val = el.value;
+      menuState.sections[sIdx].items[iIdx][key] = val;
+    }
+
+    function escapeAttr(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;');
+    }
+
+    function syncMetaFromForm() {
+      menuState.title = document.getElementById('menuTitle').value.trim();
+      menuState.status = document.getElementById('menuStatus').value;
+      menuState.currency = document.getElementById('menuCurrency').value.trim() || 'USD';
+      menuState.notes = document.getElementById('menuNotes').value.trim();
+    }
+
+    function applyMetaToForm() {
+      document.getElementById('menuTitle').value = menuState.title || '';
+      document.getElementById('menuStatus').value = menuState.status || 'active';
+      document.getElementById('menuCurrency').value = menuState.currency || 'USD';
+      document.getElementById('menuNotes').value = menuState.notes || '';
+      const pdfLink = document.getElementById('pdfLink');
+      if (menuState.sourcePdfUrl) {
+        pdfLink.href = menuState.sourcePdfUrl;
+        pdfLink.style.display = 'inline';
+        pdfLink.textContent = 'Open source PDF';
+      } else {
+        pdfLink.style.display = 'none';
+      }
+    }
+
+    /**
+     * Load location + menu.
+     */
+    async function load() {
+      if (!token) {
+        showAlert('Missing auth token. Open this page from the dashboard location modal.', 'err');
+        return;
+      }
+      wireBackLink();
+      const locRes = await api('/locations/' + locationId);
+      const loc = locRes.data?.data || locRes.data;
+      const locName = loc?.name || 'Location';
+      document.getElementById('pageTitle').textContent = locName + ' — Menu';
+
+      const menuRes = await api('/locations/' + locationId + '/menu');
+      if (menuRes.ok) {
+        const payload = menuRes.data?.data || menuRes.data;
+        const menu = payload.menu || payload;
+        menuState = {
+          title: menu.title || (locName + ' Menu'),
+          status: menu.status || 'active',
+          currency: menu.currency || 'USD',
+          notes: menu.notes || '',
+          sourcePdfUrl: menu.sourcePdfUrl || '',
+          sections: Array.isArray(menu.sections) ? menu.sections : [],
+        };
+        document.getElementById('pageSub').textContent = 'Editing existing menu';
+      } else if (menuRes.data?.error?.code === 'MENU_NOT_FOUND') {
+        menuState = {
+          title: locName + ' Menu',
+          status: 'active',
+          currency: 'USD',
+          notes: '',
+          sourcePdfUrl: '',
+          sections: [],
+        };
+        document.getElementById('pageSub').textContent = 'No menu yet — add sections and save to create.';
+      } else {
+        showAlert(menuRes.data?.error?.message || 'Failed to load menu', 'err');
+        document.getElementById('pageSub').textContent = 'Load failed';
+        return;
+      }
+      applyMetaToForm();
+      renderSections();
+    }
+
+    document.getElementById('addSectionBtn').addEventListener('click', () => {
+      menuState.sections.push({
+        name: 'New section',
+        sortOrder: menuState.sections.length,
+        items: [],
+      });
+      renderSections();
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      syncMetaFromForm();
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      try {
+        const body = {
+          title: menuState.title,
+          status: menuState.status,
+          currency: menuState.currency,
+          notes: menuState.notes,
+          sourcePdfUrl: menuState.sourcePdfUrl || '',
+          sections: menuState.sections,
+        };
+        const res = await api('/locations/' + locationId + '/menu', 'PUT', body);
+        if (!res.ok) {
+          showAlert(res.data?.error?.message || 'Save failed', 'err');
+          return;
+        }
+        const payload = res.data?.data || res.data;
+        const menu = payload.menu || payload;
+        menuState.sections = Array.isArray(menu.sections) ? menu.sections : menuState.sections;
+        menuState.sourcePdfUrl = menu.sourcePdfUrl || menuState.sourcePdfUrl;
+        applyMetaToForm();
+        renderSections();
+        showAlert('Menu saved.', 'ok');
+      } catch (err) {
+        showAlert(err.message || 'Save failed', 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('pdfInput').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!token) {
+        showAlert('Missing auth token', 'err');
+        return;
+      }
+      const form = new FormData();
+      form.append('pdf', file);
+      try {
+        const res = await fetch('/v1/locations/' + locationId + '/menu/pdf', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token },
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data?.error?.message || 'PDF upload failed', 'err');
+          return;
+        }
+        const menu = data?.data?.menu || {};
+        menuState.sourcePdfUrl = menu.sourcePdfUrl || data?.data?.sourcePdfUrl || '';
+        applyMetaToForm();
+        showAlert('PDF uploaded.', 'ok');
+      } catch (err) {
+        showAlert(err.message || 'PDF upload failed', 'err');
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

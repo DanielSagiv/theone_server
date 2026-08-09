@@ -100,6 +100,7 @@ const { requirePasswordAuth } = require('./middleware/passwordProtection');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const locationRoutes = require('./routes/locations');
+const locationMenuRoutes = require('./routes/locationMenus');
 const eventRoutes = require('./routes/events');
 const coeRoutes = require('./routes/coes');
 const testRoutes = require('./routes/test');
@@ -127,6 +128,7 @@ console.log('[AUTH_ROUTES] OTP login endpoints active:', {
 });
 app.use('/v1/users', userRoutes);
 app.use('/v1/locations', locationRoutes);
+app.use('/v1/locations/:id/menu', locationMenuRoutes);
 app.use('/v1/events', eventRoutes);
 app.use('/v1/coes', coeRoutes);
 app.use('/v1/payments', paymentRoutes);
