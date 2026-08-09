@@ -1,5 +1,9 @@
 const Event = require('../models/Event');
 const Location = require('../models/Location');
+const {
+  loadArtistGenreCatalog,
+  matchArtistsInEventNameAgainstCatalog,
+} = require('./eventArtistGenreMatchService');
 
 /**
  * City display name -> possible DB values (e.g. locations may store "LV" not "Las Vegas")
@@ -176,6 +180,44 @@ async function searchEvents(searchParams, options = {}) {
         event.media = event.media.filter(m => m && m.url && typeof m.url === 'string');
       }
     });
+
+    // Fill genres for prioritize filter when Event docs lack stored match fields
+    // (e.g. events created/copied before artist→genre hooks). Read-only enrich; no DB write.
+    const needsGenreEnrich = events.some(
+      e => !Array.isArray(e.genres) || e.genres.length === 0,
+    );
+    if (needsGenreEnrich) {
+      try {
+        const catalog = await loadArtistGenreCatalog();
+        for (const event of events) {
+          if (Array.isArray(event.genres) && event.genres.length > 0) {
+            continue;
+          }
+          const matched = matchArtistsInEventNameAgainstCatalog(
+            event.name,
+            catalog,
+          );
+          if (matched.genres.length) {
+            event.genres = matched.genres;
+          }
+          if (!event.genre && matched.genre) {
+            event.genre = matched.genre;
+          }
+          if (
+            matched.matched_artists.length &&
+            (!Array.isArray(event.matched_artists) ||
+              event.matched_artists.length === 0)
+          ) {
+            event.matched_artists = matched.matched_artists;
+          }
+        }
+      } catch (enrichErr) {
+        console.warn(
+          '[EventSearchService] genre enrich skipped:',
+          enrichErr?.message || enrichErr,
+        );
+      }
+    }
 
     console.log('[EventSearchService] Sample event media check:', {
       sampleEvent: events.length > 0 ? {

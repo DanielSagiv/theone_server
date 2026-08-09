@@ -3,6 +3,7 @@
  */
 const ArtistGenre = require('../models/ArtistGenre');
 const { normalizeArtistKey } = require('../utils/artistNameNormalize');
+const { tokenizeGenres } = require('../utils/artistGenreTokens');
 
 const LOG = '[eventArtistGenreMatch]';
 const MIN_ARTIST_KEY_CHARS = 3;
@@ -102,7 +103,15 @@ function matchArtistsInEventNameAgainstCatalog(eventName, catalog) {
   const genres = [];
   const seenGenre = new Set();
   for (const m of matched_artists) {
-    for (const g of m.genres || []) {
+    let artistGenres = Array.isArray(m.genres)
+      ? m.genres.map(g => String(g).trim()).filter(Boolean)
+      : [];
+    if (!artistGenres.length && m.genre) {
+      // Prefer tokenized label when catalog row has genre text but empty genres[]
+      artistGenres = tokenizeGenres(m.genre);
+      m.genres = artistGenres;
+    }
+    for (const g of artistGenres) {
       const k = g.toLowerCase();
       if (seenGenre.has(k)) continue;
       seenGenre.add(k);
