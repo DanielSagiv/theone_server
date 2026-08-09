@@ -3,11 +3,15 @@
  * Idempotent by location_id. Does not modify Location.menu (GXN URL).
  *
  * Usage (from server/):
- *   node scripts/seed-venue-menus.js
  *   node scripts/seed-venue-menus.js --dry-run
+ *   node scripts/seed-venue-menus.js --env=stage
+ *   node scripts/seed-venue-menus.js --env=prod
+ *   node scripts/seed-venue-menus.js --env=both
  *   node scripts/seed-venue-menus.js --only=omnia-dayclub
  *
- * Uses DB_URI from .env (fallback MONGODB_URI).
+ * Env:
+ *   stage: STAGE_MONGODB_URI | DB_URI | MONGODB_URI
+ *   prod:  PROD_MONGODB_URI | derived (the1-stage → the1-PROD)
  */
 
 require('dotenv').config();
@@ -24,6 +28,13 @@ const LOG = '[seed-venue-menus]';
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
 const MENU_FILES = [
+  {
+    key: 'liv-beach',
+    file: 'liv-beach-menu.json',
+    fallbackPdf: '/menus/liv-beach-menu.pdf',
+    locationId: '69d9143e8ae9a8c036317fb7',
+    locationMatch: { nameRegex: '^LIV Beach$', preferType: 'day_club' },
+  },
   {
     key: 'omnia-dayclub',
     file: 'omnia-dayclub-menu.json',
@@ -47,13 +58,49 @@ const MENU_FILES = [
 ];
 
 /**
- * @returns {{ dryRun: boolean, only: string|null }}
+ * @returns {{ dryRun: boolean, only: string|null, envs: Array<'stage'|'prod'> }}
  */
 function parseArgs() {
   const dryRun = process.argv.includes('--dry-run');
   const onlyArg = process.argv.find(a => a.startsWith('--only='));
   const only = onlyArg ? onlyArg.slice('--only='.length).trim() : null;
-  return { dryRun, only };
+  const envArg = process.argv.find(a => a.startsWith('--env='));
+  const envRaw = envArg ? envArg.slice('--env='.length).trim().toLowerCase() : 'stage';
+  /** @type {Array<'stage'|'prod'>} */
+  let envs = ['stage'];
+  if (envRaw === 'stage') envs = ['stage'];
+  else if (envRaw === 'prod') envs = ['prod'];
+  else if (envRaw === 'both') envs = ['stage', 'prod'];
+  else throw new Error(`Invalid --env=${envRaw} (use stage|prod|both)`);
+  return { dryRun, only, envs };
+}
+
+/**
+ * @param {'stage'|'prod'} target
+ * @returns {string}
+ */
+function resolveMongoUri(target) {
+  if (target === 'stage') {
+    const uri =
+      process.env.STAGE_MONGODB_URI ||
+      process.env.STAGE_DB_URI ||
+      process.env.DB_URI ||
+      process.env.MONGODB_URI ||
+      process.env.MONGO_URI;
+    if (!uri) {
+      throw new Error('Stage URI missing (STAGE_MONGODB_URI, DB_URI, or MONGODB_URI)');
+    }
+    return uri;
+  }
+  const explicit = process.env.PROD_MONGODB_URI || process.env.PROD_DB_URI || null;
+  if (explicit) return explicit;
+  const stageUri = resolveMongoUri('stage');
+  if (!/\/the1-stage(\?|$)/i.test(stageUri)) {
+    throw new Error(
+      'Prod URI missing and could not derive from stage (expected /the1-stage)',
+    );
+  }
+  return stageUri.replace(/\/the1-stage(\?|$)/i, '/the1-PROD$1');
 }
 
 /**
@@ -70,11 +117,20 @@ function loadSeedJson(fileName) {
 }
 
 /**
- * Resolve a Location by name regex, preferring type and Las Vegas when ambiguous.
- * @param {{ nameRegex: string, preferType?: string }} match
+ * Resolve a Location by id and/or name regex, preferring type and Las Vegas when ambiguous.
+ * @param {{ locationId?: string, nameRegex?: string, preferType?: string }} match
  * @returns {Promise<object|null>}
  */
 async function resolveLocation(match) {
+  if (match?.locationId && mongoose.Types.ObjectId.isValid(match.locationId)) {
+    const byId = await Location.findById(match.locationId)
+      .select('_id name type city address')
+      .lean();
+    if (byId) {
+      return byId;
+    }
+  }
+
   const nameRegex = match?.nameRegex;
   if (!nameRegex) {
     return null;
@@ -107,7 +163,6 @@ async function resolveLocation(match) {
   }
 
   if (candidates.length > 1) {
-    // Prefer exact case-insensitive name when regex is anchored; else shortest name
     const anchored = /^\^.*\$$/.test(nameRegex);
     if (anchored) {
       const re = new RegExp(nameRegex, 'i');
@@ -137,10 +192,15 @@ async function resolveLocation(match) {
  */
 async function seedOne(entry, dryRun) {
   const seed = loadSeedJson(entry.file);
-  const location = await resolveLocation(seed.locationMatch || {});
+  const match = {
+    ...(seed.locationMatch || {}),
+    ...(entry.locationMatch || {}),
+    ...(entry.locationId ? { locationId: entry.locationId } : {}),
+  };
+  const location = await resolveLocation(match);
   if (!location) {
     console.error(
-      `${LOG} SKIP ${entry.key}: no Location for /${seed.locationMatch?.nameRegex}/i`,
+      `${LOG} SKIP ${entry.key}: no Location for ${match.locationId || `/${match.nameRegex}/i`}`,
     );
     return { key: entry.key, skipped: true, reason: 'location_not_found' };
   }
@@ -200,26 +260,17 @@ async function seedOne(entry, dryRun) {
 }
 
 /**
- * Main seed entry.
+ * Seed all selected menus against one Mongo URI.
+ * @param {'stage'|'prod'} target
+ * @param {object[]} entries
+ * @param {boolean} dryRun
+ * @returns {Promise<object[]>}
  */
-async function main() {
-  const { dryRun, only } = parseArgs();
-  const uri = process.env.DB_URI || process.env.MONGODB_URI;
-  if (!uri) {
-    console.error(`${LOG} Missing DB_URI (or MONGODB_URI)`);
-    process.exit(1);
-  }
-
-  const entries = only
-    ? MENU_FILES.filter(e => e.key === only || e.file.includes(only))
-    : MENU_FILES;
-  if (!entries.length) {
-    console.error(`${LOG} No menu entries matched --only=${only}`);
-    process.exit(1);
-  }
-
+async function seedAgainst(target, entries, dryRun) {
+  const uri = resolveMongoUri(target);
+  const redacted = uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:***@');
   await mongoose.connect(uri);
-  console.log(`${LOG} connected dryRun=${dryRun}`);
+  console.log(`${LOG} connected target=${target} uri=${redacted} dryRun=${dryRun}`);
 
   const results = [];
   try {
@@ -231,12 +282,37 @@ async function main() {
         results.push({ key: entry.key, error: String(err.message || err) });
       }
     }
+    if (!dryRun) {
+      const count = await VenueMenu.countDocuments({});
+      console.log(`${LOG} ${target} venuemenus count=${count}`);
+    }
   } finally {
     await mongoose.disconnect();
-    console.log(`${LOG} disconnected`);
+    console.log(`${LOG} disconnected target=${target}`);
+  }
+  return results;
+}
+
+/**
+ * Main seed entry.
+ */
+async function main() {
+  const { dryRun, only, envs } = parseArgs();
+
+  const entries = only
+    ? MENU_FILES.filter(e => e.key === only || e.file.includes(only))
+    : MENU_FILES;
+  if (!entries.length) {
+    console.error(`${LOG} No menu entries matched --only=${only}`);
+    process.exit(1);
   }
 
-  console.log(`${LOG} summary:`, JSON.stringify(results, null, 2));
+  const all = {};
+  for (const target of envs) {
+    all[target] = await seedAgainst(target, entries, dryRun);
+  }
+
+  console.log(`${LOG} summary:`, JSON.stringify(all, null, 2));
 }
 
 main().catch(err => {

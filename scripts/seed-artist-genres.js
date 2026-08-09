@@ -21,6 +21,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const ArtistGenre = require('../models/ArtistGenre');
 const { normalizeArtistKey } = require('../utils/artistNameNormalize');
+const { tokenizeGenres } = require('../utils/artistGenreTokens');
 
 const LOG = '[seed-artist-genres]';
 dns.setServers(['8.8.8.8', '1.1.1.1']);
@@ -77,72 +78,6 @@ function resolveMongoUri(target) {
     );
   }
   return stageUri.replace(/\/the1-stage(\?|$)/i, '/the1-PROD$1');
-}
-
-/**
- * Split genre label into tokens (keeps multi-word phrases when present).
- * @param {string} genreRaw
- * @returns {string[]}
- */
-function tokenizeGenres(genreRaw) {
-  const raw = String(genreRaw || '')
-    .replace(/\s*2\s*$/i, '')
-    .replace(/&/g, ' ')
-    .replace(/\//g, ' ')
-    .replace(/,/g, ' ')
-    .replace(/\s*-\s*/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!raw) return [];
-
-  /** Known multi-word genres (longest first). */
-  const phrases = [
-    'Open Format (Various Genres)',
-    'Open Format',
-    'Various Genres',
-    'Melodic House',
-    'Melodic Techno',
-    'Tech House',
-    'Deep House',
-    'Tropical House',
-    'Afro House',
-    'Bass House',
-    'Electro House',
-    'Progressive Electro House',
-    'Hip Hop',
-    'R&B',
-    'R And B',
-  ];
-
-  let rest = raw;
-  /** @type {string[]} */
-  const found = [];
-  for (const phrase of phrases) {
-    const re = new RegExp(phrase.replace(/[()]/g, '\\$&'), 'ig');
-    if (re.test(rest)) {
-      found.push(phrase === 'R And B' ? 'R&B' : phrase);
-      rest = rest.replace(re, ' ');
-    }
-  }
-  rest = rest.replace(/\s+/g, ' ').trim();
-  if (rest) {
-    for (const part of rest.split(' ')) {
-      const t = part.trim();
-      if (t && !/^various$/i.test(t) && !/^\(?genres\)?$/i.test(t)) {
-        found.push(t);
-      }
-    }
-  }
-  // Dedupe case-insensitively, preserve first casing
-  const seen = new Set();
-  const out = [];
-  for (const g of found) {
-    const k = g.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(g);
-  }
-  return out;
 }
 
 /**

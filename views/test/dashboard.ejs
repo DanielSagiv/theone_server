@@ -5834,6 +5834,17 @@
                             </div>
                         </div>
                     </div>
+                    <div class="card" style="margin-top:20px;">
+                        <div class="card-body" style="max-width:720px;">
+                            <h2 style="margin:0 0 8px;font-size:18px;">Artist genres</h2>
+                            <p style="color:#555;margin:0 0 16px;">
+                                View and edit the artist → genre catalog used for event name matching and the client prioritize genre filter.
+                            </p>
+                            <button type="button" class="btn" style="padding:10px 16px;border-radius:8px;background:#2980b9;color:#fff;border:none;" onclick="openArtistGenresTool()">
+                                Open artist genres
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Settings Section -->
@@ -11503,6 +11514,25 @@
                 console.error('API request error:', error);
                 return { success: false, data: { error: error.message }, status: 0 };
             }
+        }
+
+        /**
+         * Open Artist Genres admin console (preserves auth token in query).
+         */
+        function openArtistGenresTool() {
+            if (currentUser?.role !== 'admin') {
+                showAlert('Tools are available to administrators only.', 'error');
+                return;
+            }
+            if (!currentToken) {
+                showAlert('Not authenticated. Log in again.', 'error');
+                return;
+            }
+            const q = new URLSearchParams();
+            q.set('token', currentToken);
+            const authParams = new URLSearchParams(window.location.search);
+            if (authParams.get('user')) q.set('user', authParams.get('user'));
+            window.location.href = '/test/artist-genres?' + q.toString();
         }
 
         /**

@@ -198,4 +198,14 @@ router.get('/location-menu/:locationId', (req, res) => {
   });
 });
 
+/**
+ * GET /test/artist-genres
+ * Admin console for viewing and editing artist → genre catalog.
+ */
+router.get('/artist-genres', (req, res) => {
+  res.render('test/artist-genres', {
+    title: 'Artist Genres - The1 Platform',
+  });
+});
+
 module.exports = router;

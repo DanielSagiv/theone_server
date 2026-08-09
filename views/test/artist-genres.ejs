@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 20px;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 26px; color: #f8fafc; }
+    .sub { color: #94a3b8; margin-bottom: 16px; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+      margin-bottom: 16px;
+    }
+    .btn {
+      border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; cursor: pointer;
+      background: #2563eb; color: #fff;
+    }
+    .btn.secondary { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+    .btn.danger { background: #7f1d1d; }
+    .btn.small { padding: 6px 10px; font-size: 13px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .card {
+      background: #0b1220; border: 1px solid #1e293b; border-radius: 12px;
+      padding: 14px; margin-bottom: 12px;
+    }
+    .card h2 { margin: 0 0 10px; font-size: 18px; color: #a3e635; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; align-items: flex-end; }
+    label { display: block; font-size: 12px; color: #93c5fd; margin-bottom: 4px; }
+    input, textarea {
+      width: 100%; padding: 8px 10px; border-radius: 8px;
+      border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+    }
+    .field { flex: 1 1 160px; min-width: 140px; }
+    .field.wide { flex: 2 1 280px; }
+    .muted { color: #94a3b8; font-size: 13px; }
+    .alert {
+      display: none; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px;
+    }
+    .alert.show { display: block; }
+    .alert.ok { background: #14532d; border: 1px solid #166534; color: #bbf7d0; }
+    .alert.err { background: #7f1d1d; border: 1px solid #b91c1c; color: #fecaca; }
+    a { color: #60a5fa; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      background: #1e293b; border: 1px solid #334155; color: #cbd5e1;
+      border-radius: 999px; padding: 4px 10px; font-size: 12px;
+    }
+    table {
+      width: 100%; border-collapse: collapse; font-size: 14px;
+    }
+    th, td {
+      text-align: left; padding: 10px 8px; border-bottom: 1px solid #1e293b;
+      vertical-align: top;
+    }
+    th { color: #93c5fd; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+    tr:hover td { background: #111827; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #94a3b8; }
+    .edit-row input { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <a class="btn secondary" id="backLink" href="/test/dashboard">Back to dashboard</a>
+      <button class="btn secondary" id="refreshBtn" type="button">Refresh</button>
+    </div>
+
+    <h1>Artist genres</h1>
+    <p class="sub" id="pageSub">Loading catalog…</p>
+    <div id="alert" class="alert"></div>
+
+    <div class="card">
+      <h2>Unique genre labels</h2>
+      <p class="muted" style="margin-top:0;">Used by the mobile prioritize genre filter.</p>
+      <div id="genreChips" class="chips"></div>
+    </div>
+
+    <div class="card">
+      <h2>Add artist</h2>
+      <div class="row">
+        <div class="field">
+          <label for="newArtist">Artist</label>
+          <input id="newArtist" type="text" placeholder="FISHER" />
+        </div>
+        <div class="field wide">
+          <label for="newGenre">Genre label</label>
+          <input id="newGenre" type="text" placeholder="Tech House" />
+        </div>
+        <div class="field wide">
+          <label for="newGenres">Genre tokens (optional, comma-separated)</label>
+          <input id="newGenres" type="text" placeholder="Tech House, EDM" />
+        </div>
+        <div>
+          <button class="btn" id="addBtn" type="button">Add</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Catalog</h2>
+      <div class="row">
+        <div class="field wide">
+          <label for="searchInput">Search</label>
+          <input id="searchInput" type="search" placeholder="Artist or genre…" />
+        </div>
+        <div>
+          <button class="btn secondary" id="searchBtn" type="button">Search</button>
+        </div>
+      </div>
+      <div id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Artist</th>
+              <th>Genre</th>
+              <th>Tokens</th>
+              <th>Key</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const authParams = new URLSearchParams(window.location.search);
+    const token = authParams.get('token');
+    const userParam = authParams.get('user');
+
+    /** @type {Array<object>} */
+    let rows = [];
+    let editingId = null;
+
+    /**
+     * Show alert banner.
+     * @param {string} message
+     * @param {'ok'|'err'} kind
+     */
+    function showAlert(message, kind) {
+      const el = document.getElementById('alert');
+      el.className = 'alert show ' + kind;
+      el.textContent = message;
+    }
+
+    /**
+     * Authenticated JSON API helper against /v1.
+     * @param {string} path
+     * @param {string} [method]
+     * @param {object|null} [body]
+     */
+    async function api(path, method = 'GET', body = null) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const opts = { method, headers, cache: 'no-store' };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch('/v1' + path, opts);
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    }
+
+    /**
+     * Preserve dashboard auth query on back link.
+     */
+    function wireBackLink() {
+      const back = document.getElementById('backLink');
+      const q = new URLSearchParams();
+      if (token) q.set('token', token);
+      if (userParam) q.set('user', userParam);
+      const qs = q.toString();
+      back.href = '/test/dashboard' + (qs ? '?' + qs : '');
+    }
+
+    /**
+     * Escape HTML for table cells.
+     * @param {string} s
+     * @returns {string}
+     */
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /**
+     * Render unique genre chips.
+     * @param {string[]} labels
+     */
+    function renderGenreChips(labels) {
+      const root = document.getElementById('genreChips');
+      if (!labels || !labels.length) {
+        root.innerHTML = '<span class="muted">No genre labels yet.</span>';
+        return;
+      }
+      root.innerHTML = labels.map(l => '<span class="chip">' + esc(l) + '</span>').join('');
+    }
+
+    /**
+     * Render catalog table.
+     */
+    function renderTable() {
+      const tbody = document.getElementById('tableBody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="muted">No artists match.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(row => {
+        if (editingId === row.id) {
+          return (
+            '<tr class="edit-row" data-id="' + esc(row.id) + '">' +
+              '<td><input data-field="artist" value="' + esc(row.artist) + '" /></td>' +
+              '<td><input data-field="genre" value="' + esc(row.genre) + '" /></td>' +
+              '<td><input data-field="genres" value="' + esc((row.genres || []).join(', ')) + '" /></td>' +
+              '<td class="mono">' + esc(row.artistKey) + '</td>' +
+              '<td class="actions">' +
+                '<button class="btn small" type="button" data-action="save">Save</button>' +
+                '<button class="btn secondary small" type="button" data-action="cancel">Cancel</button>' +
+              '</td>' +
+            '</tr>'
+          );
+        }
+        return (
+          '<tr data-id="' + esc(row.id) + '">' +
+            '<td><strong>' + esc(row.artist) + '</strong></td>' +
+            '<td>' + esc(row.genre) + '</td>' +
+            '<td>' + esc((row.genres || []).join(', ')) + '</td>' +
+            '<td class="mono">' + esc(row.artistKey) + '</td>' +
+            '<td class="actions">' +
+              '<button class="btn secondary small" type="button" data-action="edit">Edit</button>' +
+              '<button class="btn danger small" type="button" data-action="delete">Delete</button>' +
+            '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    /**
+     * Load catalog from API.
+     */
+    async function loadCatalog() {
+      const q = (document.getElementById('searchInput').value || '').trim();
+      const path = '/artist-genres/catalog' + (q ? '?q=' + encodeURIComponent(q) : '');
+      const { ok, data, status } = await api(path);
+      if (!ok) {
+        const msg = data?.error?.message || ('Failed to load catalog (' + status + ')');
+        showAlert(msg, 'err');
+        document.getElementById('pageSub').textContent = 'Failed to load.';
+        return;
+      }
+      rows = data?.data?.artists || [];
+      const total = data?.data?.total ?? rows.length;
+      const count = data?.data?.count ?? rows.length;
+      document.getElementById('pageSub').textContent =
+        q
+          ? 'Showing ' + count + ' of ' + total + ' artists (filtered).'
+          : total + ' artists in catalog.';
+      renderGenreChips(data?.data?.genreLabels || []);
+      editingId = null;
+      renderTable();
+    }
+
+    /**
+     * Create artist from form.
+     */
+    async function addArtist() {
+      const artist = (document.getElementById('newArtist').value || '').trim();
+      const genre = (document.getElementById('newGenre').value || '').trim();
+      const genresRaw = (document.getElementById('newGenres').value || '').trim();
+      if (!artist) {
+        showAlert('Artist name is required.', 'err');
+        return;
+      }
+      const body = { artist, genre };
+      if (genresRaw) {
+        body.genres = genresRaw.split(/[;,|]+/).map(s => s.trim()).filter(Boolean);
+      }
+      const btn = document.getElementById('addBtn');
+      btn.disabled = true;
+      try {
+        const { ok, data } = await api('/artist-genres/catalog', 'POST', body);
+        if (!ok) {
+          showAlert(data?.error?.message || 'Create failed', 'err');
+          return;
+        }
+        document.getElementById('newArtist').value = '';
+        document.getElementById('newGenre').value = '';
+        document.getElementById('newGenres').value = '';
+        showAlert('Added ' + (data?.data?.artist?.artist || artist), 'ok');
+        await loadCatalog();
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    /**
+     * Save inline edit for a row.
+     * @param {HTMLElement} tr
+     */
+    async function saveRow(tr) {
+      const id = tr.getAttribute('data-id');
+      const artist = (tr.querySelector('[data-field="artist"]')?.value || '').trim();
+      const genre = (tr.querySelector('[data-field="genre"]')?.value || '').trim();
+      const genresRaw = (tr.querySelector('[data-field="genres"]')?.value || '').trim();
+      const body = {
+        artist,
+        genre,
+        genres: genresRaw
+          ? genresRaw.split(/[;,|]+/).map(s => s.trim()).filter(Boolean)
+          : [],
+      };
+      const { ok, data } = await api('/artist-genres/catalog/' + id, 'PUT', body);
+      if (!ok) {
+        showAlert(data?.error?.message || 'Update failed', 'err');
+        return;
+      }
+      showAlert('Updated ' + (data?.data?.artist?.artist || artist), 'ok');
+      editingId = null;
+      await loadCatalog();
+    }
+
+    /**
+     * Delete a catalog row.
+     * @param {string} id
+     * @param {string} artist
+     */
+    async function deleteRow(id, artist) {
+      if (!window.confirm('Delete artist genre for "' + artist + '"?')) return;
+      const { ok, data } = await api('/artist-genres/catalog/' + id, 'DELETE');
+      if (!ok) {
+        showAlert(data?.error?.message || 'Delete failed', 'err');
+        return;
+      }
+      showAlert('Deleted ' + artist, 'ok');
+      await loadCatalog();
+    }
+
+    document.getElementById('tableBody').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      if (!tr) return;
+      const id = tr.getAttribute('data-id');
+      const action = btn.getAttribute('data-action');
+      const row = rows.find(r => r.id === id);
+      if (action === 'edit') {
+        editingId = id;
+        renderTable();
+        return;
+      }
+      if (action === 'cancel') {
+        editingId = null;
+        renderTable();
+        return;
+      }
+      if (action === 'save') {
+        saveRow(tr);
+        return;
+      }
+      if (action === 'delete' && row) {
+        deleteRow(id, row.artist);
+      }
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', () => loadCatalog());
+    document.getElementById('searchBtn').addEventListener('click', () => loadCatalog());
+    document.getElementById('searchInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadCatalog();
+    });
+    document.getElementById('addBtn').addEventListener('click', () => addArtist());
+
+    wireBackLink();
+    if (!token) {
+      showAlert('Missing auth token. Open this page from the dashboard Tools tab while logged in as admin.', 'err');
+      document.getElementById('pageSub').textContent = 'Not authenticated.';
+    } else {
+      loadCatalog();
+    }
+  </script>
+</body>
+</html>
