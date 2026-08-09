@@ -145,11 +145,24 @@ async function getAdhocPaymentOptions(coeId, eventId) {
 
   /** Fee rates for on-spot preview (mobile enters base; server charges base+fees). */
   let onSpotFeeContext = null;
+  /** @type {string|null} */
+  let locationId = null;
+  /** @type {string|null} */
+  let locationName = null;
   if (eventId) {
     try {
       const { loadEventLocation } = require('../utils/eventLineFeeTotal');
       const { resolveThe1FeePercentForSeat } = require('./coeService');
       const location = await loadEventLocation(eventId);
+      if (location) {
+        locationId =
+          location._id?.toString?.() ||
+          (location.id != null ? String(location.id) : null);
+        locationName =
+          typeof location.name === 'string' && location.name.trim()
+            ? location.name.trim()
+            : null;
+      }
       const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
       const eid = String(eventId);
       let the1Pct = resolveThe1FeePercentForSeat({});
@@ -187,6 +200,8 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     payers,
     events: eventLines,
     selected_event: selectedEvent,
+    location_id: locationId,
+    location_name: locationName,
     on_spot_fee_context: onSpotFeeContext,
   };
 }

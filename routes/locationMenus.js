@@ -69,6 +69,106 @@ function normalizeSections(sections) {
 }
 
 /**
+ * Flatten priced, available menu items for on-spot picker.
+ * @param {object|null|undefined} menu
+ * @param {string} [q]
+ * @returns {Array<{id: string, name: string, price: number, sectionName: string, description: string}>}
+ */
+function flattenPricedItems(menu, q) {
+  const query = String(q || '')
+    .trim()
+    .toLowerCase();
+  /** @type {Array<{id: string, name: string, price: number, sectionName: string, description: string}>} */
+  const out = [];
+  const sections = Array.isArray(menu?.sections) ? menu.sections : [];
+  for (const section of sections) {
+    const sectionName = String(section?.name || '').trim();
+    const items = Array.isArray(section?.items) ? section.items : [];
+    for (const item of items) {
+      if (item?.available === false) continue;
+      const price = Number(item?.price);
+      if (!Number.isFinite(price) || !(price > 0)) continue;
+      const name = String(item?.name || '').trim();
+      if (!name) continue;
+      if (query && !name.toLowerCase().includes(query)) continue;
+      const id =
+        item?._id != null
+          ? String(item._id)
+          : `${sectionName}:${name}:${price}`;
+      out.push({
+        id,
+        name,
+        price,
+        sectionName,
+        description: String(item?.description || '').trim(),
+      });
+    }
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
+/**
+ * GET /v1/locations/:id/menu/priced-items
+ * Lightweight priced-item list for admin on-spot Venue menu picker.
+ */
+router.get('/priced-items', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const locationId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(locationId)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ID', message: 'Invalid location id' },
+      });
+    }
+
+    const location = await Location.findById(locationId).select('name type').lean();
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'LOCATION_NOT_FOUND', message: 'Location not found' },
+      });
+    }
+
+    const menu = await VenueMenu.findOne({ location_id: locationId })
+      .select('title currency sections.name sections.items')
+      .lean();
+    if (!menu) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'MENU_NOT_FOUND', message: 'No menu for this location' },
+        data: { location, items: [] },
+      });
+    }
+
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const items = flattenPricedItems(menu, q);
+
+    return res.json({
+      success: true,
+      data: {
+        location,
+        currency: menu.currency || 'USD',
+        title: menu.title || null,
+        items,
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[${new Date().toISOString()}] GET location menu priced-items error:`,
+      err,
+    );
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: 'MENU_PRICED_ITEMS_FAILED',
+        message: 'Failed to fetch priced menu items',
+      },
+    });
+  }
+});
+
+/**
  * GET /v1/locations/:id/menu
  * Fetch venue menu for a location (admin).
  */

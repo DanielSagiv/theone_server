@@ -55,4 +55,6 @@ const VenueMenuSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+VenueMenuSchema.index({ location_id: 1, status: 1 });
+
 module.exports = mongoose.model('VenueMenu', VenueMenuSchema);
