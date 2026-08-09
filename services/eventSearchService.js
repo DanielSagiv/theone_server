@@ -148,7 +148,7 @@ async function searchEvents(searchParams, options = {}) {
           path: 'location_id',
           select: 'name type address geo media sentiment'
         })
-        .select('name description type start_datetime end_datetime base_price currency status media seats performers')
+        .select('name description type start_datetime end_datetime base_price currency status media seats performers genre genres')
         .sort(sort)
         .skip(skip)
         .limit(limit)
