@@ -1,0 +1,2086 @@
+{
+  "generatedAt": "2026-08-09T08:56:25.720Z",
+  "source": "Artist/",
+  "count": 171,
+  "artists": [
+    {
+      "artistKey": "50CENT",
+      "artist": "50CENT",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "50CENT - Hip Hop Rap.jpg"
+      ]
+    },
+    {
+      "artistKey": "ACRAZE",
+      "artist": "ACRAZE",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ACRAZE EDM  Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "ADRIATIQUE",
+      "artist": "ADRIATIQUE",
+      "genre": "Melodic Techno Deep House",
+      "genres": [
+        "Melodic Techno",
+        "Deep House"
+      ],
+      "sourceFiles": [
+        "ADRIATIQUE - Melodic Techno  Deep House.webp"
+      ]
+    },
+    {
+      "artistKey": "ADVENTURE CLUB",
+      "artist": "ADVENTURE CLUB",
+      "genre": "EDM Dubstep Bass",
+      "genres": [
+        "EDM",
+        "Dubstep",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "ADVENTURE CLUB - EDM  Dubstep Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "AFROJACK",
+      "artist": "AFROJACK",
+      "genre": "EDM House",
+      "genres": [
+        "EDM",
+        "House"
+      ],
+      "sourceFiles": [
+        "AFROJACK - EDM House.png"
+      ]
+    },
+    {
+      "artistKey": "AL TAMAR",
+      "artist": "AL TAMAR",
+      "genre": "House",
+      "genres": [
+        "House"
+      ],
+      "sourceFiles": [
+        "AL TAMAR - House.jpg"
+      ]
+    },
+    {
+      "artistKey": "ALEC MONOPOLY",
+      "artist": "ALEC MONOPOLY",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ALEC MONOPOLY - EDM   Tech House.jpeg"
+      ]
+    },
+    {
+      "artistKey": "ALESSO",
+      "artist": "ALESSO",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "ALESSO - EDM Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "AMIRI PAUL",
+      "artist": "AMIRI PAUL",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "AMIRI PAUL - EDM Tech House.avif"
+      ]
+    },
+    {
+      "artistKey": "ASHANTI",
+      "artist": "ASHANTI",
+      "genre": "Hip Hop Rap R&B",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "ASHANTI - Hip Hop Rap R&B.jpeg"
+      ]
+    },
+    {
+      "artistKey": "BEATBREAKER",
+      "artist": "BEATBREAKER",
+      "genre": "House Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "House",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "BEATBREAKER - House Hip Hop Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "BELTRAN",
+      "artist": "BELTRAN",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "BELTRAN - EDM Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "BEN STERLING",
+      "artist": "BEN STERLING",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "BEN STERLING - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "BENNY BENASSI",
+      "artist": "BENNY BENASSI",
+      "genre": "EDM House",
+      "genres": [
+        "EDM",
+        "House"
+      ],
+      "sourceFiles": [
+        "BENNY BENASSI - EDM  House.webp"
+      ]
+    },
+    {
+      "artistKey": "BIG SEAN",
+      "artist": "BIG SEAN",
+      "genre": "Hip Hop Rap Trap",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "BIG SEAN  - Hip Hop Rap Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "BIGXTHAPLUG",
+      "artist": "BIGXTHAPLUG",
+      "genre": "Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "BIGXTHAPLUG - Hip Hop Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "BLONDISH",
+      "artist": "BLONDISH",
+      "genre": "Tech House Afro House Melodic Techno",
+      "genres": [
+        "Melodic Techno",
+        "Tech House",
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "BLONDISH - Tech House Afro House Melodic Techno.png"
+      ]
+    },
+    {
+      "artistKey": "BOB MOSES",
+      "artist": "Bob Moses",
+      "genre": "",
+      "genres": [],
+      "sourceFiles": [
+        "Bob Moses.jpg"
+      ]
+    },
+    {
+      "artistKey": "BONTAN",
+      "artist": "BONTAN",
+      "genre": "EDM Tech House Afro House",
+      "genres": [
+        "Tech House",
+        "Afro House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "BONTAN - EDM Tech House Afro House.png"
+      ]
+    },
+    {
+      "artistKey": "BUNT",
+      "artist": "Bunt",
+      "genre": "",
+      "genres": [],
+      "sourceFiles": [
+        "Bunt.jpg"
+      ]
+    },
+    {
+      "artistKey": "CALVIN HARRIS",
+      "artist": "CALVIN HARRIS",
+      "genre": "EDM Pop House",
+      "genres": [
+        "EDM",
+        "Pop",
+        "House"
+      ],
+      "sourceFiles": [
+        "CALVIN HARRIS -EDM Pop House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CASSIAN",
+      "artist": "CASSIAN",
+      "genre": "EDM Melodic House",
+      "genres": [
+        "Melodic House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "CASSIAN - EDM Melodic House.webp"
+      ]
+    },
+    {
+      "artistKey": "CEDRIC GERVAIS",
+      "artist": "CEDRIC GERVAIS",
+      "genre": "EDM House",
+      "genres": [
+        "EDM",
+        "House"
+      ],
+      "sourceFiles": [
+        "CEDRIC GERVAIS - EDM House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CHARLY JORDAN",
+      "artist": "CHARLY JORDAN",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "CHARLY JORDAN - EDM Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CHASE B",
+      "artist": "CHASE B",
+      "genre": "Hip Hop Rap Trap Pop",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "Trap",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "CHASE B - Hip Hop Rap Trap  Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "CHASEWEST",
+      "artist": "CHASEWEST",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "CHASEWEST - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CHENCHO CORLEONE",
+      "artist": "CHENCHO CORLEONE",
+      "genre": "Latin",
+      "genres": [
+        "Latin"
+      ],
+      "sourceFiles": [
+        "CHENCHO CORLEONE - Latin.jpg"
+      ]
+    },
+    {
+      "artistKey": "CHRIS GARCIA",
+      "artist": "CHRIS GARCIA",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "CHRIS GARCIA - Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "CHRIS LAKE",
+      "artist": "CHRIS LAKE",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "CHRIS LAKE - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CID",
+      "artist": "CID",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "CID - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CLOONEE",
+      "artist": "CLOONEE",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "CLOONEE - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "CRANKDAT",
+      "artist": "CRANKDAT",
+      "genre": "EDM Dubstep Trap",
+      "genres": [
+        "EDM",
+        "Dubstep",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "CRANKDAT - EDM  Dubstep  Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "CRESPO",
+      "artist": "CRESPO",
+      "genre": "EDM Latin Pop",
+      "genres": [
+        "EDM",
+        "Latin",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "CRESPO - EDM Latin  Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "D",
+      "artist": "D",
+      "genre": "MILES - R&B Pop",
+      "genres": [
+        "MILES",
+        "R",
+        "B",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "D-MILES - R&B Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "D O D",
+      "artist": "D.O.D",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "D.O.D - EDM Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "DANNY AVILA",
+      "artist": "DANNY AVILA",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "DANNY AVILA - Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "DAVID GUETTA",
+      "artist": "DAVID GUETTA",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "DAVID GUETTA - EDM  Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "DEADMAU5",
+      "artist": "DEADMAU5",
+      "genre": "Progressive Electro House",
+      "genres": [
+        "Electro House",
+        "Progressive"
+      ],
+      "sourceFiles": [
+        "DEADMAU5 - Progressive Electro House.jpg"
+      ]
+    },
+    {
+      "artistKey": "DEORRO",
+      "artist": "DEORRO",
+      "genre": "EDM Latin",
+      "genres": [
+        "EDM",
+        "Latin"
+      ],
+      "sourceFiles": [
+        "DEORRO - EDM Latin.avif"
+      ]
+    },
+    {
+      "artistKey": "DEVAULT",
+      "artist": "DEVAULT",
+      "genre": "Tech House - Bass",
+      "genres": [
+        "Tech House",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "DEVAULT - Tech House - Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "DILLON FRANCIS",
+      "artist": "DILLON FRANCIS",
+      "genre": "EDM Trap",
+      "genres": [
+        "EDM",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "DILLON FRANCIS - EDM Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "DIPLO",
+      "artist": "DIPLO",
+      "genre": "EDM House Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "House",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "DIPLO - EDM House Hip Hop  Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "DISCIP",
+      "artist": "DISCIP",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "DISCIP - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "DISCOLINES",
+      "artist": "DISCOLINES",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "DISCOLINES - EDM Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ BAMBOOZLE",
+      "artist": "DJ BAMBOOZLE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ BAMBOOZLE - Open Format (Various Genres).webp"
+      ]
+    },
+    {
+      "artistKey": "DJ BONICS",
+      "artist": "DJ BONICS",
+      "genre": "Hip Hop EDM Trap",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "DJ BONICS - Hip Hop EDM Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ BOOF",
+      "artist": "DJ BOOF",
+      "genre": "Hip Hop R&B",
+      "genres": [
+        "Hip Hop",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "DJ BOOF - Hip Hop R&B.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ BUZA",
+      "artist": "DJ BUZA",
+      "genre": "EDM Hip Hop",
+      "genres": [
+        "Hip Hop",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "DJ BUZA - EDM Hip Hop.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ CUTSWELL",
+      "artist": "DJ CUTSWELL",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ CUTSWELL - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ E",
+      "artist": "DJ E",
+      "genre": "ROCK - Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)",
+        "ROCK"
+      ],
+      "sourceFiles": [
+        "DJ E-ROCK - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ FIVE",
+      "artist": "DJ FIVE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ FIVE - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ HILLS",
+      "artist": "DJ HILLS",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "DJ HILLS - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ LUCKY YOU",
+      "artist": "DJ LUCKY YOU",
+      "genre": "EDM Hip Hop",
+      "genres": [
+        "Hip Hop",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "DJ LUCKY YOU - EDM Hip Hop.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ MONDO",
+      "artist": "DJ MONDO",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "DJ MONDO - EDM.png"
+      ]
+    },
+    {
+      "artistKey": "DJ PARADICE",
+      "artist": "DJ PARADICE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ PARADICE - Open Format (Various Genres).avif"
+      ]
+    },
+    {
+      "artistKey": "DJ PAULY D",
+      "artist": "DJ PAULY D",
+      "genre": "EDM Hip Hop Pop",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "DJ PAULY D - EDM Hip Hop Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ PHENOM",
+      "artist": "DJ PHENOM",
+      "genre": "EDM Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "DJ PHENOM - EDM Hip Hop Rap.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ PUFFY",
+      "artist": "DJ PUFFY",
+      "genre": "EDM Hip Hop Latin",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Latin"
+      ],
+      "sourceFiles": [
+        "DJ PUFFY - EDM Hip Hop  Latin.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ SHIFT",
+      "artist": "DJ SHIFT",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ SHIFT - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ SNAKE",
+      "artist": "DJ SNAKE",
+      "genre": "EDM Trap Dubstep Hip Hop Pop",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Trap",
+        "Dubstep",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "DJ SNAKE - EDM Trap Dubstep Hip Hop Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "DJ SOURMILK",
+      "artist": "DJ SOURMILK",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "DJ SOURMILK - Hip Hop Rap.jpeg"
+      ]
+    },
+    {
+      "artistKey": "DJ VICE",
+      "artist": "DJ VICE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "DJ VICE - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "DMTRI",
+      "artist": "DMTRI",
+      "genre": "Afro House Melodic House & Techno",
+      "genres": [
+        "Melodic House",
+        "Afro House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "DMTRI - Afro House Melodic House & Techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "DOM DOLLA",
+      "artist": "DOM DOLLA",
+      "genre": "Tech House Bass",
+      "genres": [
+        "Tech House",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "DOM DOLLA - Tech House Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "DOMBERSKY",
+      "artist": "DOMBERSKY",
+      "genre": "EDM Disco Tech House",
+      "genres": [
+        "Tech House",
+        "EDM",
+        "Disco"
+      ],
+      "sourceFiles": [
+        "DOMBERSKY - EDM Disco  Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "DRE SINATRA",
+      "artist": "DRE SINATRA",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "DRE SINATRA - Hip Hop  Rap.jpg"
+      ]
+    },
+    {
+      "artistKey": "ELDERBROOK",
+      "artist": "ELDERBROOK",
+      "genre": "Melodic House & Techno",
+      "genres": [
+        "Melodic House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "ELDERBROOK - Melodic House & Techno.webp"
+      ]
+    },
+    {
+      "artistKey": "ELI BROWN",
+      "artist": "ELI BROWN",
+      "genre": "Tech House Techno",
+      "genres": [
+        "Tech House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "ELI BROWN - Tech House Techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "ERIC D",
+      "artist": "ERIC D",
+      "genre": "LUX - Open Format (Various Genre)",
+      "genres": [
+        "Open Format",
+        "LUX",
+        "(Various",
+        "Genre)"
+      ],
+      "sourceFiles": [
+        "ERIC D-LUX - Open Format (Various Genre).jpg"
+      ]
+    },
+    {
+      "artistKey": "ERIC FORBES",
+      "artist": "ERIC FORBES",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "ERIC FORBES - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "ERIC REMY",
+      "artist": "ERIC REMY",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ERIC REMY - EDM Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "FABOLOUS",
+      "artist": "FABOLOUS",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "FABOLOUS - Hip Hop  Rap.jpeg"
+      ]
+    },
+    {
+      "artistKey": "FISHER",
+      "artist": "FISHER",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "FISHER - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "FOUR COLOR ZACK",
+      "artist": "FOUR COLOR ZACK",
+      "genre": "Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "FOUR COLOR ZACK - Hip Hop Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "FRANCIS MERCIER",
+      "artist": "FRANCIS MERCIER",
+      "genre": "Tech House Afro House",
+      "genres": [
+        "Tech House",
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "FRANCIS MERCIER - Tech House Afro House.jpg"
+      ]
+    },
+    {
+      "artistKey": "FRANZEN",
+      "artist": "FRANZEN",
+      "genre": "Hip Hop Rap R&B",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "FRANZEN - Hip Hop Rap R&B.jpg"
+      ]
+    },
+    {
+      "artistKey": "FRENCH MONTANA",
+      "artist": "FRENCH MONTANA",
+      "genre": "Hip Hop Rap Pop Trap",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "Pop",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "FRENCH MONTANA - Hip Hop Rap Pop Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "GORDO",
+      "artist": "GORDO",
+      "genre": "Tech House Techno",
+      "genres": [
+        "Tech House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "GORDO  - Tech House Techno.png"
+      ]
+    },
+    {
+      "artistKey": "GORGON CITY",
+      "artist": "GORGON CITY",
+      "genre": "EDM Deep House",
+      "genres": [
+        "Deep House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "GORGON CITY - EDM Deep House.jpg"
+      ]
+    },
+    {
+      "artistKey": "GREG LOPEZ",
+      "artist": "GREG LOPEZ",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "GREG LOPEZ - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "GRYFFIN",
+      "artist": "GRYFFIN",
+      "genre": "Dubstep Bass Melodic House",
+      "genres": [
+        "Melodic House",
+        "Dubstep",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "GRYFFIN - Dubstep Bass Melodic House.jpg"
+      ]
+    },
+    {
+      "artistKey": "HNTR",
+      "artist": "HNTR",
+      "genre": "EDM Melodic House Techno",
+      "genres": [
+        "Melodic House",
+        "EDM",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "HNTR - EDM Melodic House Techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "HUGEL",
+      "artist": "HUGEL",
+      "genre": "Afro House Tech House",
+      "genres": [
+        "Tech House",
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "HUGEL- Afro House Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "ILLENIUM",
+      "artist": "ILLENIUM",
+      "genre": "EDM Bass Dubstep",
+      "genres": [
+        "EDM",
+        "Bass",
+        "Dubstep"
+      ],
+      "sourceFiles": [
+        "ILLENIUM - EDM Bass Dubstep.jpg"
+      ]
+    },
+    {
+      "artistKey": "IRV G",
+      "artist": "IRV G",
+      "genre": "Hip Hop - Rap - R&B",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "IRV G - Hip Hop - Rap - R&B.jpg"
+      ]
+    },
+    {
+      "artistKey": "ITS MURPH",
+      "artist": "ITS MURPH",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ITS MURPH - EDM.webp"
+      ]
+    },
+    {
+      "artistKey": "JERRO",
+      "artist": "JERRO",
+      "genre": "melodic house deep house",
+      "genres": [
+        "Melodic House",
+        "Deep House"
+      ],
+      "sourceFiles": [
+        "JERRO melodic house deep house.jpg"
+      ]
+    },
+    {
+      "artistKey": "JIGITZ",
+      "artist": "JIGITZ",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "JIGITZ- EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "JOHN SUMMIT",
+      "artist": "JOHN SUMMIT",
+      "genre": "EDM Tech House Melodic House",
+      "genres": [
+        "Melodic House",
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "JOHN SUMMIT - EDM Tech House Melodic House.jpg"
+      ]
+    },
+    {
+      "artistKey": "JONAS BLUE",
+      "artist": "JONAS BLUE",
+      "genre": "EDM Tropical House",
+      "genres": [
+        "Tropical House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "JONAS BLUE - EDM Tropical House.jpg"
+      ]
+    },
+    {
+      "artistKey": "JOSH BAKER",
+      "artist": "JOSH BAKER",
+      "genre": "EDM House",
+      "genres": [
+        "EDM",
+        "House"
+      ],
+      "sourceFiles": [
+        "JOSH BAKER  - EDM House.webp"
+      ]
+    },
+    {
+      "artistKey": "JOSHWA",
+      "artist": "JOSHWA",
+      "genre": "Tech House EDM",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "JOSHWA - Tech House EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "JUSTIN CREDIBLE",
+      "artist": "JUSTIN CREDIBLE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "JUSTIN CREDIBLE - Open Format (Various Genres).webp"
+      ]
+    },
+    {
+      "artistKey": "KASKADE",
+      "artist": "KASKADE",
+      "genre": "EDM Deep House Tech House",
+      "genres": [
+        "Tech House",
+        "Deep House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "KASKADE - EDM Deep House Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "KETTAMA",
+      "artist": "KETTAMA",
+      "genre": "EDM House Techno",
+      "genres": [
+        "EDM",
+        "House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "KETTAMA - EDM House Techno.webp"
+      ]
+    },
+    {
+      "artistKey": "KNOCK2",
+      "artist": "KNOCK2",
+      "genre": "Trap Bass",
+      "genres": [
+        "Trap",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "KNOCK2 - Trap Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "KROMI",
+      "artist": "KROMI",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "KROMI - EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "KUNGS",
+      "artist": "KUNGS",
+      "genre": "EDM Tropical House Pop",
+      "genres": [
+        "Tropical House",
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "KUNGS - EDM Tropical House Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "KYGO",
+      "artist": "KYGO",
+      "genre": "EDM Pop Tropical House",
+      "genres": [
+        "Tropical House",
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "KYGO - EDM Pop Tropical House.jpeg"
+      ]
+    },
+    {
+      "artistKey": "KYLE COOKE",
+      "artist": "KYLE COOKE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "KYLE COOKE - Open Format (Various Genres).webp"
+      ]
+    },
+    {
+      "artistKey": "LCORE",
+      "artist": "L’CORE",
+      "genre": "Afro House Melodic House",
+      "genres": [
+        "Melodic House",
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "L’CORE - Afro House Melodic House.jpg"
+      ]
+    },
+    {
+      "artistKey": "LAIDBACK LUKE",
+      "artist": "LAIDBACK LUKE",
+      "genre": "house electro house techno",
+      "genres": [
+        "Electro House",
+        "house",
+        "techno"
+      ],
+      "sourceFiles": [
+        "LAIDBACK LUKE - house electro house techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "ASZEWO",
+      "artist": "ŁASZEWO",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "ŁASZEWO - EDM Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "LAVERN",
+      "artist": "LAVERN",
+      "genre": "EDM Deep House",
+      "genres": [
+        "Deep House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LAVERN - EDM Deep House.jpg"
+      ]
+    },
+    {
+      "artistKey": "LAYTON GIORDANI",
+      "artist": "LAYTON GIORDANI",
+      "genre": "EDM Tech House Melodic Techno",
+      "genres": [
+        "Melodic Techno",
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LAYTON GIORDANI - EDM Tech House Melodic Techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "LEMA",
+      "artist": "LEMA",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LEMA - EDM Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "LEVI",
+      "artist": "LEVI",
+      "genre": "EDM Afro House",
+      "genres": [
+        "Afro House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LEVI - EDM Afro House.jpeg"
+      ]
+    },
+    {
+      "artistKey": "LEVITY",
+      "artist": "LEVITY",
+      "genre": "EDM - Dubstep - Trap Bass",
+      "genres": [
+        "EDM",
+        "Dubstep",
+        "Trap",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "LEVITY - EDM - Dubstep - Trap Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "LINSKA",
+      "artist": "LINSKA",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "LINSKA - Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "LOST FREQUENCIES",
+      "artist": "LOST FREQUENCIES",
+      "genre": "EDM Tropical House",
+      "genres": [
+        "Tropical House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LOST FREQUENCIES - EDM  Tropical House.jpg"
+      ]
+    },
+    {
+      "artistKey": "LOUD LUXURY",
+      "artist": "LOUD LUXURY",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LOUD LUXURY - EDM.webp"
+      ]
+    },
+    {
+      "artistKey": "LOUIS THE CHILD",
+      "artist": "LOUIS THE CHILD",
+      "genre": "EDM Bass House",
+      "genres": [
+        "Bass House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "LOUIS THE CHILD - EDM  Bass House.jpg"
+      ]
+    },
+    {
+      "artistKey": "LUIS TORRES",
+      "artist": "LUIS TORRES",
+      "genre": "EDM House",
+      "genres": [
+        "EDM",
+        "House"
+      ],
+      "sourceFiles": [
+        "LUIS TORRES - EDM House.jpg"
+      ]
+    },
+    {
+      "artistKey": "MARSHMELLOE",
+      "artist": "MARSHMELLOE",
+      "genre": "EDM Trap Bass",
+      "genres": [
+        "EDM",
+        "Trap",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "MARSHMELLOE - EDM Trap Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "MARTIN GARRIX",
+      "artist": "MARTIN GARRIX",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "MARTIN GARRIX - EDM Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "MATRODA",
+      "artist": "MATRODA",
+      "genre": "Tech House Bass",
+      "genres": [
+        "Tech House",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "MATRODA - Tech House  Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "MAU P",
+      "artist": "MAU P",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "MAU P - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "MAX STYLER",
+      "artist": "MAX STYLER",
+      "genre": "EDM Tech House Memodic Techno",
+      "genres": [
+        "Tech House",
+        "EDM",
+        "Memodic",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "MAX STYLER - EDM Tech House Memodic Techno.jpg"
+      ]
+    },
+    {
+      "artistKey": "ME N U",
+      "artist": "ME N ü",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ME N ü - EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "MELE",
+      "artist": "Melé",
+      "genre": "tech house",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "Melé - tech house.webp"
+      ]
+    },
+    {
+      "artistKey": "METRO BOOMIN",
+      "artist": "METRO BOOMIN",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "METRO BOOMIN - Hip Hop Rap.webp"
+      ]
+    },
+    {
+      "artistKey": "MIKE ATTACK",
+      "artist": "MIKE ATTACK",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "MIKE ATTACK - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "MIKE POSNER",
+      "artist": "MIKE POSNER",
+      "genre": "EDM Pop Hip Hop R&B",
+      "genres": [
+        "Hip Hop",
+        "EDM",
+        "Pop",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "MIKE POSNER - EDM Pop  Hip Hop R&B.jpg"
+      ]
+    },
+    {
+      "artistKey": "MIKEY FRANCIS",
+      "artist": "MIKEY FRANCIS",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "MIKEY FRANCIS - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "MONEYBAGG YO",
+      "artist": "MONEYBAGG YO",
+      "genre": "Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "MONEYBAGG YO - Hip Hop Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "MURDA BEATZ",
+      "artist": "MURDA BEATZ",
+      "genre": "Hip Hop Trap",
+      "genres": [
+        "Hip Hop",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "MURDA BEATZ - Hip Hop  Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "MUSTARD",
+      "artist": "MUSTARD",
+      "genre": "Hip Hop R&B Pop",
+      "genres": [
+        "Hip Hop",
+        "R",
+        "B",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "MUSTARD - Hip Hop R&B Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "NE",
+      "artist": "NE",
+      "genre": "YO - Hip Hop R&B Pop",
+      "genres": [
+        "Hip Hop",
+        "YO",
+        "R",
+        "B",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "NE-YO - Hip Hop  R&B Pop.jpeg"
+      ]
+    },
+    {
+      "artistKey": "NIC VANS",
+      "artist": "NIC VANS",
+      "genre": "EDM Bass Pop",
+      "genres": [
+        "EDM",
+        "Bass",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "NIC VANS - EDM Bass Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "NICE BERNARDINI",
+      "artist": "NICE BERNARDINI",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "NICE BERNARDINI - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "NIIKO X SWAE",
+      "artist": "NIIKO X SWAE",
+      "genre": "EDM Bass",
+      "genres": [
+        "EDM",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "NIIKO X SWAE - EDM Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "NIMINO",
+      "artist": "NIMINO",
+      "genre": "House Hip Hop Pop",
+      "genres": [
+        "Hip Hop",
+        "House",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "NIMINO - House Hip Hop Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "ODD MOB",
+      "artist": "ODD MOB",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "ODD MOB - Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "ODESZA",
+      "artist": "ODESZA",
+      "genre": "EDM Bass Trap",
+      "genres": [
+        "EDM",
+        "Bass",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "ODESZA - EDM Bass  Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "OHGEESY",
+      "artist": "OHGEESY",
+      "genre": "Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "OHGEESY - Hip Hop  Rap.jpg"
+      ]
+    },
+    {
+      "artistKey": "OMAR",
+      "artist": "OMAR+",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "OMAR+  - Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "OMNOM",
+      "artist": "OMNOM",
+      "genre": "Tech House Bass",
+      "genres": [
+        "Tech House",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "OMNOM - Tech House Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "P",
+      "artist": "P",
+      "genre": "LO - Hip Hop Rap",
+      "genres": [
+        "Hip Hop",
+        "LO",
+        "Rap"
+      ],
+      "sourceFiles": [
+        "P-LO - Hip Hop Rap.jpg"
+      ]
+    },
+    {
+      "artistKey": "PHOREYZ",
+      "artist": "PHOREYZ",
+      "genre": "Hip Hop R&B",
+      "genres": [
+        "Hip Hop",
+        "R",
+        "B"
+      ],
+      "sourceFiles": [
+        "PHOREYZ - Hip Hop R&B.jpg"
+      ]
+    },
+    {
+      "artistKey": "PROSPA",
+      "artist": "PROSPA",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "PROSPA - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "R3HAB",
+      "artist": "R3HAB",
+      "genre": "EDM Popp",
+      "genres": [
+        "EDM",
+        "Popp"
+      ],
+      "sourceFiles": [
+        "R3HAB - EDM Popp.jpg"
+      ]
+    },
+    {
+      "artistKey": "RICK ROSS",
+      "artist": "RICK ROSS",
+      "genre": "Hip Hop",
+      "genres": [
+        "Hip Hop"
+      ],
+      "sourceFiles": [
+        "RICK ROSS - Hip Hop.jpg"
+      ]
+    },
+    {
+      "artistKey": "RIODAN",
+      "artist": "RIODAN",
+      "genre": "EDM Tech House",
+      "genres": [
+        "Tech House",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "RIODAN - EDM Tech House.png"
+      ]
+    },
+    {
+      "artistKey": "ROB GUSON",
+      "artist": "ROB GUSON",
+      "genre": "EDM Techno House",
+      "genres": [
+        "EDM",
+        "Techno",
+        "House"
+      ],
+      "sourceFiles": [
+        "ROB GUSON - EDM Techno House.jpg"
+      ]
+    },
+    {
+      "artistKey": "ROSS",
+      "artist": "ROSS",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "ROSS - EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "R Z",
+      "artist": "RØZ",
+      "genre": "EDM Tech House Trap",
+      "genres": [
+        "Tech House",
+        "EDM",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "RØZ - EDM Tech House Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "RUFUS DU SOL",
+      "artist": "Rüfüs DU SOL",
+      "genre": "Melodic House & Techno",
+      "genres": [
+        "Melodic House",
+        "Techno"
+      ],
+      "sourceFiles": [
+        "Rüfüs DU SOL - Melodic House & Techno.jpg",
+        "Rüfüs DU SOL - Melodic House & Techno2.jpg"
+      ]
+    },
+    {
+      "artistKey": "SAM FELDT",
+      "artist": "SAM FELDT",
+      "genre": "Deep House Pop",
+      "genres": [
+        "Deep House",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "SAM FELDT - Deep House Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "SHIZMA",
+      "artist": "SHIZMA",
+      "genre": "Afro House",
+      "genres": [
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "SHIZMA - Afro House.jpg"
+      ]
+    },
+    {
+      "artistKey": "SIDEPIECE",
+      "artist": "SIDEPIECE",
+      "genre": "EDM Tech House Bass",
+      "genres": [
+        "Tech House",
+        "EDM",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "SIDEPIECE - EDM Tech House Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "SLANDER",
+      "artist": "SLANDER",
+      "genre": "Bass Trap Dubstep",
+      "genres": [
+        "Bass",
+        "Trap",
+        "Dubstep"
+      ],
+      "sourceFiles": [
+        "SLANDER - Bass Trap Dubstep.jpg"
+      ]
+    },
+    {
+      "artistKey": "SOFFI TUKKER",
+      "artist": "SOFFI TUKKER",
+      "genre": "EDM Pop House",
+      "genres": [
+        "EDM",
+        "Pop",
+        "House"
+      ],
+      "sourceFiles": [
+        "SOFFI TUKKER - EDM Pop House.jpg"
+      ]
+    },
+    {
+      "artistKey": "SOMMER RAY",
+      "artist": "SOMMER RAY",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "SOMMER RAY - EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "STEPHI K",
+      "artist": "STEPHI K",
+      "genre": "EDM Hip Hop Tech House",
+      "genres": [
+        "Tech House",
+        "Hip Hop",
+        "EDM"
+      ],
+      "sourceFiles": [
+        "STEPHI K - EDM Hip Hop Tech House.webp"
+      ]
+    },
+    {
+      "artistKey": "STEVE AOKI",
+      "artist": "STEVE AOKI",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "STEVE AOKI - EDM Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "SUBTRONICS",
+      "artist": "SUBTRONICS",
+      "genre": "Dubstep Bass",
+      "genres": [
+        "Dubstep",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "SUBTRONICS - Dubstep Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "SULLIVAN KING",
+      "artist": "SULLIVAN KING",
+      "genre": "Dubstep Bass",
+      "genres": [
+        "Dubstep",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "SULLIVAN KING - Dubstep Bass.webp"
+      ]
+    },
+    {
+      "artistKey": "THE CHAINSMOKERS",
+      "artist": "THE CHAINSMOKERS",
+      "genre": "EDM Bass",
+      "genres": [
+        "EDM",
+        "Bass"
+      ],
+      "sourceFiles": [
+        "THE CHAINSMOKERS - EDM Bass.jpg"
+      ]
+    },
+    {
+      "artistKey": "TIESTO",
+      "artist": "Tiësto",
+      "genre": "EDM Trance Pop",
+      "genres": [
+        "EDM",
+        "Trance",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "Tiësto - EDM Trance Pop 2.jpg",
+        "Tiësto - EDM Trance Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "TIMMY TRUMPET",
+      "artist": "TIMMY TRUMPET",
+      "genre": "EDM",
+      "genres": [
+        "EDM"
+      ],
+      "sourceFiles": [
+        "TIMMY TRUMPET - EDM.jpg"
+      ]
+    },
+    {
+      "artistKey": "TWINSICK",
+      "artist": "TWINSICK",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "TWINSICK - EDM Pop.webp"
+      ]
+    },
+    {
+      "artistKey": "TWO FRIENDS",
+      "artist": "TWO FRIENDS",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "TWO FRIENDS - EDM Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "TY DOLLA IGN",
+      "artist": "TY DOLLA �IGN",
+      "genre": "Rap Hip Hop R&B Trap",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "R",
+        "B",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "TY DOLLA �IGN - Rap Hip Hop R&B Trap.webp"
+      ]
+    },
+    {
+      "artistKey": "TYGA",
+      "artist": "TYGA",
+      "genre": "Hip Hop Pop Rap Trap",
+      "genres": [
+        "Hip Hop",
+        "Pop",
+        "Rap",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "TYGA - Hip Hop  Pop Rap Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "VALENTINO KHAN",
+      "artist": "VALENTINO KHAN",
+      "genre": "Bass Trap",
+      "genres": [
+        "Bass",
+        "Trap"
+      ],
+      "sourceFiles": [
+        "VALENTINO KHAN - Bass Trap.jpg"
+      ]
+    },
+    {
+      "artistKey": "VANDELUX",
+      "artist": "VANDELUX",
+      "genre": "Deep House",
+      "genres": [
+        "Deep House"
+      ],
+      "sourceFiles": [
+        "VANDELUX - Deep House.jpg"
+      ]
+    },
+    {
+      "artistKey": "WAKYIN",
+      "artist": "WAKYIN",
+      "genre": "Afro House Tech House",
+      "genres": [
+        "Tech House",
+        "Afro House"
+      ],
+      "sourceFiles": [
+        "WAKYIN - Afro House Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "WESTEND AND BISCITS",
+      "artist": "WESTEND AND BISCITS",
+      "genre": "Tech House",
+      "genres": [
+        "Tech House"
+      ],
+      "sourceFiles": [
+        "WESTEND AND BISCITS - Tech House.jpg"
+      ]
+    },
+    {
+      "artistKey": "WIZ KHALIFA",
+      "artist": "WIZ KHALIFA",
+      "genre": "Hip HopRap Trap Pop",
+      "genres": [
+        "Hip Hop",
+        "Rap",
+        "Trap",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "WIZ KHALIFA - Hip HopRap Trap Pop.jpg"
+      ]
+    },
+    {
+      "artistKey": "YU YOLIE",
+      "artist": "YU YOLIE",
+      "genre": "Open Format (Various Genres)",
+      "genres": [
+        "Open Format (Various Genres)"
+      ],
+      "sourceFiles": [
+        "YU YOLIE - Open Format (Various Genres).jpg"
+      ]
+    },
+    {
+      "artistKey": "ZEDD",
+      "artist": "ZEDD",
+      "genre": "EDM Pop",
+      "genres": [
+        "EDM",
+        "Pop"
+      ],
+      "sourceFiles": [
+        "ZEDD - EDM Pop.jpg"
+      ]
+    }
+  ]
+}

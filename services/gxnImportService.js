@@ -1,6 +1,9 @@
 const Location = require('../models/Location');
 const Event = require('../models/Event');
 const { inheritSeatsFromLocation } = require('./locationEventService');
+const {
+  applyEventArtistGenreMatch,
+} = require('./eventArtistGenreMatchService');
 
 /**
  * Map GXN venue type to THE1 location type
@@ -568,6 +571,15 @@ async function importEventsFromGXN(gxnData, userId) {
             created_by: userId,
             updated_by: userId
           };
+
+          try {
+            await applyEventArtistGenreMatch(eventObj);
+          } catch (genreErr) {
+            console.warn(
+              '[gxnImport] artist genre match:',
+              genreErr?.message || genreErr,
+            );
+          }
           
           // Create event
           const event = await Event.create(eventObj);

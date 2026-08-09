@@ -16,6 +16,9 @@ const multer = require('multer');
 const { enrichEventImageFields } = require('../utils/ensureImageMetadata');
 const { uploadMediaWithMetadata } = require('../utils/mediaUploadHelpers');
 const { resolveVenueTimezone } = require('../utils/venueTimezone');
+const {
+  applyEventArtistGenreMatch,
+} = require('../services/eventArtistGenreMatchService');
 
 const upload = multer({ 
   storage: multer.memoryStorage(), 
@@ -441,6 +444,12 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       priority: 0
     };
 
+    try {
+      await applyEventArtistGenreMatch(eventData);
+    } catch (genreErr) {
+      console.warn('[events] create artist genre match:', genreErr?.message || genreErr);
+    }
+
     console.log('=== FINAL EVENT DATA ===');
     console.log('Event data media field:', eventData.media);
     console.log('Media type:', typeof eventData.media);
@@ -605,6 +614,19 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       if (!explicitTz || explicitTz === 'UTC') {
         updateData.timezone = resolveVenueTimezone(locationForTz);
       }
+    }
+
+    // Recompute artist→genre when name is set/changed (server-owned fields).
+    if (Object.prototype.hasOwnProperty.call(value, 'name')) {
+      try {
+        await applyEventArtistGenreMatch(updateData);
+      } catch (genreErr) {
+        console.warn('[events] update artist genre match:', genreErr?.message || genreErr);
+      }
+    } else {
+      delete updateData.genre;
+      delete updateData.genres;
+      delete updateData.matched_artists;
     }
 
     let event = await Event.findByIdAndUpdate(

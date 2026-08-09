@@ -249,6 +249,19 @@ const createEventSchema = Joi.object({
       )
       .optional(),
   })).optional(),
+  // Server-owned artist→genre match fields (optional on input; overwritten on write)
+  genre: Joi.string().allow('').optional(),
+  genres: Joi.array().items(Joi.string().allow('')).optional(),
+  matched_artists: Joi.array()
+    .items(
+      Joi.object({
+        artist: Joi.string().allow('').optional(),
+        artistKey: Joi.string().allow('').optional(),
+        genre: Joi.string().allow('').optional(),
+        genres: Joi.array().items(Joi.string().allow('')).optional(),
+      }),
+    )
+    .optional(),
 });
 
 // Update event validation schema

@@ -3,6 +3,9 @@ const cheerio = require('cheerio');
 const Location = require('../models/Location');
 const Event = require('../models/Event');
 const { inheritSeatsFromLocation } = require('./locationEventService');
+const {
+  applyEventArtistGenreMatch,
+} = require('./eventArtistGenreMatchService');
 
 const TAO_EVENTS_LISTING_URL = process.env.TAO_EVENTS_URL || 'https://taogroup.com/events/?event_venue=121&event_city=81&';
 const REQUEST_DELAY_MS = 800;
@@ -859,6 +862,15 @@ async function runTaoGroupImport(userId) {
           created_by: userId,
           updated_by: userId
         };
+
+        try {
+          await applyEventArtistGenreMatch(eventPayload);
+        } catch (genreErr) {
+          console.warn(
+            '[Tao import] artist genre match:',
+            genreErr?.message || genreErr,
+          );
+        }
 
         if (event) {
           Object.assign(event, eventPayload);

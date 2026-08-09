@@ -192,6 +192,22 @@ const EventSchema = new mongoose.Schema({
       },
     ],
   }],
+
+  /**
+   * ArtistGenre match from event.name (server-owned; set on create/update).
+   */
+  matched_artists: [
+    {
+      artist: { type: String, trim: true },
+      artistKey: { type: String, trim: true },
+      genre: { type: String, trim: true, default: '' },
+      genres: [{ type: String, trim: true }],
+    },
+  ],
+  /** Union of tokenized genres from matched artists. */
+  genres: [{ type: String, trim: true }],
+  /** Primary display genre label from best match(es). */
+  genre: { type: String, trim: true, default: '' },
   
   // Event Settings
   requires_approval: { type: Boolean, default: false }, // Requires admin approval
@@ -246,6 +262,7 @@ EventSchema.index({ status: 1, start_datetime: 1 });
 EventSchema.index({ start_datetime: 1, end_datetime: 1 });
 EventSchema.index({ name: 'text', description: 'text' });
 EventSchema.index({ tags: 1 });
+EventSchema.index({ genres: 1 });
 EventSchema.index({ created_by: 1, status: 1 });
 EventSchema.index({ gxnEventCode: 1 }, { sparse: true }); // Index for GXN event code lookups
 EventSchema.index({ taoEventId: 1 }, { sparse: true }); // Index for Tao Group event lookups

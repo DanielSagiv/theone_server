@@ -79,8 +79,8 @@ async function createEventWithSeats(eventData, userId) {
     // Create event
     console.log('Event data before creation:', eventData);
     console.log('Event media in data:', eventData.media);
-    
-    const event = new Event({
+
+    const payload = {
       ...eventData,
       seats: inheritedSeats,
       units: inheritedUnits,
@@ -95,7 +95,21 @@ async function createEventWithSeats(eventData, userId) {
       coe_count: 0,
       is_featured: false,
       priority: 0
-    });
+    };
+
+    try {
+      const {
+        applyEventArtistGenreMatch,
+      } = require('./eventArtistGenreMatchService');
+      await applyEventArtistGenreMatch(payload);
+    } catch (genreErr) {
+      console.warn(
+        '[eventService] artist genre match:',
+        genreErr?.message || genreErr,
+      );
+    }
+
+    const event = new Event(payload);
     
     console.log('Event object before save:', event);
     console.log('Event media before save:', event.media);
