@@ -70,11 +70,11 @@ Scrape events from venue websites and populate them into THE1 (locations → eve
 |----|----------|
 | Platform select | Local / Stage / Prod (`sessionStorage`) |
 | Connect | Stage/Prod admin email+password → `POST /scrap-events/platforms/:platform/login` → token in `sessionStorage` (never logged) |
-| Per-row Import | Local prepare-import (scrape) → Local `POST /events` **or** `POST /platforms/:platform/commit-import` (remap location by name, seats by code, re-host flyer to target `/events/media/upload`) |
+| Per-row Import | Local prepare-import (scrape) → `POST /platforms/:platform/commit-import` (Local/Stage/Prod): remap location/seats, **AI-clean flyer** (text removal, keep AR), re-host to target `/events/media/upload` |
 | Show Live Events | Local scrape; if Stage/Prod, re-partition via `POST /platforms/:platform/partition` |
 | Big Gun | Required date range; venues in order Encore → LIV → OMNIA → Hakkasan → TAO Beach → Palm Tree → Marquee Day → Marquee Night; sequential; on error **Continue** / **Abort** |
 
-**Env:** `SCRAP_IMPORT_STAGE_API_BASE` (default `https://stage.the1.vip/v1`), `SCRAP_IMPORT_PROD_API_BASE` (default `https://app.the1.vip/v1`).
+**Env:** `SCRAP_IMPORT_STAGE_API_BASE` (default `https://stage.the1.vip/v1`), `SCRAP_IMPORT_PROD_API_BASE` (default `https://app.the1.vip/v1`), `OPENAI_API_KEY` + optional `OPENAI_IMAGE_MODEL` for flyer AI, `SCRAP_EVENT_FLYER_AI=0` to skip AI (re-host original only).
 
 **Deploy note:** Stage/Prod must include `POST /v1/scrap-events/lookup-external-ids` **and** `POST /v1/scrap-events/lookup-event-identities` for accurate remote partition (older deploys fall back to external-id-only / treat as new until create-time duplicate check).
 
@@ -86,6 +86,10 @@ Imports are blocked as **already imported** if **either** matches an existing TH
 2. **Identity** — `location_id` + calendar date (`YYYY-MM-DD` in venue TZ, default `America/Los_Angeles`) + normalized name (trim, collapse whitespace, case-insensitive)
 
 Used on prepare-import, platform commit (Local/Stage/Prod), Show Live partition, and Big Gun “new” lists. Helper: `services/scrapEvents/scrapImportDedupe.js`.
+
+### Event flyer AI clean (commit)
+
+On every scrap commit (row Import + Big Gun), after download: OpenAI `images.edit` removes text/logos from the venue flyer, sharpens, keeps **source aspect ratio** (max long edge ~1536 JPEG), then uploads to THE1 media. Same family as Tools → Section image AI, but **not** forced 4:3. On AI failure (or no key / `SCRAP_EVENT_FLYER_AI=0`): warn and re-host the original. Helper: `services/scrapEvents/scrapEventFlyerAiService.js` via `resolveFlyerMediaForCommit`.
 
 ## What works today (LIV Night + Beach)
 

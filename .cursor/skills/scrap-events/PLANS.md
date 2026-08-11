@@ -96,6 +96,7 @@ Import events from venue websites into THE1, venue by venue, via the EJS **Event
 | yes | Dual dedupe: external id **or** location + date + normalized name (`scrapImportDedupe.js`) |
 | yes | `POST /scrap-events/lookup-event-identities` for identity partition/commit |
 | yes | Big Gun bulk runner (Encore-first venue order, pause Continue/Abort) |
+| yes | Event flyer AI clean on commit (text removal, keep AR; fallback to original) |
 | no | Hakkasan Studio / R&Bae seat map |
 | no | Production hardening (audit, rate limits) |
 | no | Additional scrap-events venues (current set complete) |

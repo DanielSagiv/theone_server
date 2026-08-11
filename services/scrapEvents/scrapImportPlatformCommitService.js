@@ -22,6 +22,12 @@ const {
   findExistingEventByScrapIdentity,
   lookupEventIdentitiesLocal,
 } = require('./scrapImportDedupe');
+const {
+  isScrapEventFlyerAiEnabled,
+  cleanEventFlyerBuffer,
+  normalizeEventFlyerForApp,
+} = require('./scrapEventFlyerAiService');
+const { uploadMediaWithMetadata } = require('../../utils/mediaUploadHelpers');
 
 const LOG_PREFIX = '[scrap-import-commit]';
 
@@ -468,6 +474,138 @@ async function uploadFlyerToRemote(platform, token, file) {
 }
 
 /**
+ * Upload flyer bytes to local S3 via the same helper as POST /events/media/upload.
+ * @param {{ buffer: Buffer, contentType: string, filename: string }} file
+ * @param {string} userId
+ * @returns {Promise<object>}
+ */
+async function uploadFlyerLocal(file, userId) {
+  const uid = String(userId || 'scrap-import').trim() || 'scrap-import';
+  return uploadMediaWithMetadata(
+    {
+      buffer: file.buffer,
+      mimetype: file.contentType || 'image/jpeg',
+      originalname: file.filename || 'scrap-flyer.jpg',
+    },
+    `events/${uid}`,
+    uid
+  );
+}
+
+/**
+ * Download venue flyer, optionally AI-clean (text removal), re-host to THE1 media.
+ * On AI failure: warn and re-host the original bytes.
+ * @param {object} prefill
+ * @param {{ platform: string, token?: string|null, userId?: string|null }} opts
+ * @returns {Promise<{ media: object[], warnings: string[] }>}
+ */
+async function resolveFlyerMediaForCommit(prefill, opts = {}) {
+  const warnings = [];
+  const existing = Array.isArray(prefill?.media) ? [...prefill.media] : [];
+  const flyerUrl = existing[0]?.url ? String(existing[0].url).trim() : '';
+  if (!flyerUrl) {
+    return { media: existing, warnings };
+  }
+  if (/the1-media-uploads/i.test(flyerUrl)) {
+    return { media: existing, warnings };
+  }
+
+  const downloaded = await downloadFlyerImage(flyerUrl);
+  if (!downloaded?.buffer?.length) {
+    warnings.push('Flyer download failed; kept venue URL');
+    return { media: existing, warnings };
+  }
+
+  let uploadBuffer = downloaded.buffer;
+  let contentType = downloaded.contentType || 'image/jpeg';
+  let filename = downloaded.filename || 'scrap-flyer.jpg';
+  let width;
+  let height;
+  let aiCleaned = false;
+
+  if (isScrapEventFlyerAiEnabled()) {
+    try {
+      console.log(`${LOG_PREFIX} flyer AI clean: start`);
+      const cleaned = await cleanEventFlyerBuffer(downloaded.buffer);
+      uploadBuffer = cleaned.buffer;
+      contentType = cleaned.mime || 'image/jpeg';
+      filename = 'scrap-flyer-ai.jpg';
+      width = cleaned.width;
+      height = cleaned.height;
+      aiCleaned = true;
+      console.log(`${LOG_PREFIX} flyer AI clean: ok model=${cleaned.model}`);
+    } catch (aiErr) {
+      console.warn(`${LOG_PREFIX} flyer AI clean failed; using original:`, aiErr.message || aiErr);
+      warnings.push('Flyer AI clean failed; used original image');
+      try {
+        const normalized = await normalizeEventFlyerForApp(downloaded.buffer);
+        uploadBuffer = normalized.buffer;
+        contentType = normalized.mime;
+        filename = 'scrap-flyer.jpg';
+        width = normalized.width;
+        height = normalized.height;
+      } catch (_) {
+        // keep raw download bytes
+      }
+    }
+  } else {
+    try {
+      const normalized = await normalizeEventFlyerForApp(downloaded.buffer);
+      uploadBuffer = normalized.buffer;
+      contentType = normalized.mime;
+      filename = 'scrap-flyer.jpg';
+      width = normalized.width;
+      height = normalized.height;
+    } catch (_) {
+      // keep raw download
+    }
+  }
+
+  const file = { buffer: uploadBuffer, contentType, filename };
+  const platform = normalizeScrapImportPlatform(opts.platform || 'local');
+
+  let uploaded;
+  try {
+    if (platform === 'local') {
+      uploaded = await uploadFlyerLocal(file, opts.userId);
+    } else {
+      if (!opts.token) {
+        warnings.push('Flyer upload skipped: missing platform token');
+        return { media: existing, warnings };
+      }
+      uploaded = await uploadFlyerToRemote(platform, opts.token, file);
+    }
+  } catch (upErr) {
+    console.warn(`${LOG_PREFIX} flyer upload failed:`, upErr.message || upErr);
+    warnings.push(`Flyer upload failed; kept venue URL (${upErr.message || 'error'})`);
+    return { media: existing, warnings };
+  }
+
+  const url = uploaded?.url || uploaded?.data?.url;
+  if (!url) {
+    warnings.push('Flyer upload returned no URL; kept venue URL');
+    return { media: existing, warnings };
+  }
+
+  const mediaItem = {
+    type: 'image',
+    url,
+    order: 0,
+  };
+  const w = uploaded.width || width;
+  const h = uploaded.height || height;
+  if (w) mediaItem.width = w;
+  if (h) mediaItem.height = h;
+  if (uploaded.thumb_url) mediaItem.thumb_url = uploaded.thumb_url;
+  if (uploaded.list_thumb_url) mediaItem.list_thumb_url = uploaded.list_thumb_url;
+  if (aiCleaned) {
+    // no extra warning on success
+  }
+
+  return { media: [mediaItem], warnings };
+}
+
+/**
  * @param {'stage'|'prod'} platform
  * @param {string} token
  * @param {string} venueName
@@ -565,7 +703,7 @@ function buildEventCreatePayload(prefill, listingEvent, venueKey, location, seat
  * Commit scraped prefill to local Mongo (same process DB).
  * @param {object} args
  */
-async function commitImportLocal({ venueKey, listingEvent, prefill }) {
+async function commitImportLocal({ venueKey, listingEvent, prefill, userId }) {
   const { field, priceReason } = getVenueExternalMeta(venueKey);
   const code = extractExternalCode(listingEvent, venueKey, prefill);
   if (code) {
@@ -622,14 +760,18 @@ async function commitImportLocal({ venueKey, listingEvent, prefill }) {
   }
 
   const inventory = prefill?.scrapedInventory || [];
-  const { seats, units, warnings } = buildSeatsFromLocationAndInventory(
+  const { seats, units, warnings: seatWarnings } = buildSeatsFromLocationAndInventory(
     location,
     inventory,
     priceReason
   );
 
-  let media = Array.isArray(prefill?.media) ? [...prefill.media] : [];
-  // Local: keep external flyer URLs (same as prior behavior). Optional re-host skipped for local.
+  const flyerResolved = await resolveFlyerMediaForCommit(prefill, {
+    platform: 'local',
+    userId,
+  });
+  const media = flyerResolved.media;
+  const warnings = [...(seatWarnings || []), ...(flyerResolved.warnings || [])];
 
   const eventData = buildEventCreatePayload(
     prefill,
@@ -670,10 +812,10 @@ async function commitImportLocal({ venueKey, listingEvent, prefill }) {
  * Commit scraped prefill to Stage/Prod via remote API (remap location/seats, re-host flyer).
  * @param {object} args
  */
-async function commitImportRemote({ platform, token, venueKey, listingEvent, prefill }) {
+async function commitImportRemote({ platform, token, venueKey, listingEvent, prefill, userId }) {
   const p = normalizeScrapImportPlatform(platform);
   if (p === 'local') {
-    return commitImportLocal({ venueKey, listingEvent, prefill });
+    return commitImportLocal({ venueKey, listingEvent, prefill, userId });
   }
   if (!token) {
     const err = new Error(`Connect to ${p} before committing`);
@@ -741,24 +883,19 @@ async function commitImportRemote({ platform, token, venueKey, listingEvent, pre
     throw err;
   }
 
-  const { seats, units, warnings } = buildSeatsFromLocationAndInventory(
+  const { seats, units, warnings: seatWarnings } = buildSeatsFromLocationAndInventory(
     location,
     inventory,
     priceReason
   );
 
-  let media = Array.isArray(prefill?.media) ? [...prefill.media] : [];
-  const flyerUrl = media[0]?.url;
-  if (flyerUrl && !/the1-media-uploads/i.test(flyerUrl)) {
-    const file = await downloadFlyerImage(flyerUrl);
-    if (file) {
-      const uploaded = await uploadFlyerToRemote(p, token, file);
-      const url = uploaded?.url || uploaded?.data?.url;
-      if (url) {
-        media = [{ type: 'image', url, order: 0, ...(uploaded.width ? { width: uploaded.width } : {}) }];
-      }
-    }
-  }
+  const flyerResolved = await resolveFlyerMediaForCommit(prefill, {
+    platform: p,
+    token,
+    userId,
+  });
+  const media = flyerResolved.media;
+  const warnings = [...(seatWarnings || []), ...(flyerResolved.warnings || [])];
 
   const eventData = buildEventCreatePayload(
     { ...prefill, type: locMeta.type || prefill?.type },
@@ -794,12 +931,19 @@ async function commitImportRemote({ platform, token, venueKey, listingEvent, pre
 /**
  * @param {object} args
  */
-async function commitScrapImport({ platform, token, venueKey, listingEvent, prefill }) {
+async function commitScrapImport({ platform, token, venueKey, listingEvent, prefill, userId }) {
   const p = normalizeScrapImportPlatform(platform);
   if (p === 'local') {
-    return commitImportLocal({ venueKey, listingEvent, prefill });
+    return commitImportLocal({ venueKey, listingEvent, prefill, userId });
   }
-  return commitImportRemote({ platform: p, token, venueKey, listingEvent, prefill });
+  return commitImportRemote({
+    platform: p,
+    token,
+    venueKey,
+    listingEvent,
+    prefill,
+    userId,
+  });
 }
 
 module.exports = {
@@ -814,6 +958,7 @@ module.exports = {
   lookupEventIdentitiesRemote,
   buildIdentityLookupItems,
   partitionAgainstPlatform,
+  resolveFlyerMediaForCommit,
   commitScrapImport,
   buildSeatsFromLocationAndInventory,
 };

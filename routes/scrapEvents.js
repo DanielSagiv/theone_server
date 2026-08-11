@@ -2118,6 +2118,7 @@ router.post('/platforms/:platform/commit-import', authenticateToken, requireAdmi
       venueKey,
       listingEvent,
       prefill,
+      userId: req.user?._id ? String(req.user._id) : null,
     });
 
     res.json({ success: true, platform, venueKey, ...result });

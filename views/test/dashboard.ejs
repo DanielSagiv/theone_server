@@ -4968,7 +4968,7 @@
                         <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
                             <div>
                                 <h3 style="margin:0;">Import target + Big Gun</h3>
-                                <small>Choose where events are written. Scraping always runs on this machine.</small>
+                                <small>Choose where events are written. Scraping always runs on this machine. Event flyers are AI-cleaned on commit (slower; falls back to original on failure).</small>
                             </div>
                             <div id="scrapImportPlatformStatus" style="font-size:13px;color:#666;">Target: Local</div>
                         </div>
@@ -5009,7 +5009,7 @@
                                 <button type="button" id="scrapBulkContinueBtn" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;display:none;" onclick="resolveScrapBulkPause('continue')">Continue</button>
                                 <button type="button" id="scrapBulkAbortBtn" class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;display:none;" onclick="resolveScrapBulkPause('abort')">Abort</button>
                             </div>
-                            <p style="color:#7f8c8d;font-size:13px;margin:0 0 12px;">Big Gun imports all venues in order (Encore first), event by event. On error the job pauses so you can Continue or Abort.</p>
+                            <p style="color:#7f8c8d;font-size:13px;margin:0 0 12px;">Big Gun imports all venues in order (Encore first), event by event. On error the job pauses so you can Continue or Abort. Each commit AI-cleans the event flyer (text removal) before upload.</p>
                             <div id="scrapBulkProgress" style="display:none;color:#666;margin-bottom:8px;font-size:13px;"></div>
                             <div id="scrapBulkLog" style="display:none;max-height:240px;overflow:auto;background:#f8f9fa;border:1px solid #ecf0f1;border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;"></div>
                         </div>
@@ -20213,56 +20213,56 @@
 
             try {
                 const platform = getScrapImportPlatform();
-                let created;
-
-                if (platform === 'local') {
-                    const eventData = buildEventDataFromScrapPrefill(prefill);
-                    const result = await makeApiRequest('/events', 'POST', eventData);
-                    if (!result.success) {
-                        throw new Error(getApiErrorMessage(result));
-                    }
-                    created = result.data?.data || result.data;
-                } else {
-                    if (!requireScrapPlatformConnected()) {
-                        throw new Error('Connect to ' + platform + ' before importing');
-                    }
-                    const row =
-                        listingEvent ||
-                        getScrapLastImportedListingRow(venueKey) ||
-                        {};
-                    const response = await makeApiRequest(
-                        `/scrap-events/platforms/${platform}/commit-import`,
-                        'POST',
-                        { venueKey, listingEvent: row, prefill },
-                        { targetToken: getScrapTargetToken(platform) }
-                    );
-                    const body = response.data || {};
-                    if (!response.success || !body.success) {
-                        throw new Error(body.error?.message || 'Commit import failed');
-                    }
-                    if (body.alreadyImported) {
-                        if (!silent) {
-                            showAlert(
-                                `Already imported on ${platform}: ${body.eventName || prefill.name}`,
-                                'warning'
-                            );
-                        }
-                        clearScrapImportPrefillGlobals();
-                        return true;
-                    }
-                    created = body.created || {
-                        _id: body.eventId,
-                        name: body.eventName || prefill.name,
-                        encoreEventId: body.encoreEventId || prefill.encoreEventId,
-                        livEventCode: body.livEventCode || prefill.livEventCode,
-                        omniaEventCode: body.omniaEventCode || prefill.omniaEventCode,
-                        hakkasanEventCode: body.hakkasanEventCode || prefill.hakkasanEventCode,
-                        taoBeachEventCode: body.taoBeachEventCode || prefill.taoBeachEventCode,
-                        palmTreeBeachEventCode: body.palmTreeBeachEventCode || prefill.palmTreeBeachEventCode,
-                        marqueeDayclubEventCode: body.marqueeDayclubEventCode || prefill.marqueeDayclubEventCode,
-                        marqueeNightclubEventId: body.marqueeNightclubEventId || prefill.marqueeNightclubEventId,
-                    };
+                if (platform !== 'local' && !requireScrapPlatformConnected()) {
+                    throw new Error('Connect to ' + platform + ' before importing');
                 }
+
+                const row =
+                    listingEvent ||
+                    getScrapLastImportedListingRow(venueKey) ||
+                    {};
+                const requestOpts =
+                    platform === 'local'
+                        ? undefined
+                        : { targetToken: getScrapTargetToken(platform) };
+                const response = await makeApiRequest(
+                    `/scrap-events/platforms/${platform}/commit-import`,
+                    'POST',
+                    { venueKey, listingEvent: row, prefill },
+                    requestOpts
+                );
+                const body = response.data || {};
+                if (!response.success || !body.success) {
+                    throw new Error(body.error?.message || 'Commit import failed');
+                }
+                if (Array.isArray(body.warnings) && body.warnings.length) {
+                    console.warn(`[scrap-import] ${venueKey} warnings:`, body.warnings);
+                    if (typeof appendScrapBulkLog === 'function' && window.scrapBulkRunning) {
+                        body.warnings.forEach((w) => appendScrapBulkLog(`warn: ${w}`));
+                    }
+                }
+                if (body.alreadyImported) {
+                    if (!silent) {
+                        showAlert(
+                            `Already imported on ${platform}: ${body.eventName || prefill.name}`,
+                            'warning'
+                        );
+                    }
+                    clearScrapImportPrefillGlobals();
+                    return true;
+                }
+                const created = body.created || {
+                    _id: body.eventId,
+                    name: body.eventName || prefill.name,
+                    encoreEventId: body.encoreEventId || prefill.encoreEventId,
+                    livEventCode: body.livEventCode || prefill.livEventCode,
+                    omniaEventCode: body.omniaEventCode || prefill.omniaEventCode,
+                    hakkasanEventCode: body.hakkasanEventCode || prefill.hakkasanEventCode,
+                    taoBeachEventCode: body.taoBeachEventCode || prefill.taoBeachEventCode,
+                    palmTreeBeachEventCode: body.palmTreeBeachEventCode || prefill.palmTreeBeachEventCode,
+                    marqueeDayclubEventCode: body.marqueeDayclubEventCode || prefill.marqueeDayclubEventCode,
+                    marqueeNightclubEventId: body.marqueeNightclubEventId || prefill.marqueeNightclubEventId,
+                };
 
                 const patchFn = patchByVenue[venueKey];
                 if (typeof patchFn === 'function') {
