@@ -10,11 +10,15 @@
  */
 function parseUrvenueMinimumSpendFromItemText(text) {
   const raw = String(text || '');
-  // Same line: "Minimum Spend $3,000.00" or "Minimum Spend 3,000.00"
-  let minMatch = raw.match(/Minimum Spend\s*:?\s*\$?\s*([\d,]+\.?\d*)/i);
+  // "Minimum Spend $3,000.00" / "F&B Minimum* $3,000" (Wynn Social SEATING)
+  let minMatch = raw.match(
+    /(?:F\s*&\s*B\s+)?Minimum\*?(?:\s+Spend)?\s*:?\s*\$?\s*([\d,]+\.?\d*)/i
+  );
   if (!minMatch) {
     // Amount on following line (common on Booketing dayclub rows)
-    minMatch = raw.match(/Minimum Spend\s*\n\s*\$?\s*([\d,]+\.?\d*)/i);
+    minMatch = raw.match(
+      /(?:F\s*&\s*B\s+)?Minimum\*?(?:\s+Spend)?\s*\n\s*\$?\s*([\d,]+\.?\d*)/i
+    );
   }
   if (!minMatch) return null;
   const value = parseFloat(minMatch[1].replace(/,/g, ''));
@@ -99,12 +103,14 @@ async function waitForUrvenueInventoryRows(page, options = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const count = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('.uwsinv-item, .uws-inventory-item'))
+      const selectors =
+        '.uwsinv-item, .uws-inventory-item, tr.uv-eventitems-item, .uv-eventitems-item';
+      return Array.from(document.querySelectorAll(selectors))
         .filter((el) => {
           const st = window.getComputedStyle(el);
           return st.display !== 'none' && st.visibility !== 'hidden';
         })
-        .filter((el) => /Minimum Spend/i.test(el.innerText || ''))
+        .filter((el) => /(?:F\s*&\s*B\s+)?Minimum/i.test(el.innerText || ''))
         .length;
     });
     if (count >= minRows) return count;
@@ -121,15 +127,20 @@ async function waitForUrvenueInventoryRows(page, options = {}) {
 async function collectUrvenueInventoryRawRows(page) {
   return page.evaluate(() => {
     const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
-    return Array.from(document.querySelectorAll('.uwsinv-item, .uws-inventory-item'))
+    const selectors =
+      '.uwsinv-item, .uws-inventory-item, tr.uv-eventitems-item, .uv-eventitems-item';
+    return Array.from(document.querySelectorAll(selectors))
       .filter((el) => {
         const st = window.getComputedStyle(el);
         return st.display !== 'none' && st.visibility !== 'hidden';
       })
+      .filter((el) => !/inquiry\s*only/i.test(el.innerText || ''))
       .map((el) => ({
         innerText: el.innerText || '',
         nameFromSelector: clean(
-          el.querySelector('.uwsinv-name, .uws-inv-name, h5, h6')?.textContent
+          el.querySelector(
+            '.uwsinv-name, .uws-inv-name, .uv-eventitems-name, td.uv-eventitems-name, h5, h6, td:first-child'
+          )?.textContent
         ),
       }));
   });

@@ -234,6 +234,7 @@ const createEventSchema = Joi.object({
   palmTreeBeachEventCode: Joi.string().allow('').optional(),
   marqueeDayclubEventCode: Joi.string().allow('').optional(),
   marqueeNightclubEventId: Joi.string().allow('').optional(),
+  encoreEventId: Joi.string().allow('').optional(),
   performers: Joi.array().items(Joi.object({
     perfcode: Joi.string().allow('').optional(),
     importance: Joi.string().allow('').optional(),

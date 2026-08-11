@@ -16,6 +16,10 @@ const {
   SCRAP_IMPORT_EVENT_DESCRIPTION,
   getScrapImportEventStatus,
 } = require('./scrapEventsShared');
+const {
+  findAlreadyImportedForScrap,
+  enrichPartitionWithIdentityDedupe,
+} = require('./scrapImportDedupe');
 
 const LOG_PREFIX = '[LIV import]';
 
@@ -177,18 +181,34 @@ async function partitionLivEventsByImportStatus(events, options = {}) {
     }
   });
 
-  const alreadyImportedWithEligibility = await attachLivRemoveEligibility(alreadyImported);
+  const enriched = await enrichPartitionWithIdentityDedupe(
+    newEvents,
+    alreadyImported,
+    async (row) => {
+      const ref = resolveLivLocation(row);
+      return ref ? String(ref.locationId) : null;
+    }
+  );
+
+  const alreadyImportedWithEligibility = await attachLivRemoveEligibility(
+    enriched.alreadyImported
+  );
 
   const stats = {
     totalScraped: allRows.length,
     importableTotal: importable.length,
-    newCount: newEvents.length,
+    newCount: enriched.newEvents.length,
     alreadyImportedCount: alreadyImportedWithEligibility.length,
     skippedCount: skipped.length,
     scope,
   };
 
-  return { newEvents, alreadyImported: alreadyImportedWithEligibility, skipped, stats };
+  return {
+    newEvents: enriched.newEvents,
+    alreadyImported: alreadyImportedWithEligibility,
+    skipped,
+    stats,
+  };
 }
 
 /**
@@ -232,16 +252,6 @@ async function prepareLivEventImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'LIV_EVENT_IN_PAST');
 
-  const existing = await Event.findOne({ livEventCode }).select('_id name').lean();
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      livEventCode,
-    };
-  }
-
   const locationRef = resolveLivLocation(listingEvent);
   if (!locationRef) {
     const err = new Error(
@@ -249,6 +259,22 @@ async function prepareLivEventImport(listingEvent) {
     );
     err.code = 'LIV_LOCATION_UNMAPPED';
     throw err;
+  }
+
+  const existing = await findAlreadyImportedForScrap({
+    externalField: 'livEventCode',
+    externalCode: livEventCode,
+    locationId: locationRef.locationId,
+    isoDate: listingEvent.isoDate,
+    name: listingEvent.name,
+  });
+  if (existing) {
+    return {
+      alreadyImported: true,
+      eventId: String(existing._id),
+      eventName: existing.name,
+      livEventCode,
+    };
   }
 
   const location = await Location.findById(locationRef.locationId);

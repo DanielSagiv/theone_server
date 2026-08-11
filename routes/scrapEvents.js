@@ -71,6 +71,29 @@ const {
   filterMarqueeNightclubEventsByDateRange,
   filterMarqueeNightclubEventsNotInPast,
 } = require('../services/scrapEvents/marqueeNightclubEventImportService');
+const { fetchEncoreBeachEventsPreview } = require('../services/scrapEvents/encoreBeachScraperService');
+const {
+  prepareEncoreBeachImport,
+  undoEncoreBeachImport,
+  resyncEncoreBeachEventPricing,
+  partitionEncoreEventsByImportStatus,
+  validateEncoreDateRangeQuery,
+  filterEncoreEventsByDateRange,
+  filterEncoreEventsNotInPast,
+} = require('../services/scrapEvents/encoreBeachEventImportService');
+const { normalizeEncoreScope } = require('../utils/encoreBeachVenueConfig');
+const {
+  normalizeScrapImportPlatform,
+  getScrapImportPlatformApiBase,
+  loginScrapImportPlatform,
+  validateScrapImportPlatformToken,
+} = require('../services/scrapEvents/scrapImportPlatformClient');
+const {
+  lookupExternalIdsLocal,
+  partitionAgainstPlatform,
+  commitScrapImport,
+} = require('../services/scrapEvents/scrapImportPlatformCommitService');
+const { lookupEventIdentitiesLocal } = require('../services/scrapEvents/scrapImportDedupe');
 
 const router = express.Router();
 
@@ -1632,6 +1655,486 @@ router.post('/marquee-nightclub/resync-pricing/:marqueeNightclubEventId', authen
       error: {
         code,
         message: error.message || 'Failed to resync Marquee Nightclub event pricing',
+      },
+    });
+  }
+});
+
+/**
+ * GET /v1/scrap-events/encore-beach/events
+ * @description Preview Encore Beach Club day + night from wynnsocial.com (no DB writes).
+ * Query: diffOnly (default true), scope (daylife|nightlife|both), fromDate, toDate.
+ */
+router.get('/encore-beach/events', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const diffOnly = req.query.diffOnly !== 'false';
+    const scope = normalizeEncoreScope(req.query.scope);
+    const dateRange = validateEncoreDateRangeQuery(req.query.fromDate, req.query.toDate);
+
+    console.log('[scrap-events] GET /encore-beach/events: start', {
+      userId: req.user?._id,
+      diffOnly,
+      scope,
+      dateFilter: dateRange.active ? { from: dateRange.fromDate, to: dateRange.toDate } : null,
+    });
+
+    const payload = await fetchEncoreBeachEventsPreview({ scope });
+
+    if (payload.browserError) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'SCRAP_BROWSER_UNAVAILABLE',
+          message: 'Could not load Encore Beach events page in headless browser',
+          details: payload.browserError,
+        },
+        sourceUrl: payload.sourceUrl,
+        warnings: payload.warnings,
+      });
+    }
+
+    const allEvents = payload.events || [];
+    const totalScraped = allEvents.length;
+    const upcomingEvents = filterEncoreEventsNotInPast(allEvents);
+    const pastExcludedCount = totalScraped - upcomingEvents.length;
+
+    const partitionAll = await partitionEncoreEventsByImportStatus(upcomingEvents, { scope });
+    const allNewEvents = partitionAll.newEvents;
+    const allImportedEvents = partitionAll.alreadyImported;
+
+    const eventsForPartition = dateRange.active
+      ? filterEncoreEventsByDateRange(upcomingEvents, dateRange.fromDate, dateRange.toDate)
+      : upcomingEvents;
+    const inDateRangeTotal = eventsForPartition.length;
+
+    const partition = await partitionEncoreEventsByImportStatus(eventsForPartition, { scope });
+
+    let events;
+    if (diffOnly) {
+      events = partition.newEvents;
+    } else {
+      events = [...partition.newEvents, ...partition.alreadyImported];
+    }
+
+    const stats = {
+      ...partition.stats,
+      totalScraped,
+      pastExcludedCount,
+      upcomingTotal: upcomingEvents.length,
+      inDateRangeTotal: dateRange.active ? inDateRangeTotal : upcomingEvents.length,
+    };
+
+    res.json({
+      success: true,
+      sourceUrl: payload.sourceUrl,
+      scrapedAt: payload.scrapedAt,
+      count: events.length,
+      events,
+      alreadyImported: partition.alreadyImported,
+      allNewEvents,
+      allImportedEvents,
+      skipped: partition.skipped,
+      stats,
+      dateFilter: {
+        fromDate: dateRange.fromDate,
+        toDate: dateRange.toDate,
+        active: dateRange.active,
+      },
+      diffOnly,
+      scope,
+      warnings: payload.warnings,
+    });
+  } catch (error) {
+    if (error.code === 'ENCORE_INVALID_DATE_RANGE') {
+      return res.status(400).json({
+        success: false,
+        error: { code: error.code, message: error.message },
+      });
+    }
+    console.error('[scrap-events] GET /encore-beach/events error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'ENCORE_SCRAPE_FAILED',
+        message: 'Failed to fetch Encore Beach live events',
+        details: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/encore-beach/prepare-import
+ * @description Scrape Encore SEATING tab and return create-event prefill (no DB writes).
+ */
+router.post('/encore-beach/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('[scrap-events] POST /encore-beach/prepare-import: start', {
+      userId: req.user?._id,
+      eventId: req.body?.eventId || req.body?.eventCode,
+    });
+
+    const result = await prepareEncoreBeachImport(req.body || {});
+
+    if (result.alreadyImported) {
+      return res.json({
+        success: true,
+        alreadyImported: true,
+        eventId: result.eventId,
+        eventName: result.eventName,
+        encoreEventId: result.encoreEventId,
+      });
+    }
+
+    res.json({
+      success: true,
+      alreadyImported: false,
+      prefill: result.prefill,
+      warnings: result.warnings,
+      encoreEventId: result.encoreEventId,
+    });
+  } catch (error) {
+    const code = error.code || 'ENCORE_PREPARE_IMPORT_FAILED';
+    const status = error.code ? 400 : 500;
+    console.error('[scrap-events] POST /encore-beach/prepare-import error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: {
+        code,
+        message: error.message || 'Failed to prepare Encore Beach import',
+      },
+    });
+  }
+});
+
+/**
+ * DELETE /v1/scrap-events/encore-beach/import/:encoreEventId
+ * @description Undo Encore import by deleting the THE1 event when safe.
+ */
+router.delete('/encore-beach/import/:encoreEventId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { encoreEventId } = req.params;
+    console.log('[scrap-events] DELETE /encore-beach/import: start', {
+      userId: req.user?._id,
+      encoreEventId,
+    });
+
+    const result = await undoEncoreBeachImport(encoreEventId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    const code = error.code || 'ENCORE_UNDO_IMPORT_FAILED';
+    const status =
+      code === 'ENCORE_EVENT_NOT_FOUND'
+        ? 404
+        : code === 'ENCORE_EVENT_IN_COE_USE' || code === 'EVENT_HAS_BOOKINGS'
+          ? 409
+          : error.code
+            ? 400
+            : 500;
+    console.error('[scrap-events] DELETE /encore-beach/import error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: {
+        code,
+        message: error.message || 'Failed to undo Encore Beach import',
+      },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/encore-beach/resync-pricing/:encoreEventId
+ */
+router.post('/encore-beach/resync-pricing/:encoreEventId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { encoreEventId } = req.params;
+    console.log('[scrap-events] POST /encore-beach/resync-pricing: start', {
+      userId: req.user?._id,
+      encoreEventId,
+    });
+
+    const result = await resyncEncoreBeachEventPricing(encoreEventId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    const code = error.code || 'ENCORE_RESYNC_PRICING_FAILED';
+    const status =
+      code === 'ENCORE_EVENT_NOT_FOUND' ? 404 : error.code ? 400 : 500;
+    console.error('[scrap-events] POST /encore-beach/resync-pricing error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: {
+        code,
+        message: error.message || 'Failed to resync Encore Beach event pricing',
+      },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/lookup-external-ids
+ * @description Admin lookup of events by scrap external id field (for remote partition).
+ */
+router.post('/lookup-external-ids', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const field = String(req.body?.field || '').trim();
+    const codes = Array.isArray(req.body?.codes) ? req.body.codes : [];
+    console.log('[scrap-events] POST /lookup-external-ids: start', {
+      userId: req.user?._id,
+      field,
+      codeCount: codes.length,
+    });
+    const existing = await lookupExternalIdsLocal(field, codes);
+    res.json({ success: true, field, existing, count: existing.length });
+  } catch (error) {
+    const code = error.code || 'SCRAP_LOOKUP_FAILED';
+    const status = error.code ? 400 : 500;
+    console.error('[scrap-events] POST /lookup-external-ids error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: { code, message: error.message || 'Lookup failed' },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/lookup-event-identities
+ * @description Admin batch lookup by location + calendar date + normalized name.
+ */
+router.post('/lookup-event-identities', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    console.log('[scrap-events] POST /lookup-event-identities: start', {
+      userId: req.user?._id,
+      itemCount: items.length,
+    });
+    const existing = await lookupEventIdentitiesLocal(items);
+    res.json({ success: true, existing, count: existing.length });
+  } catch (error) {
+    const code = error.code || 'SCRAP_IDENTITY_LOOKUP_FAILED';
+    const status = error.code ? 400 : 500;
+    console.error('[scrap-events] POST /lookup-event-identities error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: { code, message: error.message || 'Identity lookup failed' },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/platforms/:platform/login
+ * @description Proxy admin sign-in to Stage/Prod (never logs password).
+ */
+router.post('/platforms/:platform/login', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const platform = normalizeScrapImportPlatform(req.params.platform);
+    if (platform === 'local') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'SCRAP_PLATFORM_LOCAL_NO_LOGIN',
+          message: 'Local target uses the current dashboard session',
+        },
+      });
+    }
+    const email = String(req.body?.email || '').trim();
+    const password = String(req.body?.password || '');
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'email and password are required' },
+      });
+    }
+    console.log('[scrap-events] POST /platforms/login: start', {
+      userId: req.user?._id,
+      platform,
+      emailPrefix: email.slice(0, 3),
+    });
+    const result = await loginScrapImportPlatform(platform, email, password);
+    res.json({
+      success: true,
+      platform,
+      token: result.token,
+      user: result.user,
+      expiresAt: result.expiresAt,
+      apiBase: getScrapImportPlatformApiBase(platform),
+    });
+  } catch (error) {
+    const code = error.code || 'SCRAP_PLATFORM_LOGIN_FAILED';
+    const status = error.status && error.status < 500 ? error.status : error.code ? 400 : 500;
+    console.error('[scrap-events] POST /platforms/login error:', {
+      code,
+      platform: req.params?.platform,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: { code, message: error.message || 'Platform login failed' },
+    });
+  }
+});
+
+/**
+ * GET /v1/scrap-events/platforms/:platform/status
+ * @description Validate stored target token (pass Bearer in X-Scrap-Target-Token or body token query).
+ */
+router.get('/platforms/:platform/status', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const platform = normalizeScrapImportPlatform(req.params.platform);
+    if (platform === 'local') {
+      return res.json({
+        success: true,
+        platform: 'local',
+        connected: true,
+        apiBase: null,
+        message: 'Local uses current server DB_URI / S3_BUCKET',
+      });
+    }
+    const token =
+      String(req.headers['x-scrap-target-token'] || '').trim() ||
+      String(req.query.token || '').trim();
+    if (!token) {
+      return res.json({ success: true, platform, connected: false, apiBase: getScrapImportPlatformApiBase(platform) });
+    }
+    const result = await validateScrapImportPlatformToken(platform, token);
+    res.json({
+      success: true,
+      platform,
+      connected: result.ok,
+      user: result.user || null,
+      error: result.error || null,
+      apiBase: getScrapImportPlatformApiBase(platform),
+    });
+  } catch (error) {
+    console.error('[scrap-events] GET /platforms/status error:', {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(500).json({
+      success: false,
+      error: { code: 'SCRAP_PLATFORM_STATUS_FAILED', message: error.message },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/platforms/:platform/partition
+ * @description Split external codes into new vs already imported on target platform.
+ */
+router.post('/platforms/:platform/partition', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const platform = normalizeScrapImportPlatform(req.params.platform);
+    const venueKey = String(req.body?.venueKey || '').trim();
+    const codes = Array.isArray(req.body?.codes) ? req.body.codes : [];
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
+    const token =
+      String(req.headers['x-scrap-target-token'] || '').trim() ||
+      String(req.body?.token || '').trim() ||
+      null;
+
+    console.log('[scrap-events] POST /platforms/partition: start', {
+      userId: req.user?._id,
+      platform,
+      venueKey,
+      codeCount: codes.length,
+      rowCount: rows ? rows.length : 0,
+    });
+
+    const result = await partitionAgainstPlatform(platform, token, venueKey, codes, rows);
+    res.json({ success: true, platform, venueKey, ...result });
+  } catch (error) {
+    const code = error.code || 'SCRAP_PARTITION_FAILED';
+    const status = error.code ? 400 : 500;
+    console.error('[scrap-events] POST /platforms/partition error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: { code, message: error.message || 'Partition failed' },
+    });
+  }
+});
+
+/**
+ * POST /v1/scrap-events/platforms/:platform/commit-import
+ * @description Remap seats/location for target and create event (remote: upload flyer to target bucket).
+ */
+router.post('/platforms/:platform/commit-import', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const platform = normalizeScrapImportPlatform(req.params.platform);
+    const venueKey = String(req.body?.venueKey || '').trim();
+    const listingEvent = req.body?.listingEvent || {};
+    const prefill = req.body?.prefill || null;
+    const token =
+      String(req.headers['x-scrap-target-token'] || '').trim() ||
+      String(req.body?.token || '').trim() ||
+      null;
+
+    if (!venueKey || !prefill) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'venueKey and prefill are required',
+        },
+      });
+    }
+
+    console.log('[scrap-events] POST /platforms/commit-import: start', {
+      userId: req.user?._id,
+      platform,
+      venueKey,
+      name: prefill?.name,
+    });
+
+    const result = await commitScrapImport({
+      platform,
+      token,
+      venueKey,
+      listingEvent,
+      prefill,
+    });
+
+    res.json({ success: true, platform, venueKey, ...result });
+  } catch (error) {
+    const code = error.code || 'SCRAP_COMMIT_FAILED';
+    const status = error.code ? 400 : 500;
+    console.error('[scrap-events] POST /platforms/commit-import error:', {
+      code,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    res.status(status).json({
+      success: false,
+      error: {
+        code,
+        message: error.message || 'Commit import failed',
+        details: error.details || undefined,
       },
     });
   }

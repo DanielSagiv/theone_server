@@ -2,7 +2,8 @@
 name: scrap-events
 description: >-
   R&D guide for THE1 "scrap events" — complete venue set: LIV Las Vegas Night + Beach, OMNIA Night + Dayclub,
-  Hakkasan Las Vegas, TAO Beach, Palm Tree Beach, Marquee Dayclub (Booketing), and Marquee Nightclub (taogroup.com).
+  Hakkasan Las Vegas, TAO Beach, Palm Tree Beach, Marquee Dayclub (Booketing), Marquee Nightclub (taogroup.com),
+  and Encore Beach Club Day + Night (wynnsocial.com).
   Listing scrape, detail inventory, import, undo, and prod rollout via the EJS Events Import console.
 ---
 
@@ -10,18 +11,18 @@ description: >-
 
 ## Status
 
-**Phase: R&D — venue set complete (9 THE1 locations, 7 Events Import cards).**
+**Phase: R&D — venue set complete (11 THE1 locations, 8 Events Import cards).**
 
-All target venues for this phase are implemented: **LIV Night + Beach**, **OMNIA Night + Dayclub**, **Hakkasan**, **TAO Beach**, **Palm Tree Beach**, **Marquee Dayclub**, **Marquee Nightclub**. No additional scrap-events venues are planned until validation / prod rollout or a new scope is defined in `PLANS.md`.
+All target venues for this phase are implemented: **LIV Night + Beach**, **OMNIA Night + Dayclub**, **Hakkasan**, **TAO Beach**, **Palm Tree Beach**, **Marquee Dayclub**, **Marquee Nightclub**, **Encore Beach Club Day + Night**. No additional scrap-events venues are planned until validation / prod rollout or a new scope is defined in `PLANS.md`.
 
-| Capability | LIV Night (`Nightlife`) | LIV Beach (`Daylife`) | OMNIA Night | OMNIA Dayclub | Hakkasan Night | TAO Beach Day | Palm Tree Beach Day | Marquee Dayclub Day | Marquee Nightclub Night |
-|------------|----------------------|----------------------|-------------|---------------|----------------|----------------|---------------|---------------------|-------------------------|
-| Listing preview | yes | yes (same page) | yes (current + next month) | yes (separate calendar) | yes (current + next month) | yes (current + next month) | yes (current + next month) | yes (current + next month) | yes (taogroup venue tiles) |
-| Import → Create Event | **yes, validated** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** |
-| Undo import (Remove) | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| Resync pricing | — | — | yes | yes | yes | yes | yes | yes | yes |
+| Capability | LIV Night (`Nightlife`) | LIV Beach (`Daylife`) | OMNIA Night | OMNIA Dayclub | Hakkasan Night | TAO Beach Day | Palm Tree Beach Day | Marquee Dayclub Day | Marquee Nightclub Night | Encore Day | Encore Night |
+|------------|----------------------|----------------------|-------------|---------------|----------------|----------------|---------------|---------------------|-------------------------|------------|--------------|
+| Listing preview | yes | yes (same page) | yes (current + next month) | yes (separate calendar) | yes (current + next month) | yes (current + next month) | yes (current + next month) | yes (current + next month) | yes (taogroup venue tiles) | yes (wynnsocial shared) | yes (wynnsocial shared) |
+| Import → Create Event | **yes, validated** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** | **yes, pilot** |
+| Undo import (Remove) | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| Resync pricing | — | — | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 
-Location per row: LIV — `venueName` + `category` → `LIV_NIGHT_LOCATION_ID` / `LIV_BEACH_LOCATION_ID`. OMNIA — `category` + `venueType` → `OMNIA_LOCATION_ID` / `OMNIA_DAY_LOCATION_ID` via `resolveOmniaVenue()`. UI **scope** (Night / Day / Both) filters the table; **Import** resolves location from the row, not scope alone.
+Location per row: LIV — `venueName` + `category` → `LIV_NIGHT_LOCATION_ID` / `LIV_BEACH_LOCATION_ID`. OMNIA — `category` + `venueType` → `OMNIA_LOCATION_ID` / `OMNIA_DAY_LOCATION_ID` via `resolveOmniaVenue()`. Encore — venue label / EVE site id → `ENCORE_DAY_LOCATION_ID` / `ENCORE_NIGHT_LOCATION_ID` via `resolveEncoreVenue()`. UI **scope** (Night / Day / Both) filters the table; **Import** resolves location from the row, not scope alone.
 
 ## Trigger
 
@@ -58,6 +59,33 @@ Scrape events from venue websites and populate them into THE1 (locations → eve
 **Marquee Dayclub pilot (R&D):** Card below Palm Tree Beach — single Dayclub calendar (`61/1109/marquee-dayclub`). Detail: **Tables** accordion. Dedupe: `marqueeDayclubEventCode`. v1 imports all `EVE1109…` rows with TABLES inventory. Remove: `DELETE /marquee-dayclub/import/:marqueeDayclubEventCode`. Resync: `POST /marquee-dayclub/resync-pricing/:marqueeDayclubEventCode`.
 
 **Marquee Nightclub pilot (R&D):** Card below Marquee Dayclub — taogroup.com venue calendar. Detail: click **VIP Reservations** on listing tile, expand **Tables**. Dedupe: `marqueeNightclubEventId`. v1 imports VIP-capable events only. Remove: `DELETE /marquee-nightclub/import/:marqueeNightclubEventId`. Resync: `POST /marquee-nightclub/resync-pricing/:marqueeNightclubEventId`. **Not** `taoEventId` (bulk Tao import).
+
+**Encore Beach Club pilot (R&D):** Card below Marquee Nightclub — single [wynnsocial.com/events](https://www.wynnsocial.com/events/) calendar. Scope Day / Night / Both. Detail: **SEATING** tab (`?tab=tables`); F&B Minimum → catalog price. Dedupe: `encoreEventId` (EVE code). XS / Field Club excluded. Remove: `DELETE /encore-beach/import/:encoreEventId`. Resync: `POST /encore-beach/resync-pricing/:encoreEventId`.
+
+## Platform target + Big Gun
+
+**Scrape always local** (Puppeteer on the machine running the EJS dashboard). **Write** to Local (same `DB_URI` / `S3_BUCKET`) or **Stage** / **Prod** via local proxy.
+
+| UI | Behavior |
+|----|----------|
+| Platform select | Local / Stage / Prod (`sessionStorage`) |
+| Connect | Stage/Prod admin email+password → `POST /scrap-events/platforms/:platform/login` → token in `sessionStorage` (never logged) |
+| Per-row Import | Local prepare-import (scrape) → Local `POST /events` **or** `POST /platforms/:platform/commit-import` (remap location by name, seats by code, re-host flyer to target `/events/media/upload`) |
+| Show Live Events | Local scrape; if Stage/Prod, re-partition via `POST /platforms/:platform/partition` |
+| Big Gun | Required date range; venues in order Encore → LIV → OMNIA → Hakkasan → TAO Beach → Palm Tree → Marquee Day → Marquee Night; sequential; on error **Continue** / **Abort** |
+
+**Env:** `SCRAP_IMPORT_STAGE_API_BASE` (default `https://stage.the1.vip/v1`), `SCRAP_IMPORT_PROD_API_BASE` (default `https://app.the1.vip/v1`).
+
+**Deploy note:** Stage/Prod must include `POST /v1/scrap-events/lookup-external-ids` **and** `POST /v1/scrap-events/lookup-event-identities` for accurate remote partition (older deploys fall back to external-id-only / treat as new until create-time duplicate check).
+
+### Dual dedupe (all venues)
+
+Imports are blocked as **already imported** if **either** matches an existing THE1 event:
+
+1. **External id** — venue field (`livEventCode`, `omniaEventCode`, `encoreEventId`, …)
+2. **Identity** — `location_id` + calendar date (`YYYY-MM-DD` in venue TZ, default `America/Los_Angeles`) + normalized name (trim, collapse whitespace, case-insensitive)
+
+Used on prepare-import, platform commit (Local/Stage/Prod), Show Live partition, and Big Gun “new” lists. Helper: `services/scrapEvents/scrapImportDedupe.js`.
 
 ## What works today (LIV Night + Beach)
 
@@ -415,6 +443,50 @@ fetchMarqueeNightclubEventsPreview().then(r => {
 
 Expect non-zero count, valid `isoDate` on each row, `hasVipReservations: true` for importable tiles.
 
+## What works today (Encore Beach Club Day + Night)
+
+| Encore listing row | THE1 location | `type` | Listing URL |
+|--------------------|---------------|--------|-------------|
+| Encore Beach Club | Encore Beach Club (`ENCORE_DAY_LOCATION_ID`) | `day_club` | `https://www.wynnsocial.com/events/` |
+| Encore Beach Club At Night | Encore Beach Club At Night (`ENCORE_NIGHT_LOCATION_ID`) | `night_club` | same calendar |
+
+**UI scope:** `#encoreBeachEventsScope` — Day / Night / Both → `GET /encore-beach/events?scope=`. Default **both**.
+
+| Aspect | Day | Night |
+|--------|-----|-------|
+| Event code site id | `1103` (`EVE1103…`) | `1163` (`EVE1163…`) |
+| Detail | **SEATING** tab / `?tab=tables` | same |
+| Pricing label | F&B Minimum* (parsed as Minimum Spend) | same |
+| Default start | `11:00` | `22:00` |
+| Seat map | 16 codes (parity script) | same catalog |
+
+**Out of scope v1:** XS Nightclub, Wynn Field Club tiles.
+
+**Import resolves location from row** via `resolveEncoreVenue()` — never from UI scope alone. Mis-route guard rejects night→day / day→night location ids.
+
+### Encore Beach APIs
+
+| Method | Path |
+|--------|------|
+| GET | `/v1/scrap-events/encore-beach/events` |
+| POST | `/v1/scrap-events/encore-beach/prepare-import` |
+| DELETE | `/v1/scrap-events/encore-beach/import/:encoreEventId` |
+| POST | `/v1/scrap-events/encore-beach/resync-pricing/:encoreEventId` |
+
+Prod parity: `node scripts/verify-encore-beach-location-parity.js`.
+
+### Encore Beach quick test (CLI)
+
+```bash
+cd server && node -e "
+const { fetchEncoreBeachEventsPreview } = require('./services/scrapEvents/encoreBeachScraperService');
+fetchEncoreBeachEventsPreview({ scope: 'both' }).then(r => {
+  console.log('count', r.events.length, 'err', r.browserError);
+  console.log(r.events.slice(0, 4).map(e => ({ name: e.name, venue: e.venueName, isoDate: e.isoDate, id: e.eventId })));
+});
+"
+```
+
 ## Venue catalog pricing rule (all scrap venues)
 
 **Venue cost on import = Minimum Spend from the venue detail page** — not Pay Now deposit, not THE1 negotiated pricing.
@@ -427,7 +499,7 @@ Expect non-zero count, valid `isoDate` on each row, `hasVipReservations: true` f
 
 **Implementation (required for LIV, OMNIA, and every new scrap venue):**
 
-1. Parse rows with [`urvenueInventoryDom.js`](server/services/scrapEvents/urvenueInventoryDom.js) — `parseUrvenueMinimumSpendFromItemText` (supports `$` and next-line amounts), `parseUrvenueInventoryItemFromRaw`, `waitForUrvenueInventoryRows`.
+1. Parse rows with [`urvenueInventoryDom.js`](server/services/scrapEvents/urvenueInventoryDom.js) — `parseUrvenueMinimumSpendFromItemText` (supports `$`, next-line amounts, and Wynn **F&B Minimum***), `parseUrvenueInventoryItemFromRaw`, `waitForUrvenueInventoryRows` (also `tr.uv-eventitems-item`).
 2. Overlay with [`applyInventoryToSeats`](server/services/scrapEvents/scrapEventsShared.js) + `venueCatalogMinSpendFromInventoryItem` — sets **`event_price`** / **`event_min_spend`** only; **`min_spend`** stays location baseline.
 3. Call [`assertScrapInventoryPricingApplied`](server/services/scrapEvents/scrapEventsShared.js) on OMNIA prepare-import — fail when priced inventory exists but **no** seat received `price_change_reason` (OMNIA uses `OMNIA_PRICING_NOT_APPLIED`).
 4. Do not use `payNow` for catalog price. Rows without Minimum Spend are skipped.
@@ -480,6 +552,7 @@ Date inputs re-filter **both** sections from `allNewEvents` / `allImportedEvents
 | Palm Tree Beach | `#palmTreeBeachLiveEventsBtn` | `/scrap-events/palm-tree-beach` | `palmTreeBeachEventCode` |
 | Marquee Dayclub | `#marqueeDayclubLiveEventsBtn` | `/scrap-events/marquee-dayclub` | `marqueeDayclubEventCode` |
 | Marquee Nightclub | `#marqueeNightclubLiveEventsBtn` | `/scrap-events/marquee-nightclub` | `marqueeNightclubEventId` |
+| Encore Beach Club | `#encoreBeachLiveEventsBtn` | `/scrap-events/encore-beach` | `encoreEventId` |
 
 | Item | Path / handler |
 |------|----------------|
@@ -535,6 +608,7 @@ server/
 ├── utils/palmTreeBeachVenueConfig.js # Palm Tree Beach listing URL, location ID, event code inference
 ├── utils/marqueeDayclubVenueConfig.js  # Marquee Dayclub listing URL, location ID, event code inference
 ├── utils/marqueeNightclubVenueConfig.js  # Marquee Nightclub taogroup listing URL, location ID
+├── utils/encoreBeachVenueConfig.js       # Encore day/night location IDs, resolveEncoreVenue, wynnsocial URL
 ├── utils/venueScraperBrowser.js   # Shared puppeteer fetch + Load More
 ├── services/scrapEvents/
 │   ├── scrapEventsShared.js         # Date parse, COE lookup, applyInventory (LIV + OMNIA + Hakkasan)
@@ -559,7 +633,10 @@ server/
 │   ├── marqueeDayclubEventImportService.js
 │   ├── marqueeNightclubScraperService.js
 │   ├── marqueeNightclubEventDetailScraperService.js
-│   └── marqueeNightclubEventImportService.js
+│   ├── marqueeNightclubEventImportService.js
+│   ├── encoreBeachScraperService.js
+│   ├── encoreBeachEventDetailScraperService.js
+│   └── encoreBeachEventImportService.js
 ├── scripts/verify-liv-location-parity.js
 ├── scripts/verify-omnia-location-parity.js   # Night + day location seat parity
 ├── scripts/verify-hakkasan-location-parity.js
@@ -567,8 +644,9 @@ server/
 ├── scripts/verify-palm-tree-beach-location-parity.js
 ├── scripts/verify-marquee-dayclub-location-parity.js
 ├── scripts/verify-marquee-nightclub-location-parity.js
+├── scripts/verify-encore-beach-location-parity.js
 ├── scripts/sync-omnia-dayclub-seats.js       # Idempotent Premium Villa + Stage Cabana push
-├── routes/scrapEvents.js            # LIV + OMNIA + Hakkasan + TAO Beach + Palm Tree Beach + Marquee Dayclub + Marquee Nightclub listing, prepare-import, resync-pricing, undo-import
+├── routes/scrapEvents.js            # LIV + OMNIA + Hakkasan + TAO Beach + Palm Tree Beach + Marquee Dayclub + Marquee Nightclub + Encore Beach listing, prepare-import, resync-pricing, undo-import
 └── views/test/dashboard.ejs         # Events Import UI — Show Live Events
 ```
 
@@ -595,6 +673,9 @@ Before adding endpoints: scan `server/routes/` for existing import patterns (e.g
 | `MARQUEE_DAYCLUB_LOCATION_ID` | `6a3ae2f9b7e4c059eb79880e` | Marquee Dayclub (stage default) |
 | `MARQUEE_NIGHTCLUB_EVENTS_LISTING_URL` | `https://taogroup.com/venues/marquee-nightclub-las-vegas/events/` | Marquee Nightclub calendar |
 | `MARQUEE_NIGHTCLUB_LOCATION_ID` | `6a3bc1894bf82ca19711bbbd` | Marquee Nightclub (stage default) |
+| `ENCORE_EVENTS_LISTING_URL` | `https://www.wynnsocial.com/events/` | Encore / Wynn Social calendar |
+| `ENCORE_DAY_LOCATION_ID` | `6a3bbb42dbdace6b54541a99` | Encore Beach Club (day) |
+| `ENCORE_NIGHT_LOCATION_ID` | `6a60c3cd319f57ebc37b700b` | Encore Beach Club At Night |
 | `PUPPETEER_EXECUTABLE_PATH` | Mac: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` | Required for puppeteer-core |
 
 ## LIV Las Vegas — listing (shared page)
@@ -964,6 +1045,8 @@ Optional: pass the prod location `_id` if it differs from stage default, e.g. `M
 | Palm Tree Beach | `PALM_TREE_BEACH_LOCATION_ID` | `6a3aca44bdbdad91c9fd0ee5` | `verify-palm-tree-beach-location-parity.js` | Tiësto `EVE111700020260711` |
 | **Marquee Dayclub** | `MARQUEE_DAYCLUB_LOCATION_ID`, optional `MARQUEE_DAYCLUB_EVENTS_LISTING_URL` | `6a3ae2f9b7e4c059eb79880e` | `verify-marquee-dayclub-location-parity.js` | DJ Pauly D `EVE110900020260711` or Adventure Club `EVE110900020260725` |
 | **Marquee Nightclub** | `MARQUEE_NIGHTCLUB_LOCATION_ID`, optional `MARQUEE_NIGHTCLUB_EVENTS_LISTING_URL` | `6a3bc1894bf82ca19711bbbd` | `verify-marquee-nightclub-location-parity.js` | Twenty Six — Lowkey; DJ Pauly D |
+| **Encore Beach Club** | `ENCORE_DAY_LOCATION_ID`, optional `ENCORE_EVENTS_LISTING_URL` | `6a3bbb42dbdace6b54541a99` | `verify-encore-beach-location-parity.js` | Gryffin `EVE110300020260814` |
+| **Encore Beach Club At Night** | `ENCORE_NIGHT_LOCATION_ID` | `6a60c3cd319f57ebc37b700b` | (same script — day + night) | Acraze `EVE116300020260812` |
 
 Listing URLs rarely change between stages; override `*_EVENTS_LISTING_URL` only if Booketing path differs.
 
@@ -977,6 +1060,7 @@ Scripts fail if stage or prod location is missing codes or stage ≠ prod. Expec
 | Palm Tree Beach | Premium Beach Villa, Beach Villa, Coastal Cabana, Cabana, Seaside Tables, Shore Table, Boardwalk Table, Ocean Bed |
 | **Marquee Dayclub** | **Daybed, Cabana, Grand Cabana, Prime Cabana, Prime Daybed** |
 | **Marquee Nightclub** | **Cloud, Dance Floor, Full Upper Dance Floor, Salon, Third Tier Main Room, Upper Dance Floor** |
+| **Encore Beach (day + night)** | **Backstage Section, Beach Couch, Center L Couch, Center Pool Lily Pad, Dance Floor Section, Dance Floor Water Couch, Daybed, Gaming Section, L Couch, Large Backstage Section, Lily Pad, Lower Bungalow, Lower Cabana, Medium Backstage Section, Patio Section, Water Couch** |
 | Hakkasan | Main Room Owners, Main Room Stage, Main Room Lower Dance Floor, Main Room Upper Dancefloor, Main Room 3rd/4th Rows, Mezzanine Center, Mezzanine Side, Mezzanine Skybox |
 | LIV / OMNIA | See script output — night + beach / night + day each checked separately |
 
@@ -1051,7 +1135,7 @@ Then set the corresponding `*_LOCATION_ID` values in prod `.env` and smoke one p
 
 Only after PLANS explicitly marks a venue **production-ready**:
 
-- Idempotent imports (external id or stable hash dedupe).
+- Idempotent imports (external id **and** location/date/name identity dedupe).
 - Admin-only routes + auth middleware.
 - Dry-run vs commit modes.
 - Audit log of imported / skipped / failed rows.

@@ -1,14 +1,20 @@
+/**
+ * Encore Beach Club scrap import — prepare / undo / resync (day + night locations).
+ */
 const Event = require('../../models/Event');
 const Location = require('../../models/Location');
 const { inheritSeatsFromLocation } = require('../locationEventService');
 const {
-  fetchMarqueeNightclubEventDetailInventory,
+  fetchEncoreBeachEventDetailInventory,
   normalizeTableName,
-  resolveMarqueeNightclubSeatMapping,
-} = require('./marqueeNightclubEventDetailScraperService');
-const { isoDateFromEventName } = require('./marqueeNightclubScraperService');
+  resolveEncoreSeatMapping,
+} = require('./encoreBeachEventDetailScraperService');
 const { resolveVenueTimezone, wallClockInVenueTzToUtcDate } = require('../../utils/venueTimezone');
-const { getMarqueeNightclubVenueConfig } = require('../../utils/marqueeNightclubVenueConfig');
+const {
+  resolveEncoreVenue,
+  normalizeEncoreScope,
+  getEncoreBeachVenueConfig,
+} = require('../../utils/encoreBeachVenueConfig');
 const {
   parseScrapDateQueryParam,
   validateScrapDateRangeQuery,
@@ -27,10 +33,14 @@ const {
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
 
-const LOG_PREFIX = '[Marquee Nightclub import]';
-const PRICE_CHANGE_REASON = 'Marquee Nightclub scrap import';
+const LOG_PREFIX = '[Encore Beach import]';
+const PRICE_CHANGE_REASON = 'Encore Beach scrap import';
 
-function parseMarqueeNightclubStartTimeTo24h(timeStr) {
+/**
+ * @param {string} timeStr
+ * @returns {string|null}
+ */
+function parseEncoreStartTimeTo24h(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return null;
   const m = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(am|pm)?/i);
   if (!m) return null;
@@ -42,86 +52,119 @@ function parseMarqueeNightclubStartTimeTo24h(timeStr) {
   return `${String(hh).padStart(2, '0')}:${mm}`;
 }
 
-function isoDateFromMetadata(metadata, listingEvent) {
-  if (metadata?.start_datetime) {
-    const d = new Date(metadata.start_datetime);
-    if (!Number.isNaN(d.getTime())) {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    }
-  }
-  return listingEvent.isoDate || isoDateFromEventName(listingEvent.name) || null;
-}
-
-function buildStartDatetimeLocal(isoDate, startTime) {
+/**
+ * @param {string} isoDate
+ * @param {string} startTime
+ * @param {'night_club'|'day_club'} [venueType]
+ * @returns {string|null}
+ */
+function buildStartDatetimeLocal(isoDate, startTime, venueType = 'day_club') {
   if (!isoDate) return null;
-  const time24 = parseMarqueeNightclubStartTimeTo24h(startTime) || '22:00';
+  const defaultTime = venueType === 'night_club' ? '22:00' : '11:00';
+  const time24 = parseEncoreStartTimeTo24h(startTime) || defaultTime;
   return `${isoDate}T${time24}`;
 }
 
-function isMarqueeNightclubImportableRow(listingEvent) {
-  if (!listingEvent || !listingEvent.eventId || listingEvent.isCustomPromo) return false;
-  if (listingEvent.hasVipReservations === false) return false;
+/**
+ * @param {object} listingEvent
+ * @returns {boolean}
+ */
+function isEncoreImportableRow(listingEvent) {
+  return Boolean(
+    listingEvent &&
+      (listingEvent.eventId || listingEvent.eventCode) &&
+      !listingEvent.isCustomPromo
+  );
+}
+
+/**
+ * @param {object} listingEvent
+ * @param {string} [scope]
+ * @returns {boolean}
+ */
+function isEncoreImportableRowForScope(listingEvent, scope) {
+  if (!isEncoreImportableRow(listingEvent)) return false;
+  const s = normalizeEncoreScope(scope);
+  const resolved = resolveEncoreVenue(listingEvent);
+  if (s === 'daylife') return resolved.venueType === 'day_club';
+  if (s === 'nightlife') return resolved.venueType === 'night_club';
   return true;
 }
 
-function parseMarqueeNightclubDateQueryParam(value) {
+/** @param {string|null|undefined} value @returns {string|null} */
+function parseEncoreDateQueryParam(value) {
   return parseScrapDateQueryParam(value);
 }
 
-function validateMarqueeNightclubDateRangeQuery(fromDate, toDate) {
-  return validateScrapDateRangeQuery(fromDate, toDate, 'MARQUEE_NIGHTCLUB_INVALID_DATE_RANGE');
+/** @param {string|null|undefined} fromDate @param {string|null|undefined} toDate */
+function validateEncoreDateRangeQuery(fromDate, toDate) {
+  return validateScrapDateRangeQuery(fromDate, toDate, 'ENCORE_INVALID_DATE_RANGE');
 }
 
-function filterMarqueeNightclubEventsByDateRange(events, fromDate, toDate) {
+/** @param {object[]} events @param {string} fromDate @param {string} toDate */
+function filterEncoreEventsByDateRange(events, fromDate, toDate) {
   return filterScrapEventsByDateRange(events, fromDate, toDate);
 }
 
-function filterMarqueeNightclubEventsNotInPast(events) {
+/** @param {object[]} events */
+function filterEncoreEventsNotInPast(events) {
   return filterScrapEventsNotInPast(events);
 }
 
-function enrichMarqueeNightclubInventorySeatCodes(items) {
+/**
+ * @param {object[]} items
+ * @returns {object[]}
+ */
+function enrichEncoreInventorySeatCodes(items) {
   return (items || []).map((item) => {
     if (item.seatCode) return item;
     const key = item.sectionKey || normalizeTableName(item.name);
-    const { seatCode, the1Category } = resolveMarqueeNightclubSeatMapping(key);
+    const { seatCode, the1Category } = resolveEncoreSeatMapping(key);
     return { ...item, seatCode, the1Category };
   });
 }
 
-async function partitionMarqueeNightclubEventsByImportStatus(events) {
+/**
+ * @param {object[]} events
+ * @param {{ scope?: string }} [options]
+ */
+async function partitionEncoreEventsByImportStatus(events, options = {}) {
+  const scope = normalizeEncoreScope(options.scope);
   const allRows = Array.isArray(events) ? events : [];
   const importable = [];
   const skipped = [];
 
   allRows.forEach((row) => {
-    if (isMarqueeNightclubImportableRow(row)) {
+    if (isEncoreImportableRowForScope(row, scope)) {
       importable.push(row);
+    } else if (isEncoreImportableRow(row)) {
+      skipped.push({ ...row, skippedReason: `Out of scope (${scope})` });
     } else {
       skipped.push({
         ...row,
-        skippedReason: row.skippedReason || 'No VIP Reservations / not importable',
+        skippedReason: row.skippedReason || 'Not importable',
       });
     }
   });
 
-  const ids = importable.map((r) => r.eventId).filter(Boolean);
+  const ids = importable
+    .map((r) => r.eventId || r.eventCode)
+    .filter(Boolean)
+    .map(String);
   const existingRows =
     ids.length > 0
-      ? await Event.find({ marqueeNightclubEventId: { $in: ids } })
-          .select('marqueeNightclubEventId name')
+      ? await Event.find({ encoreEventId: { $in: ids } })
+          .select('encoreEventId name')
           .lean()
       : [];
-  const existingById = new Map(existingRows.map((e) => [e.marqueeNightclubEventId, e]));
+  const existingById = new Map(existingRows.map((e) => [e.encoreEventId, e]));
 
   const newEvents = [];
   const alreadyImported = [];
 
   importable.forEach((row) => {
-    const existing = existingById.get(row.eventId);
+    const code = String(row.eventId || row.eventCode);
+    const existing = existingById.get(code);
     if (existing) {
       alreadyImported.push({
         ...row,
@@ -139,7 +182,7 @@ async function partitionMarqueeNightclubEventsByImportStatus(events) {
     alreadyImported,
     async (row) => {
       try {
-        return String(getMarqueeNightclubVenueConfig().locationId);
+        return String(resolveEncoreVenue(row).locationId);
       } catch (_) {
         return null;
       }
@@ -164,43 +207,33 @@ async function partitionMarqueeNightclubEventsByImportStatus(events) {
   };
 }
 
-function extractMarqueeNightclubListingUrlFromNotes(notes) {
-  if (!notes) return null;
-  const match = String(notes).match(/Source:\s*(https?:\/\/\S+)/i);
-  return match ? match[1].trim() : null;
-}
-
-function resolveMarqueeNightclubListingUrl(notes) {
-  const fromNotes = extractMarqueeNightclubListingUrlFromNotes(notes);
-  if (fromNotes) return fromNotes;
-  return getMarqueeNightclubVenueConfig().listingUrl;
-}
-
-async function prepareMarqueeNightclubImport(listingEvent) {
+/**
+ * @param {object} listingEvent
+ */
+async function prepareEncoreBeachImport(listingEvent) {
   const warnings = [];
-  const { locationId, type, venueName, listingUrl } = getMarqueeNightclubVenueConfig();
-  const marqueeNightclubEventId = listingEvent.eventId;
+  const encoreEventId = String(listingEvent.eventId || listingEvent.eventCode || '').trim();
+  const resolved = resolveEncoreVenue(listingEvent);
+  const { locationId, type, venueName, venueType } = resolved;
+  const cfg = getEncoreBeachVenueConfig();
 
-  if (!marqueeNightclubEventId) {
-    const err = new Error('Missing Marquee Nightclub event id');
-    err.code = 'MARQUEE_NIGHTCLUB_MISSING_EVENT_ID';
+  if (!encoreEventId) {
+    const err = new Error('Missing Encore event id');
+    err.code = 'ENCORE_MISSING_EVENT_ID';
     throw err;
   }
 
-  if (!isMarqueeNightclubImportableRow(listingEvent)) {
-    const err = new Error(
-      listingEvent.skippedReason ||
-        'This Marquee Nightclub row cannot be imported (no VIP Reservations)'
-    );
-    err.code = 'MARQUEE_NIGHTCLUB_NOT_IMPORTABLE';
+  if (!isEncoreImportableRow(listingEvent)) {
+    const err = new Error(listingEvent.skippedReason || 'This Encore row cannot be imported');
+    err.code = 'ENCORE_NOT_IMPORTABLE';
     throw err;
   }
 
-  assertScrapListingEventNotInPast(listingEvent, 'MARQUEE_NIGHTCLUB_EVENT_IN_PAST');
+  assertScrapListingEventNotInPast(listingEvent, 'ENCORE_EVENT_IN_PAST');
 
   const existing = await findAlreadyImportedForScrap({
-    externalField: 'marqueeNightclubEventId',
-    externalCode: marqueeNightclubEventId,
+    externalField: 'encoreEventId',
+    externalCode: encoreEventId,
     locationId,
     isoDate: listingEvent.isoDate,
     name: listingEvent.name,
@@ -210,32 +243,44 @@ async function prepareMarqueeNightclubImport(listingEvent) {
       alreadyImported: true,
       eventId: String(existing._id),
       eventName: existing.name,
-      marqueeNightclubEventId,
+      encoreEventId,
     };
   }
 
   const location = await Location.findById(locationId);
   if (!location) {
-    const err = new Error(`Marquee Nightclub location not found: ${locationId}`);
-    err.code = 'MARQUEE_NIGHTCLUB_LOCATION_NOT_FOUND';
+    const err = new Error(`Encore location not found: ${locationId} (${venueName})`);
+    err.code = 'ENCORE_LOCATION_NOT_FOUND';
     throw err;
   }
 
-  const detail = await fetchMarqueeNightclubEventDetailInventory(listingEvent);
+  // Mis-route guard: night tiles must not use day location id
+  if (venueType === 'night_club' && String(locationId) === String(cfg.dayLocationId)) {
+    const err = new Error('Night event resolved to day location_id; aborting import');
+    err.code = 'ENCORE_VENUE_MISROUTE';
+    throw err;
+  }
+  if (venueType === 'day_club' && String(locationId) === String(cfg.nightLocationId)) {
+    const err = new Error('Day event resolved to night location_id; aborting import');
+    err.code = 'ENCORE_VENUE_MISROUTE';
+    throw err;
+  }
+
+  const detail = await fetchEncoreBeachEventDetailInventory(listingEvent);
   if (detail.browserError) {
-    const err = new Error(`Could not scrape Marquee Nightclub VIP flow: ${detail.browserError}`);
-    err.code = 'MARQUEE_NIGHTCLUB_DETAIL_SCRAPE_FAILED';
+    const err = new Error(`Could not scrape Encore SEATING tab: ${detail.browserError}`);
+    err.code = 'ENCORE_DETAIL_SCRAPE_FAILED';
     throw err;
   }
   if (detail.warnings?.length) warnings.push(...detail.warnings);
 
   if (!Array.isArray(detail.items) || detail.items.length === 0) {
-    const err = new Error('No TABLES inventory found for Marquee Nightclub event');
-    err.code = 'MARQUEE_NIGHTCLUB_EMPTY_INVENTORY';
+    const err = new Error('No SEATING inventory found for Encore event');
+    err.code = 'ENCORE_EMPTY_INVENTORY';
     throw err;
   }
 
-  const inventoryItems = enrichMarqueeNightclubInventorySeatCodes(detail.items);
+  const inventoryItems = enrichEncoreInventorySeatCodes(detail.items);
   const inheritance = await inheritSeatsFromLocation(locationId, {
     name: listingEvent.name,
     type,
@@ -252,7 +297,7 @@ async function prepareMarqueeNightclubImport(listingEvent) {
     seats,
     inventoryItems,
     PRICE_CHANGE_REASON,
-    'MARQUEE_NIGHTCLUB_PRICING_NOT_APPLIED'
+    'ENCORE_PRICING_NOT_APPLIED'
   );
 
   const locationMediaBySeatId = new Map(
@@ -273,14 +318,14 @@ async function prepareMarqueeNightclubImport(listingEvent) {
   }));
 
   const timezone = resolveVenueTimezone(location);
-  const isoDate = isoDateFromMetadata(detail.metadata, listingEvent);
+  const defaultTime = venueType === 'night_club' ? '22:00' : '11:00';
   const startDatetimeLocal =
-    buildStartDatetimeLocal(isoDate, listingEvent.startTime) ||
-    (isoDate ? `${isoDate}T22:00` : null);
+    buildStartDatetimeLocal(listingEvent.isoDate, listingEvent.startTime, venueType) ||
+    (listingEvent.isoDate ? `${listingEvent.isoDate}T${defaultTime}` : null);
   const startDatetime = startDatetimeLocal
     ? wallClockInVenueTzToUtcDate(startDatetimeLocal, timezone)
-    : isoDate
-      ? new Date(`${isoDate}T22:00:00`)
+    : listingEvent.isoDate
+      ? new Date(`${listingEvent.isoDate}T${defaultTime}:00`)
       : new Date();
 
   const minSpends = (inventoryItems || [])
@@ -288,13 +333,14 @@ async function prepareMarqueeNightclubImport(listingEvent) {
     .filter((n) => typeof n === 'number' && n > 0);
   const basePrice = minSpends.length ? Math.min(...minSpends) : 0;
 
-  const imageUrl = listingEvent.imageUrl || detail.metadata?.image || '';
+  const imageUrl = listingEvent.imageUrl || '';
   const media = imageUrl ? [{ type: 'image', url: imageUrl, order: 0 }] : [];
 
   const notes = [
-    'Imported from Marquee Nightclub taogroup.com listing.',
-    `marqueeNightclubEventId: ${marqueeNightclubEventId}`,
-    listingUrl ? `Source: ${listingUrl}` : null,
+    'Imported from Encore Beach Club wynnsocial.com listing.',
+    `encoreEventId: ${encoreEventId}`,
+    `venue: ${venueName}`,
+    cfg.listingUrl ? `Source: ${cfg.listingUrl}` : null,
     listingEvent.detailUrl ? `Detail: ${listingEvent.detailUrl}` : null,
   ]
     .filter(Boolean)
@@ -315,37 +361,42 @@ async function prepareMarqueeNightclubImport(listingEvent) {
     notes,
     policies: '',
     media,
-    marqueeNightclubEventId,
+    encoreEventId,
     seats: seatsForClient,
     units: unitsForClient,
-    listingUrl,
+    listingUrl: cfg.listingUrl,
     detailUrl: listingEvent.detailUrl,
     scrapedInventory: inventoryItems,
     venueName,
   };
 
-  console.log(`${LOG_PREFIX} prepareMarqueeNightclubImport: "${prefill.name}" -> location ${location.name}`);
+  console.log(
+    `${LOG_PREFIX} prepareEncoreBeachImport: "${prefill.name}" -> ${venueName} (${locationId})`
+  );
 
   return {
     alreadyImported: false,
     prefill,
     warnings,
-    marqueeNightclubEventId,
+    encoreEventId,
   };
 }
 
-async function undoMarqueeNightclubImport(marqueeNightclubEventId) {
-  const id = (marqueeNightclubEventId || '').trim();
+/**
+ * @param {string} encoreEventId
+ */
+async function undoEncoreBeachImport(encoreEventId) {
+  const id = (encoreEventId || '').trim();
   if (!id) {
-    const err = new Error('Missing Marquee Nightclub event id');
-    err.code = 'MARQUEE_NIGHTCLUB_MISSING_EVENT_ID';
+    const err = new Error('Missing Encore event id');
+    err.code = 'ENCORE_MISSING_EVENT_ID';
     throw err;
   }
 
-  const event = await Event.findOne({ marqueeNightclubEventId: id });
+  const event = await Event.findOne({ encoreEventId: id });
   if (!event) {
-    const err = new Error(`No THE1 event found for marqueeNightclubEventId ${id}`);
-    err.code = 'MARQUEE_NIGHTCLUB_EVENT_NOT_FOUND';
+    const err = new Error(`No THE1 event found for encoreEventId ${id}`);
+    err.code = 'ENCORE_EVENT_NOT_FOUND';
     throw err;
   }
 
@@ -354,7 +405,7 @@ async function undoMarqueeNightclubImport(marqueeNightclubEventId) {
   if (coeByEventId.has(eventId)) {
     const coeUse = coeByEventId.get(eventId);
     const err = new Error(`Cannot remove: used in COE "${coeUse.coeName}" (${coeUse.status})`);
-    err.code = 'MARQUEE_NIGHTCLUB_EVENT_IN_COE_USE';
+    err.code = 'ENCORE_EVENT_IN_COE_USE';
     throw err;
   }
 
@@ -370,49 +421,56 @@ async function undoMarqueeNightclubImport(marqueeNightclubEventId) {
 
   await Event.findByIdAndDelete(event._id);
 
+  console.log(`${LOG_PREFIX} undoEncoreBeachImport: deleted event ${eventId} (${id})`);
+
   return {
-    marqueeNightclubEventId: id,
+    encoreEventId: id,
     deletedEventId: eventId,
-    message: 'Marquee Nightclub import undone; event removed from THE1',
+    message: 'Encore Beach import undone; event removed from THE1',
   };
 }
 
-async function resyncMarqueeNightclubEventPricing(marqueeNightclubEventId) {
-  const id = (marqueeNightclubEventId || '').trim();
+/**
+ * @param {string} encoreEventId
+ */
+async function resyncEncoreBeachEventPricing(encoreEventId) {
+  const id = (encoreEventId || '').trim();
   if (!id) {
-    const err = new Error('Missing Marquee Nightclub event id');
-    err.code = 'MARQUEE_NIGHTCLUB_MISSING_EVENT_ID';
+    const err = new Error('Missing Encore event id');
+    err.code = 'ENCORE_MISSING_EVENT_ID';
     throw err;
   }
 
-  const event = await Event.findOne({ marqueeNightclubEventId: id });
+  const event = await Event.findOne({ encoreEventId: id });
   if (!event) {
-    const err = new Error(`No THE1 event found for marqueeNightclubEventId ${id}`);
-    err.code = 'MARQUEE_NIGHTCLUB_EVENT_NOT_FOUND';
+    const err = new Error(`No THE1 event found for encoreEventId ${id}`);
+    err.code = 'ENCORE_EVENT_NOT_FOUND';
     throw err;
   }
 
   const listingEvent = {
     eventId: id,
+    eventCode: id,
     name: event.name,
     detailUrl: (event.notes || '').match(/Detail:\s*(https?:\/\/\S+)/i)?.[1] || null,
+    venueName: event.type === 'night_club' ? 'Encore Beach Club At Night' : 'Encore Beach Club',
+    venueType: event.type === 'night_club' ? 'night_club' : 'day_club',
     isoDate: null,
-    hasVipReservations: true,
   };
 
-  const detail = await fetchMarqueeNightclubEventDetailInventory(listingEvent);
+  const detail = await fetchEncoreBeachEventDetailInventory(listingEvent);
   if (detail.browserError) {
-    const err = new Error(`Could not scrape Marquee Nightclub VIP flow: ${detail.browserError}`);
-    err.code = 'MARQUEE_NIGHTCLUB_DETAIL_SCRAPE_FAILED';
+    const err = new Error(`Could not scrape Encore SEATING tab: ${detail.browserError}`);
+    err.code = 'ENCORE_DETAIL_SCRAPE_FAILED';
     throw err;
   }
   if (!Array.isArray(detail.items) || detail.items.length === 0) {
-    const err = new Error('No TABLES inventory found for Marquee Nightclub event');
-    err.code = 'MARQUEE_NIGHTCLUB_EMPTY_INVENTORY';
+    const err = new Error('No SEATING inventory found for Encore event');
+    err.code = 'ENCORE_EMPTY_INVENTORY';
     throw err;
   }
 
-  const inventoryItems = enrichMarqueeNightclubInventorySeatCodes(detail.items);
+  const inventoryItems = enrichEncoreInventorySeatCodes(detail.items);
   const warnings = [...(detail.warnings || [])];
   const plainSeats = (event.seats || []).map((s) =>
     s && typeof s.toObject === 'function' ? s.toObject() : { ...s }
@@ -449,26 +507,27 @@ async function resyncMarqueeNightclubEventPricing(marqueeNightclubEventId) {
   await event.save();
 
   return {
-    marqueeNightclubEventId: id,
+    encoreEventId: id,
     eventId: String(event._id),
     eventName: event.name,
     base_price: event.base_price,
     updatedSeatCount,
     warnings,
-    message: 'Marquee Nightclub venue catalog pricing refreshed from taogroup.com',
+    message: 'Encore Beach venue catalog pricing refreshed from wynnsocial.com',
   };
 }
 
 module.exports = {
-  prepareMarqueeNightclubImport,
-  undoMarqueeNightclubImport,
-  resyncMarqueeNightclubEventPricing,
-  resolveMarqueeNightclubListingUrl,
-  extractMarqueeNightclubListingUrlFromNotes,
-  partitionMarqueeNightclubEventsByImportStatus,
-  isMarqueeNightclubImportableRow,
-  parseMarqueeNightclubDateQueryParam,
-  validateMarqueeNightclubDateRangeQuery,
-  filterMarqueeNightclubEventsByDateRange,
-  filterMarqueeNightclubEventsNotInPast,
+  prepareEncoreBeachImport,
+  undoEncoreBeachImport,
+  resyncEncoreBeachEventPricing,
+  partitionEncoreEventsByImportStatus,
+  isEncoreImportableRow,
+  isEncoreImportableRowForScope,
+  parseEncoreDateQueryParam,
+  validateEncoreDateRangeQuery,
+  filterEncoreEventsByDateRange,
+  filterEncoreEventsNotInPast,
+  enrichEncoreInventorySeatCodes,
+  buildStartDatetimeLocal,
 };

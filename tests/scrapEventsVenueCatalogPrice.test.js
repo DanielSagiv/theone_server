@@ -75,6 +75,21 @@ const {
   sanitizeMarqueeNightclubDescription,
 } = require('../services/scrapEvents/marqueeNightclubEventDetailScraperService');
 const { isoDateFromEventName, isoDateFromTaoSlug, isoDateFromListingDateDisplay } = require('../services/scrapEvents/marqueeNightclubScraperService');
+const {
+  normalizeTableName: normalizeEncoreTableName,
+  mapEncoreTableToSeatCode,
+  resolveEncoreSeatMapping,
+} = require('../services/scrapEvents/encoreBeachEventDetailScraperService');
+const {
+  resolveEncoreVenue,
+  normalizeEncoreScope,
+  inferEncoreVenueTypeFromEventCode,
+  isEncoreListingVenue,
+} = require('../utils/encoreBeachVenueConfig');
+const {
+  normalizeScrapEventName,
+  scrapEventDayBoundsUtc,
+} = require('../services/scrapEvents/scrapImportDedupe');
 const { assertScrapInventoryPricingApplied } = require('../services/scrapEvents/scrapEventsShared');
 
 const SAMPLE_OMNIA_TEXT = `Main Room Dance Floor
@@ -93,6 +108,8 @@ function testParseMinimumSpend() {
   assert.strictEqual(parseUrvenueMinimumSpendFromItemText('Minimum Spend\n$2,500.00'), 2500);
   assert.strictEqual(parseUrvenueMinimumSpendFromItemText(SAMPLE_OMNIA_TEXT), 6000);
   assert.strictEqual(parseUrvenueMinimumSpendFromItemText('Pay Now 1,200.00'), null);
+  assert.strictEqual(parseUrvenueMinimumSpendFromItemText('F&B Minimum* $4,500.00'), 4500);
+  assert.strictEqual(parseUrvenueMinimumSpendFromItemText('F&B Minimum\n$2,000'), 2000);
 }
 
 function testPayNowNotUsedForCatalog() {
@@ -545,6 +562,90 @@ function testMarqueeNightclubDescriptionSanitize() {
   assert.strictEqual(sanitizeMarqueeNightclubDescription('DJ Pauly D birthday weekend'), 'DJ Pauly D birthday weekend');
 }
 
+function testEncoreSeatMapNormalization() {
+  assert.strictEqual(
+    resolveEncoreSeatMapping(normalizeEncoreTableName('Dancefloor')).seatCode,
+    'Dance Floor Water Couch'
+  );
+  assert.strictEqual(
+    resolveEncoreSeatMapping(normalizeEncoreTableName('Center L Couch Section')).seatCode,
+    'Center L Couch'
+  );
+  assert.strictEqual(
+    mapEncoreTableToSeatCode(normalizeEncoreTableName('Daybed 6')).seatCode,
+    'Daybed'
+  );
+  assert.strictEqual(
+    resolveEncoreSeatMapping(normalizeEncoreTableName('Small Backstage Section')).seatCode,
+    'Backstage Section'
+  );
+  assert.strictEqual(
+    resolveEncoreSeatMapping(normalizeEncoreTableName('Large Backstage Section')).seatCode,
+    'Large Backstage Section'
+  );
+}
+
+function testEncoreVenueRouting() {
+  assert.strictEqual(normalizeEncoreScope('day'), 'daylife');
+  assert.strictEqual(normalizeEncoreScope('night'), 'nightlife');
+  assert.strictEqual(inferEncoreVenueTypeFromEventCode('EVE110300020260814'), 'day_club');
+  assert.strictEqual(inferEncoreVenueTypeFromEventCode('EVE116300020260814'), 'night_club');
+  assert.ok(isEncoreListingVenue('Encore Beach Club'));
+  assert.ok(isEncoreListingVenue('Encore Beach Club At Night'));
+  assert.ok(!isEncoreListingVenue('XS Nightclub'));
+  assert.ok(!isEncoreListingVenue('Wynn Field Club'));
+
+  const day = resolveEncoreVenue({ venueName: 'Encore Beach Club', eventCode: 'EVE110300020260814' });
+  assert.strictEqual(day.venueName, 'Encore Beach Club');
+  assert.strictEqual(day.venueType, 'day_club');
+  assert.strictEqual(day.type, 'day_club');
+
+  const night = resolveEncoreVenue({
+    venueName: 'Encore Beach Club At Night',
+    eventCode: 'EVE116300020260814',
+  });
+  assert.strictEqual(night.venueName, 'Encore Beach Club At Night');
+  assert.strictEqual(night.venueType, 'night_club');
+  assert.notStrictEqual(night.locationId, day.locationId);
+}
+
+function testEncoreInventoryApply() {
+  const seats = [
+    { code: 'Dance Floor Water Couch', event_price: 1000, event_min_spend: 1000 },
+    { code: 'Center L Couch', event_price: 1000, event_min_spend: 1000 },
+    { code: 'Daybed', event_price: 1000, event_min_spend: 1000 },
+  ];
+  const items = [
+    { name: 'Dancefloor', minSpend: 5000, seatCode: 'Dance Floor Water Couch' },
+    { name: 'Center L Couch Section', minSpend: 3500, seatCode: 'Center L Couch' },
+    { name: 'Daybed', minSpend: 2000, seatCode: 'Daybed' },
+  ];
+  const { seats: applied } = applyInventoryToSeats(seats, items, 'Encore Beach scrap import');
+  assert.strictEqual(applied[0].event_price, 5000);
+  assert.strictEqual(applied[1].event_price, 3500);
+  assert.strictEqual(applied[2].event_price, 2000);
+  assert.doesNotThrow(() =>
+    assertScrapInventoryPricingApplied(applied, items, 'Encore Beach scrap import')
+  );
+}
+
+function testScrapIdentityNormalizeAndDayBounds() {
+  assert.strictEqual(normalizeScrapEventName('  Gryffin   Live  '), 'gryffin live');
+  assert.strictEqual(normalizeScrapEventName(''), '');
+
+  const bounds = scrapEventDayBoundsUtc('2026-08-14', 'America/Los_Angeles');
+  assert.ok(bounds);
+  assert.ok(bounds.start instanceof Date);
+  assert.ok(bounds.end instanceof Date);
+  assert.ok(bounds.end.getTime() > bounds.start.getTime());
+  // ~24h in LA (DST-aware: 23 or 24 or 25 hours)
+  const hours = (bounds.end - bounds.start) / (1000 * 60 * 60);
+  assert.ok(hours >= 23 && hours <= 25);
+
+  assert.strictEqual(scrapEventDayBoundsUtc('bad', 'America/Los_Angeles'), null);
+  assert.strictEqual(scrapEventDayBoundsUtc(null, 'America/Los_Angeles'), null);
+}
+
 function run() {
   testParseMinimumSpend();
   testPayNowNotUsedForCatalog();
@@ -580,6 +681,10 @@ function run() {
   testMarqueeNightclubIsoDateFromTaoSlug();
   testMarqueeNightclubIsoDateFromListingDateDisplay();
   testMarqueeNightclubDescriptionSanitize();
+  testEncoreSeatMapNormalization();
+  testEncoreVenueRouting();
+  testEncoreInventoryApply();
+  testScrapIdentityNormalizeAndDayBounds();
   console.log('scrapEventsVenueCatalogPrice.test.js: all passed');
 }
 

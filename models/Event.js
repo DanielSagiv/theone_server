@@ -179,6 +179,8 @@ const EventSchema = new mongoose.Schema({
   marqueeDayclubEventCode: { type: String, trim: true },
   // Marquee Nightclub (taogroup.com) - external event id for scrap import idempotency
   marqueeNightclubEventId: { type: String, trim: true },
+  // Encore Beach Club / At Night (wynnsocial.com) - external EVE code for scrap import idempotency
+  encoreEventId: { type: String, trim: true },
   performers: [{ // Performer information (GXN codes + optional display fields)
     perfcode: { type: String, trim: true }, // Performer code (e.g., PER1242)
     importance: { type: String, trim: true }, // Performer importance level
@@ -273,6 +275,7 @@ EventSchema.index({ taoBeachEventCode: 1 }, { sparse: true }); // Index for TAO 
 EventSchema.index({ palmTreeBeachEventCode: 1 }, { sparse: true }); // Index for Palm Tree Beach scrap import lookups
 EventSchema.index({ marqueeDayclubEventCode: 1 }, { sparse: true }); // Index for Marquee Dayclub scrap import lookups
 EventSchema.index({ marqueeNightclubEventId: 1 }, { sparse: true }); // Index for Marquee Nightclub scrap import lookups
+EventSchema.index({ encoreEventId: 1 }, { sparse: true }); // Index for Encore Beach scrap import lookups
 
 // Pre-save middleware to update availability
 EventSchema.pre('save', function(next) {

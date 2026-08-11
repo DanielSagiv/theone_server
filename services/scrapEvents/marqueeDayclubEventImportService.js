@@ -25,6 +25,10 @@ const {
   SCRAP_IMPORT_EVENT_DESCRIPTION,
   getScrapImportEventStatus,
 } = require('./scrapEventsShared');
+const {
+  findAlreadyImportedForScrap,
+  enrichPartitionWithIdentityDedupe,
+} = require('./scrapImportDedupe');
 
 const LOG_PREFIX = '[Marquee Dayclub import]';
 const PRICE_CHANGE_REASON = 'Marquee Dayclub scrap import';
@@ -114,16 +118,30 @@ async function partitionMarqueeDayclubEventsByImportStatus(events) {
     }
   });
 
-  const alreadyImportedWithEligibility = await attachScrapRemoveEligibility(alreadyImported);
+  const enriched = await enrichPartitionWithIdentityDedupe(
+    newEvents,
+    alreadyImported,
+    async (row) => {
+      try {
+        return String(getMarqueeDayclubVenueConfig().locationId);
+      } catch (_) {
+        return null;
+      }
+    }
+  );
+
+  const alreadyImportedWithEligibility = await attachScrapRemoveEligibility(
+    enriched.alreadyImported
+  );
 
   return {
-    newEvents,
+    newEvents: enriched.newEvents,
     alreadyImported: alreadyImportedWithEligibility,
     skipped,
     stats: {
       totalScraped: allRows.length,
       importableTotal: importable.length,
-      newCount: newEvents.length,
+      newCount: enriched.newEvents.length,
       alreadyImportedCount: alreadyImportedWithEligibility.length,
       skippedCount: skipped.length,
     },
@@ -160,7 +178,13 @@ async function prepareMarqueeDayclubImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'MARQUEE_DAYCLUB_EVENT_IN_PAST');
 
-  const existing = await Event.findOne({ marqueeDayclubEventCode }).select('_id name').lean();
+  const existing = await findAlreadyImportedForScrap({
+    externalField: 'marqueeDayclubEventCode',
+    externalCode: marqueeDayclubEventCode,
+    locationId,
+    isoDate: listingEvent.isoDate,
+    name: listingEvent.name,
+  });
   if (existing) {
     return {
       alreadyImported: true,

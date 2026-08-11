@@ -4961,8 +4961,60 @@
                 <div class="content-section" id="events-importSection">
                     <div class="section-header">
                         <h1>Events Import</h1>
-                        <p>Scrape events from venue websites and import into THE1. R&D phase — venue by venue.</p>
+                        <p>Scrape locally (Puppeteer), then import into Local / Stage / Prod. R&amp;D phase.</p>
                     </div>
+
+                    <div class="card" style="margin-bottom:24px;border:1px solid #dfe6e9;">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+                            <div>
+                                <h3 style="margin:0;">Import target + Big Gun</h3>
+                                <small>Choose where events are written. Scraping always runs on this machine.</small>
+                            </div>
+                            <div id="scrapImportPlatformStatus" style="font-size:13px;color:#666;">Target: Local</div>
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;">
+                                <div>
+                                    <label for="scrapImportPlatform" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Platform</label>
+                                    <select id="scrapImportPlatform" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;min-width:140px;" onchange="onScrapImportPlatformChange()">
+                                        <option value="local" selected>Local</option>
+                                        <option value="stage">Stage</option>
+                                        <option value="prod">Prod</option>
+                                    </select>
+                                </div>
+                                <div id="scrapImportConnectWrap" style="display:none;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                                    <div>
+                                        <label for="scrapImportTargetEmail" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Admin email</label>
+                                        <input id="scrapImportTargetEmail" type="email" autocomplete="username" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;min-width:200px;" />
+                                    </div>
+                                    <div>
+                                        <label for="scrapImportTargetPassword" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Password</label>
+                                        <input id="scrapImportTargetPassword" type="password" autocomplete="current-password" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;min-width:160px;" />
+                                    </div>
+                                    <button type="button" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="connectScrapImportPlatform()">Connect</button>
+                                    <button type="button" class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;" onclick="disconnectScrapImportPlatform()">Disconnect</button>
+                                </div>
+                            </div>
+                            <hr style="border:none;border-top:1px solid #ecf0f1;margin:8px 0 16px;" />
+                            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+                                <div>
+                                    <label for="scrapBulkFromDate" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Bulk From</label>
+                                    <input id="scrapBulkFromDate" type="date" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                                </div>
+                                <div>
+                                    <label for="scrapBulkToDate" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Bulk To</label>
+                                    <input id="scrapBulkToDate" type="date" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                                </div>
+                                <button type="button" id="scrapBulkRunBtn" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;background:#2c3e50;" onclick="runScrapBulkImport()">Run bulk import</button>
+                                <button type="button" id="scrapBulkContinueBtn" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;display:none;" onclick="resolveScrapBulkPause('continue')">Continue</button>
+                                <button type="button" id="scrapBulkAbortBtn" class="btn btn-secondary" style="padding:10px 14px;border-radius:8px;display:none;" onclick="resolveScrapBulkPause('abort')">Abort</button>
+                            </div>
+                            <p style="color:#7f8c8d;font-size:13px;margin:0 0 12px;">Big Gun imports all venues in order (Encore first), event by event. On error the job pauses so you can Continue or Abort.</p>
+                            <div id="scrapBulkProgress" style="display:none;color:#666;margin-bottom:8px;font-size:13px;"></div>
+                            <div id="scrapBulkLog" style="display:none;max-height:240px;overflow:auto;background:#f8f9fa;border:1px solid #ecf0f1;border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;"></div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
                             <div>
@@ -5443,6 +5495,81 @@
                             </div>
                             <p id="marqueeNightclubLiveEventsPlaceholder" style="color:#7f8c8d;font-size:14px;margin:0;">
                                 Click <strong>Show Live Events</strong> to scrape taogroup.com and list new Marquee Nightclub events not yet imported into THE1.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:24px;">
+                        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                            <div>
+                                <h3 style="margin:0;">Encore Beach Club — Day + Night</h3>
+                                <small>Import Encore Beach Club and Encore Beach Club At Night from wynnsocial.com (SEATING inventory)</small>
+                            </div>
+                            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                                <div>
+                                    <label for="encoreBeachEventsScope" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">Location</label>
+                                    <select id="encoreBeachEventsScope" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;">
+                                        <option value="both" selected>Both</option>
+                                        <option value="daylife">Day</option>
+                                        <option value="nightlife">Night</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="encoreBeachEventsFromDate" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">From</label>
+                                    <input id="encoreBeachEventsFromDate" type="date" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                                </div>
+                                <div>
+                                    <label for="encoreBeachEventsToDate" style="display:block;font-size:12px;color:#666;margin-bottom:4px;">To</label>
+                                    <input id="encoreBeachEventsToDate" type="date" style="padding:8px 10px;border:1px solid #ecf0f1;border-radius:8px;" />
+                                </div>
+                                <button type="button" id="encoreBeachLiveEventsBtn" class="btn" style="padding:10px 14px;border-radius:8px;font-weight:600;" onclick="loadEncoreBeachLiveEvents()">Show Live Events</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <p style="color:#7f8c8d;font-size:13px;margin:0 0 16px;">Primary table lists <strong>new upcoming</strong> Encore events (XS / Field Club excluded). Import routes each row to day or night location from venue label. Optional date range re-filters without re-scraping.</p>
+                            <div id="encoreBeachLiveEventsLoading" style="display:none;text-align:center;padding:24px;">
+                                <div class="spinner"></div>
+                                <p style="color:#666;margin-top:12px;">Fetching live events from wynnsocial.com (may take up to a minute)...</p>
+                            </div>
+                            <div id="encoreBeachLiveEventsSummary" style="display:none;color:#666;margin-bottom:16px;"></div>
+                            <div id="encoreBeachLiveEventsWarnings" style="display:none;margin-bottom:16px;"></div>
+                            <div id="encoreBeachLiveEventsTableWrap" style="display:none;overflow:auto;max-height:70vh;">
+                                <table class="table" id="encoreBeachLiveEventsTable">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:90px;">Image</th>
+                                            <th>Name</th>
+                                            <th>Venue</th>
+                                            <th>Category</th>
+                                            <th>Date</th>
+                                            <th>Source</th>
+                                            <th style="width:100px;">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="encoreBeachLiveEventsTableBody"></tbody>
+                                </table>
+                            </div>
+                            <div id="encoreBeachImportedEventsSection" style="display:none;margin-top:24px;padding-top:20px;border-top:1px solid #ecf0f1;">
+                                <h4 style="margin:0 0 12px;font-size:15px;color:#333;">Imported into THE1</h4>
+                                <p style="color:#7f8c8d;font-size:13px;margin:0 0 12px;">Remove an import to delete the THE1 event and allow re-import. Blocked when the event is used in a COE.</p>
+                                <div id="encoreBeachImportedEventsTableWrap" style="overflow:auto;max-height:40vh;">
+                                    <table class="table" id="encoreBeachImportedEventsTable">
+                                        <thead>
+                                            <tr>
+                                                <th>Name</th>
+                                                <th>Venue</th>
+                                                <th>Date</th>
+                                                <th>THE1 event</th>
+                                                <th>THE1 id</th>
+                                                <th style="width:100px;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="encoreBeachImportedEventsTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <p id="encoreBeachLiveEventsPlaceholder" style="color:#7f8c8d;font-size:14px;margin:0;">
+                                Click <strong>Show Live Events</strong> to scrape wynnsocial.com and list new Encore Beach Club events not yet imported into THE1.
                             </p>
                         </div>
                     </div>
@@ -11476,13 +11603,16 @@
         /**
          * Make API request with authentication
          */
-        async function makeApiRequest(endpoint, method = 'GET', body = null) {
+        async function makeApiRequest(endpoint, method = 'GET', body = null, options = {}) {
             const headers = {
                 'Content-Type': 'application/json'
             };
             
             if (currentToken) {
                 headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+            if (options && options.targetToken) {
+                headers['X-Scrap-Target-Token'] = options.targetToken;
             }
 
             const config = {
@@ -11503,7 +11633,7 @@
                 headers['Cache-Control'] = 'no-cache';
             }
 
-            console.log('Making API request:', { endpoint: `/v1${finalEndpoint}`, method, headers });
+            console.log('Making API request:', { endpoint: `/v1${finalEndpoint}`, method, headers: { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : undefined, 'X-Scrap-Target-Token': headers['X-Scrap-Target-Token'] ? '***' : undefined } });
 
             try {
                 const response = await fetch(`/v1${finalEndpoint}`, config);
@@ -16162,6 +16292,12 @@
                 window.livLiveEventsLastStats = stats;
                 window.livLiveEventsLastScrapedAt = scrapedAt;
                 window.livLiveEventsLastScope = scope;
+                await applyPlatformPartitionToVenueCaches(
+                    'liv',
+                    'livLiveEventsCacheAll',
+                    'livImportedEventsCacheAll',
+                    'livLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -16171,8 +16307,8 @@
                 }
 
                 const scopeLabel = getLivScopeLabel(scope);
-                const hasNew = events.length > 0;
-                const hasImported = window.livImportedEventsCacheAll.length > 0;
+                const hasNew = (window.livLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.livImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -16239,6 +16375,509 @@
 
         /** When true, scrap import opens 4-step Create Event wizard (draft). Default: auto-create active. */
         const SCRAP_EVENTS_IMPORT_WIZARD = <%= scrapEventsImportWizard ? 'true' : 'false' %>;
+
+        /** Ordered venues for Big Gun (Encore first). */
+        const SCRAP_BULK_VENUE_ORDER = [
+            {
+                venueKey: 'encoreBeach',
+                label: 'Encore Beach Club',
+                eventsPath: '/scrap-events/encore-beach/events',
+                preparePath: '/scrap-events/encore-beach/prepare-import',
+                scope: 'both',
+                codeFrom: (r) => r.eventId || r.eventCode,
+            },
+            {
+                venueKey: 'liv',
+                label: 'LIV',
+                eventsPath: '/scrap-events/liv/events',
+                preparePath: '/scrap-events/liv/prepare-import',
+                scope: 'both',
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'omnia',
+                label: 'OMNIA',
+                eventsPath: '/scrap-events/omnia/events',
+                preparePath: '/scrap-events/omnia/prepare-import',
+                scope: 'both',
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'hakkasan',
+                label: 'Hakkasan',
+                eventsPath: '/scrap-events/hakkasan/events',
+                preparePath: '/scrap-events/hakkasan/prepare-import',
+                scope: null,
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'taoBeach',
+                label: 'TAO Beach',
+                eventsPath: '/scrap-events/tao-beach/events',
+                preparePath: '/scrap-events/tao-beach/prepare-import',
+                scope: null,
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'palmTreeBeach',
+                label: 'Palm Tree Beach',
+                eventsPath: '/scrap-events/palm-tree-beach/events',
+                preparePath: '/scrap-events/palm-tree-beach/prepare-import',
+                scope: null,
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'marqueeDayclub',
+                label: 'Marquee Dayclub',
+                eventsPath: '/scrap-events/marquee-dayclub/events',
+                preparePath: '/scrap-events/marquee-dayclub/prepare-import',
+                scope: null,
+                codeFrom: (r) => r.eventCode || r.eventId,
+            },
+            {
+                venueKey: 'marqueeNightclub',
+                label: 'Marquee Nightclub',
+                eventsPath: '/scrap-events/marquee-nightclub/events',
+                preparePath: '/scrap-events/marquee-nightclub/prepare-import',
+                scope: null,
+                codeFrom: (r) => r.eventId || r.eventCode,
+            },
+        ];
+
+        window.scrapBulkPauseResolver = null;
+        window.scrapBulkRunning = false;
+
+        function getScrapImportPlatform() {
+            const el = document.getElementById('scrapImportPlatform');
+            const raw = el && el.value ? el.value.trim().toLowerCase() : 'local';
+            if (raw === 'stage' || raw === 'prod') return raw;
+            return 'local';
+        }
+
+        function getScrapTargetToken(platform) {
+            const p = platform || getScrapImportPlatform();
+            if (p === 'local') return null;
+            try {
+                return sessionStorage.getItem('scrapTargetToken_' + p) || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setScrapTargetToken(platform, token) {
+            try {
+                if (!token) sessionStorage.removeItem('scrapTargetToken_' + platform);
+                else sessionStorage.setItem('scrapTargetToken_' + platform, token);
+            } catch (e) { /* ignore */ }
+        }
+
+        function requireScrapPlatformConnected() {
+            const platform = getScrapImportPlatform();
+            if (platform === 'local') return true;
+            if (!getScrapTargetToken(platform)) {
+                showAlert('Connect to ' + platform + ' before importing.', 'warning');
+                return false;
+            }
+            return true;
+        }
+
+        function updateScrapImportPlatformUi() {
+            const platform = getScrapImportPlatform();
+            const wrap = document.getElementById('scrapImportConnectWrap');
+            const status = document.getElementById('scrapImportPlatformStatus');
+            if (wrap) wrap.style.display = platform === 'local' ? 'none' : 'flex';
+            const connected = platform === 'local' || !!getScrapTargetToken(platform);
+            if (status) {
+                status.textContent =
+                    platform === 'local'
+                        ? 'Target: Local (this server DB / S3)'
+                        : 'Target: ' + platform + (connected ? ' (connected)' : ' (not connected)');
+                status.style.color = connected || platform === 'local' ? '#27ae60' : '#c0392b';
+            }
+            try {
+                sessionStorage.setItem('scrapImportPlatform', platform);
+            } catch (e) { /* ignore */ }
+        }
+
+        function onScrapImportPlatformChange() {
+            const platform = getScrapImportPlatform();
+            if (platform === 'prod') {
+                const ok = window.confirm(
+                    'You selected PRODUCTION. Imports will create live events on prod. Continue?'
+                );
+                if (!ok) {
+                    const el = document.getElementById('scrapImportPlatform');
+                    if (el) el.value = 'local';
+                }
+            }
+            updateScrapImportPlatformUi();
+        }
+
+        async function connectScrapImportPlatform() {
+            const platform = getScrapImportPlatform();
+            if (platform === 'local') {
+                showAlert('Local uses your current dashboard session.', 'info');
+                return;
+            }
+            if (platform === 'prod') {
+                const ok = window.confirm(
+                    'Connect to PRODUCTION admin API? Credentials are sent to this local server which proxies to prod.'
+                );
+                if (!ok) return;
+            }
+            const email = (document.getElementById('scrapImportTargetEmail') || {}).value || '';
+            const password = (document.getElementById('scrapImportTargetPassword') || {}).value || '';
+            if (!email.trim() || !password) {
+                showAlert('Enter admin email and password for ' + platform + '.', 'warning');
+                return;
+            }
+            try {
+                const response = await makeApiRequest(`/scrap-events/platforms/${platform}/login`, 'POST', {
+                    email: email.trim(),
+                    password,
+                });
+                const body = response.data || {};
+                if (!response.success || !body.success || !body.token) {
+                    showAlert(body.error?.message || 'Connect failed', 'error');
+                    return;
+                }
+                setScrapTargetToken(platform, body.token);
+                const pw = document.getElementById('scrapImportTargetPassword');
+                if (pw) pw.value = '';
+                updateScrapImportPlatformUi();
+                showAlert('Connected to ' + platform + ' as ' + (body.user?.email || 'admin') + '.', 'success');
+            } catch (error) {
+                showAlert('Connect error: ' + error.message, 'error');
+            }
+        }
+
+        function disconnectScrapImportPlatform() {
+            const platform = getScrapImportPlatform();
+            if (platform === 'local') return;
+            setScrapTargetToken(platform, null);
+            updateScrapImportPlatformUi();
+            showAlert('Disconnected from ' + platform + '.', 'info');
+        }
+
+        function getScrapLastImportedListingRow(venueKey) {
+            const map = {
+                liv: 'livLastImportedListingRow',
+                omnia: 'omniaLastImportedListingRow',
+                hakkasan: 'hakkasanLastImportedListingRow',
+                taoBeach: 'taoBeachLastImportedListingRow',
+                palmTreeBeach: 'palmTreeBeachLastImportedListingRow',
+                marqueeDayclub: 'marqueeDayclubLastImportedListingRow',
+                marqueeNightclub: 'marqueeNightclubLastImportedListingRow',
+                encoreBeach: 'encoreBeachLastImportedListingRow',
+            };
+            const key = map[venueKey];
+            return key ? window[key] : null;
+        }
+
+        function scrapRowExternalCode(venueKey, row) {
+            const meta = SCRAP_BULK_VENUE_ORDER.find((v) => v.venueKey === venueKey);
+            if (meta && typeof meta.codeFrom === 'function') return meta.codeFrom(row) || null;
+            return row.eventCode || row.eventId || null;
+        }
+
+        /**
+         * After local scrape, re-split new vs imported against Stage/Prod.
+         * @param {string} venueKey
+         * @param {string} newCacheKey
+         * @param {string} importedCacheKey
+         * @param {string} statsKey
+         */
+        async function applyPlatformPartitionToVenueCaches(venueKey, newCacheKey, importedCacheKey, statsKey) {
+            const platform = getScrapImportPlatform();
+            if (platform === 'local') return;
+            const combined = [...(window[newCacheKey] || []), ...(window[importedCacheKey] || [])];
+            const parted = await repartitionScrapRowsForPlatform(venueKey, combined);
+            if (!parted) return;
+            window[newCacheKey] = parted.newEvents;
+            window[importedCacheKey] = parted.alreadyImported;
+            if (statsKey && window[statsKey]) {
+                window[statsKey].newCount = parted.newEvents.length;
+                window[statsKey].alreadyImportedCount = parted.alreadyImported.length;
+            }
+        }
+
+        /**
+         * Re-partition listing caches against Stage/Prod when needed.
+         * @param {string} venueKey
+         * @param {object[]} allRows
+         * @returns {Promise<{ newEvents: object[], alreadyImported: object[] }|null>}
+         */
+        async function repartitionScrapRowsForPlatform(venueKey, allRows) {
+            const platform = getScrapImportPlatform();
+            if (platform === 'local') return null;
+            if (!requireScrapPlatformConnected()) {
+                throw new Error('Connect to ' + platform + ' to partition against target');
+            }
+            const rows = Array.isArray(allRows) ? allRows : [];
+            const codes = rows.map((r) => scrapRowExternalCode(venueKey, r)).filter(Boolean);
+            const response = await makeApiRequest(
+                `/scrap-events/platforms/${platform}/partition`,
+                'POST',
+                { venueKey, codes, rows },
+                { targetToken: getScrapTargetToken(platform) }
+            );
+            const body = response.data || {};
+            if (!response.success || !body.success) {
+                throw new Error(body.error?.message || 'Partition failed');
+            }
+            const existingByCode = body.existingByCode || {};
+            const identityByKey = {};
+            (body.identityExisting || []).forEach((hit) => {
+                if (hit && hit.key) identityByKey[hit.key] = hit;
+            });
+            const newEvents = [];
+            const alreadyImported = [];
+            rows.forEach((row) => {
+                const code = scrapRowExternalCode(venueKey, row);
+                const identityKey =
+                    code ||
+                    `${String(row?.isoDate || '').trim()}|${String(row?.name || '')
+                        .replace(/\s+/g, ' ')
+                        .trim()
+                        .toLowerCase()}`;
+                const existing = (code && existingByCode[code]) || identityByKey[identityKey] || null;
+                if (existing) {
+                    alreadyImported.push({
+                        ...row,
+                        alreadyImported: true,
+                        the1EventId: String(existing.eventId),
+                        the1EventName: existing.name,
+                        canRemove: false,
+                        removeBlockedReason: 'Remove only supported for Local target',
+                    });
+                } else {
+                    newEvents.push({ ...row, alreadyImported: false });
+                }
+            });
+            return { newEvents, alreadyImported };
+        }
+
+        function appendScrapBulkLog(line) {
+            const el = document.getElementById('scrapBulkLog');
+            if (!el) return;
+            el.style.display = 'block';
+            const ts = new Date().toLocaleTimeString();
+            el.textContent += `[${ts}] ${line}\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function setScrapBulkProgress(text) {
+            const el = document.getElementById('scrapBulkProgress');
+            if (!el) return;
+            el.style.display = 'block';
+            el.textContent = text || '';
+        }
+
+        function setScrapBulkPausedUi(paused) {
+            const cont = document.getElementById('scrapBulkContinueBtn');
+            const abort = document.getElementById('scrapBulkAbortBtn');
+            const run = document.getElementById('scrapBulkRunBtn');
+            if (cont) cont.style.display = paused ? 'inline-block' : 'none';
+            if (abort) abort.style.display = paused ? 'inline-block' : 'none';
+            if (run) run.disabled = !!window.scrapBulkRunning && !paused;
+        }
+
+        function resolveScrapBulkPause(action) {
+            if (typeof window.scrapBulkPauseResolver === 'function') {
+                window.scrapBulkPauseResolver(action);
+                window.scrapBulkPauseResolver = null;
+            }
+            setScrapBulkPausedUi(false);
+        }
+
+        function waitForScrapBulkPause(message) {
+            appendScrapBulkLog('PAUSED: ' + message);
+            setScrapBulkProgress('Paused — Continue or Abort');
+            setScrapBulkPausedUi(true);
+            showAlert(message + '\n\nUse Continue or Abort in the Big Gun panel.', 'warning');
+            return new Promise((resolve) => {
+                window.scrapBulkPauseResolver = resolve;
+            });
+        }
+
+        function delayMs(ms) {
+            return new Promise((r) => setTimeout(r, ms));
+        }
+
+        /**
+         * Shared prepare + commit used by row Import and Big Gun.
+         * @param {string} venueKey
+         * @param {object} listingRow
+         * @param {{ silent?: boolean }} [opts]
+         */
+        async function runScrapPrepareAndCommit(venueKey, listingRow, opts) {
+            const venue = SCRAP_BULK_VENUE_ORDER.find((v) => v.venueKey === venueKey);
+            if (!venue) throw new Error('Unknown venueKey ' + venueKey);
+            if (!requireScrapPlatformConnected()) {
+                throw new Error('Platform not connected');
+            }
+            const response = await makeApiRequest(venue.preparePath, 'POST', listingRow);
+            const body = response.data || {};
+            if (!response.success || !body.success) {
+                throw new Error(body.error?.message || 'prepare-import failed');
+            }
+            if (body.alreadyImported) {
+                return { alreadyImported: true, body };
+            }
+            await finishScrapImportAfterPrepare(body, venueKey, venue.label, {
+                forceDirect: true,
+                listingEvent: listingRow,
+                silent: !!(opts && opts.silent),
+            });
+            return { alreadyImported: false, body };
+        }
+
+        async function fetchScrapVenueListingForBulk(venue, fromDate, toDate) {
+            let endpoint = `${venue.eventsPath}?diffOnly=false`;
+            if (venue.scope) endpoint += `&scope=${encodeURIComponent(venue.scope)}`;
+            if (fromDate && toDate) {
+                endpoint += `&fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}`;
+            }
+            const response = await makeApiRequest(endpoint, 'GET');
+            const body = response.data || {};
+            if (!response.success || !body.success) {
+                throw new Error(body.error?.details || body.error?.message || 'Listing scrape failed');
+            }
+            const allNew = Array.isArray(body.allNewEvents) ? body.allNewEvents : [];
+            const allImported = Array.isArray(body.allImportedEvents)
+                ? body.allImportedEvents
+                : Array.isArray(body.alreadyImported)
+                  ? body.alreadyImported
+                  : [];
+            let allRows = [...allNew, ...allImported];
+            if (!allRows.length && Array.isArray(body.events)) allRows = body.events;
+
+            const platform = getScrapImportPlatform();
+            if (platform !== 'local') {
+                const parted = await repartitionScrapRowsForPlatform(venue.venueKey, allRows);
+                return parted ? parted.newEvents : allNew;
+            }
+            return allNew;
+        }
+
+        async function runScrapBulkImport() {
+            if (window.scrapBulkRunning) {
+                showAlert('Bulk import already running.', 'warning');
+                return;
+            }
+            if (!requireScrapPlatformConnected()) return;
+
+            const fromEl = document.getElementById('scrapBulkFromDate');
+            const toEl = document.getElementById('scrapBulkToDate');
+            const fromDate = fromEl && fromEl.value ? fromEl.value.trim() : '';
+            const toDate = toEl && toEl.value ? toEl.value.trim() : '';
+            if (!fromDate || !toDate) {
+                showAlert('Select Bulk From and To dates.', 'warning');
+                return;
+            }
+            if (fromDate > toDate) {
+                showAlert('Bulk From must be on or before To.', 'warning');
+                return;
+            }
+
+            const platform = getScrapImportPlatform();
+            if (platform === 'prod') {
+                const ok = window.confirm(
+                    `Run Big Gun bulk import into PRODUCTION for ${fromDate} → ${toDate}?`
+                );
+                if (!ok) return;
+            }
+
+            window.scrapBulkRunning = true;
+            const runBtn = document.getElementById('scrapBulkRunBtn');
+            if (runBtn) runBtn.disabled = true;
+            const logEl = document.getElementById('scrapBulkLog');
+            if (logEl) {
+                logEl.style.display = 'block';
+                logEl.textContent = '';
+            }
+            appendScrapBulkLog(`Start bulk → ${platform} (${fromDate} to ${toDate})`);
+
+            let aborted = false;
+            try {
+                for (let vi = 0; vi < SCRAP_BULK_VENUE_ORDER.length; vi += 1) {
+                    if (aborted) break;
+                    const venue = SCRAP_BULK_VENUE_ORDER[vi];
+                    setScrapBulkProgress(`Venue ${vi + 1}/${SCRAP_BULK_VENUE_ORDER.length}: ${venue.label}`);
+                    appendScrapBulkLog(`Scraping listing: ${venue.label}`);
+                    let newEvents = [];
+                    try {
+                        newEvents = await fetchScrapVenueListingForBulk(venue, fromDate, toDate);
+                    } catch (err) {
+                        const action = await waitForScrapBulkPause(
+                            `${venue.label} listing failed: ${err.message}`
+                        );
+                        if (action === 'abort') {
+                            aborted = true;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    newEvents = (newEvents || []).slice().sort((a, b) => {
+                        const da = a.isoDate || '';
+                        const db = b.isoDate || '';
+                        if (da !== db) return da.localeCompare(db);
+                        return String(a.name || '').localeCompare(String(b.name || ''));
+                    });
+
+                    appendScrapBulkLog(`${venue.label}: ${newEvents.length} new event(s)`);
+
+                    for (let ei = 0; ei < newEvents.length; ei += 1) {
+                        if (aborted) break;
+                        const row = newEvents[ei];
+                        const code = scrapRowExternalCode(venue.venueKey, row) || '';
+                        setScrapBulkProgress(
+                            `Venue ${vi + 1}/${SCRAP_BULK_VENUE_ORDER.length} ${venue.label} — event ${ei + 1}/${newEvents.length}: ${row.name || code}`
+                        );
+                        appendScrapBulkLog(`Import ${row.name || code}…`);
+                        try {
+                            const result = await runScrapPrepareAndCommit(venue.venueKey, row, {
+                                silent: true,
+                            });
+                            if (result.alreadyImported) {
+                                appendScrapBulkLog(`SKIP already imported: ${row.name || code}`);
+                            } else {
+                                appendScrapBulkLog(`OK ${row.name || code}`);
+                            }
+                            await delayMs(750);
+                        } catch (err) {
+                            const action = await waitForScrapBulkPause(
+                                `${venue.label} / ${row.name || code}: ${err.message}`
+                            );
+                            if (action === 'abort') {
+                                aborted = true;
+                                break;
+                            }
+                            appendScrapBulkLog(`SKIP after error: ${row.name || code}`);
+                        }
+                    }
+                }
+                appendScrapBulkLog(aborted ? 'Bulk aborted.' : 'Bulk finished.');
+                setScrapBulkProgress(aborted ? 'Aborted' : 'Complete');
+                showAlert(aborted ? 'Bulk import aborted.' : 'Bulk import finished.', aborted ? 'warning' : 'success');
+            } finally {
+                window.scrapBulkRunning = false;
+                setScrapBulkPausedUi(false);
+                if (runBtn) runBtn.disabled = false;
+            }
+        }
+
+        (function initScrapImportPlatformUi() {
+            try {
+                const saved = sessionStorage.getItem('scrapImportPlatform');
+                const el = document.getElementById('scrapImportPlatform');
+                if (el && (saved === 'local' || saved === 'stage' || saved === 'prod')) {
+                    el.value = saved;
+                }
+            } catch (e) { /* ignore */ }
+            updateScrapImportPlatformUi();
+        })();
 
         /** @type {object|null} Last listing row clicked for Import (cache patch) */
         window.livLastImportedListingRow = null;
@@ -16308,7 +16947,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'liv', 'LIV');
+                await finishScrapImportAfterPrepare(body, 'liv', 'LIV', { listingEvent: ev });
             } catch (error) {
                 console.error('importLivEvent error:', error);
                 showAlert('LIV import error: ' + error.message, 'error');
@@ -16707,6 +17346,12 @@
                 window.omniaLiveEventsLastStats = stats;
                 window.omniaLiveEventsLastScrapedAt = scrapedAt;
                 window.omniaLiveEventsLastScope = body.scope || scope;
+                await applyPlatformPartitionToVenueCaches(
+                    'omnia',
+                    'omniaLiveEventsCacheAll',
+                    'omniaImportedEventsCacheAll',
+                    'omniaLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -16715,8 +17360,8 @@
                     ).join('');
                 }
 
-                const hasNew = events.length > 0;
-                const hasImported = window.omniaImportedEventsCacheAll.length > 0;
+                const hasNew = (window.omniaLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.omniaImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -16830,7 +17475,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'omnia', 'OMNIA');
+                await finishScrapImportAfterPrepare(body, 'omnia', 'OMNIA', { listingEvent: ev });
             } catch (error) {
                 console.error('importOmniaEvent error:', error);
                 showAlert('OMNIA import error: ' + error.message, 'error');
@@ -17163,6 +17808,12 @@
                     : (Array.isArray(body.alreadyImported) ? body.alreadyImported : []);
                 window.hakkasanLiveEventsLastStats = stats;
                 window.hakkasanLiveEventsLastScrapedAt = scrapedAt;
+                await applyPlatformPartitionToVenueCaches(
+                    'hakkasan',
+                    'hakkasanLiveEventsCacheAll',
+                    'hakkasanImportedEventsCacheAll',
+                    'hakkasanLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -17171,8 +17822,8 @@
                     ).join('');
                 }
 
-                const hasNew = events.length > 0;
-                const hasImported = window.hakkasanImportedEventsCacheAll.length > 0;
+                const hasNew = (window.hakkasanLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.hakkasanImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -17286,7 +17937,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'hakkasan', 'Hakkasan');
+                await finishScrapImportAfterPrepare(body, 'hakkasan', 'Hakkasan', { listingEvent: ev });
             } catch (error) {
                 console.error('importHakkasanEvent error:', error);
                 showAlert('Hakkasan import error: ' + error.message, 'error');
@@ -17619,6 +18270,12 @@
                     : (Array.isArray(body.alreadyImported) ? body.alreadyImported : []);
                 window.taoBeachLiveEventsLastStats = stats;
                 window.taoBeachLiveEventsLastScrapedAt = scrapedAt;
+                await applyPlatformPartitionToVenueCaches(
+                    'taoBeach',
+                    'taoBeachLiveEventsCacheAll',
+                    'taoBeachImportedEventsCacheAll',
+                    'taoBeachLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -17627,8 +18284,8 @@
                     ).join('');
                 }
 
-                const hasNew = events.length > 0;
-                const hasImported = window.taoBeachImportedEventsCacheAll.length > 0;
+                const hasNew = (window.taoBeachLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.taoBeachImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -17742,7 +18399,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'taoBeach', 'TAO Beach');
+                await finishScrapImportAfterPrepare(body, 'taoBeach', 'TAO Beach', { listingEvent: ev });
             } catch (error) {
                 console.error('importTaoBeachEvent error:', error);
                 showAlert('TAO Beach import error: ' + error.message, 'error');
@@ -18075,6 +18732,12 @@
                     : (Array.isArray(body.alreadyImported) ? body.alreadyImported : []);
                 window.palmTreeBeachLiveEventsLastStats = stats;
                 window.palmTreeBeachLiveEventsLastScrapedAt = scrapedAt;
+                await applyPlatformPartitionToVenueCaches(
+                    'palmTreeBeach',
+                    'palmTreeBeachLiveEventsCacheAll',
+                    'palmTreeBeachImportedEventsCacheAll',
+                    'palmTreeBeachLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -18083,8 +18746,8 @@
                     ).join('');
                 }
 
-                const hasNew = events.length > 0;
-                const hasImported = window.palmTreeBeachImportedEventsCacheAll.length > 0;
+                const hasNew = (window.palmTreeBeachLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.palmTreeBeachImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -18204,7 +18867,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'palmTreeBeach', 'Palm Tree Beach');
+                await finishScrapImportAfterPrepare(body, 'palmTreeBeach', 'Palm Tree Beach', { listingEvent: ev });
             } catch (error) {
                 console.error('importPalmTreeBeachEvent error:', error);
                 showAlert('Palm Tree Beach import error: ' + error.message, 'error');
@@ -18536,6 +19199,12 @@
                     : (Array.isArray(body.alreadyImported) ? body.alreadyImported : []);
                 window.marqueeDayclubLiveEventsLastStats = stats;
                 window.marqueeDayclubLiveEventsLastScrapedAt = scrapedAt;
+                await applyPlatformPartitionToVenueCaches(
+                    'marqueeDayclub',
+                    'marqueeDayclubLiveEventsCacheAll',
+                    'marqueeDayclubImportedEventsCacheAll',
+                    'marqueeDayclubLiveEventsLastStats'
+                );
 
                 if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
                     warningsEl.style.display = 'block';
@@ -18544,8 +19213,8 @@
                     ).join('');
                 }
 
-                const hasNew = events.length > 0;
-                const hasImported = window.marqueeDayclubImportedEventsCacheAll.length > 0;
+                const hasNew = (window.marqueeDayclubLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.marqueeDayclubImportedEventsCacheAll || []).length > 0;
 
                 if (!hasNew && !hasImported) {
                     const emptyMsg = dateFilter.active
@@ -18660,7 +19329,7 @@
                 }
 
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'marqueeDayclub', 'Marquee Dayclub');
+                await finishScrapImportAfterPrepare(body, 'marqueeDayclub', 'Marquee Dayclub', { listingEvent: ev });
             } catch (error) {
                 console.error('importMarqueeDayclubEvent error:', error);
                 showAlert('Marquee Dayclub import error: ' + error.message, 'error');
@@ -18882,6 +19551,12 @@
                 window.marqueeNightclubImportedEventsCacheAll = body.allImportedEvents || body.alreadyImported || [];
                 window.marqueeNightclubLiveEventsLastStats = body.stats || {};
                 window.marqueeNightclubLiveEventsLastScrapedAt = body.scrapedAt || '';
+                await applyPlatformPartitionToVenueCaches(
+                    'marqueeNightclub',
+                    'marqueeNightclubLiveEventsCacheAll',
+                    'marqueeNightclubImportedEventsCacheAll',
+                    'marqueeNightclubLiveEventsLastStats'
+                );
                 if (body.warnings && body.warnings.length && warningsEl) {
                     warningsEl.style.display = 'block';
                     warningsEl.innerHTML = '<div style="color:#856404;background:#fff3cd;padding:10px;border-radius:6px;font-size:13px;">' + body.warnings.map((w) => escapeHtmlForTable(w)).join('<br>') + '</div>';
@@ -18951,7 +19626,7 @@
                     return;
                 }
                 if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
-                await finishScrapImportAfterPrepare(body, 'marqueeNightclub', 'Marquee Nightclub');
+                await finishScrapImportAfterPrepare(body, 'marqueeNightclub', 'Marquee Nightclub', { listingEvent: ev });
             } catch (error) {
                 console.error('importMarqueeNightclubEvent error:', error);
                 showAlert('Marquee Nightclub import error: ' + error.message, 'error');
@@ -18989,6 +19664,428 @@
             }
         }
 
+        function getEncoreBeachEventsScopeFromInputs() {
+            const el = document.getElementById('encoreBeachEventsScope');
+            const raw = el && el.value ? el.value.trim().toLowerCase() : 'both';
+            if (raw === 'daylife' || raw === 'nightlife') return raw;
+            return 'both';
+        }
+
+        function getEncoreBeachScopeLabel(scope) {
+            if (scope === 'daylife') return 'Day';
+            if (scope === 'nightlife') return 'Night';
+            return 'Both';
+        }
+
+        function filterEncoreBeachEventsByScopeLocal(rows, scope) {
+            const s = scope || 'both';
+            if (s === 'both') return rows || [];
+            return (rows || []).filter((row) => {
+                const isNight =
+                    row.venueType === 'night_club' ||
+                    row.type === 'night_club' ||
+                    /at\s*night/i.test(String(row.venueName || ''));
+                return s === 'nightlife' ? isNight : !isNight;
+            });
+        }
+
+        function getEncoreBeachEventsDateRangeFromInputs() {
+            const fromEl = document.getElementById('encoreBeachEventsFromDate');
+            const toEl = document.getElementById('encoreBeachEventsToDate');
+            const fromDate = (fromEl && fromEl.value) ? fromEl.value.trim() : '';
+            const toDate = (toEl && toEl.value) ? toEl.value.trim() : '';
+            if (!fromDate && !toDate) return { fromDate: '', toDate: '', active: false, error: null };
+            if (!fromDate || !toDate) return { fromDate, toDate, active: false, error: 'Select both From and To dates, or leave both blank.' };
+            if (fromDate > toDate) return { fromDate, toDate, active: false, error: 'From date must be on or before To date.' };
+            return { fromDate, toDate, active: true, error: null };
+        }
+
+        function filterEncoreBeachEventsByDateRangeLocal(events, fromDate, toDate) {
+            return filterLivEventsByDateRangeLocal(events, fromDate, toDate);
+        }
+
+        function renderEncoreBeachLiveEventsTable(events) {
+            const tableBody = document.getElementById('encoreBeachLiveEventsTableBody');
+            const tableWrap = document.getElementById('encoreBeachLiveEventsTableWrap');
+            if (!tableBody) return;
+            if (!events || events.length === 0) {
+                tableBody.innerHTML = '';
+                if (tableWrap) tableWrap.style.display = 'none';
+                window.encoreBeachLiveEventsCache = [];
+                return;
+            }
+            tableBody.innerHTML = events.map((ev, index) => {
+                const imgHtml = ev.imageUrl
+                    ? `<img src="${escapeHtmlForTable(ev.imageUrl)}" alt="${escapeHtmlForTable(ev.name)}" style="max-height:80px;max-width:80px;object-fit:cover;border-radius:6px;" loading="lazy">`
+                    : '<span style="color:#999;">—</span>';
+                const sourceHtml = ev.detailUrl
+                    ? `<a href="${escapeHtmlForTable(ev.detailUrl)}" target="_blank" rel="noopener noreferrer">View</a>`
+                    : '—';
+                const importBtn = `<button type="button" id="encore-beach-import-btn-${index}" class="btn" style="padding:6px 10px;font-size:12px;font-weight:600;" onclick="importEncoreBeachEvent(${index})" title="Import into THE1">Import</button>`;
+                return `<tr><td>${imgHtml}</td><td>${escapeHtmlForTable(ev.name)}</td><td>${escapeHtmlForTable(ev.venueName)}</td><td>${escapeHtmlForTable(ev.category || '—')}</td><td>${escapeHtmlForTable(ev.dateDisplay)}</td><td>${sourceHtml}</td><td>${importBtn}</td></tr>`;
+            }).join('');
+            window.encoreBeachLiveEventsCache = events;
+            if (tableWrap) tableWrap.style.display = 'block';
+        }
+
+        function renderEncoreBeachImportedEventsTable(importedEvents) {
+            const sectionWrap = document.getElementById('encoreBeachImportedEventsSection');
+            const tableBody = document.getElementById('encoreBeachImportedEventsTableBody');
+            const tableWrap = document.getElementById('encoreBeachImportedEventsTableWrap');
+            if (!tableBody || !sectionWrap) return;
+            const rows = Array.isArray(importedEvents) ? importedEvents : [];
+            window.encoreBeachImportedEventsCache = rows;
+            if (rows.length === 0) {
+                sectionWrap.style.display = 'none';
+                tableBody.innerHTML = '';
+                return;
+            }
+            sectionWrap.style.display = 'block';
+            tableBody.innerHTML = rows.map((ev, index) => {
+                const the1Label = ev.the1EventName ? escapeHtmlForTable(ev.the1EventName) : '—';
+                const the1Id = ev.the1EventId ? escapeHtmlForTable(ev.the1EventId) : '—';
+                let actionHtml;
+                if (ev.canRemove) {
+                    actionHtml = `<button type="button" id="encore-beach-remove-btn-${index}" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;font-weight:600;" onclick="removeEncoreBeachImport(${index})" title="Undo import and delete THE1 event">Remove</button>`;
+                } else {
+                    const reason = ev.removeBlockedReason ? escapeHtmlForTable(ev.removeBlockedReason) : 'Cannot remove';
+                    actionHtml = `<button type="button" class="btn btn-secondary" style="padding:6px 10px;font-size:12px;font-weight:600;opacity:0.6;cursor:not-allowed;" disabled title="${reason}">Remove</button>`;
+                }
+                return `<tr><td>${escapeHtmlForTable(ev.name)}</td><td>${escapeHtmlForTable(ev.venueName)}</td><td>${escapeHtmlForTable(ev.dateDisplay)}</td><td>${the1Label}</td><td style="font-size:11px;color:#666;">${the1Id}</td><td>${actionHtml}</td></tr>`;
+            }).join('');
+            if (tableWrap) tableWrap.style.display = 'block';
+        }
+
+        function buildEncoreBeachEventsSummaryText(stats, dateFilter, displayCount, scrapedAt, scope) {
+            const text = buildOmniaEventsSummaryText(stats, dateFilter, displayCount, scrapedAt);
+            const scopeLabel = getEncoreBeachScopeLabel(scope || 'both');
+            return text
+                .replace(' scraped from Booketing', ' scraped from wynnsocial.com')
+                .replace(/^/, `${scopeLabel} · `);
+        }
+
+        function refreshEncoreBeachEventsDisplayLocal() {
+            if (!window.encoreBeachLiveEventsLastStats) return;
+            const dateRange = getEncoreBeachEventsDateRangeFromInputs();
+            if (dateRange.error) {
+                showAlert('Encore Beach date filter: ' + dateRange.error, 'warning');
+                return;
+            }
+            const scope = window.encoreBeachLiveEventsLastScope || getEncoreBeachEventsScopeFromInputs();
+            const filterRows = (rows) => {
+                let next = filterEncoreBeachEventsByScopeLocal(rows || [], scope);
+                if (dateRange.active) next = filterEncoreBeachEventsByDateRangeLocal(next, dateRange.fromDate, dateRange.toDate);
+                return next;
+            };
+            const filteredNew = filterRows(window.encoreBeachLiveEventsCacheAll || []);
+            const filteredImported = filterRows(window.encoreBeachImportedEventsCacheAll || []);
+            const summary = document.getElementById('encoreBeachLiveEventsSummary');
+            const placeholder = document.getElementById('encoreBeachLiveEventsPlaceholder');
+            const stats = window.encoreBeachLiveEventsLastStats || {};
+            const dateFilter = dateRange.active
+                ? { active: true, fromDate: dateRange.fromDate, toDate: dateRange.toDate }
+                : { active: false };
+            if (summary) {
+                summary.style.display = 'block';
+                summary.textContent = buildEncoreBeachEventsSummaryText(
+                    stats,
+                    dateFilter,
+                    filteredNew.length,
+                    window.encoreBeachLiveEventsLastScrapedAt || '',
+                    scope
+                );
+            }
+            if (placeholder) placeholder.style.display = 'none';
+            renderEncoreBeachLiveEventsTable(filteredNew);
+            renderEncoreBeachImportedEventsTable(filteredImported);
+        }
+
+        function patchEncoreBeachCacheAfterImport(createdEvent) {
+            const encoreId =
+                createdEvent?.encoreEventId || window.encoreBeachImportPrefill?.encoreEventId;
+            if (!encoreId) return;
+            const allNew = window.encoreBeachLiveEventsCacheAll || [];
+            const rowIndex = allNew.findIndex(
+                (r) => r.eventId === encoreId || r.eventCode === encoreId
+            );
+            let row;
+            if (rowIndex >= 0) {
+                row = allNew[rowIndex];
+                window.encoreBeachLiveEventsCacheAll = allNew.filter((_, i) => i !== rowIndex);
+            } else {
+                row = window.encoreBeachLastImportedListingRow || { eventId: encoreId, eventCode: encoreId };
+            }
+            const eventId = createdEvent._id || createdEvent.id;
+            const importedRow = {
+                ...row,
+                alreadyImported: true,
+                the1EventId: String(eventId),
+                the1EventName: createdEvent.name || row.name,
+                canRemove: true,
+                removeBlockedReason: null,
+            };
+            window.encoreBeachImportedEventsCacheAll = window.encoreBeachImportedEventsCacheAll || [];
+            window.encoreBeachImportedEventsCacheAll.push(importedRow);
+            if (window.encoreBeachLiveEventsLastStats) {
+                window.encoreBeachLiveEventsLastStats.newCount = window.encoreBeachLiveEventsCacheAll.length;
+                window.encoreBeachLiveEventsLastStats.alreadyImportedCount =
+                    window.encoreBeachImportedEventsCacheAll.length;
+            }
+            refreshEncoreBeachEventsDisplayLocal();
+        }
+
+        function patchEncoreBeachCacheAfterRemove(importedRow) {
+            if (!importedRow?.eventId && !importedRow?.eventCode) return;
+            const code = importedRow.eventId || importedRow.eventCode;
+            window.encoreBeachImportedEventsCacheAll = (
+                window.encoreBeachImportedEventsCacheAll || []
+            ).filter((r) => (r.eventId || r.eventCode) !== code);
+            const {
+                the1EventId,
+                the1EventName,
+                canRemove,
+                removeBlockedReason,
+                ...listingRow
+            } = importedRow;
+            window.encoreBeachLiveEventsCacheAll = window.encoreBeachLiveEventsCacheAll || [];
+            window.encoreBeachLiveEventsCacheAll.push({ ...listingRow, alreadyImported: false });
+            if (window.encoreBeachLiveEventsLastStats) {
+                window.encoreBeachLiveEventsLastStats.newCount = window.encoreBeachLiveEventsCacheAll.length;
+                window.encoreBeachLiveEventsLastStats.alreadyImportedCount =
+                    window.encoreBeachImportedEventsCacheAll.length;
+            }
+            refreshEncoreBeachEventsDisplayLocal();
+        }
+
+        async function loadEncoreBeachLiveEvents() {
+            const btn = document.getElementById('encoreBeachLiveEventsBtn');
+            const loading = document.getElementById('encoreBeachLiveEventsLoading');
+            const summary = document.getElementById('encoreBeachLiveEventsSummary');
+            const warningsEl = document.getElementById('encoreBeachLiveEventsWarnings');
+            const placeholder = document.getElementById('encoreBeachLiveEventsPlaceholder');
+            const dateRange = getEncoreBeachEventsDateRangeFromInputs();
+            if (dateRange.error) {
+                showAlert('Encore Beach date filter: ' + dateRange.error, 'warning');
+                return;
+            }
+            const scope = getEncoreBeachEventsScopeFromInputs();
+            if (btn) btn.disabled = true;
+            if (loading) loading.style.display = 'block';
+            if (summary) summary.style.display = 'none';
+            if (warningsEl) {
+                warningsEl.style.display = 'none';
+                warningsEl.innerHTML = '';
+            }
+            if (placeholder) placeholder.style.display = 'none';
+            try {
+                let endpoint = `/scrap-events/encore-beach/events?diffOnly=true&scope=${encodeURIComponent(scope)}`;
+                if (dateRange.active) {
+                    endpoint += `&fromDate=${encodeURIComponent(dateRange.fromDate)}&toDate=${encodeURIComponent(dateRange.toDate)}`;
+                }
+                const response = await makeApiRequest(endpoint, 'GET');
+                const body = response.data || {};
+                if (!response.success || !body.success) {
+                    const errMsg = body.error?.details || body.error?.message || 'Failed to load live events';
+                    showAlert('Encore Beach live events: ' + errMsg, 'error');
+                    if (placeholder) {
+                        placeholder.style.display = 'block';
+                        placeholder.textContent = errMsg;
+                    }
+                    return;
+                }
+                const events = Array.isArray(body.events) ? body.events : [];
+                const stats = body.stats || {};
+                const scrapedAt = body.scrapedAt ? new Date(body.scrapedAt).toLocaleString() : '';
+                window.encoreBeachLiveEventsCacheAll = Array.isArray(body.allNewEvents)
+                    ? body.allNewEvents
+                    : events;
+                window.encoreBeachImportedEventsCacheAll = Array.isArray(body.allImportedEvents)
+                    ? body.allImportedEvents
+                    : Array.isArray(body.alreadyImported)
+                      ? body.alreadyImported
+                      : [];
+                window.encoreBeachLiveEventsLastStats = stats;
+                window.encoreBeachLiveEventsLastScrapedAt = scrapedAt;
+                window.encoreBeachLiveEventsLastScope = scope;
+                await applyPlatformPartitionToVenueCaches(
+                    'encoreBeach',
+                    'encoreBeachLiveEventsCacheAll',
+                    'encoreBeachImportedEventsCacheAll',
+                    'encoreBeachLiveEventsLastStats'
+                );
+                if (Array.isArray(body.warnings) && body.warnings.length > 0 && warningsEl) {
+                    warningsEl.style.display = 'block';
+                    warningsEl.innerHTML = body.warnings
+                        .map(
+                            (w) =>
+                                `<p style="color:#856404;background:#fff3cd;padding:8px 12px;border-radius:6px;margin:0 0 8px;">${escapeHtmlForTable(w)}</p>`
+                        )
+                        .join('');
+                }
+                const scopeLabel = getEncoreBeachScopeLabel(scope);
+                const hasNew = (window.encoreBeachLiveEventsCacheAll || []).length > 0;
+                const hasImported = (window.encoreBeachImportedEventsCacheAll || []).length > 0;
+                if (!hasNew && !hasImported) {
+                    const emptyMsg = dateRange.active
+                        ? `No new ${scopeLabel} Encore events in the selected date range.`
+                        : `No new ${scopeLabel} Encore events to import.`;
+                    showAlert('Encore Beach live events: ' + emptyMsg, 'info');
+                    if (placeholder) {
+                        placeholder.style.display = 'block';
+                        placeholder.textContent = emptyMsg;
+                    }
+                    window.encoreBeachLiveEventsCache = [];
+                    return;
+                }
+                if (!hasNew) {
+                    showAlert(
+                        dateRange.active
+                            ? `No new ${scopeLabel} Encore events in the selected date range.`
+                            : `No new ${scopeLabel} Encore events to import.`,
+                        'info'
+                    );
+                } else {
+                    showAlert('Encore Beach live events loaded.', 'success');
+                }
+                refreshEncoreBeachEventsDisplayLocal();
+            } catch (error) {
+                console.error('Encore Beach live events error:', error);
+                showAlert('Encore Beach live events error: ' + error.message, 'error');
+            } finally {
+                if (loading) loading.style.display = 'none';
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        window.encoreBeachLiveEventsCacheAll = [];
+        window.encoreBeachImportedEventsCacheAll = [];
+        window.encoreBeachLiveEventsLastStats = null;
+        window.encoreBeachLiveEventsLastScrapedAt = '';
+        window.encoreBeachLiveEventsLastScope = 'both';
+        window.encoreBeachImportPrefill = null;
+        window.encoreBeachLastImportedListingRow = null;
+        window.encoreBeachLiveEventsCache = [];
+        window.encoreBeachImportedEventsCache = [];
+
+        (function initEncoreBeachEventsDateFilterListeners() {
+            const fromEl = document.getElementById('encoreBeachEventsFromDate');
+            const toEl = document.getElementById('encoreBeachEventsToDate');
+            const scopeEl = document.getElementById('encoreBeachEventsScope');
+            const onChange = () => {
+                if (window.encoreBeachLiveEventsLastStats) {
+                    window.encoreBeachLiveEventsLastScope = getEncoreBeachEventsScopeFromInputs();
+                    refreshEncoreBeachEventsDisplayLocal();
+                }
+            };
+            if (fromEl) fromEl.addEventListener('change', onChange);
+            if (toEl) toEl.addEventListener('change', onChange);
+            if (scopeEl) scopeEl.addEventListener('change', onChange);
+        })();
+
+        async function importEncoreBeachEvent(index) {
+            const events = window.encoreBeachLiveEventsCache || [];
+            const ev = events[index];
+            const btn = document.getElementById(`encore-beach-import-btn-${index}`);
+            if (!ev) {
+                showAlert('Event row not found. Reload live events and try again.', 'error');
+                return;
+            }
+            if (!ev.eventId && !ev.eventCode) {
+                showAlert('This row cannot be imported as a bookable event.', 'warning');
+                return;
+            }
+            window.encoreBeachLastImportedListingRow = ev;
+            window.livImportPrefill = null;
+            window.livLastImportedListingRow = null;
+            window.omniaImportPrefill = null;
+            window.omniaLastImportedListingRow = null;
+            window.hakkasanImportPrefill = null;
+            window.hakkasanLastImportedListingRow = null;
+            window.taoBeachImportPrefill = null;
+            window.taoBeachLastImportedListingRow = null;
+            window.palmTreeBeachImportPrefill = null;
+            window.palmTreeBeachLastImportedListingRow = null;
+            window.marqueeDayclubImportPrefill = null;
+            window.marqueeDayclubLastImportedListingRow = null;
+            window.marqueeNightclubImportPrefill = null;
+            window.marqueeNightclubLastImportedListingRow = null;
+            window.encoreBeachImportPrefill = null;
+            const prevLabel = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Preparing…';
+            }
+            try {
+                showAlert('Scraping Encore SEATING inventory…', 'info');
+                const response = await makeApiRequest('/scrap-events/encore-beach/prepare-import', 'POST', ev);
+                const body = response.data || {};
+                if (!response.success || !body.success) {
+                    const errMsg = body.error?.message || 'Failed to prepare import';
+                    showAlert('Encore Beach import: ' + errMsg, 'error');
+                    return;
+                }
+                if (body.alreadyImported) {
+                    showAlert(`Already imported: ${body.eventName || ev.name}`, 'warning');
+                    return;
+                }
+                if (!SCRAP_EVENTS_IMPORT_WIZARD && btn) btn.textContent = 'Creating…';
+                await finishScrapImportAfterPrepare(body, 'encoreBeach', 'Encore Beach', { listingEvent: ev });
+            } catch (error) {
+                console.error('importEncoreBeachEvent error:', error);
+                showAlert('Encore Beach import error: ' + error.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = prevLabel || 'Import';
+                }
+            }
+        }
+
+        async function removeEncoreBeachImport(index) {
+            const rows = window.encoreBeachImportedEventsCache || [];
+            const ev = rows[index];
+            const btn = document.getElementById(`encore-beach-remove-btn-${index}`);
+            const code = ev?.eventId || ev?.eventCode;
+            if (!ev || !code) {
+                showAlert('Imported row not found. Reload live events and try again.', 'error');
+                return;
+            }
+            if (!ev.canRemove) {
+                showAlert(ev.removeBlockedReason || 'This import cannot be removed.', 'warning');
+                return;
+            }
+            const confirmMsg = `Remove "${ev.name}" from THE1? This deletes the imported event and allows re-import from Encore Beach.`;
+            if (!window.confirm(confirmMsg)) return;
+            const prevLabel = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Removing…';
+            }
+            try {
+                const response = await makeApiRequest(
+                    `/scrap-events/encore-beach/import/${encodeURIComponent(code)}`,
+                    'DELETE'
+                );
+                const body = response.data || {};
+                if (!response.success || !body.success) {
+                    const errMsg = body.error?.message || 'Failed to remove import';
+                    showAlert('Encore Beach remove: ' + errMsg, 'error');
+                    return;
+                }
+                showAlert('Import removed. Event can be imported again from the list above.', 'success');
+                patchEncoreBeachCacheAfterRemove(ev);
+                loadEvents();
+            } catch (error) {
+                console.error('removeEncoreBeachImport error:', error);
+                showAlert('Encore Beach remove error: ' + error.message, 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = prevLabel || 'Remove';
+                }
+            }
+        }
+
 
         /**
          * Set the active scrap-import prefill global for Create Event / direct commit.
@@ -19002,8 +20099,11 @@
             window.palmTreeBeachImportPrefill = null;
             window.marqueeDayclubImportPrefill = null;
             window.marqueeNightclubImportPrefill = null;
+            window.encoreBeachImportPrefill = null;
 
-            if (prefill.marqueeNightclubEventId) {
+            if (prefill.encoreEventId) {
+                window.encoreBeachImportPrefill = prefill;
+            } else if (prefill.marqueeNightclubEventId) {
                 window.marqueeNightclubImportPrefill = prefill;
             } else if (prefill.marqueeDayclubEventCode) {
                 window.marqueeDayclubImportPrefill = prefill;
@@ -19063,6 +20163,7 @@
             if (prefill.palmTreeBeachEventCode) eventData.palmTreeBeachEventCode = prefill.palmTreeBeachEventCode;
             if (prefill.marqueeDayclubEventCode) eventData.marqueeDayclubEventCode = prefill.marqueeDayclubEventCode;
             if (prefill.marqueeNightclubEventId) eventData.marqueeNightclubEventId = prefill.marqueeNightclubEventId;
+            if (prefill.encoreEventId) eventData.encoreEventId = prefill.encoreEventId;
 
             return eventData;
         }
@@ -19085,15 +20186,20 @@
             window.marqueeDayclubLastImportedListingRow = null;
             window.marqueeNightclubImportPrefill = null;
             window.marqueeNightclubLastImportedListingRow = null;
+            window.encoreBeachImportPrefill = null;
+            window.encoreBeachLastImportedListingRow = null;
         }
 
         /**
          * Auto-create THE1 event from scrap prefill (no wizard).
          * @param {object} prefill
          * @param {string} venueKey
+         * @param {object} [listingEvent]
+         * @param {{ silent?: boolean }} [opts]
          * @returns {Promise<boolean>}
          */
-        async function commitScrapImportDirect(prefill, venueKey) {
+        async function commitScrapImportDirect(prefill, venueKey, listingEvent, opts) {
+            const silent = !!(opts && opts.silent);
             const patchByVenue = {
                 liv: patchLivCacheAfterImport,
                 omnia: patchOmniaCacheAfterImport,
@@ -19102,30 +20208,78 @@
                 palmTreeBeach: patchPalmTreeBeachCacheAfterImport,
                 marqueeDayclub: patchMarqueeDayclubCacheAfterImport,
                 marqueeNightclub: patchMarqueeNightclubCacheAfterImport,
+                encoreBeach: patchEncoreBeachCacheAfterImport,
             };
 
             try {
-                const eventData = buildEventDataFromScrapPrefill(prefill);
-                const result = await makeApiRequest('/events', 'POST', eventData);
+                const platform = getScrapImportPlatform();
+                let created;
 
-                if (!result.success) {
-                    showAlert('Import failed: ' + getApiErrorMessage(result), 'error');
-                    return false;
+                if (platform === 'local') {
+                    const eventData = buildEventDataFromScrapPrefill(prefill);
+                    const result = await makeApiRequest('/events', 'POST', eventData);
+                    if (!result.success) {
+                        throw new Error(getApiErrorMessage(result));
+                    }
+                    created = result.data?.data || result.data;
+                } else {
+                    if (!requireScrapPlatformConnected()) {
+                        throw new Error('Connect to ' + platform + ' before importing');
+                    }
+                    const row =
+                        listingEvent ||
+                        getScrapLastImportedListingRow(venueKey) ||
+                        {};
+                    const response = await makeApiRequest(
+                        `/scrap-events/platforms/${platform}/commit-import`,
+                        'POST',
+                        { venueKey, listingEvent: row, prefill },
+                        { targetToken: getScrapTargetToken(platform) }
+                    );
+                    const body = response.data || {};
+                    if (!response.success || !body.success) {
+                        throw new Error(body.error?.message || 'Commit import failed');
+                    }
+                    if (body.alreadyImported) {
+                        if (!silent) {
+                            showAlert(
+                                `Already imported on ${platform}: ${body.eventName || prefill.name}`,
+                                'warning'
+                            );
+                        }
+                        clearScrapImportPrefillGlobals();
+                        return true;
+                    }
+                    created = body.created || {
+                        _id: body.eventId,
+                        name: body.eventName || prefill.name,
+                        encoreEventId: body.encoreEventId || prefill.encoreEventId,
+                        livEventCode: body.livEventCode || prefill.livEventCode,
+                        omniaEventCode: body.omniaEventCode || prefill.omniaEventCode,
+                        hakkasanEventCode: body.hakkasanEventCode || prefill.hakkasanEventCode,
+                        taoBeachEventCode: body.taoBeachEventCode || prefill.taoBeachEventCode,
+                        palmTreeBeachEventCode: body.palmTreeBeachEventCode || prefill.palmTreeBeachEventCode,
+                        marqueeDayclubEventCode: body.marqueeDayclubEventCode || prefill.marqueeDayclubEventCode,
+                        marqueeNightclubEventId: body.marqueeNightclubEventId || prefill.marqueeNightclubEventId,
+                    };
                 }
 
-                const created = result.data?.data || result.data;
                 const patchFn = patchByVenue[venueKey];
                 if (typeof patchFn === 'function') {
                     patchFn(created);
                 }
                 clearScrapImportPrefillGlobals();
-                loadEvents();
-                showAlert(`Imported "${created?.name || prefill.name}" as active event.`, 'success');
+                if (platform === 'local') loadEvents();
+                if (!silent) {
+                    showAlert(
+                        `Imported "${created?.name || prefill.name}" to ${platform}.`,
+                        'success'
+                    );
+                }
                 return true;
             } catch (error) {
                 console.error('commitScrapImportDirect error:', error);
-                showAlert('Import error: ' + error.message, 'error');
-                return false;
+                throw error;
             }
         }
 
@@ -19134,25 +20288,31 @@
          * @param {object} body
          * @param {string} venueKey
          * @param {string} venueLabel
+         * @param {{ forceDirect?: boolean, listingEvent?: object, silent?: boolean }} [options]
          */
-        async function finishScrapImportAfterPrepare(body, venueKey, venueLabel) {
+        async function finishScrapImportAfterPrepare(body, venueKey, venueLabel, options) {
+            const opts = options || {};
             const prefill = body?.prefill;
             if (!prefill) {
                 showAlert('No prefill data for import.', 'error');
-                return;
+                throw new Error('No prefill data for import');
             }
 
             if (Array.isArray(body.warnings) && body.warnings.length) {
                 console.warn(`${venueLabel} prepare-import warnings:`, body.warnings);
             }
 
-            if (SCRAP_EVENTS_IMPORT_WIZARD) {
+            const useWizard = SCRAP_EVENTS_IMPORT_WIZARD && !opts.forceDirect && getScrapImportPlatform() === 'local';
+            if (useWizard) {
                 assignScrapImportPrefillGlobals(prefill);
                 await openCreateEventPrefilled(prefill);
                 showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
-            } else {
-                await commitScrapImportDirect(prefill, venueKey);
+                return true;
             }
+
+            return commitScrapImportDirect(prefill, venueKey, opts.listingEvent, {
+                silent: !!opts.silent,
+            });
         }
 
         /**
@@ -19732,7 +20892,8 @@
                 const palmTreeBeachPrefill = window.palmTreeBeachImportPrefill;
                 const marqueeDayclubPrefill = window.marqueeDayclubImportPrefill;
                 const marqueeNightclubPrefill = window.marqueeNightclubImportPrefill;
-                const scrapPrefill = livPrefill || omniaPrefill || hakkasanPrefill || taoBeachPrefill || palmTreeBeachPrefill || marqueeDayclubPrefill || marqueeNightclubPrefill;
+                const encoreBeachPrefill = window.encoreBeachImportPrefill;
+                const scrapPrefill = livPrefill || omniaPrefill || hakkasanPrefill || taoBeachPrefill || palmTreeBeachPrefill || marqueeDayclubPrefill || marqueeNightclubPrefill || encoreBeachPrefill;
                 const fileInput = document.getElementById('ce_media_files');
                 const hasFileUploads = fileInput && fileInput.files && fileInput.files.length > 0;
 
@@ -19849,6 +21010,18 @@
                     }
                 }
 
+                if (encoreBeachPrefill) {
+                    if (Array.isArray(encoreBeachPrefill.seats) && encoreBeachPrefill.seats.length) {
+                        eventData.seats = encoreBeachPrefill.seats;
+                    }
+                    if (Array.isArray(encoreBeachPrefill.units) && encoreBeachPrefill.units.length) {
+                        eventData.units = encoreBeachPrefill.units;
+                    }
+                    if (encoreBeachPrefill.encoreEventId) {
+                        eventData.encoreEventId = encoreBeachPrefill.encoreEventId;
+                    }
+                }
+
                 if (scrapPrefill) {
                     eventData.status = scrapPrefill.status || 'draft';
                 }
@@ -19870,6 +21043,7 @@
                     const wasPalmTreeBeachImport = !!palmTreeBeachPrefill;
                     const wasMarqueeDayclubImport = !!marqueeDayclubPrefill;
                     const wasMarqueeNightclubImport = !!marqueeNightclubPrefill;
+                    const wasEncoreBeachImport = !!encoreBeachPrefill;
                     window.livImportPrefill = null;
                     window.livLastImportedListingRow = null;
                     window.omniaImportPrefill = null;
@@ -19884,6 +21058,8 @@
                     window.marqueeDayclubLastImportedListingRow = null;
                     window.marqueeNightclubImportPrefill = null;
                     window.marqueeNightclubLastImportedListingRow = null;
+                    window.encoreBeachImportPrefill = null;
+                    window.encoreBeachLastImportedListingRow = null;
                     if (wasLivImport) {
                         const created = result.data?.data || result.data;
                         patchLivCacheAfterImport(created);
@@ -19911,6 +21087,10 @@
                     if (wasMarqueeNightclubImport) {
                         const created = result.data?.data || result.data;
                         patchMarqueeNightclubCacheAfterImport(created);
+                    }
+                    if (wasEncoreBeachImport) {
+                        const created = result.data?.data || result.data;
+                        patchEncoreBeachCacheAfterImport(created);
                     }
                 } else {
                     const errMsg = getApiErrorMessage(result);

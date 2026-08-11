@@ -2,8 +2,8 @@
 
 Update this file whenever we gain a new ability, finish a venue spike, or change scope.
 
-**Last updated:** 2026-06-09  
-**Phase:** R&D — **venue set complete** (LIV Night + Beach, OMNIA Night + Dayclub, Hakkasan, TAO Beach, Palm Tree Beach, Marquee Dayclub, Marquee Nightclub). Next: validation, prod rollout, production hardening — not new venue parsers unless scope expands.
+**Last updated:** 2026-08-11  
+**Phase:** R&D — **venue set complete** + **platform target / Big Gun bulk** (local scrape → Local/Stage/Prod commit). Next: validation, prod rollout, production hardening.
 
 ---
 
@@ -84,8 +84,19 @@ Import events from venue websites into THE1, venue by venue, via the EJS **Event
 | yes | VIP-only importable partition (Buy Tickets-only skipped) |
 | yes | `scripts/verify-marquee-nightclub-location-parity.js` |
 | yes | Marquee Nightclub DOM listing parser (`.event-list__item` — not `parseListingPage`) |
+| yes | Encore Beach Club wynnsocial.com listing (Day + Night, XS/Field Club excluded) |
+| yes | `GET /v1/scrap-events/encore-beach/events` + `POST /encore-beach/prepare-import` |
+| yes | Encore SEATING tab scrape (F&B Minimum) + 16-seat map + dual-location resolve |
+| yes | `encoreEventId` dedupe + undo + resync-pricing |
+| yes | Encore Beach EJS card (scope Day/Night/Both) + local cache patch |
+| yes | `scripts/verify-encore-beach-location-parity.js` |
+| yes | Import target selector Local / Stage / Prod + Connect (remote admin token) |
+| yes | Platform proxy: login, partition, commit-import (flyer re-host + location remap) |
+| yes | `POST /scrap-events/lookup-external-ids` for remote partition |
+| yes | Dual dedupe: external id **or** location + date + normalized name (`scrapImportDedupe.js`) |
+| yes | `POST /scrap-events/lookup-event-identities` for identity partition/commit |
+| yes | Big Gun bulk runner (Encore-first venue order, pause Continue/Abort) |
 | no | Hakkasan Studio / R&Bae seat map |
-| no | Bulk import all rows |
 | no | Production hardening (audit, rate limits) |
 | no | Additional scrap-events venues (current set complete) |
 
@@ -104,6 +115,8 @@ Import events from venue websites into THE1, venue by venue, via the EJS **Event
 | Palm Tree Beach | **Palm Tree Beach** (`PALM_TREE_BEACH_LOCATION_ID`, `day_club`) | Booketing `61/1117/palm-tree-beach-club` | TABLES accordion; 8 seats; all EVE1117 rows | **pilot** |
 | Marquee Dayclub | **Marquee Dayclub** (`MARQUEE_DAYCLUB_LOCATION_ID`, `day_club`) | Booketing `61/1109/marquee-dayclub` | TABLES accordion; 5 seats; all EVE1109 rows | **pilot** |
 | Marquee Nightclub | **Marquee Nightclub** (`MARQUEE_NIGHTCLUB_LOCATION_ID`, `night_club`) | taogroup.com venue calendar | DOM `.event-list__item` tiles; VIP Reservations + TABLES; 6 seats; slug dedupe | **pilot** |
+| Encore Beach Club | **Encore Beach Club** (`ENCORE_DAY_LOCATION_ID`, `day_club`) | wynnsocial.com/events | `li.eventitem`; SEATING / F&B Minimum; site id `1103` | **pilot** |
+| Encore Beach Club At Night | **Encore Beach Club At Night** (`ENCORE_NIGHT_LOCATION_ID`, `night_club`) | same calendar | venue label / site id `1163`; same SEATING DOM | **pilot** |
 
 **Beach spike event:** Cloonee — `EVE121488100020260627` — https://www.livnightclub.com/las-vegas/event/EVE121488100020260627/cloonee/
 

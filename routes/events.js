@@ -431,6 +431,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       palmTreeBeachEventCode: value.palmTreeBeachEventCode || undefined,
       marqueeDayclubEventCode: value.marqueeDayclubEventCode || undefined,
       marqueeNightclubEventId: value.marqueeNightclubEventId || undefined,
+      encoreEventId: value.encoreEventId || undefined,
       total_capacity: totalCapacity,
       total_available: totalCapacity,
       total_booked: 0,

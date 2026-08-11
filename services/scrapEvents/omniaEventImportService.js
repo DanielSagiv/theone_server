@@ -17,6 +17,10 @@ const {
   SCRAP_IMPORT_EVENT_DESCRIPTION,
   getScrapImportEventStatus,
 } = require('./scrapEventsShared');
+const {
+  findAlreadyImportedForScrap,
+  enrichPartitionWithIdentityDedupe,
+} = require('./scrapImportDedupe');
 
 const LOG_PREFIX = '[OMNIA import]';
 
@@ -157,17 +161,36 @@ async function partitionOmniaEventsByImportStatus(events, options = {}) {
     }
   });
 
-  const alreadyImportedWithEligibility = await attachScrapRemoveEligibility(alreadyImported);
+  const enriched = await enrichPartitionWithIdentityDedupe(
+    newEvents,
+    alreadyImported,
+    async (row) => {
+      try {
+        return String(resolveOmniaVenue(row).locationId);
+      } catch (_) {
+        return null;
+      }
+    }
+  );
+
+  const alreadyImportedWithEligibility = await attachScrapRemoveEligibility(
+    enriched.alreadyImported
+  );
 
   const stats = {
     totalScraped: allRows.length,
     importableTotal: importable.length,
-    newCount: newEvents.length,
+    newCount: enriched.newEvents.length,
     alreadyImportedCount: alreadyImportedWithEligibility.length,
     skippedCount: skipped.length,
   };
 
-  return { newEvents, alreadyImported: alreadyImportedWithEligibility, skipped, stats };
+  return {
+    newEvents: enriched.newEvents,
+    alreadyImported: alreadyImportedWithEligibility,
+    skipped,
+    stats,
+  };
 }
 
 /**
@@ -194,7 +217,13 @@ async function prepareOmniaEventImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'OMNIA_EVENT_IN_PAST');
 
-  const existing = await Event.findOne({ omniaEventCode }).select('_id name').lean();
+  const existing = await findAlreadyImportedForScrap({
+    externalField: 'omniaEventCode',
+    externalCode: omniaEventCode,
+    locationId,
+    isoDate: listingEvent.isoDate,
+    name: listingEvent.name,
+  });
   if (existing) {
     return {
       alreadyImported: true,
