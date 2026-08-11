@@ -89,7 +89,8 @@ function parseArtistFileName(fileName) {
   const base = path.basename(fileName).replace(/\.[^.]+$/, '').trim();
   if (!base) return null;
 
-  const dash = base.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  // Require spaces around the dash so "ERIC D-LUX - Open Format" keeps D-LUX in the artist.
+  const dash = base.match(/^(.+?)\s+[-–—]\s+(.+)$/);
   if (dash) {
     return {
       artist: dash[1].replace(/\s+/g, ' ').trim(),
@@ -225,6 +226,11 @@ async function upsertRows(rows, label, dryRun) {
       { upsert: true, new: true },
     );
     upserted += 1;
+  }
+  // Drop mis-parsed predecessor of ERIC D-LUX (was artistKey ERIC D).
+  const staleEric = await ArtistGenre.deleteOne({ artistKey: 'ERIC D' });
+  if (staleEric.deletedCount) {
+    console.log(`${LOG} ${label}: removed stale ERIC D row`);
   }
   const count = await ArtistGenre.countDocuments();
   console.log(`${LOG} ${label}: upserted ${upserted}, collection count=${count}`);

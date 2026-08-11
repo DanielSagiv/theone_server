@@ -5,6 +5,7 @@
 const assert = require('assert');
 const {
   matchArtistsInEventNameAgainstCatalog,
+  resolveDjOnlyEventName,
   normalizeArtistKey,
 } = require('../services/eventArtistGenreMatchService');
 
@@ -38,6 +39,12 @@ const CATALOG = [
     artist: 'ROSS',
     genre: 'EDM',
     genres: ['EDM'],
+  },
+  {
+    artistKey: 'ERIC D LUX',
+    artist: 'ERIC D-LUX',
+    genre: 'Open Format (Various Genre)',
+    genres: ['Open Format'],
   },
 ];
 
@@ -122,6 +129,61 @@ function testNonOverlappingMultiArtist() {
   assert.deepStrictEqual(keys, ['CID', 'JOHN SUMMIT']);
 }
 
+function testDjOnlyEricDLux() {
+  const title = 'Eric D-Lux - Good Life Fridays';
+  const r = matchArtistsInEventNameAgainstCatalog(title, CATALOG);
+  assert.strictEqual(r.matched_artists.length, 1);
+  assert.strictEqual(r.matched_artists[0].artistKey, 'ERIC D LUX');
+  assert.ok(r.genres.includes('Open Format'));
+  const renamed = resolveDjOnlyEventName(title, r.matched_artists);
+  assert.strictEqual(renamed, 'ERIC D-LUX');
+}
+
+function testDjOnlyJohnSummit() {
+  const title = 'JOHN SUMMIT - Some Venue Party';
+  const r = matchArtistsInEventNameAgainstCatalog(title, CATALOG);
+  assert.strictEqual(r.matched_artists.length, 1);
+  const renamed = resolveDjOnlyEventName(title, r.matched_artists);
+  assert.strictEqual(renamed, 'JOHN SUMMIT');
+}
+
+function testDjOnlyUnmatchedUnchanged() {
+  const title = 'Some Random - Party';
+  const r = matchArtistsInEventNameAgainstCatalog(title, CATALOG);
+  assert.strictEqual(r.matched_artists.length, 0);
+  assert.strictEqual(
+    resolveDjOnlyEventName(title, r.matched_artists),
+    title,
+  );
+}
+
+function testDjOnlyNoSuffixUnchanged() {
+  const title = 'Eric D-Lux';
+  const r = matchArtistsInEventNameAgainstCatalog(title, CATALOG);
+  assert.strictEqual(r.matched_artists.length, 1);
+  assert.strictEqual(
+    resolveDjOnlyEventName(title, r.matched_artists),
+    title,
+  );
+}
+
+function testBareHyphenInsideArtistNeverSplits() {
+  const title = 'Eric D-Lux Night';
+  const r = matchArtistsInEventNameAgainstCatalog(title, CATALOG);
+  assert.strictEqual(r.matched_artists.length, 1);
+  assert.strictEqual(
+    resolveDjOnlyEventName(title, r.matched_artists),
+    title,
+  );
+  // Direct helper: spaced-dash required
+  assert.strictEqual(
+    resolveDjOnlyEventName('Eric D-Lux', [
+      { artist: 'ERIC D-LUX', artistKey: 'ERIC D LUX' },
+    ]),
+    'Eric D-Lux',
+  );
+}
+
 function run() {
   testExactPhraseMatch();
   testNoSubstringInsideWord();
@@ -130,6 +192,11 @@ function run() {
   testNoMatchEmpty();
   testCidWholeWord();
   testNonOverlappingMultiArtist();
+  testDjOnlyEricDLux();
+  testDjOnlyJohnSummit();
+  testDjOnlyUnmatchedUnchanged();
+  testDjOnlyNoSuffixUnchanged();
+  testBareHyphenInsideArtistNeverSplits();
   console.log('eventArtistGenreMatch.test.js: all passed');
 }
 

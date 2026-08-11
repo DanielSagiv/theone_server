@@ -822,14 +822,11 @@
       ]
     },
     {
-      "artistKey": "ERIC D",
-      "artist": "ERIC D",
-      "genre": "LUX - Open Format (Various Genre)",
+      "artistKey": "ERIC D LUX",
+      "artist": "ERIC D-LUX",
+      "genre": "Open Format (Various Genre)",
       "genres": [
-        "Open Format",
-        "LUX",
-        "(Various",
-        "Genre)"
+        "Open Format"
       ],
       "sourceFiles": [
         "ERIC D-LUX - Open Format (Various Genre).jpg"
