@@ -3,6 +3,7 @@ const Location = require('../models/Location');
 const Event = require('../models/Event');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { createLocationSchema, updateLocationSchema, addSentimentSchema, updateSentimentSchema } = require('../utils/validationSchemas');
+const { LOCATION_SEAT_CATEGORY_CATALOG_COLLECTION } = require('../constants/locationSeatCategories');
 const { 
   getLocationEventCount, 
   getLocationEventRevenue, 
@@ -142,6 +143,23 @@ router.get('/the1-categories', authenticateToken, requireAdmin, async (req, res)
         });
       }
     });
+
+    try {
+      const catalog = await Location.db
+        .collection(LOCATION_SEAT_CATEGORY_CATALOG_COLLECTION)
+        .find({})
+        .project({ label: 1, value: 1 })
+        .toArray();
+      catalog.forEach((row) => {
+        const label = typeof row?.label === 'string' ? row.label.trim() : '';
+        if (label) categoriesSet.add(label);
+      });
+    } catch (catalogErr) {
+      console.warn('Get THE1 categories: catalog read skipped', {
+        error: catalogErr.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     const categories = Array.from(categoriesSet).sort();
 

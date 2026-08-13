@@ -47,6 +47,7 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'owner_tables', label: 'Owner Tables' },
   { value: 'patio_section', label: 'Patio Section' },
   { value: 'platform_section', label: 'Platform Section' },
+  { value: 'premium_platform_section', label: 'Premium Platform Section' },
   { value: 'pool_couch', label: 'Pool Couch' },
   { value: 'pool_deck_or_lawn', label: 'Pool Deck or Lawn' },
   { value: 'poolside_section', label: 'Poolside Section' },
@@ -141,7 +142,11 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
 
 const LOCATION_SEAT_CATEGORY_VALUES = LOCATION_SEAT_CATEGORY_OPTIONS.map((o) => o.value);
 
+/** Mongo collection for extra THE1 category labels (create/update location datalist). */
+const LOCATION_SEAT_CATEGORY_CATALOG_COLLECTION = 'location_seat_category_catalog';
+
 module.exports = {
   LOCATION_SEAT_CATEGORY_OPTIONS,
   LOCATION_SEAT_CATEGORY_VALUES,
+  LOCATION_SEAT_CATEGORY_CATALOG_COLLECTION,
 };
