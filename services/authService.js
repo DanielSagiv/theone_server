@@ -252,8 +252,6 @@ const createClientByAdmin = async (payload) => {
     entity_status: 'live',
     emailVerified: true,
     emailVerifiedAt: now,
-    termsAcceptedAt: now,
-    privacyConsentAt: now,
     first_coe_deduction_enabled: Boolean(payload.first_coe_deduction_enabled),
     first_coe_deduction_consumed: false,
     first_coe_deduction_amount: 1000,
