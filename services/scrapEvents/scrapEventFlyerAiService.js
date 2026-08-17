@@ -1,6 +1,7 @@
 /**
- * Scrap-import event flyer AI clean: remove text overlays, sharpen, keep source aspect ratio.
+ * Scrap-import event flyer AI clean: remove baked-in text, sharpen, keep source aspect ratio.
  * Same OpenAI images.edit family as sectionImageAiService; does not force 4:3.
+ * Pass 1 + vision leftover-text check; one retry edit when text is still likely.
  */
 const OpenAI = require('openai');
 const { toFile } = require('openai');
@@ -18,11 +19,19 @@ const MAX_LONG_EDGE = 1536;
 const JPEG_QUALITY = 90;
 
 const EVENT_FLYER_PROMPT =
-  'Create a new image from the image. Remove all text, logos, date badges, time pills, ' +
-  'margin branding, watermarks, and typographic overlays from the flyer. ' +
-  'Make the image sharper. Fill the entire frame edge-to-edge with the subject and artwork. ' +
-  'Do not add borders, letterboxing, black bars, or empty padding. ' +
-  'Preserve the artist/subject and venue look without inventing new text.';
+  'Create a new image from the image. The new image will be without text (if any) and the image will be sharper. ' +
+  'Remove all letters even if they look like design: titles, artist names, venue names, dates, times, logos, ' +
+  'signatures, watermarks, and typographic overlays. Reconstruct the artwork and background so no ghosted or ' +
+  'smeared letterforms remain. Fill the entire frame edge-to-edge with the subject and artwork. ' +
+  'Do not add new text, borders, letterboxing, black bars, or empty padding. ' +
+  'Preserve the subject, composition, and venue look — not the typography.';
+
+const EVENT_FLYER_RETRY_PROMPT =
+  'This image still has leftover characters, logos, signatures, or ghosted smeared letterforms. ' +
+  'Paint them out and reconstruct the artwork and background. The new image must be without text and sharper. ' +
+  'Do not add any new text, borders, or letterboxing.';
+
+const VISION_MODEL = String(process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 
 const openaiClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
 
@@ -183,25 +192,75 @@ async function downloadHttpImageBuffer(sourceUrl) {
 }
 
 /**
- * Clean venue flyer bytes: remove text, sharpen, keep AR JPEG.
- * @param {Buffer} inputBuffer
- * @returns {Promise<{ buffer: Buffer, mime: string, width: number, height: number, model: string }>}
+ * Bytes from an images.edit completion (b64 or URL).
+ * @param {object} completion
+ * @returns {Promise<Buffer>}
  */
-async function cleanEventFlyerBuffer(inputBuffer) {
-  if (!openaiClient) {
-    const err = new Error('OpenAI API key is not configured on the server');
-    err.statusCode = 503;
-    throw err;
+async function bufferFromEditCompletion(completion) {
+  const first = completion?.data?.[0];
+  if (first?.b64_json) {
+    return Buffer.from(first.b64_json, 'base64');
   }
-  if (!inputBuffer || !Buffer.isBuffer(inputBuffer) || !inputBuffer.length) {
-    const err = new Error('Image buffer is empty');
-    err.statusCode = 400;
-    throw err;
+  if (first?.url) {
+    return downloadHttpImageBuffer(first.url);
   }
+  throw new Error('Empty response from OpenAI image edit');
+}
 
-  const meta = await sharp(inputBuffer).rotate().metadata();
-  const preferredSize = pickAiSizeForOrientation(meta.width, meta.height);
-  const pngBuffer = await prepareEditPngBuffer(inputBuffer, preferredSize);
+/**
+ * Vision check: leftover readable or ghosted text. True on API error (fail-safe retry).
+ * @param {Buffer} imageBuffer
+ * @returns {Promise<boolean>}
+ */
+async function flyerImageHasLeftoverText(imageBuffer) {
+  try {
+    const jpeg = await sharp(imageBuffer)
+      .jpeg({ quality: 70, mozjpeg: true })
+      .toBuffer();
+    const completion = await openaiClient.chat.completions.create({
+      model: VISION_MODEL,
+      temperature: 0,
+      max_tokens: 16,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text:
+                'Does this image still contain readable text, logos with letters, signatures, ' +
+                'watermarks, or ghosted/smeared letterforms? Answer YES or NO only.',
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${jpeg.toString('base64')}` },
+            },
+          ],
+        },
+      ],
+    });
+    const raw = String(completion?.choices?.[0]?.message?.content || '').trim();
+    const leftover = /^\s*yes\b/i.test(raw);
+    console.log(`${LOG_PREFIX} leftover-text check`, { answer: raw, leftover });
+    return leftover;
+  } catch (err) {
+    console.warn(
+      `${LOG_PREFIX} leftover-text check failed; will retry edit`,
+      err?.message || err
+    );
+    return true;
+  }
+}
+
+/**
+ * One images.edit with model + size fallbacks.
+ * @param {Buffer} sourceBuffer
+ * @param {string} prompt
+ * @param {string} preferredSize
+ * @returns {Promise<{ completion: object, usedModel: string, usedSize: string }>}
+ */
+async function runFlyerEditWithFallbacks(sourceBuffer, prompt, preferredSize) {
+  const pngBuffer = await prepareEditPngBuffer(sourceBuffer, preferredSize);
   const imageFile = await toFile(pngBuffer, 'event-flyer-source.png', {
     type: 'image/png',
   });
@@ -231,7 +290,7 @@ async function cleanEventFlyerBuffer(inputBuffer) {
       usedModel = model;
       usedSize = preferredSize;
       try {
-        completion = await runImageEdit(imageFile, model, EVENT_FLYER_PROMPT, usedSize);
+        completion = await runImageEdit(imageFile, model, prompt, usedSize);
       } catch (sizeErr) {
         const wrappedSize = wrapProcessError(sizeErr);
         if (usedSize !== AI_SIZE_SQUARE && isUnsupportedSizeError(wrappedSize)) {
@@ -242,16 +301,11 @@ async function cleanEventFlyerBuffer(inputBuffer) {
             message: wrappedSize.message,
           });
           usedSize = AI_SIZE_SQUARE;
-          const squarePng = await prepareEditPngBuffer(inputBuffer, AI_SIZE_SQUARE);
+          const squarePng = await prepareEditPngBuffer(sourceBuffer, AI_SIZE_SQUARE);
           const squareFile = await toFile(squarePng, 'event-flyer-source.png', {
             type: 'image/png',
           });
-          completion = await runImageEdit(
-            squareFile,
-            model,
-            EVENT_FLYER_PROMPT,
-            usedSize
-          );
+          completion = await runImageEdit(squareFile, model, prompt, usedSize);
         } else {
           throw sizeErr;
         }
@@ -275,15 +329,58 @@ async function cleanEventFlyerBuffer(inputBuffer) {
   if (!completion) {
     throw lastErr || new Error('Failed to process event flyer');
   }
+  return { completion, usedModel, usedSize };
+}
 
-  const first = completion?.data?.[0];
-  let outBuffer;
-  if (first?.b64_json) {
-    outBuffer = Buffer.from(first.b64_json, 'base64');
-  } else if (first?.url) {
-    outBuffer = await downloadHttpImageBuffer(first.url);
-  } else {
-    throw new Error('Empty response from OpenAI image edit');
+/**
+ * Clean venue flyer bytes: remove text, sharpen, keep AR JPEG.
+ * @param {Buffer} inputBuffer
+ * @returns {Promise<{ buffer: Buffer, mime: string, width: number, height: number, model: string }>}
+ */
+async function cleanEventFlyerBuffer(inputBuffer) {
+  if (!openaiClient) {
+    const err = new Error('OpenAI API key is not configured on the server');
+    err.statusCode = 503;
+    throw err;
+  }
+  if (!inputBuffer || !Buffer.isBuffer(inputBuffer) || !inputBuffer.length) {
+    const err = new Error('Image buffer is empty');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const meta = await sharp(inputBuffer).rotate().metadata();
+  const preferredSize = pickAiSizeForOrientation(meta.width, meta.height);
+
+  const pass1 = await runFlyerEditWithFallbacks(
+    inputBuffer,
+    EVENT_FLYER_PROMPT,
+    preferredSize
+  );
+  let outBuffer = await bufferFromEditCompletion(pass1.completion);
+  let usedModel = pass1.usedModel;
+  let usedSize = pass1.usedSize;
+  let pass2Ran = false;
+
+  const leftover = await flyerImageHasLeftoverText(outBuffer);
+  if (leftover) {
+    try {
+      console.log(`${LOG_PREFIX} leftover text likely; running retry edit`);
+      const pass2 = await runFlyerEditWithFallbacks(
+        outBuffer,
+        EVENT_FLYER_RETRY_PROMPT,
+        usedSize
+      );
+      outBuffer = await bufferFromEditCompletion(pass2.completion);
+      usedModel = pass2.usedModel;
+      usedSize = pass2.usedSize;
+      pass2Ran = true;
+    } catch (retryErr) {
+      console.warn(
+        `${LOG_PREFIX} retry edit failed; keeping pass-1 result`,
+        retryErr?.message || retryErr
+      );
+    }
   }
 
   const normalized = await normalizeEventFlyerForApp(outBuffer);
@@ -291,6 +388,7 @@ async function cleanEventFlyerBuffer(inputBuffer) {
     at: new Date().toISOString(),
     model: usedModel,
     size: usedSize,
+    pass2: pass2Ran,
     bytes: normalized.buffer.length,
     width: normalized.width,
     height: normalized.height,
@@ -311,4 +409,5 @@ module.exports = {
   normalizeEventFlyerForApp,
   pickAiSizeForOrientation,
   EVENT_FLYER_PROMPT,
+  EVENT_FLYER_RETRY_PROMPT,
 };

@@ -89,7 +89,7 @@ Used on prepare-import, platform commit (Local/Stage/Prod), Show Live partition,
 
 ### Event flyer AI clean (commit)
 
-On every scrap commit (row Import + Big Gun), after download: OpenAI `images.edit` removes text/logos from the venue flyer, sharpens, keeps **source aspect ratio** (max long edge ~1536 JPEG), then uploads to THE1 media. Same family as Tools → Section image AI, but **not** forced 4:3. On AI failure (or no key / `SCRAP_EVENT_FLYER_AI=0`): warn and re-host the original. Helper: `services/scrapEvents/scrapEventFlyerAiService.js` via `resolveFlyerMediaForCommit`.
+On every scrap commit (row Import + Big Gun), after download: OpenAI `images.edit` removes **baked-in** flyer text (titles, artist/venue names, logos, dates — even if they look like design), reconstructs the artwork (no ghosted letters), sharpens, keeps **source aspect ratio** (max long edge ~1536 JPEG), then uploads to THE1 media. Same family as Tools → Section image AI (“without text if any”), but **not** forced 4:3. After pass 1, a cheap vision check (`OPENAI_MODEL` / `gpt-4o-mini`) may trigger **one** second edit if leftover text is likely (or if the check fails). On AI failure (or no key / `SCRAP_EVENT_FLYER_AI=0`): warn and re-host the original. Helper: `services/scrapEvents/scrapEventFlyerAiService.js` via `resolveFlyerMediaForCommit`.
 
 ## What works today (LIV Night + Beach)
 

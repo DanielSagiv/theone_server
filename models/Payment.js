@@ -69,6 +69,14 @@ const paymentSchema = new mongoose.Schema({
   },
   adhoc_note: { type: String, trim: true },
 
+  /** Payer scribble + initials captured at on-spot charge time. */
+  adhoc_signature: {
+    svg: { type: String },
+    initials: { type: String, trim: true, maxlength: 8 },
+    signed_name: { type: String, trim: true },
+    signed_at: { type: Date },
+  },
+
   /** Links on-spot charge to a paid_seat_upgrades entry when charging an upgrade delta. */
   seat_upgrade_id: {
     type: mongoose.Schema.Types.ObjectId,

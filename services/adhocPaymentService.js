@@ -21,6 +21,49 @@ const PAYMENT_CONFIG = {
   currency: process.env.PAYMENT_CURRENCY || 'USD',
 };
 
+const ADHOC_SIGNATURE_SVG_MAX = 200000;
+
+/**
+ * Validate and normalize payer signature for an on-spot charge.
+ * @param {object} input
+ * @param {string} [fallbackName]
+ * @returns {{ svg: string, initials: string, signed_name?: string, signed_at: Date }}
+ */
+function normalizeAdhocSignature(input, fallbackName) {
+  if (!input || typeof input !== 'object') {
+    throw new Error('Payer signature is required');
+  }
+  const svg = typeof input.svg === 'string' ? input.svg.trim() : '';
+  if (!svg) {
+    throw new Error('Payer signature is required');
+  }
+  if (svg.length > ADHOC_SIGNATURE_SVG_MAX) {
+    throw new Error('Payer signature is too large');
+  }
+  const svgLower = svg.toLowerCase();
+  if (!svgLower.includes('<svg') || !svgLower.includes('<path')) {
+    throw new Error('Payer signature is invalid');
+  }
+  if (svgLower.includes('<script') || svgLower.includes('javascript:')) {
+    throw new Error('Payer signature is invalid');
+  }
+  const initialsRaw = typeof input.initials === 'string' ? input.initials.trim() : '';
+  const initials = initialsRaw.replace(/[^A-Za-z]/g, '').slice(0, 8).toUpperCase();
+  if (!initials) {
+    throw new Error('Payer initials are required');
+  }
+  const signedNameRaw =
+    (typeof input.signed_name === 'string' && input.signed_name.trim()) ||
+    (typeof fallbackName === 'string' && fallbackName.trim()) ||
+    '';
+  return {
+    svg,
+    initials,
+    signed_name: signedNameRaw.slice(0, 120) || undefined,
+    signed_at: new Date(),
+  };
+}
+
 const {
   ensureGoatCustomerId,
   getCustomerDisplayName,
@@ -365,6 +408,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     adhoc_note: adhocNote,
     seat_upgrade_id: seatUpgradeId,
     adhoc_kind: adhocKindInput,
+    adhoc_signature: adhocSignatureInput,
   } = payload;
 
   if (!amount || amount <= 0) {
@@ -450,6 +494,11 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     };
   }
 
+  const adhocSignature = normalizeAdhocSignature(
+    adhocSignatureInput,
+    adhocPayer.display_name
+  );
+
   if (idempotencyKey) {
     const existing = await Payment.findOne({ idempotency_key: idempotencyKey });
     if (existing) {
@@ -472,6 +521,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     created_by_admin_id: adminUserId,
     adhoc_payer: adhocPayer,
     adhoc_note: adhocNote ? String(adhocNote).trim() : undefined,
+    adhoc_signature: adhocSignature,
     seat_upgrade_id: seatUpgradeId || undefined,
     adhoc_kind: resolvedAdhocKind,
     idempotency_key: idempotencyKey || undefined,
