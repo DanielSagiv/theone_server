@@ -94,6 +94,7 @@ const {
   commitScrapImport,
 } = require('../services/scrapEvents/scrapImportPlatformCommitService');
 const { lookupEventIdentitiesLocal } = require('../services/scrapEvents/scrapImportDedupe');
+const { parseScrapPrepareImportOptions } = require('../services/scrapEvents/scrapEventsShared');
 
 const router = express.Router();
 
@@ -210,12 +211,17 @@ router.get('/liv/events', authenticateToken, requireAdmin, async (req, res) => {
  */
 router.post('/liv/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /liv/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareLivEventImport(req.body || {});
+    const result = await prepareLivEventImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -409,12 +415,17 @@ router.get('/omnia/events', authenticateToken, requireAdmin, async (req, res) =>
  */
 router.post('/omnia/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /omnia/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareOmniaEventImport(req.body || {});
+    const result = await prepareOmniaEventImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -642,12 +653,17 @@ router.get('/hakkasan/events', authenticateToken, requireAdmin, async (req, res)
  */
 router.post('/hakkasan/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /hakkasan/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareHakkasanEventImport(req.body || {});
+    const result = await prepareHakkasanEventImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -867,12 +883,17 @@ router.get('/tao-beach/events', authenticateToken, requireAdmin, async (req, res
  */
 router.post('/tao-beach/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /tao-beach/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareTaoBeachEventImport(req.body || {});
+    const result = await prepareTaoBeachEventImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -1092,12 +1113,17 @@ router.get('/palm-tree-beach/events', authenticateToken, requireAdmin, async (re
  */
 router.post('/palm-tree-beach/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /palm-tree-beach/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await preparePalmTreeBeachImport(req.body || {});
+    const result = await preparePalmTreeBeachImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -1317,12 +1343,17 @@ router.get('/marquee-dayclub/events', authenticateToken, requireAdmin, async (re
  */
 router.post('/marquee-dayclub/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /marquee-dayclub/prepare-import: start', {
       userId: req.user?._id,
-      eventCode: req.body?.eventCode,
+      eventCode: listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareMarqueeDayclubImport(req.body || {});
+    const result = await prepareMarqueeDayclubImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -1542,12 +1573,17 @@ router.get('/marquee-nightclub/events', authenticateToken, requireAdmin, async (
  */
 router.post('/marquee-nightclub/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /marquee-nightclub/prepare-import: start', {
       userId: req.user?._id,
-      eventId: req.body?.eventId,
+      eventId: listingEvent.eventId,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareMarqueeNightclubImport(req.body || {});
+    const result = await prepareMarqueeNightclubImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({
@@ -1772,12 +1808,17 @@ router.get('/encore-beach/events', authenticateToken, requireAdmin, async (req, 
  */
 router.post('/encore-beach/prepare-import', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const { listingEvent, skipLocalAlreadyImported, targetPlatform } = parseScrapPrepareImportOptions(
+      req.body
+    );
     console.log('[scrap-events] POST /encore-beach/prepare-import: start', {
       userId: req.user?._id,
-      eventId: req.body?.eventId || req.body?.eventCode,
+      eventId: listingEvent.eventId || listingEvent.eventCode,
+      targetPlatform: targetPlatform || 'local',
+      skipLocalAlreadyImported,
     });
 
-    const result = await prepareEncoreBeachImport(req.body || {});
+    const result = await prepareEncoreBeachImport(listingEvent, { skipLocalAlreadyImported });
 
     if (result.alreadyImported) {
       return res.json({

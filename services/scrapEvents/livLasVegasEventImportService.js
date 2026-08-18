@@ -224,9 +224,10 @@ function applyInventoryToSeats(seats, inventoryItems) {
 /**
  * Prepare create-event prefill from LIV listing row (detail scrape + location mapping).
  * @param {object} listingEvent - preview DTO from listing scraper
+ * @param {{ skipLocalAlreadyImported?: boolean }} [options]
  * @returns {Promise<object>}
  */
-async function prepareLivEventImport(listingEvent) {
+async function prepareLivEventImport(listingEvent, options = {}) {
   const warnings = [];
 
   if (listingEvent.isCustomPromo) {
@@ -261,20 +262,22 @@ async function prepareLivEventImport(listingEvent) {
     throw err;
   }
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'livEventCode',
-    externalCode: livEventCode,
-    locationId: locationRef.locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      livEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'livEventCode',
+      externalCode: livEventCode,
+      locationId: locationRef.locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        livEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationRef.locationId);

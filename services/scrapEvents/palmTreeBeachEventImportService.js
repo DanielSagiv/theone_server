@@ -159,7 +159,7 @@ function resolvePalmTreeBeachDetailUrl(notes, palmTreeBeachEventCode) {
   return ensurePalmTreeBeachEventCodeOnDetailUrl(fromNotes, palmTreeBeachEventCode);
 }
 
-async function preparePalmTreeBeachImport(listingEvent) {
+async function preparePalmTreeBeachImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueName } = getPalmTreeBeachVenueConfig();
   const palmTreeBeachEventCode = listingEvent.eventCode;
@@ -178,20 +178,22 @@ async function preparePalmTreeBeachImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'PALM_TREE_BEACH_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'palmTreeBeachEventCode',
-    externalCode: palmTreeBeachEventCode,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      palmTreeBeachEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'palmTreeBeachEventCode',
+      externalCode: palmTreeBeachEventCode,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        palmTreeBeachEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

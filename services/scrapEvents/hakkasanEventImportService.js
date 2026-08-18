@@ -166,7 +166,7 @@ function resolveHakkasanDetailUrl(notes, hakkasanEventCode) {
   return ensureHakkasanEventCodeOnDetailUrl(fromNotes, hakkasanEventCode);
 }
 
-async function prepareHakkasanEventImport(listingEvent) {
+async function prepareHakkasanEventImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueName } = getHakkasanVenueConfig();
   const hakkasanEventCode = listingEvent.eventCode;
@@ -189,20 +189,22 @@ async function prepareHakkasanEventImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'HAKKASAN_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'hakkasanEventCode',
-    externalCode: hakkasanEventCode,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      hakkasanEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'hakkasanEventCode',
+      externalCode: hakkasanEventCode,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        hakkasanEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

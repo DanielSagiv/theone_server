@@ -176,7 +176,7 @@ function resolveMarqueeNightclubListingUrl(notes) {
   return getMarqueeNightclubVenueConfig().listingUrl;
 }
 
-async function prepareMarqueeNightclubImport(listingEvent) {
+async function prepareMarqueeNightclubImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueName, listingUrl } = getMarqueeNightclubVenueConfig();
   const marqueeNightclubEventId = listingEvent.eventId;
@@ -198,20 +198,22 @@ async function prepareMarqueeNightclubImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'MARQUEE_NIGHTCLUB_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'marqueeNightclubEventId',
-    externalCode: marqueeNightclubEventId,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      marqueeNightclubEventId,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'marqueeNightclubEventId',
+      externalCode: marqueeNightclubEventId,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        marqueeNightclubEventId,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

@@ -5020,6 +5020,7 @@
                             <div>
                                 <h3 style="margin:0;">LIV Las Vegas — Night + Beach</h3>
                                 <small>Import LIV Nightlife and Daylife events; location is chosen per row from venue and category</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5095,6 +5096,7 @@
                             <div>
                                 <h3 style="margin:0;">OMNIA Night + Dayclub</h3>
                                 <small>Import OMNIA Nightlife and Daylife from Booketing (current + next calendar month)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5170,6 +5172,7 @@
                             <div>
                                 <h3 style="margin:0;">Hakkasan Las Vegas</h3>
                                 <small>Import Hakkasan Nightlife from Booketing (current + next calendar month; main room only)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5237,6 +5240,7 @@
                             <div>
                                 <h3 style="margin:0;">TAO Beach</h3>
                                 <small>Import TAO Beach Daylife from Booketing (current + next calendar month; named events only)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5304,6 +5308,7 @@
                             <div>
                                 <h3 style="margin:0;">Palm Tree Beach</h3>
                                 <small>Import Palm Tree Beach Daylife from Booketing (current + next calendar month; all EVE1117 events)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5371,6 +5376,7 @@
                             <div>
                                 <h3 style="margin:0;">Marquee Dayclub</h3>
                                 <small>Import Marquee Dayclub Daylife from Booketing (current + next calendar month; all EVE1109 events)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5437,6 +5443,7 @@
                             <div>
                                 <h3 style="margin:0;">Marquee Nightclub</h3>
                                 <small>Import Marquee Nightclub Nightlife from taogroup.com (VIP Reservations events only)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -5504,6 +5511,7 @@
                             <div>
                                 <h3 style="margin:0;">Encore Beach Club — Day + Night</h3>
                                 <small>Import Encore Beach Club and Encore Beach Club At Night from wynnsocial.com (SEATING inventory)</small>
+                                <small class="scrapVenueTargetHint" style="display:block;margin-top:4px;color:#2980b9;"></small>
                             </div>
                             <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
                                 <div>
@@ -16256,6 +16264,7 @@
                 showAlert('LIV date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             const scope = getLivEventsScopeFromInputs();
 
@@ -16487,6 +16496,15 @@
             return true;
         }
 
+        /**
+         * Attach Big Gun platform so prepare-import can skip local duplicate abort.
+         * @param {object} listingRow
+         * @returns {object}
+         */
+        function scrapPrepareImportBody(listingRow) {
+            return Object.assign({}, listingRow, { targetPlatform: getScrapImportPlatform() });
+        }
+
         function updateScrapImportPlatformUi() {
             const platform = getScrapImportPlatform();
             const wrap = document.getElementById('scrapImportConnectWrap');
@@ -16500,6 +16518,11 @@
                         : 'Target: ' + platform + (connected ? ' (connected)' : ' (not connected)');
                 status.style.color = connected || platform === 'local' ? '#27ae60' : '#c0392b';
             }
+            const label = platform === 'local' ? 'Local' : platform === 'stage' ? 'Stage' : 'Prod';
+            document.querySelectorAll('.scrapVenueTargetHint').forEach((el) => {
+                el.textContent =
+                    'Imports to ' + label + ' (same as Import target above). Location IDs come from that DB.';
+            });
             try {
                 sessionStorage.setItem('scrapImportPlatform', platform);
             } catch (e) { /* ignore */ }
@@ -16722,12 +16745,12 @@
             if (!requireScrapPlatformConnected()) {
                 throw new Error('Platform not connected');
             }
-            const response = await makeApiRequest(venue.preparePath, 'POST', listingRow);
+            const response = await makeApiRequest(venue.preparePath, 'POST', scrapPrepareImportBody(listingRow));
             const body = response.data || {};
             if (!response.success || !body.success) {
                 throw new Error(body.error?.message || 'prepare-import failed');
             }
-            if (body.alreadyImported) {
+            if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                 return { alreadyImported: true, body };
             }
             await finishScrapImportAfterPrepare(body, venueKey, venue.label, {
@@ -16899,6 +16922,7 @@
          * @param {number} index - row index in livLiveEventsCache
          */
         async function importLivEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.livLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`liv-import-btn-${index}`);
@@ -16935,7 +16959,7 @@
 
             try {
                 showAlert('Scraping LIV event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/liv/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/liv/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -16944,7 +16968,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.livEventCode})`,
                         'warning'
@@ -17311,6 +17335,7 @@
                 showAlert('OMNIA date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -17428,6 +17453,7 @@
 
         /** @param {number} index */
         async function importOmniaEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.omniaLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`omnia-import-btn-${index}`);
@@ -17463,7 +17489,7 @@
 
             try {
                 showAlert('Scraping OMNIA event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/omnia/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/omnia/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -17472,7 +17498,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.omniaEventCode})`,
                         'warning'
@@ -17775,6 +17801,7 @@
                 showAlert('Hakkasan date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -17890,6 +17917,7 @@
 
         /** @param {number} index */
         async function importHakkasanEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.hakkasanLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`hakkasan-import-btn-${index}`);
@@ -17925,7 +17953,7 @@
 
             try {
                 showAlert('Scraping Hakkasan event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/hakkasan/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/hakkasan/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -17934,7 +17962,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.hakkasanEventCode})`,
                         'warning'
@@ -18237,6 +18265,7 @@
                 showAlert('TAO Beach date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -18352,6 +18381,7 @@
 
         /** @param {number} index */
         async function importTaoBeachEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.taoBeachLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`tao-beach-import-btn-${index}`);
@@ -18387,7 +18417,7 @@
 
             try {
                 showAlert('Scraping TAO Beach event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/tao-beach/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/tao-beach/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -18396,7 +18426,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.taoBeachEventCode})`,
                         'warning'
@@ -18699,6 +18729,7 @@
                 showAlert('Palm Tree Beach date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -18818,6 +18849,7 @@
 
         /** @param {number} index */
         async function importPalmTreeBeachEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.palmTreeBeachLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`palm-tree-beach-import-btn-${index}`);
@@ -18855,7 +18887,7 @@
 
             try {
                 showAlert('Scraping Palm Tree Beach event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/palm-tree-beach/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/palm-tree-beach/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -18864,7 +18896,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.palmTreeBeachEventCode})`,
                         'warning'
@@ -19166,6 +19198,7 @@
                 showAlert('Marquee Dayclub date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
 
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -19281,6 +19314,7 @@
 
         /** @param {number} index */
         async function importMarqueeDayclubEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.marqueeDayclubLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`marquee-dayclub-import-btn-${index}`);
@@ -19317,7 +19351,7 @@
 
             try {
                 showAlert('Scraping Marquee Dayclub event detail page…', 'info');
-                const response = await makeApiRequest('/scrap-events/marquee-dayclub/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/marquee-dayclub/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
 
                 if (!response.success || !body.success) {
@@ -19326,7 +19360,7 @@
                     return;
                 }
 
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(
                         `Already imported: ${body.eventName || 'event'} (${body.eventId || body.marqueeDayclubEventCode})`,
                         'warning'
@@ -19539,6 +19573,7 @@
                 showAlert('Marquee Nightclub date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
             if (summary) summary.style.display = 'none';
@@ -19603,6 +19638,7 @@
         })();
 
         async function importMarqueeNightclubEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.marqueeNightclubLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`marquee-nightclub-import-btn-${index}`);
@@ -19620,14 +19656,14 @@
             if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
             try {
                 showAlert('Opening VIP Reservations and scraping tables…', 'info');
-                const response = await makeApiRequest('/scrap-events/marquee-nightclub/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/marquee-nightclub/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
                 if (!response.success || !body.success) {
                     const errMsg = body.error?.message || 'Failed to prepare import';
                     showAlert('Marquee Nightclub import: ' + errMsg, 'error');
                     return;
                 }
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(`Already imported: ${body.eventName || ev.name}`, 'warning');
                     return;
                 }
@@ -19874,6 +19910,7 @@
                 showAlert('Encore Beach date filter: ' + dateRange.error, 'warning');
                 return;
             }
+            if (!requireScrapPlatformConnected()) return;
             const scope = getEncoreBeachEventsScopeFromInputs();
             if (btn) btn.disabled = true;
             if (loading) loading.style.display = 'block';
@@ -19989,6 +20026,7 @@
         })();
 
         async function importEncoreBeachEvent(index) {
+            if (!requireScrapPlatformConnected()) return;
             const events = window.encoreBeachLiveEventsCache || [];
             const ev = events[index];
             const btn = document.getElementById(`encore-beach-import-btn-${index}`);
@@ -20023,14 +20061,14 @@
             }
             try {
                 showAlert('Scraping Encore SEATING inventory…', 'info');
-                const response = await makeApiRequest('/scrap-events/encore-beach/prepare-import', 'POST', ev);
+                const response = await makeApiRequest('/scrap-events/encore-beach/prepare-import', 'POST', scrapPrepareImportBody(ev));
                 const body = response.data || {};
                 if (!response.success || !body.success) {
                     const errMsg = body.error?.message || 'Failed to prepare import';
                     showAlert('Encore Beach import: ' + errMsg, 'error');
                     return;
                 }
-                if (body.alreadyImported) {
+                if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                     showAlert(`Already imported: ${body.eventName || ev.name}`, 'warning');
                     return;
                 }

@@ -28,26 +28,26 @@ const LIV_NIGHT_TABLE_TO_SEAT_CODE = {
 };
 
 /**
- * Beach table map — value is seat code or { code, the1Category } for duplicate codes.
+ * Beach table map — values must match LIV Beach Location.seats[].code exactly.
  * @type {Record<string, string|{ code: string, the1Category?: string }>}
  */
 const LIV_BEACH_TABLE_TO_SEAT_CODE = {
-  'beach villa': 'bv',
-  'stage cabana': 'sc',
-  'beach cabana': { code: 'bc', the1Category: 'beach_cabana' },
-  'beach couch': { code: 'bc', the1Category: 'beach_couch' },
-  'dance floor': 'df',
-  'pool couch': 'pc',
-  daybeds: 'db',
-  'lower club': 'lc',
-  'center club': 'cc',
-  'upper club': 'uc',
-  'premium upper club': 'puc',
-  'premium terrace east': 'pte',
-  'terrace reserve': 'tr',
-  'terrace tables': 'tt',
-  'terrace daybed': 'tdb',
-  '2nd row premium terrace': '2nrpt',
+  'beach villa': 'Beach Villa',
+  'stage cabana': 'Stage Cabana',
+  'beach cabana': 'Beach Cabana',
+  'beach couch': 'Beach Couch',
+  'dance floor': 'Dance Floor',
+  'pool couch': 'Pool Couch',
+  daybeds: 'Daybeds',
+  'lower club': 'Lower Club',
+  'center club': 'Center Club',
+  'upper club': 'Upper Club',
+  'premium upper club': 'Premium Upper Club',
+  'premium terrace east': 'Premium Terrace East',
+  'terrace reserve': 'Terrace Reserve',
+  'terrace tables': 'Terrace Tables',
+  'terrace daybed': 'Terrace Daybed',
+  '2nd row premium terrace': 'Second Row Premium Terrace',
 };
 
 /**

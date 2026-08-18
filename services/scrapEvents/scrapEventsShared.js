@@ -372,6 +372,19 @@ function getScrapImportEventStatus() {
   return isScrapEventsImportWizardEnabled() ? 'draft' : 'active';
 }
 
+/**
+ * Strip targetPlatform from prepare-import body. Stage/Prod skip local duplicate check.
+ * @param {object} body
+ * @returns {{ listingEvent: object, skipLocalAlreadyImported: boolean, targetPlatform: string }}
+ */
+function parseScrapPrepareImportOptions(body) {
+  const raw = body && typeof body === 'object' ? { ...body } : {};
+  const targetPlatform = String(raw.targetPlatform || '').trim().toLowerCase();
+  delete raw.targetPlatform;
+  const skipLocalAlreadyImported = targetPlatform === 'stage' || targetPlatform === 'prod';
+  return { listingEvent: raw, skipLocalAlreadyImported, targetPlatform };
+}
+
 module.exports = {
   parseIsoDateFromUrvenueEventCode,
   parseScrapDateQueryParam,
@@ -393,4 +406,5 @@ module.exports = {
   SCRAP_IMPORT_EVENT_DESCRIPTION,
   isScrapEventsImportWizardEnabled,
   getScrapImportEventStatus,
+  parseScrapPrepareImportOptions,
 };

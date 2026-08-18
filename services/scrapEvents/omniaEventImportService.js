@@ -198,7 +198,7 @@ async function partitionOmniaEventsByImportStatus(events, options = {}) {
  * @param {object} listingEvent
  * @returns {Promise<object>}
  */
-async function prepareOmniaEventImport(listingEvent) {
+async function prepareOmniaEventImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueType } = resolveOmniaVenue(listingEvent);
 
@@ -217,20 +217,22 @@ async function prepareOmniaEventImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'OMNIA_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'omniaEventCode',
-    externalCode: omniaEventCode,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      omniaEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'omniaEventCode',
+      externalCode: omniaEventCode,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        omniaEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

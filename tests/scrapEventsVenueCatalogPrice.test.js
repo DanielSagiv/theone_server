@@ -9,7 +9,10 @@ const {
   venueCatalogMinSpendFromInventoryItem,
   parseUrvenueInventoryItemFromRaw,
 } = require('../services/scrapEvents/urvenueInventoryDom');
-const { applyInventoryToSeats } = require('../services/scrapEvents/scrapEventsShared');
+const {
+  applyInventoryToSeats,
+  parseScrapPrepareImportOptions,
+} = require('../services/scrapEvents/scrapEventsShared');
 const {
   ensureOmniaEventCodeOnDetailUrl,
   resolveOmniaDetailUrl,
@@ -629,6 +632,23 @@ function testEncoreInventoryApply() {
   );
 }
 
+function testParseScrapPrepareImportOptions() {
+  const local = parseScrapPrepareImportOptions({ eventCode: 'E1', targetPlatform: 'local' });
+  assert.strictEqual(local.skipLocalAlreadyImported, false);
+  assert.strictEqual(local.listingEvent.eventCode, 'E1');
+  assert.strictEqual(local.listingEvent.targetPlatform, undefined);
+
+  const stage = parseScrapPrepareImportOptions({ eventCode: 'E1', targetPlatform: 'stage' });
+  assert.strictEqual(stage.skipLocalAlreadyImported, true);
+  assert.strictEqual(stage.targetPlatform, 'stage');
+
+  const prod = parseScrapPrepareImportOptions({ eventCode: 'E1', targetPlatform: 'PROD' });
+  assert.strictEqual(prod.skipLocalAlreadyImported, true);
+
+  const missing = parseScrapPrepareImportOptions({ eventCode: 'E1' });
+  assert.strictEqual(missing.skipLocalAlreadyImported, false);
+}
+
 function testScrapIdentityNormalizeAndDayBounds() {
   assert.strictEqual(normalizeScrapEventName('  Gryffin   Live  '), 'gryffin live');
   assert.strictEqual(normalizeScrapEventName(''), '');
@@ -685,6 +705,7 @@ function run() {
   testEncoreVenueRouting();
   testEncoreInventoryApply();
   testScrapIdentityNormalizeAndDayBounds();
+  testParseScrapPrepareImportOptions();
   console.log('scrapEventsVenueCatalogPrice.test.js: all passed');
 }
 

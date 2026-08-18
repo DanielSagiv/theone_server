@@ -209,8 +209,9 @@ async function partitionEncoreEventsByImportStatus(events, options = {}) {
 
 /**
  * @param {object} listingEvent
+ * @param {{ skipLocalAlreadyImported?: boolean }} [options]
  */
-async function prepareEncoreBeachImport(listingEvent) {
+async function prepareEncoreBeachImport(listingEvent, options = {}) {
   const warnings = [];
   const encoreEventId = String(listingEvent.eventId || listingEvent.eventCode || '').trim();
   const resolved = resolveEncoreVenue(listingEvent);
@@ -231,20 +232,22 @@ async function prepareEncoreBeachImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'ENCORE_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'encoreEventId',
-    externalCode: encoreEventId,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      encoreEventId,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'encoreEventId',
+      externalCode: encoreEventId,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        encoreEventId,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

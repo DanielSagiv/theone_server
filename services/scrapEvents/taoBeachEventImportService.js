@@ -174,7 +174,7 @@ function resolveTaoBeachDetailUrl(notes, taoBeachEventCode) {
   return ensureTaoBeachEventCodeOnDetailUrl(fromNotes, taoBeachEventCode);
 }
 
-async function prepareTaoBeachEventImport(listingEvent) {
+async function prepareTaoBeachEventImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueName } = getTaoBeachVenueConfig();
   const taoBeachEventCode = listingEvent.eventCode;
@@ -201,20 +201,22 @@ async function prepareTaoBeachEventImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'TAO_BEACH_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'taoBeachEventCode',
-    externalCode: taoBeachEventCode,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      taoBeachEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'taoBeachEventCode',
+      externalCode: taoBeachEventCode,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        taoBeachEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);

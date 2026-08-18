@@ -159,7 +159,7 @@ function resolveMarqueeDayclubDetailUrl(notes, marqueeDayclubEventCode) {
   return ensureMarqueeDayclubEventCodeOnDetailUrl(fromNotes, marqueeDayclubEventCode);
 }
 
-async function prepareMarqueeDayclubImport(listingEvent) {
+async function prepareMarqueeDayclubImport(listingEvent, options = {}) {
   const warnings = [];
   const { locationId, type, venueName } = getMarqueeDayclubVenueConfig();
   const marqueeDayclubEventCode = listingEvent.eventCode;
@@ -178,20 +178,22 @@ async function prepareMarqueeDayclubImport(listingEvent) {
 
   assertScrapListingEventNotInPast(listingEvent, 'MARQUEE_DAYCLUB_EVENT_IN_PAST');
 
-  const existing = await findAlreadyImportedForScrap({
-    externalField: 'marqueeDayclubEventCode',
-    externalCode: marqueeDayclubEventCode,
-    locationId,
-    isoDate: listingEvent.isoDate,
-    name: listingEvent.name,
-  });
-  if (existing) {
-    return {
-      alreadyImported: true,
-      eventId: String(existing._id),
-      eventName: existing.name,
-      marqueeDayclubEventCode,
-    };
+  if (!options.skipLocalAlreadyImported) {
+    const existing = await findAlreadyImportedForScrap({
+      externalField: 'marqueeDayclubEventCode',
+      externalCode: marqueeDayclubEventCode,
+      locationId,
+      isoDate: listingEvent.isoDate,
+      name: listingEvent.name,
+    });
+    if (existing) {
+      return {
+        alreadyImported: true,
+        eventId: String(existing._id),
+        eventName: existing.name,
+        marqueeDayclubEventCode,
+      };
+    }
   }
 
   const location = await Location.findById(locationId);
