@@ -6,6 +6,7 @@ const FormData = require('form-data');
 const Event = require('../../models/Event');
 const Location = require('../../models/Location');
 const { applyInventoryToSeats, assertScrapInventoryPricingApplied } = require('./scrapEventsShared');
+const { remapInventoryItemsForLocationSeats } = require('./scrapInventorySeatRemap');
 const { resolveEncoreVenue } = require('../../utils/encoreBeachVenueConfig');
 const { resolveOmniaVenue } = require('../../utils/omniaVenueConfig');
 const { resolveLivLocation } = require('./livLasVegasEventImportService');
@@ -363,8 +364,9 @@ async function partitionAgainstPlatform(platform, token, venueKey, codes, rows =
  * @param {object} location
  * @param {object[]} inventoryItems
  * @param {string} priceReason
+ * @param {{ venueKey?: string }} [options]
  */
-function buildSeatsFromLocationAndInventory(location, inventoryItems, priceReason) {
+function buildSeatsFromLocationAndInventory(location, inventoryItems, priceReason, options = {}) {
   const baseSeats = (location.seats || []).map((seat) => {
     const s = seat && typeof seat.toObject === 'function' ? seat.toObject() : { ...seat };
     const id = s._id;
@@ -408,8 +410,19 @@ function buildSeatsFromLocationAndInventory(location, inventoryItems, priceReaso
     };
   });
 
-  const { seats, warnings } = applyInventoryToSeats(baseSeats, inventoryItems || [], priceReason);
-  assertScrapInventoryPricingApplied(seats, inventoryItems || [], priceReason, 'SCRAP_PRICING_NOT_APPLIED');
+  const remappedInventory = remapInventoryItemsForLocationSeats(
+    inventoryItems || [],
+    location.seats || [],
+    { venueKey: options.venueKey }
+  );
+
+  const { seats, warnings } = applyInventoryToSeats(baseSeats, remappedInventory, priceReason);
+  assertScrapInventoryPricingApplied(
+    seats,
+    remappedInventory,
+    priceReason,
+    'SCRAP_PRICING_NOT_APPLIED'
+  );
 
   return { seats, units, warnings };
 }
@@ -763,7 +776,8 @@ async function commitImportLocal({ venueKey, listingEvent, prefill, userId }) {
   const { seats, units, warnings: seatWarnings } = buildSeatsFromLocationAndInventory(
     location,
     inventory,
-    priceReason
+    priceReason,
+    { venueKey }
   );
 
   const flyerResolved = await resolveFlyerMediaForCommit(prefill, {
@@ -886,7 +900,8 @@ async function commitImportRemote({ platform, token, venueKey, listingEvent, pre
   const { seats, units, warnings: seatWarnings } = buildSeatsFromLocationAndInventory(
     location,
     inventory,
-    priceReason
+    priceReason,
+    { venueKey }
   );
 
   const flyerResolved = await resolveFlyerMediaForCommit(prefill, {

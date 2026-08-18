@@ -14,6 +14,9 @@ const {
   parseScrapPrepareImportOptions,
 } = require('../services/scrapEvents/scrapEventsShared');
 const {
+  remapInventoryItemsForLocationSeats,
+} = require('../services/scrapEvents/scrapInventorySeatRemap');
+const {
   ensureOmniaEventCodeOnDetailUrl,
   resolveOmniaDetailUrl,
 } = require('../services/scrapEvents/omniaEventImportService');
@@ -649,6 +652,39 @@ function testParseScrapPrepareImportOptions() {
   assert.strictEqual(missing.skipLocalAlreadyImported, false);
 }
 
+function testLivBeachInventoryRemapForLegacyShortCodes() {
+  const stageSeats = [
+    { code: 'bv', category: 'beach_villa', label: 'Beach Villa' },
+    { code: 'sc', category: 'stage_cabana', label: 'Stage Cabana' },
+    { code: 'bc', category: 'beach_cabana', label: 'Beach Cabana' },
+    { code: 'bc', category: 'beach_couch', label: 'Beach Couch' },
+    { code: 'df', category: 'dance_floor', label: 'Dance Floor' },
+  ];
+  const inventory = [
+    { name: 'Beach Villa', minSpend: 5000, seatCode: 'Beach Villa' },
+    { name: 'Stage Cabana', minSpend: 3000, seatCode: 'Stage Cabana' },
+    { name: 'Beach Cabana', minSpend: 2500, seatCode: 'Beach Cabana', the1Category: 'beach_cabana' },
+    { name: 'Beach Couch', minSpend: 1500, seatCode: 'Beach Couch', the1Category: 'beach_couch' },
+    { name: 'Dance Floor', minSpend: 1200, seatCode: 'Dance Floor' },
+  ];
+  const remapped = remapInventoryItemsForLocationSeats(inventory, stageSeats, { venueKey: 'liv' });
+  assert.strictEqual(remapped[0].seatCode, 'bv');
+  assert.strictEqual(remapped[1].seatCode, 'sc');
+  assert.strictEqual(remapped[2].seatCode, 'bc');
+  assert.strictEqual(remapped[2].the1Category, 'beach_cabana');
+  assert.strictEqual(remapped[3].seatCode, 'bc');
+  assert.strictEqual(remapped[3].the1Category, 'beach_couch');
+  assert.strictEqual(remapped[4].seatCode, 'df');
+
+  const { seats } = applyInventoryToSeats(
+    stageSeats.map((s) => ({ ...s, event_price: 1000, event_min_spend: 1000 })),
+    remapped,
+    'LIV scrap import'
+  );
+  const priced = seats.filter((s) => s.price_change_reason === 'LIV scrap import');
+  assert.strictEqual(priced.length, 5);
+}
+
 function testScrapIdentityNormalizeAndDayBounds() {
   assert.strictEqual(normalizeScrapEventName('  Gryffin   Live  '), 'gryffin live');
   assert.strictEqual(normalizeScrapEventName(''), '');
@@ -706,6 +742,7 @@ function run() {
   testEncoreInventoryApply();
   testScrapIdentityNormalizeAndDayBounds();
   testParseScrapPrepareImportOptions();
+  testLivBeachInventoryRemapForLegacyShortCodes();
   console.log('scrapEventsVenueCatalogPrice.test.js: all passed');
 }
 

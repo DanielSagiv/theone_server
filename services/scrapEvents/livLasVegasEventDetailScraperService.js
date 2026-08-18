@@ -34,8 +34,8 @@ const LIV_NIGHT_TABLE_TO_SEAT_CODE = {
 const LIV_BEACH_TABLE_TO_SEAT_CODE = {
   'beach villa': 'Beach Villa',
   'stage cabana': 'Stage Cabana',
-  'beach cabana': 'Beach Cabana',
-  'beach couch': 'Beach Couch',
+  'beach cabana': { code: 'Beach Cabana', the1Category: 'beach_cabana' },
+  'beach couch': { code: 'Beach Couch', the1Category: 'beach_couch' },
   'dance floor': 'Dance Floor',
   'pool couch': 'Pool Couch',
   daybeds: 'Daybeds',
@@ -48,6 +48,30 @@ const LIV_BEACH_TABLE_TO_SEAT_CODE = {
   'terrace tables': 'Terrace Tables',
   'terrace daybed': 'Terrace Daybed',
   '2nd row premium terrace': 'Second Row Premium Terrace',
+};
+
+/**
+ * Legacy short seat codes on stage/prod — maps display/long codes from scraper to remote location codes.
+ * @type {Record<string, string|{ code: string, the1Category?: string }>}
+ */
+const LIV_BEACH_LEGACY_SHORT_CODES = {
+  'Beach Villa': 'bv',
+  'Stage Cabana': 'sc',
+  'Beach Cabana': { code: 'bc', the1Category: 'beach_cabana' },
+  'Beach Couch': { code: 'bc', the1Category: 'beach_couch' },
+  'Dance Floor': 'df',
+  'Pool Couch': 'pc',
+  Daybeds: 'db',
+  'Lower Club': 'lc',
+  'Center Club': 'cc',
+  'Upper Club': 'uc',
+  'Premium Upper Club': 'puc',
+  'Premium Terrace East': 'pte',
+  'Terrace Reserve': 'tr',
+  'Terrace Tables': 'tt',
+  'Terrace Daybed': 'tdb',
+  'Second Row Premium Terrace': '2nrpt',
+  '2nd Row Premium Upper Club': '2nrpuc',
 };
 
 /**
@@ -189,6 +213,7 @@ module.exports = {
   scrapeLivEventDetailPage,
   LIV_NIGHT_TABLE_TO_SEAT_CODE,
   LIV_BEACH_TABLE_TO_SEAT_CODE,
+  LIV_BEACH_LEGACY_SHORT_CODES,
   LIV_TABLE_TO_SEAT_CODE: LIV_NIGHT_TABLE_TO_SEAT_CODE,
   normalizeTableName,
   resolveLivSeatMapping,
