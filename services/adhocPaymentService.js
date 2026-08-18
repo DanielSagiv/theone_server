@@ -833,10 +833,16 @@ async function listEventCardCharges(coeId, eventId) {
     .map((p) => ({
       payment_id: p._id.toString(),
       display_name: getAdhocPayerDisplayName(p),
+      description: String(p.description || '').trim() || null,
       amount: Number(p.amount) || 0,
       status: p.status,
       goat_undo_type: p.goat_undo_type || null,
       can_undo: p.status === 'completed',
+      charged_at: p.createdAt ? new Date(p.createdAt).toISOString() : null,
+      operation_at:
+        p.status !== 'completed' && p.updatedAt
+          ? new Date(p.updatedAt).toISOString()
+          : null,
     }));
 }
 
