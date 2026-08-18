@@ -24,6 +24,60 @@ const PAYMENT_CONFIG = {
 const ADHOC_SIGNATURE_SVG_MAX = 200000;
 
 /**
+ * Return the effective min-spend USD for a given event on a COE.
+ * Reads stored values from selected_seats row (set during lazy back-fill).
+ * @param {object} coe - lean or mongoose COE doc
+ * @param {string} eventId
+ * @returns {{ venue_usd: number|null, negotiated_usd: number|null, effective_usd: number|null }}
+ */
+function resolveMinSpendForEvent(coe, eventId) {
+  const seats = Array.isArray(coe.selected_seats) ? coe.selected_seats : [];
+  const eid = String(eventId);
+  for (const row of seats) {
+    const rowEid =
+      row?.event_id?._id?.toString?.() || row?.event_id?.toString?.() || '';
+    if (rowEid !== eid) continue;
+    const venue = row.venue_min_spend_usd != null ? Number(row.venue_min_spend_usd) : null;
+    const negotiated =
+      row.negotiated_min_spend_usd != null ? Number(row.negotiated_min_spend_usd) : null;
+    const effective = negotiated != null ? negotiated : venue;
+    return { venue_usd: venue, negotiated_usd: negotiated, effective_usd: effective };
+  }
+  return { venue_usd: null, negotiated_usd: null, effective_usd: null };
+}
+
+/**
+ * Compute how much of the min-spend balance has been used for an event.
+ * @param {object} coe - lean or mongoose COE doc
+ * @param {string} eventId
+ * @returns {number}
+ */
+function getMinSpendUsed(coe, eventId) {
+  const tracker = Array.isArray(coe.on_spot_min_spend_used) ? coe.on_spot_min_spend_used : [];
+  const eid = String(eventId);
+  for (const row of tracker) {
+    const rowEid =
+      row?.event_id?._id?.toString?.() || row?.event_id?.toString?.() || '';
+    if (rowEid === eid) return Number(row.absorbed) || 0;
+  }
+  return 0;
+}
+
+/**
+ * Compute the split of a base amount between min-spend absorption and card charge.
+ * Guest payer charges never use min spend.
+ * @param {number} remaining - remaining min-spend balance
+ * @param {number} baseAmount - admin-entered base price
+ * @returns {{ absorbed: number, cardBase: number }}
+ */
+function computeMinSpendSplit(remaining, baseAmount) {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const absorbed = r2(Math.min(Math.max(remaining, 0), baseAmount));
+  const cardBase = r2(Math.max(0, baseAmount - absorbed));
+  return { absorbed, cardBase };
+}
+
+/**
  * Validate and normalize payer signature for an on-spot charge.
  * @param {object} input
  * @param {string} [fallbackName]
@@ -122,12 +176,61 @@ function mapSavedCards(user) {
 }
 
 /**
+ * Lazy back-fill venue_min_spend_usd / negotiated_min_spend_usd onto the COE selected_seats row
+ * if they haven't been stored yet. Reads from Event catalog.
+ * @param {string} coeId
+ * @param {string} eventId
+ * @returns {Promise<void>}
+ */
+async function backfillMinSpendOnCoe(coeId, eventId) {
+  try {
+    const coeDoc = await COE.findById(coeId);
+    if (!coeDoc) return;
+    const eid = String(eventId);
+    const seats = Array.isArray(coeDoc.selected_seats) ? coeDoc.selected_seats : [];
+    let changed = false;
+    for (const row of seats) {
+      const rowEid =
+        row?.event_id?._id?.toString?.() || row?.event_id?.toString?.() || '';
+      if (rowEid !== eid) continue;
+      if (row.venue_min_spend_usd != null) break; // already back-filled
+      const eventDoc = await Event.findById(eventId)
+        .select('seats')
+        .lean();
+      if (!eventDoc) break;
+      const seatId = row.seat_id?.toString?.() || '';
+      const evSeat = (eventDoc.seats || []).find(
+        (s) => (s._id?.toString?.() || '') === seatId,
+      );
+      if (!evSeat) break;
+      const venue = evSeat.min_spend != null ? Number(evSeat.min_spend) : null;
+      const negotiated =
+        evSeat.event_min_spend != null ? Number(evSeat.event_min_spend) : null;
+      row.venue_min_spend_usd = venue;
+      row.negotiated_min_spend_usd = negotiated;
+      changed = true;
+      break;
+    }
+    if (changed) {
+      await coeDoc.save();
+    }
+  } catch (err) {
+    console.warn('[AdhocPayment] min-spend back-fill failed:', err?.message);
+  }
+}
+
+/**
  * Load admin adhoc payment screen options for a COE.
  * @param {string} coeId
  * @param {string} [eventId]
  * @returns {Promise<object>}
  */
 async function getAdhocPaymentOptions(coeId, eventId) {
+  // Lazy back-fill min-spend values from Event catalog onto COE selected_seats.
+  if (eventId) {
+    await backfillMinSpendOnCoe(coeId, eventId);
+  }
+
   const coe = await COE.findById(coeId)
     .populate('client_id', 'firstName lastName email phone')
     .lean();
@@ -232,6 +335,23 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     }
   }
 
+  // Build min-spend balance info for this event.
+  let minSpendInfo = null;
+  if (eventId) {
+    const msResolved = resolveMinSpendForEvent(coe, eventId);
+    if (msResolved.effective_usd != null) {
+      const used = getMinSpendUsed(coe, eventId);
+      const remaining = Math.max(0, msResolved.effective_usd - used);
+      minSpendInfo = {
+        venue_usd: msResolved.venue_usd,
+        negotiated_usd: msResolved.negotiated_usd,
+        effective_usd: msResolved.effective_usd,
+        used_usd: used,
+        remaining_usd: Math.round(remaining * 100) / 100,
+      };
+    }
+  }
+
   return {
     coe: {
       id: coe._id.toString(),
@@ -246,6 +366,7 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     location_id: locationId,
     location_name: locationName,
     on_spot_fee_context: onSpotFeeContext,
+    min_spend: minSpendInfo,
     event_charges: await listEventCardCharges(coe._id, eventId),
   };
 }
@@ -433,6 +554,12 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   let onSpotBaseAmount = null;
   let chargeAmount = Math.round((Number(amount) + Number.EPSILON) * 100) / 100;
 
+  /** Min-spend split result (only for non-guest on-spot charges). */
+  let minSpendAbsorbed = 0;
+  let cardChargedBase = 0;
+  /** When cardBase = 0, this charge is fully covered by min spend — no GOAT call. */
+  let isMinSpendOnly = false;
+
   if (seatUpgradeId) {
     paidSeatUpgradeService.assertPendingUpgradeForCharge(
       coe,
@@ -442,13 +569,39 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     );
     resolvedAdhocKind = 'upgrade';
   } else if (eventId) {
-    // On-spot: amount is base (e.g. bottle $100); charge fee-inclusive like upgrades.
-    const priced = await computeOnSpotChargeTotalWithFees(coe, eventId, amount);
-    if (!(priced.total > 0)) {
-      throw new Error('Amount must be greater than zero');
+    // On-spot: amount is base entered by admin.
+    // For non-guest payers: apply min-spend deduction first; only charge card for the excess.
+    const isGuestPayer =
+      adhocPayerInput?.type === 'guest' ||
+      (adhocPayerInput == null && false);
+    if (!isGuestPayer) {
+      const msUsed = getMinSpendUsed(coe, eventId);
+      const msResolved = resolveMinSpendForEvent(coe, eventId);
+      const remaining = msResolved.effective_usd != null
+        ? Math.max(0, msResolved.effective_usd - msUsed)
+        : 0;
+      const split = computeMinSpendSplit(remaining, Number(amount));
+      minSpendAbsorbed = split.absorbed;
+      cardChargedBase = split.cardBase;
+    } else {
+      // Guest payer — no min-spend deduction.
+      cardChargedBase = Number(amount);
     }
-    onSpotBaseAmount = priced.base;
-    chargeAmount = priced.total;
+
+    if (cardChargedBase <= 0) {
+      // Fully absorbed by min spend — no GOAT charge.
+      isMinSpendOnly = true;
+      onSpotBaseAmount = Number(amount);
+      chargeAmount = 0;
+    } else {
+      // Card charge on the excess only.
+      const priced = await computeOnSpotChargeTotalWithFees(coe, eventId, cardChargedBase);
+      if (!(priced.total > 0)) {
+        throw new Error('Amount must be greater than zero');
+      }
+      onSpotBaseAmount = Number(amount);
+      chargeAmount = priced.total;
+    }
     resolvedAdhocKind = resolvedAdhocKind === 'upgrade' ? 'general' : resolvedAdhocKind;
   }
 
@@ -526,6 +679,8 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     seat_upgrade_id: seatUpgradeId || undefined,
     adhoc_kind: resolvedAdhocKind,
     idempotency_key: idempotencyKey || undefined,
+    min_spend_absorbed: minSpendAbsorbed,
+    card_charged_base: cardChargedBase,
   });
   await payment.save();
 
@@ -545,7 +700,17 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   );
 
   try {
-    if (chargeMethod === 'cash') {
+    if (isMinSpendOnly) {
+      // Fully absorbed by min spend: record as a completed zero-charge (no GOAT call).
+      payment.payment_channel = 'min_spend';
+      payment.recorded_by_admin_id = adminUserId;
+      payment.finance_sync_status = 'skipped';
+      payment.status = 'completed';
+      payment.completed_at = new Date();
+      // Give a fake gp_transaction_id so it shows up in listEventCardCharges.
+      payment.gp_transaction_id = `min_spend_${payment._id}`;
+      await payment.save();
+    } else if (chargeMethod === 'cash') {
       if (!payerUserId) {
         throw new Error('payer_user_id is required for cash payments');
       }
@@ -663,16 +828,37 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
             event_id: eventId,
             payment_id: payment._id,
             description: String(payment.description || '').trim(),
-            // Store fee-exclusive base so UI lines match TABLE/BOTTLE breakdown;
-            // payment.amount is fee-inclusive (collected into adhoc_collected_total).
             amount:
               onSpotBaseAmount != null
                 ? onSpotBaseAmount
                 : Number(payment.amount) || 0,
+            min_spend_absorbed: minSpendAbsorbed,
+            card_charged_base: cardChargedBase,
             adhoc_payer: payerSnap,
             created_by: adminUserId,
             created_at: new Date(),
           });
+
+          // Update the per-event min-spend balance tracker.
+          if (minSpendAbsorbed > 0) {
+            coeForLine.on_spot_min_spend_used = coeForLine.on_spot_min_spend_used || [];
+            const eid = String(eventId);
+            const trackerRow = coeForLine.on_spot_min_spend_used.find(
+              (r) =>
+                (r?.event_id?._id?.toString?.() || r?.event_id?.toString?.() || '') === eid,
+            );
+            if (trackerRow) {
+              trackerRow.absorbed = Math.round(
+                ((Number(trackerRow.absorbed) || 0) + minSpendAbsorbed) * 100,
+              ) / 100;
+            } else {
+              coeForLine.on_spot_min_spend_used.push({
+                event_id: eventId,
+                absorbed: minSpendAbsorbed,
+              });
+            }
+          }
+
           await coeForLine.save();
         }
       } catch (lineErr) {
@@ -822,7 +1008,8 @@ async function listEventCardCharges(coeId, eventId) {
     coe_id: coeId,
     event_id: eventId,
     payment_type: 'adhoc',
-    payment_channel: { $ne: 'cash' },
+    // Include card and min_spend channels; exclude cash.
+    payment_channel: { $in: ['card', 'min_spend'] },
     status: { $in: ['completed', 'cancelled', 'refunded'] },
   })
     .sort({ createdAt: 1 })
@@ -835,6 +1022,8 @@ async function listEventCardCharges(coeId, eventId) {
       display_name: getAdhocPayerDisplayName(p),
       description: String(p.description || '').trim() || null,
       amount: Number(p.amount) || 0,
+      min_spend_absorbed: Number(p.min_spend_absorbed) || 0,
+      card_charged_base: Number(p.card_charged_base) || 0,
       status: p.status,
       goat_undo_type: p.goat_undo_type || null,
       can_undo: p.status === 'completed',
@@ -875,6 +1064,63 @@ async function undoAdhocPayment(adminUserId, paymentId, opts) {
   }
   if (payment.payment_channel === 'cash') {
     throw new Error('Cash payments cannot be voided or reversed through GOAT');
+  }
+
+  // Min-spend-only payments have no GOAT charge to reverse — just mark cancelled.
+  if (payment.payment_channel === 'min_spend') {
+    payment.status = 'cancelled';
+    payment.goat_undo_type = 'void';
+    payment.refund_reason = mode === 'void' ? 'On-spot void' : 'On-spot reversal';
+    await payment.save();
+
+    const coeId = payment.coe_id?.toString?.() || String(payment.coe_id || '');
+    if (coeId) {
+      try {
+        const coeLine = await COE.findById(coeId);
+        if (coeLine) {
+          let changed = false;
+          if (coeLine.on_spot_charges?.length) {
+            const pid = String(payment._id);
+            const before = coeLine.on_spot_charges.length;
+            coeLine.on_spot_charges = coeLine.on_spot_charges.filter(
+              (row) => String(row.payment_id) !== pid,
+            );
+            if (coeLine.on_spot_charges.length !== before) changed = true;
+          }
+          const absorbedToRestore = Number(payment.min_spend_absorbed) || 0;
+          const undoneEventId =
+            payment.event_id?._id?.toString?.() || payment.event_id?.toString?.() || '';
+          if (absorbedToRestore > 0 && undoneEventId) {
+            coeLine.on_spot_min_spend_used = coeLine.on_spot_min_spend_used || [];
+            const trackerRow = coeLine.on_spot_min_spend_used.find(
+              (r) =>
+                (r?.event_id?._id?.toString?.() || r?.event_id?.toString?.() || '') ===
+                undoneEventId,
+            );
+            if (trackerRow) {
+              trackerRow.absorbed = Math.round(
+                Math.max(0, (Number(trackerRow.absorbed) || 0) - absorbedToRestore) * 100,
+              ) / 100;
+              changed = true;
+            }
+          }
+          if (changed) await coeLine.save();
+        }
+      } catch (lineErr) {
+        console.error('[AdhocPayment] min-spend-only undo COE update failed:', {
+          payment_id: payment._id,
+          error: lineErr.message,
+        });
+      }
+    }
+
+    console.log('[AdhocPayment] min-spend-only undo completed', {
+      payment_id: paymentId,
+      mode,
+      admin_id: adminUserId,
+      timestamp: new Date().toISOString(),
+    });
+    return serializePaymentForApi(payment, true);
   }
 
   const referenceNumber = parseAdhocGoatReference(payment);
@@ -936,18 +1182,46 @@ async function undoAdhocPayment(adminUserId, paymentId, opts) {
 
     try {
       const coeLine = await COE.findById(coeId);
-      if (coeLine?.on_spot_charges?.length) {
-        const pid = String(payment._id);
-        const before = coeLine.on_spot_charges.length;
-        coeLine.on_spot_charges = coeLine.on_spot_charges.filter(
-          (row) => String(row.payment_id) !== pid,
-        );
-        if (coeLine.on_spot_charges.length !== before) {
+      if (coeLine) {
+        let changed = false;
+
+        // Remove the on_spot_charges line.
+        if (coeLine.on_spot_charges?.length) {
+          const pid = String(payment._id);
+          const before = coeLine.on_spot_charges.length;
+          coeLine.on_spot_charges = coeLine.on_spot_charges.filter(
+            (row) => String(row.payment_id) !== pid,
+          );
+          if (coeLine.on_spot_charges.length !== before) {
+            changed = true;
+          }
+        }
+
+        // Restore any min-spend balance that was absorbed by this payment.
+        const absorbedToRestore = Number(payment.min_spend_absorbed) || 0;
+        const undoneEventId =
+          payment.event_id?._id?.toString?.() || payment.event_id?.toString?.() || '';
+        if (absorbedToRestore > 0 && undoneEventId) {
+          coeLine.on_spot_min_spend_used = coeLine.on_spot_min_spend_used || [];
+          const trackerRow = coeLine.on_spot_min_spend_used.find(
+            (r) =>
+              (r?.event_id?._id?.toString?.() || r?.event_id?.toString?.() || '') ===
+              undoneEventId,
+          );
+          if (trackerRow) {
+            trackerRow.absorbed = Math.round(
+              Math.max(0, (Number(trackerRow.absorbed) || 0) - absorbedToRestore) * 100,
+            ) / 100;
+            changed = true;
+          }
+        }
+
+        if (changed) {
           await coeLine.save();
         }
       }
     } catch (lineErr) {
-      console.error('[AdhocPayment] on_spot_charges remove failed:', {
+      console.error('[AdhocPayment] on_spot_charges remove / min-spend restore failed:', {
         payment_id: payment._id,
         error: lineErr.message,
       });

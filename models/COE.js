@@ -512,6 +512,10 @@ const coeSchema = new mongoose.Schema({
     venue_catalog_price: { type: Number, min: 0, default: null },
     /** THE1 platform fee % on negotiated base B (0–100); optional, 0 if unset. */
     the1_fee_percent: { type: Number, min: 0, max: 100, default: null },
+    /** Original venue catalog min spend (Event.seats[].min_spend). Saved at booking time. */
+    venue_min_spend_usd: { type: Number, min: 0, default: null },
+    /** Event-specific min spend override (Event.seats[].event_min_spend). Saved at booking time. */
+    negotiated_min_spend_usd: { type: Number, min: 0, default: null },
   }],
   // Seat upgrade offers (only for draft COEs)
   seat_upgrade_offers: [{
@@ -692,6 +696,10 @@ const coeSchema = new mongoose.Schema({
     },
     description: { type: String, trim: true, required: true, maxlength: 500 },
     amount: { type: Number, min: 0, required: true },
+    /** Portion of the base price absorbed by the min-spend balance (no card charge). */
+    min_spend_absorbed: { type: Number, min: 0, default: 0 },
+    /** Portion of the base price that was charged to card (fee-exclusive). */
+    card_charged_base: { type: Number, min: 0, default: 0 },
     adhoc_payer: {
       type: {
         type: String,
@@ -708,6 +716,18 @@ const coeSchema = new mongoose.Schema({
       required: true,
     },
     created_at: { type: Date, default: Date.now },
+  }],
+
+  /**
+   * Per-event min-spend balance tracker. Cumulative base absorbed against min spend.
+   */
+  on_spot_min_spend_used: [{
+    event_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Event',
+      required: true,
+    },
+    absorbed: { type: Number, min: 0, default: 0 },
   }],
   policies: { 
     type: String, 

@@ -90,13 +90,17 @@ const paymentSchema = new mongoose.Schema({
     default: 'general',
   },
 
-  /** How the payment was collected: card (GOAT) or admin-recorded cash. */
+  /** How the payment was collected: card (GOAT), admin-recorded cash, or min-spend deduction (no card charge). */
   payment_channel: {
     type: String,
-    enum: ['card', 'cash'],
+    enum: ['card', 'cash', 'min_spend'],
     default: 'card',
     index: true,
   },
+  /** For on-spot charges: portion of base price absorbed by min-spend (no card charge). */
+  min_spend_absorbed: { type: Number, min: 0, default: 0 },
+  /** For on-spot charges: portion of base price charged to card (fee-exclusive). */
+  card_charged_base: { type: Number, min: 0, default: 0 },
   /** Admin who recorded a cash payment (lifecycle or adhoc). */
   recorded_by_admin_id: {
     type: mongoose.Schema.Types.ObjectId,
