@@ -45,14 +45,19 @@ function formatAdhocPaidByLine(payment) {
     return null;
   }
   const name = getAdhocPayerDisplayName(payment);
+  const isGuest = payment?.adhoc_payer?.type === 'guest';
   if (payment.payment_channel === 'min_spend') {
     return 'Applied to min spend balance';
   }
   if (payment.payment_channel === 'cash') {
-    return `Paid by ${name} in cash`;
+    return isGuest
+      ? `Paid by guest user ${name} in cash`
+      : `Paid by ${name} in cash`;
   }
   const last4 = getAdhocCardLastFour(payment);
-  return `Paid by ${name} with card ending with ${last4}`;
+  return isGuest
+    ? `Paid by guest user ${name} with card ending with ${last4}`
+    : `Paid by ${name} with card ending with ${last4}`;
 }
 
 /**
