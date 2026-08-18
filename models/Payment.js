@@ -101,6 +101,16 @@ const paymentSchema = new mongoose.Schema({
   min_spend_absorbed: { type: Number, min: 0, default: 0 },
   /** For on-spot charges: portion of base price charged to card (fee-exclusive). */
   card_charged_base: { type: Number, min: 0, default: 0 },
+  /** Exact fee component snapshot for on-spot card charges (new rows only). */
+  adhoc_fee_breakdown: {
+    card_base: { type: Number, min: 0, default: null },
+    sales_tax: { type: Number, min: 0, default: null },
+    gratuity: { type: Number, min: 0, default: null },
+    venue_admin: { type: Number, min: 0, default: null },
+    the1_fee: { type: Number, min: 0, default: null },
+    processing_fee: { type: Number, min: 0, default: null },
+    total_with_fees: { type: Number, min: 0, default: null },
+  },
   /** Admin who recorded a cash payment (lifecycle or adhoc). */
   recorded_by_admin_id: {
     type: mongoose.Schema.Types.ObjectId,

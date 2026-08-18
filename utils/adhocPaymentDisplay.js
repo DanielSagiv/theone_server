@@ -45,6 +45,9 @@ function formatAdhocPaidByLine(payment) {
     return null;
   }
   const name = getAdhocPayerDisplayName(payment);
+  if (payment.payment_channel === 'min_spend') {
+    return 'Applied to min spend balance';
+  }
   if (payment.payment_channel === 'cash') {
     return `Paid by ${name} in cash`;
   }

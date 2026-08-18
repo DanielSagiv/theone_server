@@ -557,6 +557,8 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   /** Min-spend split result (only for non-guest on-spot charges). */
   let minSpendAbsorbed = 0;
   let cardChargedBase = 0;
+  /** Fee snapshot for new on-spot card charges (null for cash/min-spend-only). */
+  let adhocFeeBreakdown = null;
   /** When cardBase = 0, this charge is fully covered by min spend — no GOAT call. */
   let isMinSpendOnly = false;
 
@@ -601,6 +603,15 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
       }
       onSpotBaseAmount = Number(amount);
       chargeAmount = priced.total;
+      adhocFeeBreakdown = {
+        card_base: Number(priced.base) || 0,
+        sales_tax: Number(priced.salesTax) || 0,
+        gratuity: Number(priced.gratuity) || 0,
+        venue_admin: Number(priced.venueAdmin) || 0,
+        the1_fee: Number(priced.the1Fee) || 0,
+        processing_fee: Number(priced.processingFee) || 0,
+        total_with_fees: Number(priced.total) || 0,
+      };
     }
     resolvedAdhocKind = resolvedAdhocKind === 'upgrade' ? 'general' : resolvedAdhocKind;
   }
@@ -681,6 +692,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     idempotency_key: idempotencyKey || undefined,
     min_spend_absorbed: minSpendAbsorbed,
     card_charged_base: cardChargedBase,
+    adhoc_fee_breakdown: adhocFeeBreakdown || undefined,
   });
   await payment.save();
 
@@ -1012,7 +1024,7 @@ async function listEventCardCharges(coeId, eventId) {
     payment_channel: { $in: ['card', 'min_spend'] },
     status: { $in: ['completed', 'cancelled', 'refunded'] },
   })
-    .sort({ createdAt: 1 })
+    .sort({ createdAt: -1 })
     .lean();
 
   return payments
@@ -1024,6 +1036,7 @@ async function listEventCardCharges(coeId, eventId) {
       amount: Number(p.amount) || 0,
       min_spend_absorbed: Number(p.min_spend_absorbed) || 0,
       card_charged_base: Number(p.card_charged_base) || 0,
+      adhoc_fee_breakdown: p.adhoc_fee_breakdown || null,
       status: p.status,
       goat_undo_type: p.goat_undo_type || null,
       can_undo: p.status === 'completed',
