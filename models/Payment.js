@@ -172,6 +172,15 @@ const paymentSchema = new mongoose.Schema({
   refund_reason: String,
   refunded_at: Date,
   refund_transaction_id: String,
+
+  /**
+   * How GOAT undid an adhoc card charge: void, refund, or adjust.
+   * Set only after a successful void/reversal.
+   */
+  goat_undo_type: {
+    type: String,
+    enum: ['void', 'refund', 'adjust'],
+  },
   
   // Timestamps
   completed_at: Date

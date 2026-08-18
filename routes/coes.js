@@ -3106,6 +3106,78 @@ router.post(
 );
 
 /**
+ * POST /v1/coes/:id/admin/adhoc-payments/:paymentId/void
+ * Admin: GOAT void of an unsettled on-spot card charge on this COE.
+ */
+router.post(
+  '/:id/admin/adhoc-payments/:paymentId/void',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await adhocPaymentService.undoAdhocPayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'void', coeId: req.params.id },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'On-spot charge voided',
+      });
+    } catch (error) {
+      console.error('[COES] Admin adhoc void error:', {
+        coe_id: req.params.id,
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'ADHOC_VOID_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/admin/adhoc-payments/:paymentId/reversal
+ * Admin: GOAT full reversal of an on-spot card charge on this COE.
+ */
+router.post(
+  '/:id/admin/adhoc-payments/:paymentId/reversal',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await adhocPaymentService.undoAdhocPayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'reversal', coeId: req.params.id },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'On-spot charge reversed',
+      });
+    } catch (error) {
+      console.error('[COES] Admin adhoc reversal error:', {
+        coe_id: req.params.id,
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'ADHOC_REVERSAL_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
  * POST /v1/coes/:id/admin/paid-seat-upgrade
  * Admin: create pending paid-COE seat upgrade (apply after on-spot payment).
  * Body: { event_id, seat_category, event_price|the1_base_price, the1_fee_percent?, venue_catalog_price?, is_simple_joint? }

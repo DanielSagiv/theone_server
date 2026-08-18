@@ -696,9 +696,146 @@ async function applyPaidSeatUpgradeAfterPayment(coeId, upgradeId, payment) {
   return getCOEById(coeId);
 }
 
+/**
+ * Undo an applied paid seat upgrade after GOAT void/reversal of its adhoc payment.
+ * Restores the previous seat/price; does not touch deposit/full payment_status.
+ * @param {string} coeId
+ * @param {import('mongoose').Document|object} payment
+ * @returns {Promise<object|null>} updated COE or null if no applied upgrade
+ */
+async function revertPaidSeatUpgradeAfterUndo(coeId, payment) {
+  const coe = await COE.findById(coeId);
+  if (!coe) {
+    throw new Error('COE not found');
+  }
+  const paymentId = idStr(payment?._id || payment?.id);
+  if (!paymentId) return null;
+
+  const upgrade = (coe.paid_seat_upgrades || []).find(
+    (u) => idStr(u.payment_id) === paymentId && u.status === 'applied',
+  );
+  if (!upgrade) return null;
+
+  const eventId = idStr(upgrade.event_id);
+  const seatIndex = (coe.selected_seats || []).findIndex(
+    (s) => normalizeEventId(s.event_id) === eventId,
+  );
+  if (seatIndex < 0) {
+    upgrade.status = 'cancelled';
+    await coe.save();
+    return getCOEById(coeId);
+  }
+
+  const existingSeat = coe.selected_seats[seatIndex];
+  const samePhysical =
+    idStr(upgrade.current_seat_id) === idStr(existingSeat.seat_id);
+
+  const event = await Event.findById(eventId);
+  if (event && !samePhysical) {
+    try {
+      const targetSeat =
+        event.seats.id(existingSeat.seat_id) ||
+        (event.seats || []).find(
+          (s) => idStr(s._id) === idStr(existingSeat.seat_id),
+        );
+      if (targetSeat && idStr(targetSeat.booking_reference) === idStr(coe._id)) {
+        targetSeat.status = 'available';
+        targetSeat.booking_reference = undefined;
+        targetSeat.booked_at = undefined;
+        targetSeat.booked_by = undefined;
+        targetSeat.merged_coe_ids = [];
+      }
+      const currentSeat =
+        event.seats.id(upgrade.current_seat_id) ||
+        (event.seats || []).find(
+          (s) => idStr(s._id) === idStr(upgrade.current_seat_id),
+        );
+      if (currentSeat) {
+        currentSeat.status = 'booked';
+        currentSeat.booking_reference = coe._id;
+        currentSeat.booked_at = new Date();
+        currentSeat.booked_by = coe.client_id;
+      }
+      await event.save();
+    } catch (seatErr) {
+      console.error('[paidSeatUpgrade] revert seats:', seatErr.message);
+    }
+  }
+
+  const restoredRow = {
+    event_id: existingSeat.event_id,
+    seat_id: upgrade.current_seat_id,
+    seat_code: upgrade.current_seat_code || existingSeat.seat_code,
+    category: upgrade.current_category || existingSeat.category,
+    capacity: existingSeat.capacity,
+    base_price:
+      Number(upgrade.current_base_price) || Number(existingSeat.base_price) || 0,
+    event_price:
+      Number(upgrade.current_event_price) ||
+      Number(existingSeat.event_price) ||
+      0,
+    available_from: existingSeat.available_from,
+    available_until: existingSeat.available_until,
+    status: existingSeat.status || 'selected',
+    is_merged_booking: existingSeat.is_merged_booking || false,
+    primary_coe_id: existingSeat.primary_coe_id,
+    ai_recommendation: existingSeat.ai_recommendation,
+    recommendation_generated_at: existingSeat.recommendation_generated_at,
+    recommendation_version: existingSeat.recommendation_version ?? 1,
+    is_joint_allocation: existingSeat.is_joint_allocation || false,
+    joint_event_group_id: existingSeat.joint_event_group_id || null,
+    joint_share_percent: existingSeat.joint_share_percent ?? null,
+    is_simple_joint: existingSeat.is_simple_joint || false,
+    simple_joint_original_price: existingSeat.simple_joint_original_price,
+    venue_catalog_price: existingSeat.venue_catalog_price,
+    the1_fee_percent:
+      upgrade.current_the1_fee_percent != null
+        ? Number(upgrade.current_the1_fee_percent)
+        : existingSeat.the1_fee_percent,
+  };
+
+  if (typeof coe.selected_seats.set === 'function') {
+    coe.selected_seats.set(seatIndex, restoredRow);
+  } else {
+    coe.selected_seats[seatIndex] = restoredRow;
+  }
+  if (typeof coe.markModified === 'function') {
+    coe.markModified('selected_seats');
+  }
+
+  await applyPricingFromSelectedSeats(coe);
+  upgrade.status = 'cancelled';
+  await coe.save();
+
+  try {
+    const { logIncident } = require('./coeHistoryService');
+    await logIncident({
+      coe,
+      coeId,
+      userId: null,
+      userRole: 'admin',
+      title: 'Paid seat upgrade reversed',
+      changes: [
+        {
+          field: 'seat',
+          label: 'Table',
+          from: existingSeat.seat_code,
+          to: upgrade.current_seat_code,
+          message: `On-spot upgrade undone (${existingSeat.seat_code} → ${upgrade.current_seat_code})`,
+        },
+      ],
+    });
+  } catch (historyErr) {
+    console.error('[paidSeatUpgrade] revert history:', historyErr.message);
+  }
+
+  return getCOEById(coeId);
+}
+
 module.exports = {
   createPaidSeatUpgrade,
   cancelPaidSeatUpgrade,
+  revertPaidSeatUpgradeAfterUndo,
   assertPendingUpgradeForCharge,
   applyPaidSeatUpgradeAfterPayment,
   serializeUpgrade,

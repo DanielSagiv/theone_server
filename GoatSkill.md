@@ -1,6 +1,6 @@
 ---
 name: goat-payment-auth
-description: Function-by-function GOAT payment integration reference for THEONE. Use when implementing GOAT auth, tokenization, charging, refunds, and webhook parity with the current payment system.
+description: Function-by-function GOAT payment integration reference for THEONE. Use when implementing GOAT auth, tokenization, charging, refunds, voids, reversals, and webhook parity with the current payment system.
 ---
 
 # GOAT Payment Gateway Skill
@@ -17,15 +17,28 @@ GOAT uses HTTP Basic auth.
 - If PIN is not configured: `Authorization: Basic base64("SOURCE_KEY:")`
 
 ## Sandbox Config
-Use these env vars:
-- `GOAT_SANDBOX_BASE_URL`
-- `GOAT_SOURCE_KEY`
+Use these env vars on **THEONE stage** (and local non-prod):
+- `GOAT_SANDBOX_BASE_URL` (default `https://api.sandbox.goatpaymentsgateway.com`)
+- `GOAT_SOURCE_KEY` — sandbox source key (must include **Void**, **Refund**, and for reversal also **Charge** + PIN)
 - `GOAT_PIN`
+
+## Production Config
+Use these env vars on **THEONE prod**:
+- `GOAT_PRODUCTION_BASE_URL` (or `GOAT_BASE_URL`) → `https://api.goatpaymentsgateway.com`
+- `GOAT_SOURCE_KEY` — **production** source key (same permission set: Void, Refund, Charge as needed)
+- `GOAT_PIN` — **required** for `POST /transactions/reversal`
+
+`services/goatClient.js` `getGoatBaseUrl()` already routes: explicit `GOAT_BASE_URL` → else prod when `NODE_ENV=production` + `GOAT_PRODUCTION_BASE_URL` → else sandbox. All transaction paths (`charge`, `refund`, `void`, `reversal`) must go through that helper — never hardcode host.
 
 ## API Base URLs
 
 - Production transactions base: `https://api.goatpaymentsgateway.com/api/v2/transactions`
 - Sandbox transactions base: `https://api.sandbox.goatpaymentsgateway.com/api/v2/transactions`
+
+| THEONE host | GOAT env | Charge / refund / void / reversal |
+|-------------|----------|-----------------------------------|
+| Stage / local | Sandbox | `{GOAT_SANDBOX_BASE_URL}/api/v2/transactions/...` |
+| Prod | Production | `{GOAT_PRODUCTION_BASE_URL or GOAT_BASE_URL}/api/v2/transactions/...` |
 
 ## Integration Principles
 - Keep GOAT credentials server-side only.
@@ -39,6 +52,8 @@ Use these env vars:
 - Function 3: Transactions list / lookup (`GET /transactions`) - documented below.
 - Function 4: Source charge – saved token / PM / ref (`POST /transactions/charge`, `source`) - documented below.
 - Function 5: Refund (full/partial) (`POST /transactions/refund`) - documented below.
+- Function 25: Void unsettled charge (`POST /transactions/void`) - documented below.
+- Function 26: Reversal — void or refund by state (`POST /transactions/reversal`) - documented below.
 - Function 6: Webhooks and signature verification (`/webhooks`) - documented below.
 - Function 7: Get single invoice (`GET /invoices/{id}`) - documented below.
 - Function 8: Cancel existing invoice (`POST /invoices/{id}/cancel`) - documented below.
@@ -470,7 +485,199 @@ Notes:
   - refund amount,
   - refund timestamp,
   - GOAT refund `reference_number` as `refund_transaction_id` equivalent.
-- Use this endpoint only after the charge has settled; for immediate reversals pre-settlement, look for a separate **void** capability if GOAT provides it.
+- Use this endpoint only after the charge has settled. For **unsettled** charges use Function 25 (**void**). To let GOAT pick void vs refund by settlement state, use Function 26 (**reversal**).
+
+---
+
+## Function 25 – Void (unsettled charge)
+
+### Endpoint
+- Method: `POST`
+- Path: `/transactions/void`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/transactions/void`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/transactions/void`
+- Auth: `BasicAuthentication`
+
+THEONE: call `{getGoatApiRoot()}/transactions/void` so stage hits sandbox and prod hits production.
+
+### Purpose
+Void a previously **unsettled** charge. Returns an error if the original transaction has **already settled**.
+
+### Permissions / behavior notes
+- Requires **Void** permission on the source key for credit-card transactions.
+- Requires **Check Void** permission for checks.
+- ACH: can only be voided until **1am Eastern Time**.
+- FirstData terminal: host capture; void only within **25 minutes** of the transaction.
+- TSYS: voids only for **US or Canadian** cards. International cards must use **refund**.
+
+### Request schema
+Content type: `application/json`
+
+Required:
+- `reference_number` (integer ≥ 1) – reference number of the transaction to void.
+
+Optional:
+- `customer` (BaseTransactionCustomer) – `send_receipt`, `email`, `fax`, `identifier`.
+- `transaction_details` (BaseTransactionDetails) – `description`, `clerk`, `terminal`, `client_ip`, `signature`.
+
+Minimal example:
+```json
+{
+  "reference_number": 123456
+}
+```
+
+Full request sample:
+```json
+{
+  "reference_number": 1,
+  "customer": {
+    "send_receipt": false,
+    "email": "string",
+    "fax": "string",
+    "identifier": "string"
+  },
+  "transaction_details": {
+    "description": "string",
+    "clerk": "string",
+    "terminal": "string",
+    "client_ip": "string",
+    "signature": "string"
+  }
+}
+```
+
+### Response schema (200)
+```json
+{
+  "version": "string",
+  "status": "Approved | Partially Approved | Submitted | Declined | Error",
+  "status_code": "A | P | D | E",
+  "error_message": "string",
+  "error_code": "string",
+  "error_details": "string or object"
+}
+```
+
+Treat success like charge: `status_code` `A` or `status` `Approved`.
+
+### Error responses
+- `400` – request invalid, missing fields, or original txn already settled.
+- `401` – credentials missing or invalid.
+- `415` – `Content-Type` must be `application/json`.
+
+### Mapping to THEONE
+- Original GOAT `reference_number` → `Payment.gp_transaction_id` (legacy field; stores GOAT ref).
+- On approved void: Payment `status=cancelled` (or a dedicated voided flag if added); do **not** create a refund row.
+- Full void: reverse COE `total_paid` by the original amount; `payment_status` back to `unpaid` when that payment was the only captured amount (same accounting as full refund, without `refund_transaction_id`).
+- Persist void timestamp + GOAT void response status. Do not call refund after a successful void on the same ref.
+- Stage vs prod: sandbox source key must have Void; production source key must have Void independently.
+
+---
+
+## Function 26 – Reversal (void, refund, or adjust by state)
+
+### Endpoint
+- Method: `POST`
+- Path: `/transactions/reversal`
+- Full sandbox URL: `https://api.sandbox.goatpaymentsgateway.com/api/v2/transactions/reversal`
+- Full production URL: `https://api.goatpaymentsgateway.com/api/v2/transactions/reversal`
+- Auth: `BasicAuthentication` — source key **must have a PIN**.
+
+THEONE: call `{getGoatApiRoot()}/transactions/reversal` so stage hits sandbox and prod hits production.
+
+### Purpose
+Convenience method to completely or partially reverse a previous transaction **regardless of settlement state**. Combines `/transactions/adjust`, `/transactions/void`, and `/transactions/refund`.
+
+### Routing GOAT applies
+If **no `amount`**:
+- Unsettled → **void**
+- Settled → **full refund**
+
+If **`amount` is sent**:
+- Unsettled → **adjust** (reduce by `amount`; not the new total). Full original amount → **void**
+- Settled → **refund** for `amount`
+
+### Permissions / behavior notes
+- Source key **PIN required**.
+- CC: **Charge**, **Void**, and **Refund**.
+- Checks: **Check Void** and **Check Refund**.
+- ACH: void only until 1am ET the night after processing; refund only after **5 business days**. ACH cannot be adjusted (error if amount sent while unsettled).
+- First Data terminal: void only within **25 minutes**; after that GOAT runs refund/credit even if unsettled.
+- Terminal: cannot adjust; a different `amount` always runs as refund, settled or not.
+- TSYS: void/adjust only US/Canadian cards; international must refund.
+- Full reversal on a **different** `terminal_id` runs as **refund**, not void.
+- Terminals with connected refunds behave as matched refunds.
+
+### Request schema
+Content type: `application/json`
+
+Required:
+- `reference_number` (integer ≥ 1) – transaction to reverse.
+
+Optional:
+- `terminal_id` (string) – boarded terminal serial. Default = original terminal. Different terminal → void becomes refund.
+- `amount` (number `0.01..20000000`) – amount of the original transaction to reverse (reduction, not new total).
+- `customer` (BaseTransactionCustomer).
+- `transaction_details` (BaseTransactionDetails).
+
+Minimal full reverse:
+```json
+{
+  "reference_number": 123456
+}
+```
+
+Partial reverse sample:
+```json
+{
+  "reference_number": 1,
+  "terminal_id": "string",
+  "amount": 0.01,
+  "customer": {
+    "send_receipt": false,
+    "email": "string",
+    "fax": "string",
+    "identifier": "string"
+  },
+  "transaction_details": {
+    "description": "string",
+    "clerk": "string",
+    "terminal": "string",
+    "client_ip": "string",
+    "signature": "string"
+  }
+}
+```
+
+### Response schema (200)
+One of: Void response, Refund response, or Adjust response.
+
+```json
+{
+  "version": "string",
+  "status": "Approved | Partially Approved | Submitted | Declined | Error",
+  "status_code": "A | P | D | E",
+  "error_message": "string",
+  "error_code": "string",
+  "error_details": "string or object",
+  "type": "Void"
+}
+```
+
+`type` (when present) tells which path GOAT took (`Void` / refund / adjust). Branch THEONE accounting on `type` + `status_code`, not on whether you sent `amount`.
+
+### Error responses
+- `400` – request invalid or missing required fields.
+- `401` – credentials missing or invalid (including missing PIN).
+- `415` – `Content-Type` must be `application/json`.
+
+### Mapping to THEONE
+- Prefer Function 26 for a single admin “undo” when settlement is unknown; use Function 25 when product must **only** void and fail if already settled; use Function 5 when product must **only** refund settled charges.
+- If `type` is `Void` → same Payment/COE mapping as Function 25.
+- If GOAT refunded → same mapping as Function 5 (including refund ref if returned).
+- If GOAT adjusted (partial unsettled) → reduce captured amount on Payment; do not mark fully refunded/cancelled unless remaining auth is zero.
+- Stage sandbox key and prod key both need Charge + Void + Refund + PIN. Do not reuse the sandbox key on prod.
 
 ---
 
@@ -2383,6 +2590,8 @@ If the product requires a GOAT-hosted invoice URL:
 | **Source charge (`source` + `tkn-` / `ref-` / `pm-` / `nonce-`)** | Documented (Function 4) |
 | List transactions (`GET /transactions`) | Documented |
 | Refund (`POST /transactions/refund`) | Documented |
+| Void (`POST /transactions/void`) | Documented (Function 25) |
+| Reversal (`POST /transactions/reversal`) | Documented (Function 26) |
 | Webhook CRUD (`/webhooks`) | Documented |
 | Get single invoice (`GET /invoices/{id}`) | Documented |
 | Cancel existing invoice (`POST /invoices/{id}/cancel`) | Documented |
@@ -2404,4 +2613,6 @@ If the product requires a GOAT-hosted invoice URL:
 | List customer transactions (`GET /customers/{id}/transactions`) | Documented |
 | **Inbound webhook HTTP payload + signature verification** | Still need GOAT docs or captured sample requests |
 
-You can implement charges, token charges, refunds, reconciliation, and webhook registration. **Async payment status** parity with Global Payments still needs the inbound webhook contract above, or polling `GET /transactions` until webhooks are wired.
+You can implement charges, token charges, refunds, voids, reversals, reconciliation, and webhook registration. **Async payment status** parity with Global Payments still needs the inbound webhook contract above, or polling `GET /transactions` until webhooks are wired.
+
+Void/reversal are **documented only** until `goatClient` + payment service + mobile admin UI are wired. When implementing, reuse `getGoatApiRoot()` so THEONE stage → GOAT sandbox and THEONE prod → GOAT production.

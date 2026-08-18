@@ -246,6 +246,7 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     location_id: locationId,
     location_name: locationName,
     on_spot_fee_context: onSpotFeeContext,
+    event_charges: await listEventCardCharges(coe._id, eventId),
   };
 }
 
@@ -770,7 +771,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
  * @param {boolean} isAdmin
  * @returns {object}
  */
-const { withAdhocPaymentSummary } = require('../utils/adhocPaymentDisplay');
+const { withAdhocPaymentSummary, getAdhocPayerDisplayName } = require('../utils/adhocPaymentDisplay');
 
 function serializePaymentForApi(payment, isAdmin = false) {
   const p =
@@ -781,9 +782,189 @@ function serializePaymentForApi(payment, isAdmin = false) {
   return withAdhocPaymentSummary(p);
 }
 
+/**
+ * Parse GOAT integer reference from Payment.gp_transaction_id.
+ * @param {object} payment
+ * @returns {number}
+ */
+function parseAdhocGoatReference(payment) {
+  const refRaw = payment?.gp_transaction_id;
+  const referenceNumber = parseInt(String(refRaw || '').replace(/\D/g, ''), 10);
+  if (!Number.isFinite(referenceNumber) || referenceNumber < 1) {
+    throw new Error('Invalid gateway transaction reference for undo');
+  }
+  return referenceNumber;
+}
+
+/**
+ * Map GOAT undo response to stored goat_undo_type.
+ * @param {object} goatBody
+ * @param {'void'|'reversal'} mode
+ * @returns {'void'|'refund'|'adjust'}
+ */
+function mapGoatUndoType(goatBody, mode) {
+  const raw = goatBody?.type != null ? String(goatBody.type).toLowerCase() : '';
+  if (raw === 'void' || raw === 'refund' || raw === 'adjust') {
+    return raw;
+  }
+  return mode === 'void' ? 'void' : 'refund';
+}
+
+/**
+ * Card on-spot charges for an event (completed + already undone) for admin UI rows.
+ * @param {import('mongoose').Types.ObjectId|string} coeId
+ * @param {string} [eventId]
+ * @returns {Promise<object[]>}
+ */
+async function listEventCardCharges(coeId, eventId) {
+  if (!eventId) return [];
+  const payments = await Payment.find({
+    coe_id: coeId,
+    event_id: eventId,
+    payment_type: 'adhoc',
+    payment_channel: { $ne: 'cash' },
+    status: { $in: ['completed', 'cancelled', 'refunded'] },
+  })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  return payments
+    .filter((p) => p.gp_transaction_id)
+    .map((p) => ({
+      payment_id: p._id.toString(),
+      display_name: getAdhocPayerDisplayName(p),
+      amount: Number(p.amount) || 0,
+      status: p.status,
+      goat_undo_type: p.goat_undo_type || null,
+      can_undo: p.status === 'completed',
+    }));
+}
+
+/**
+ * Admin GOAT void or full reversal of a completed adhoc card charge.
+ * Does not change COE deposit/full payment_status.
+ * @param {string} adminUserId
+ * @param {string} paymentId
+ * @param {{ mode: 'void'|'reversal', coeId?: string }} opts
+ * @returns {Promise<object>} serialized payment
+ */
+async function undoAdhocPayment(adminUserId, paymentId, opts) {
+  const mode = opts?.mode;
+  if (mode !== 'void' && mode !== 'reversal') {
+    throw new Error('Undo mode must be void or reversal');
+  }
+
+  const payment = await Payment.findById(paymentId);
+  if (!payment) {
+    throw new Error('Payment not found');
+  }
+  if (payment.payment_type !== 'adhoc') {
+    throw new Error('Only on-spot payments can be voided or reversed here');
+  }
+  if (opts?.coeId && String(payment.coe_id) !== String(opts.coeId)) {
+    throw new Error('Payment does not belong to this experience');
+  }
+  if (payment.status !== 'completed') {
+    throw new Error(`Cannot undo payment in status: ${payment.status}`);
+  }
+  if (payment.payment_channel === 'cash') {
+    throw new Error('Cash payments cannot be voided or reversed through GOAT');
+  }
+
+  const referenceNumber = parseAdhocGoatReference(payment);
+  const description =
+    mode === 'void' ? 'On-spot void' : 'On-spot reversal';
+
+  let goatBody;
+  try {
+    goatBody =
+      mode === 'void'
+        ? await goatClient.voidTransaction({
+            reference_number: referenceNumber,
+            description,
+          })
+        : await goatClient.reverseTransaction({
+            reference_number: referenceNumber,
+            description,
+          });
+  } catch (goatErr) {
+    console.error('[AdhocPayment] GOAT undo failed', {
+      payment_id: paymentId,
+      mode,
+      admin_id: adminUserId,
+      error: goatErr.message,
+      timestamp: new Date().toISOString(),
+    });
+    throw goatErr;
+  }
+
+  const undoType = mapGoatUndoType(goatBody, mode);
+  payment.goat_undo_type = undoType;
+  payment.refund_reason = description;
+  if (undoType === 'void') {
+    payment.status = 'cancelled';
+  } else {
+    payment.status = 'refunded';
+    payment.refund_amount = Number(payment.amount) || 0;
+    payment.refunded_at = new Date();
+    if (goatBody?.reference_number != null) {
+      payment.refund_transaction_id = String(goatBody.reference_number);
+    }
+  }
+  await payment.save();
+
+  const coeId = payment.coe_id?.toString?.() || String(payment.coe_id || '');
+  if (coeId) {
+    try {
+      const paidSeatUpgradeService = require('./paidSeatUpgradeService');
+      await paidSeatUpgradeService.revertPaidSeatUpgradeAfterUndo(coeId, payment);
+    } catch (revertErr) {
+      console.error('[AdhocPayment] seat upgrade revert failed after GOAT undo:', {
+        payment_id: payment._id,
+        error: revertErr.message,
+      });
+      throw new Error(
+        `GOAT undo succeeded but seat revert failed: ${revertErr.message}`,
+      );
+    }
+
+    try {
+      const coeLine = await COE.findById(coeId);
+      if (coeLine?.on_spot_charges?.length) {
+        const pid = String(payment._id);
+        const before = coeLine.on_spot_charges.length;
+        coeLine.on_spot_charges = coeLine.on_spot_charges.filter(
+          (row) => String(row.payment_id) !== pid,
+        );
+        if (coeLine.on_spot_charges.length !== before) {
+          await coeLine.save();
+        }
+      }
+    } catch (lineErr) {
+      console.error('[AdhocPayment] on_spot_charges remove failed:', {
+        payment_id: payment._id,
+        error: lineErr.message,
+      });
+    }
+
+    await paymentService.recordAdhocPaymentCompletion(coeId, payment);
+  }
+
+  console.log('[AdhocPayment] undo completed', {
+    payment_id: paymentId,
+    mode,
+    goat_undo_type: undoType,
+    admin_id: adminUserId,
+    timestamp: new Date().toISOString(),
+  });
+
+  return serializePaymentForApi(payment, true);
+}
+
 module.exports = {
   getAdhocPaymentOptions,
   processAdhocPayment,
+  undoAdhocPayment,
   serializePaymentForApi,
   getCoePayerUserIds,
 };

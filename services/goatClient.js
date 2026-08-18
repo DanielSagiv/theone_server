@@ -283,6 +283,73 @@ async function refundTransaction(opts) {
 }
 
 /**
+ * Void an unsettled charge by original reference_number (integer).
+ * @param {{ reference_number: number, description?: string }} opts
+ * @returns {Promise<object>}
+ */
+async function voidTransaction(opts) {
+  const client = createGoatAxios();
+  const body = {
+    reference_number: Number(opts.reference_number),
+  };
+  if (opts.description) {
+    body.transaction_details = { description: opts.description };
+  }
+  const res = await client.post('/transactions/void', body);
+  if (res.status >= 400) {
+    const err = new Error(formatGoatHttpError(res, 'GOAT void failed'));
+    err.response = res;
+    throw err;
+  }
+  if (!isChargeApproved(res.data)) {
+    const err = new Error(
+      formatGoatHttpError(
+        { status: res.status, data: res.data },
+        'GOAT void was not approved',
+      ),
+    );
+    err.response = res;
+    throw err;
+  }
+  return res.data;
+}
+
+/**
+ * Reverse a charge: GOAT voids if unsettled, refunds if settled (omit amount for full).
+ * @param {{ reference_number: number, amount?: number, description?: string }} opts
+ * @returns {Promise<object>}
+ */
+async function reverseTransaction(opts) {
+  const client = createGoatAxios();
+  const body = {
+    reference_number: Number(opts.reference_number),
+  };
+  if (opts.amount != null && opts.amount > 0) {
+    body.amount = Number(opts.amount);
+  }
+  if (opts.description) {
+    body.transaction_details = { description: opts.description };
+  }
+  const res = await client.post('/transactions/reversal', body);
+  if (res.status >= 400) {
+    const err = new Error(formatGoatHttpError(res, 'GOAT reversal failed'));
+    err.response = res;
+    throw err;
+  }
+  if (!isChargeApproved(res.data)) {
+    const err = new Error(
+      formatGoatHttpError(
+        { status: res.status, data: res.data },
+        'GOAT reversal was not approved',
+      ),
+    );
+    err.response = res;
+    throw err;
+  }
+  return res.data;
+}
+
+/**
  * Optional: list transactions for reconciliation (GET /transactions).
  * @param {Record<string, string>} query
  * @returns {Promise<object>}
@@ -336,6 +403,8 @@ module.exports = {
   chargeWithSource,
   isChargeApproved,
   refundTransaction,
+  voidTransaction,
+  reverseTransaction,
   listTransactions,
   listCustomers,
   createCustomer,

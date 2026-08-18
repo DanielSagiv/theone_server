@@ -186,6 +186,76 @@ router.post('/admin/adhoc', authenticateToken, requireAdmin, async (req, res) =>
 });
 
 /**
+ * POST /v1/payments/admin/adhoc/:paymentId/void
+ * Admin: GOAT void of an unsettled on-spot card charge.
+ */
+router.post(
+  '/admin/adhoc/:paymentId/void',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await adhocPaymentService.undoAdhocPayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'void' },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'On-spot charge voided',
+      });
+    } catch (error) {
+      console.error('Admin adhoc void error:', {
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'ADHOC_VOID_FAILED', message: error.message },
+      });
+    }
+  },
+);
+
+/**
+ * POST /v1/payments/admin/adhoc/:paymentId/reversal
+ * Admin: GOAT full reversal (void if unsettled, refund if settled).
+ */
+router.post(
+  '/admin/adhoc/:paymentId/reversal',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await adhocPaymentService.undoAdhocPayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'reversal' },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'On-spot charge reversed',
+      });
+    } catch (error) {
+      console.error('Admin adhoc reversal error:', {
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'ADHOC_REVERSAL_FAILED', message: error.message },
+      });
+    }
+  },
+);
+
+/**
  * POST /v1/payments/coe/:coeId/intent
  * Create payment intent for COE
  */

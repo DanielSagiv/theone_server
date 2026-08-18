@@ -5852,6 +5852,12 @@
                                         </div>
                                         <button class="btn-primary" onclick="loadAdhocPaymentOptions()">Load payers / cards</button>
                                         <button class="btn-primary" onclick="submitAdminAdhocPayment()" style="margin-left:8px;">Charge</button>
+                                        <div class="form-group" style="margin-top:16px;">
+                                            <label for="adhocUndoPaymentId">Payment ID (void / reversal)</label>
+                                            <input type="text" id="adhocUndoPaymentId" class="form-control" placeholder="Completed adhoc payment id">
+                                        </div>
+                                        <button class="btn-primary" onclick="submitAdminAdhocUndo('void')">Void</button>
+                                        <button class="btn-primary" onclick="submitAdminAdhocUndo('reversal')" style="margin-left:8px;">Reversal</button>
                                         <pre id="adhocOptionsResult" class="text-muted" style="margin-top:16px;white-space:pre-wrap;font-size:12px;"></pre>
                                         <pre id="adhocChargeResult" class="text-muted" style="margin-top:8px;white-space:pre-wrap;font-size:12px;"></pre>
                                     </div>
@@ -24704,6 +24710,33 @@
             } catch (error) {
                 console.error('Adhoc charge error:', error);
                 showAlert('Adhoc charge failed', 'error');
+            }
+        }
+
+        async function submitAdminAdhocUndo(mode) {
+            try {
+                const coeId = document.getElementById('adhocCoeId').value.trim();
+                const paymentId = document.getElementById('adhocUndoPaymentId').value.trim();
+                if (!coeId || !paymentId) {
+                    showAlert('COE ID and payment ID are required', 'error');
+                    return;
+                }
+                if (mode !== 'void' && mode !== 'reversal') {
+                    showAlert('Invalid undo mode', 'error');
+                    return;
+                }
+                const result = await makeApiRequest(
+                    `/coes/${coeId}/admin/adhoc-payments/${paymentId}/${mode}`,
+                    'POST',
+                    {}
+                );
+                document.getElementById('adhocChargeResult').textContent = JSON.stringify(result, null, 2);
+                if (result.success) {
+                    showAlert(mode === 'void' ? 'Void completed' : 'Reversal completed', 'success');
+                }
+            } catch (error) {
+                console.error('Adhoc undo error:', error);
+                showAlert('Adhoc undo failed', 'error');
             }
         }
 
