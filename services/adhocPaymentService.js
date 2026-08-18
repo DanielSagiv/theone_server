@@ -1032,6 +1032,7 @@ async function listEventCardCharges(coeId, eventId) {
     .map((p) => ({
       payment_id: p._id.toString(),
       display_name: getAdhocPayerDisplayName(p),
+      adhoc_payer_type: p.adhoc_payer?.type || null,
       description: String(p.description || '').trim() || null,
       amount: Number(p.amount) || 0,
       min_spend_absorbed: Number(p.min_spend_absorbed) || 0,
