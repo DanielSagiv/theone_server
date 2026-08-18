@@ -75,17 +75,24 @@ const LIV_BEACH_LEGACY_SHORT_CODES = {
 };
 
 /**
- * Normalize table label from DOM text.
+ * Normalize table label from DOM text (strip capacity, venue suffix, More Info).
  * @param {string} raw
  * @returns {string}
  */
 function normalizeTableName(raw) {
-  return (raw || '')
+  let s = String(raw || '')
     .replace(/\s+More Info.*$/i, '')
-    .replace(/\s+\d+\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+    .trim();
+
+  // "Beach Villa 20 LIV Beach - 11:30am…" or "Beach Villa 15 Arrive by 11:00am"
+  const prefixMatch = s.match(/^(.+?)\s+\d+(?:\s|$|-)/);
+  if (prefixMatch) {
+    s = prefixMatch[1];
+  } else {
+    s = s.replace(/\s+\d+\s*$/, '');
+  }
+
+  return s.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 /**

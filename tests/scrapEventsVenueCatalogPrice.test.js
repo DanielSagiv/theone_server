@@ -29,6 +29,10 @@ const {
   resolveOmniaSeatMapping,
 } = require('../services/scrapEvents/omniaEventDetailScraperService');
 const {
+  normalizeTableName: normalizeLivTableName,
+  resolveLivSeatMapping,
+} = require('../services/scrapEvents/livLasVegasEventDetailScraperService');
+const {
   normalizeTableName: normalizeHakkasanTableName,
   resolveHakkasanSeatMapping,
 } = require('../services/scrapEvents/hakkasanEventDetailScraperService');
@@ -652,6 +656,25 @@ function testParseScrapPrepareImportOptions() {
   assert.strictEqual(missing.skipLocalAlreadyImported, false);
 }
 
+function testLivBeachSidepieceTableNameNormalization() {
+  const sidepiece =
+    'Beach Villa 20 LIV Beach - 11:30am to 6:00pm - Arrive by 1:00pm';
+  const key = normalizeLivTableName(sidepiece);
+  assert.strictEqual(key, 'beach villa');
+  assert.strictEqual(resolveLivSeatMapping(key, 'day_club').seatCode, 'Beach Villa');
+
+  const cloonee = 'Stage Cabana 15 Arrive by 11:00am';
+  assert.strictEqual(normalizeLivTableName(cloonee), 'stage cabana');
+  const terrace =
+    '2nd Row Premium Terrace 6 LIV Beach - 11:30am to 6:00pm - Arrive by 1:00pm';
+  const terraceKey = normalizeLivTableName(terrace);
+  assert.strictEqual(terraceKey, '2nd row premium terrace');
+  assert.strictEqual(
+    resolveLivSeatMapping(terraceKey, 'day_club').seatCode,
+    'Second Row Premium Terrace'
+  );
+}
+
 function testLivBeachInventoryRemapForLegacyShortCodes() {
   const stageSeats = [
     { code: 'bv', category: 'beach_villa', label: 'Beach Villa' },
@@ -742,6 +765,7 @@ function run() {
   testEncoreInventoryApply();
   testScrapIdentityNormalizeAndDayBounds();
   testParseScrapPrepareImportOptions();
+  testLivBeachSidepieceTableNameNormalization();
   testLivBeachInventoryRemapForLegacyShortCodes();
   console.log('scrapEventsVenueCatalogPrice.test.js: all passed');
 }
