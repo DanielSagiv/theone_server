@@ -27,6 +27,7 @@ const {
 const { canClientEditOwnRequest } = require('../utils/coeUtils');
 const proposalGroupService = require('../services/proposalGroupService');
 const adhocPaymentService = require('../services/adhocPaymentService');
+const paymentService = require('../services/paymentService');
 const {
   parseTimeRangeQuery,
   buildCoeListTimeRangeMatch,
@@ -1061,6 +1062,9 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       await attachFirstExperienceDeductionPreview(coe, deductionPreviewUser);
     }
     await coeService.attachCatalogTotalDisplay(coe);
+    await paymentService.attachExperiencePaymentUndoFields(coe, {
+      isAdmin: req.user.role === 'admin',
+    });
 
     // DEBUG: Log original_request_data so we can inspect what mobile receives
     try {
@@ -3100,6 +3104,78 @@ router.post(
       res.status(400).json({
         success: false,
         error: { code: 'ADHOC_PAYMENT_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/admin/experience-payments/:paymentId/void
+ * Admin: void the latest completed experience payment (deposit / full / final) on this COE.
+ */
+router.post(
+  '/:id/admin/experience-payments/:paymentId/void',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await paymentService.undoExperiencePayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'void', coeId: req.params.id },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'Experience payment voided',
+      });
+    } catch (error) {
+      console.error('[COES] Admin experience payment void error:', {
+        coe_id: req.params.id,
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'EXPERIENCE_VOID_FAILED', message: error.message },
+      });
+    }
+  }
+);
+
+/**
+ * POST /v1/coes/:id/admin/experience-payments/:paymentId/reversal
+ * Admin: reverse the latest completed experience payment (deposit / full / final) on this COE.
+ */
+router.post(
+  '/:id/admin/experience-payments/:paymentId/reversal',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await paymentService.undoExperiencePayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'reversal', coeId: req.params.id },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'Experience payment reversed',
+      });
+    } catch (error) {
+      console.error('[COES] Admin experience payment reversal error:', {
+        coe_id: req.params.id,
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'EXPERIENCE_REVERSAL_FAILED', message: error.message },
       });
     }
   }

@@ -2193,6 +2193,401 @@ async function updateSavedCard(userId, tokenId, updates = {}) {
   }
 }
 
+const EXPERIENCE_UNDO_PAYMENT_TYPES = ['deposit', 'full_payment', 'final_payment'];
+
+/**
+ * Parse GOAT reference_number from a Payment's gp_transaction_id.
+ * @param {object} payment
+ * @returns {number}
+ */
+function parseExperienceGoatReference(payment) {
+  const refRaw = payment?.gp_transaction_id;
+  const referenceNumber = parseInt(String(refRaw || '').replace(/\D/g, ''), 10);
+  if (!Number.isFinite(referenceNumber) || referenceNumber < 1) {
+    throw new Error('Invalid gateway transaction reference for undo');
+  }
+  return referenceNumber;
+}
+
+/**
+ * Map GOAT undo response to stored goat_undo_type.
+ * @param {object} goatBody
+ * @param {'void'|'reversal'} mode
+ * @returns {'void'|'refund'|'adjust'}
+ */
+function mapExperienceGoatUndoType(goatBody, mode) {
+  const raw = goatBody?.type != null ? String(goatBody.type).toLowerCase() : '';
+  if (raw === 'void' || raw === 'refund' || raw === 'adjust') {
+    return raw;
+  }
+  return mode === 'void' ? 'void' : 'refund';
+}
+
+/**
+ * Find the latest completed experience payment (deposit/full/final) for a COE.
+ * @param {string|import('mongoose').Types.ObjectId} coeId
+ * @returns {Promise<object|null>}
+ */
+async function findLatestCompletedExperiencePayment(coeId) {
+  if (!coeId) return null;
+  return Payment.findOne({
+    coe_id: coeId,
+    status: 'completed',
+    payment_type: { $in: EXPERIENCE_UNDO_PAYMENT_TYPES },
+  })
+    .sort({ completed_at: -1, createdAt: -1 })
+    .lean();
+}
+
+/**
+ * Build admin undo affordance payload for a completed experience payment.
+ * @param {object|null} payment
+ * @returns {{ payment_id: string, payment_type: string, amount: number, can_undo: boolean }|null}
+ */
+function buildExperiencePaymentUndoPayload(payment) {
+  if (!payment) return null;
+  const id = payment._id?.toString?.() || String(payment._id || '');
+  if (!id) return null;
+  return {
+    payment_id: id,
+    payment_type: payment.payment_type,
+    amount: roundCurrency(payment.amount || 0),
+    can_undo: true,
+  };
+}
+
+/**
+ * Serialize cancelled/refunded experience payments for client payment summary.
+ * @param {string|import('mongoose').Types.ObjectId} coeId
+ * @returns {Promise<object[]>}
+ */
+async function listExperiencePaymentUndos(coeId) {
+  if (!coeId) return [];
+  const payments = await Payment.find({
+    coe_id: coeId,
+    payment_type: { $in: EXPERIENCE_UNDO_PAYMENT_TYPES },
+    status: { $in: ['cancelled', 'refunded'] },
+    goat_undo_type: { $in: ['void', 'refund', 'adjust'] },
+  })
+    .sort({ updatedAt: -1 })
+    .limit(10)
+    .lean();
+
+  return payments.map((p) => ({
+    payment_id: p._id.toString(),
+    payment_type: p.payment_type,
+    amount: roundCurrency(p.amount || 0),
+    status: p.status,
+    goat_undo_type: p.goat_undo_type || null,
+    refund_amount: p.refund_amount != null ? roundCurrency(p.refund_amount) : null,
+    undone_at: p.refunded_at
+      ? new Date(p.refunded_at).toISOString()
+      : p.updatedAt
+        ? new Date(p.updatedAt).toISOString()
+        : null,
+  }));
+}
+
+/**
+ * Attach experience void/reversal fields onto a COE response object.
+ * @param {object} coe - mongoose doc or plain object
+ * @param {{ isAdmin?: boolean }} [opts]
+ * @returns {Promise<void>}
+ */
+async function attachExperiencePaymentUndoFields(coe, opts = {}) {
+  try {
+    if (!coe) return;
+    const coeId = coe._id?.toString?.() || coe.id?.toString?.() || null;
+    if (!coeId) return;
+
+    const undos = await listExperiencePaymentUndos(coeId);
+    assignRuntimeCoeField(coe, 'experience_payment_undos', undos);
+
+    if (opts.isAdmin === true) {
+      const latest = await findLatestCompletedExperiencePayment(coeId);
+      assignRuntimeCoeField(coe, 'experience_payment_undo', buildExperiencePaymentUndoPayload(latest));
+    }
+  } catch (error) {
+    console.warn('[PaymentService] attachExperiencePaymentUndoFields failed:', error.message);
+  }
+}
+
+/**
+ * Assign a runtime-only field on a mongoose doc or plain object.
+ * @param {object} target
+ * @param {string} key
+ * @param {*} value
+ */
+function assignRuntimeCoeField(target, key, value) {
+  if (!target) return;
+  if (typeof target.set === 'function') {
+    target.set(key, value);
+    return;
+  }
+  target[key] = value;
+}
+
+/**
+ * Recalculate COE payment_status / total_paid after an experience payment undo.
+ * @param {string} coeId
+ * @param {object} undonePayment
+ * @param {'void'|'refund'|'adjust'} undoType
+ * @param {string|null} adminUserId
+ * @returns {Promise<object>} updated COE
+ */
+async function rollbackCoeAfterExperiencePaymentUndo(coeId, undonePayment, undoType, adminUserId) {
+  const coe = await COE.findById(coeId);
+  if (!coe) {
+    throw new Error('Experience not found after payment undo');
+  }
+
+  const previousPaymentStatus = coe.payment_status || 'unpaid';
+  const previousStatus = coe.status;
+  const undoneType = undonePayment.payment_type;
+  const undoAmount = roundCurrency(undonePayment.amount || 0);
+
+  const remaining = await Payment.find({
+    coe_id: coeId,
+    status: 'completed',
+    payment_type: { $nin: ['adhoc'] },
+  });
+
+  const byRecency = (a, b) =>
+    new Date(b.completed_at || b.createdAt || 0) - new Date(a.completed_at || a.createdAt || 0);
+
+  const totalPaid = roundCurrency(
+    remaining.reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
+  );
+  coe.total_paid = totalPaid;
+
+  const depositPayment = remaining
+    .filter((p) => p.payment_type === 'deposit' || p.payment_type === 'deposit_diff')
+    .sort(byRecency)[0];
+  const finalPayment = remaining
+    .filter((p) => p.payment_type === 'final_payment')
+    .sort(byRecency)[0];
+  const fullPayment = remaining
+    .filter((p) => p.payment_type === 'full_payment' || p.payment_type === 'full_diff')
+    .sort(byRecency)[0];
+
+  if (undoType === 'refund' || undoType === 'adjust') {
+    coe.refund_amount = roundCurrency((Number(coe.refund_amount) || 0) + undoAmount);
+    coe.refunded_at = new Date();
+    coe.refund_reason =
+      undoneType === 'deposit'
+        ? 'Experience deposit reversed'
+        : undoneType === 'final_payment'
+          ? 'Experience final payment reversed'
+          : 'Experience full payment reversed';
+    coe.refund_status = totalPaid <= 0 ? 'full' : 'partial';
+  }
+
+  // Clear then re-apply from remaining completed payments
+  coe.deposit_payment_id = undefined;
+  coe.final_payment_id = undefined;
+  coe.final_paid_at = undefined;
+  coe.payment_id = undefined;
+
+  if (fullPayment) {
+    coe.payment_status = 'paid';
+    coe.deposit_paid = Number(fullPayment.amount) || totalPaid;
+    coe.deposit_paid_at = fullPayment.completed_at || fullPayment.createdAt || new Date();
+    coe.deposit_payment_id = fullPayment._id;
+    coe.payment_id = fullPayment._id;
+  } else if (finalPayment && depositPayment) {
+    coe.payment_status = 'paid';
+    coe.deposit_paid = Number(depositPayment.amount) || 0;
+    coe.deposit_paid_at = depositPayment.completed_at || depositPayment.createdAt || new Date();
+    coe.deposit_payment_id = depositPayment._id;
+    coe.final_payment_id = finalPayment._id;
+    coe.final_paid_at = finalPayment.completed_at || finalPayment.createdAt || new Date();
+    coe.payment_id = finalPayment._id;
+  } else if (depositPayment) {
+    coe.payment_status = 'deposit_paid';
+    coe.deposit_paid = Number(depositPayment.amount) || totalPaid;
+    coe.deposit_paid_at = depositPayment.completed_at || depositPayment.createdAt || new Date();
+    coe.deposit_payment_id = depositPayment._id;
+    coe.payment_id = depositPayment._id;
+  } else if (totalPaid > 0 && totalPaid >= (Number(coe.total) || 0)) {
+    coe.payment_status = 'paid';
+    coe.deposit_paid = totalPaid;
+  } else if (totalPaid > 0) {
+    coe.payment_status = 'deposit_paid';
+    coe.deposit_paid = totalPaid;
+  } else {
+    coe.payment_status = 'unpaid';
+    coe.deposit_paid = 0;
+    coe.deposit_paid_at = undefined;
+  }
+
+  await coe.save();
+
+  const coeService = require('./coeService');
+  if (coe.payment_status === 'unpaid') {
+    try {
+      await coeService.releaseSelectedSeats(coeId);
+    } catch (releaseErr) {
+      console.error('[PaymentService] Error releasing seats after experience undo:', releaseErr);
+    }
+  } else if (
+    previousPaymentStatus === 'paid' &&
+    coe.payment_status === 'deposit_paid'
+  ) {
+    // Fully paid seats were booked; re-hold after final/full undo leaves a deposit
+    try {
+      await coeService.holdSeatsForCOE(coeId);
+    } catch (holdErr) {
+      console.error('[PaymentService] Error re-holding seats after experience undo:', holdErr);
+    }
+  }
+
+  // paid → approved is not a valid updateCOEStatus transition; set directly so Pay CTAs work
+  if (
+    previousStatus === 'paid' &&
+    (coe.payment_status === 'unpaid' || coe.payment_status === 'deposit_paid')
+  ) {
+    try {
+      const coeFresh = await COE.findById(coeId);
+      if (coeFresh && coeFresh.status === 'paid') {
+        coeFresh.status = 'approved';
+        coeFresh.paid_date = undefined;
+        await coeFresh.save();
+      }
+    } catch (statusErr) {
+      console.error('[PaymentService] Error reverting COE status after experience undo:', {
+        coe_id: coeId,
+        error: statusErr.message,
+      });
+    }
+  }
+
+  console.log('[PaymentService] COE rolled back after experience payment undo', {
+    coe_id: coeId,
+    undone_payment_id: undonePayment._id?.toString?.(),
+    undone_type: undoneType,
+    previous_payment_status: previousPaymentStatus,
+    new_payment_status: coe.payment_status,
+    total_paid: coe.total_paid,
+    admin_id: adminUserId || null,
+    timestamp: new Date().toISOString(),
+  });
+
+  return COE.findById(coeId);
+}
+
+/**
+ * Admin void or reversal of a completed experience payment (deposit / full / final).
+ * Targets only the given payment on its COE; does not undo subscription dual-charge.
+ * @param {string} adminUserId
+ * @param {string} paymentId
+ * @param {{ mode: 'void'|'reversal', coeId?: string }} opts
+ * @returns {Promise<object>} updated payment plain object
+ */
+async function undoExperiencePayment(adminUserId, paymentId, opts) {
+  const mode = opts?.mode;
+  if (mode !== 'void' && mode !== 'reversal') {
+    throw new Error('Undo mode must be void or reversal');
+  }
+
+  const payment = await Payment.findById(paymentId);
+  if (!payment) {
+    throw new Error('Payment not found');
+  }
+  if (!EXPERIENCE_UNDO_PAYMENT_TYPES.includes(payment.payment_type)) {
+    throw new Error('Only deposit, full, or final experience payments can be voided or reversed here');
+  }
+  if (opts?.coeId && String(payment.coe_id) !== String(opts.coeId)) {
+    throw new Error('Payment does not belong to this experience');
+  }
+  if (payment.status !== 'completed') {
+    throw new Error(`Cannot undo payment in status: ${payment.status}`);
+  }
+
+  const coeId = payment.coe_id?.toString?.() || String(payment.coe_id || '');
+  if (!coeId) {
+    throw new Error('Payment is not linked to an experience');
+  }
+
+  const latest = await findLatestCompletedExperiencePayment(coeId);
+  if (!latest || String(latest._id) !== String(payment._id)) {
+    throw new Error(
+      'Only the latest completed experience payment can be undone. Undo the more recent payment first.',
+    );
+  }
+
+  const description =
+    mode === 'void' ? 'Experience payment void' : 'Experience payment reversal';
+
+  let undoType = mode === 'void' ? 'void' : 'refund';
+
+  if (payment.payment_channel === 'cash' || !payment.gp_transaction_id) {
+    // Local undo: cash or missing gateway ref (no GOAT call)
+    undoType = mode === 'void' ? 'void' : 'refund';
+    payment.goat_undo_type = undoType;
+    payment.refund_reason = description;
+    if (undoType === 'void') {
+      payment.status = 'cancelled';
+    } else {
+      payment.status = 'refunded';
+      payment.refund_amount = Number(payment.amount) || 0;
+      payment.refunded_at = new Date();
+    }
+    await payment.save();
+  } else {
+    const referenceNumber = parseExperienceGoatReference(payment);
+    let goatBody;
+    try {
+      goatBody =
+        mode === 'void'
+          ? await goatClient.voidTransaction({
+              reference_number: referenceNumber,
+              description,
+            })
+          : await goatClient.reverseTransaction({
+              reference_number: referenceNumber,
+              description,
+            });
+    } catch (goatErr) {
+      console.error('[PaymentService] GOAT experience undo failed', {
+        payment_id: paymentId,
+        mode,
+        admin_id: adminUserId,
+        error: goatErr.message,
+        timestamp: new Date().toISOString(),
+      });
+      throw goatErr;
+    }
+
+    undoType = mapExperienceGoatUndoType(goatBody, mode);
+    payment.goat_undo_type = undoType;
+    payment.refund_reason = description;
+    if (undoType === 'void') {
+      payment.status = 'cancelled';
+    } else {
+      payment.status = 'refunded';
+      payment.refund_amount = Number(payment.amount) || 0;
+      payment.refunded_at = new Date();
+      if (goatBody?.reference_number != null) {
+        payment.refund_transaction_id = String(goatBody.reference_number);
+      }
+    }
+    await payment.save();
+  }
+
+  await rollbackCoeAfterExperiencePaymentUndo(coeId, payment, undoType, adminUserId);
+
+  console.log('[PaymentService] experience payment undo completed', {
+    payment_id: paymentId,
+    coe_id: coeId,
+    mode,
+    goat_undo_type: undoType,
+    admin_id: adminUserId,
+    timestamp: new Date().toISOString(),
+  });
+
+  return payment.toObject ? payment.toObject() : payment;
+}
+
 module.exports = {
   createPaymentIntent,
   prepareCoePaymentCharge,
@@ -2212,6 +2607,9 @@ module.exports = {
   computeInitialDepositPricing,
   isJointAllocationSeat,
   isFullDepositSeatRow,
+  undoExperiencePayment,
+  attachExperiencePaymentUndoFields,
+  findLatestCompletedExperiencePayment,
   // Phase 2: Card Tokenization
   tokenizeAndSaveCard,
   chargeSavedCard,

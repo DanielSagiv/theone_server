@@ -186,6 +186,76 @@ router.post('/admin/adhoc', authenticateToken, requireAdmin, async (req, res) =>
 });
 
 /**
+ * POST /v1/payments/admin/experience/:paymentId/void
+ * Admin: void a completed experience payment (deposit / full / final).
+ */
+router.post(
+  '/admin/experience/:paymentId/void',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await paymentService.undoExperiencePayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'void' },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'Experience payment voided',
+      });
+    } catch (error) {
+      console.error('Admin experience payment void error:', {
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'EXPERIENCE_VOID_FAILED', message: error.message },
+      });
+    }
+  },
+);
+
+/**
+ * POST /v1/payments/admin/experience/:paymentId/reversal
+ * Admin: reverse a completed experience payment (deposit / full / final).
+ */
+router.post(
+  '/admin/experience/:paymentId/reversal',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const adminId = req.user._id?.toString?.() || req.user.id;
+      const payment = await paymentService.undoExperiencePayment(
+        adminId,
+        req.params.paymentId,
+        { mode: 'reversal' },
+      );
+      res.json({
+        success: true,
+        data: payment,
+        message: 'Experience payment reversed',
+      });
+    } catch (error) {
+      console.error('Admin experience payment reversal error:', {
+        payment_id: req.params.paymentId,
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+      res.status(400).json({
+        success: false,
+        error: { code: 'EXPERIENCE_REVERSAL_FAILED', message: error.message },
+      });
+    }
+  },
+);
+
+/**
  * POST /v1/payments/admin/adhoc/:paymentId/void
  * Admin: GOAT void of an unsettled on-spot card charge.
  */
