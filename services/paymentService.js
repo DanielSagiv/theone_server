@@ -1259,7 +1259,7 @@ async function getPaymentHistory(coeId) {
   try {
     const payments = await Payment.find({ coe_id: coeId })
       .populate('user_id', 'firstName lastName email')
-      .sort({ created_at: -1 });
+      .sort({ createdAt: -1, _id: -1 });
     
     return payments;
   } catch (error) {
@@ -1358,7 +1358,7 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
     // Get payments with pagination
     const payments = await Payment.find(query)
       .populate('coe_id', 'name')
-      .sort({ created_at: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
