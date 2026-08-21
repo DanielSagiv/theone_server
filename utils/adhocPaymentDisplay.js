@@ -47,7 +47,14 @@ function formatAdhocPaidByLine(payment) {
   const name = getAdhocPayerDisplayName(payment);
   const isGuest = payment?.adhoc_payer?.type === 'guest';
   if (payment.payment_channel === 'min_spend') {
-    return 'Applied to min spend balance';
+    const the1 =
+      payment?.is_the1_event === true ||
+      payment?.coe_is_the1_event === true ||
+      payment?.coe?.is_the1_event === true ||
+      payment?.coe?.original_request_data?.is_the1_event === true;
+    return the1
+      ? 'Applied to buy in balance'
+      : 'Applied to min spend balance';
   }
   if (payment.payment_channel === 'cash') {
     return isGuest

@@ -2341,10 +2341,25 @@ async function updateCOE(coeId, updateData, options = {}) {
     }
 
     const flatUpdate = { ...payload, updated_at: new Date() };
+    if (payload.is_the1_event !== undefined) {
+      flatUpdate.is_the1_event = payload.is_the1_event === true;
+      let baseOrd = existingCOE.original_request_data;
+      if (baseOrd != null && typeof baseOrd.toObject === 'function') {
+        baseOrd = baseOrd.toObject();
+      }
+      if (originalRequestPatch && typeof originalRequestPatch === 'object') {
+        baseOrd = mergeOriginalRequestDataForUpdate(baseOrd, originalRequestPatch);
+        originalRequestPatch = null;
+      }
+      flatUpdate.original_request_data = {
+        ...(baseOrd && typeof baseOrd === 'object' ? baseOrd : {}),
+        is_the1_event: payload.is_the1_event === true,
+      };
+    }
     if (flatUpdate.start_date || flatUpdate.end_date) {
       const startDate = flatUpdate.start_date || existingCOE.start_date;
       const endDate = flatUpdate.end_date || existingCOE.end_date;
-      let baseOrd = existingCOE.original_request_data;
+      let baseOrd = flatUpdate.original_request_data || existingCOE.original_request_data;
       if (baseOrd != null && typeof baseOrd.toObject === 'function') {
         baseOrd = baseOrd.toObject();
       }
@@ -2356,6 +2371,15 @@ async function updateCOE(coeId, updateData, options = {}) {
         startDate,
         endDate,
       );
+      if (payload.is_the1_event !== undefined) {
+        flatUpdate.original_request_data = {
+          ...(flatUpdate.original_request_data &&
+          typeof flatUpdate.original_request_data === 'object'
+            ? flatUpdate.original_request_data
+            : {}),
+          is_the1_event: payload.is_the1_event === true,
+        };
+      }
     } else if (originalRequestPatch && typeof originalRequestPatch === 'object') {
       flatUpdate.original_request_data = mergeOriginalRequestDataForUpdate(
         existingCOE.original_request_data,

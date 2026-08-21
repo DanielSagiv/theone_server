@@ -359,6 +359,10 @@ async function getAdhocPaymentOptions(coeId, eventId) {
       currency: coe.currency || PAYMENT_CONFIG.currency,
       client_id: coe.client_id?._id?.toString?.() || coe.client_id?.toString?.(),
       adhoc_collected_total: coe.adhoc_collected_total || 0,
+      is_the1_event: coe.is_the1_event === true,
+      original_request_data: {
+        is_the1_event: coe.original_request_data?.is_the1_event === true,
+      },
     },
     payers,
     events: eventLines,

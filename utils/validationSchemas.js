@@ -503,6 +503,7 @@ const updateCOESchema = Joi.object({
   client_notes: Joi.string().max(1000).allow(''),
   sharable: Joi.boolean(),
   tags: Joi.array().items(Joi.string()),
+  is_the1_event: Joi.boolean().optional(),
   original_request_data: updateCOEOriginalRequestPartialSchema.optional()
 })
   .min(1)
