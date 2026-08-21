@@ -1773,7 +1773,10 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       selected_seats: validatedSeats, // Use validated seats
       participants: [],
       tags: [],
-      sharable: false
+      sharable: false,
+      is_the1_event:
+        preferences.is_the1_event === true ||
+        conversationPreferences.is_the1_event === true,
     };
 
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== AUTO-FILL PHASE ==========');
@@ -1941,6 +1944,8 @@ async function handleCreateCOEDraft(params, user, correlationId) {
           seat_preferences: conversationPreferences.seat_preferences,
           general_preferences: conversationPreferences.specific_preferences,
           city: cityToUse || conversationPreferences.city,
+          open_to_join_events: conversationPreferences.open_to_join_events === true,
+          is_the1_event: conversationPreferences.is_the1_event === true,
           requested_at: new Date()
         };
         

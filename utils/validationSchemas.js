@@ -794,6 +794,7 @@ const updateClientRequestCOESchema = Joi.object({
   seat_preferences: Joi.string().max(2000).allow(''),
   specific_preferences: Joi.string().min(1).max(2000).required(),
   open_to_join_events: Joi.boolean().optional(),
+  is_the1_event: Joi.boolean().optional(),
   event_selections: Joi.array().items(clientRequestEventSelectionSchema).default([]),
   prioritized_event_ids: Joi.array()
     .items(Joi.string().hex().length(24))

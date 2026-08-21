@@ -2203,6 +2203,9 @@ async function updateClientRequestCOE(coeId, userId, body, executeCreateCoeDraft
         start_date: startDate,
         end_date: endDate,
         original_request_data: mergedOriginal,
+        ...(body.is_the1_event !== undefined
+          ? { is_the1_event: body.is_the1_event === true }
+          : {}),
         updated_at: new Date(),
       },
     });
@@ -2224,6 +2227,9 @@ async function updateClientRequestCOE(coeId, userId, body, executeCreateCoeDraft
     original_request_data: mergedOriginal,
     updated_at: new Date(),
   };
+  if (body.is_the1_event !== undefined) {
+    flatUpdate.is_the1_event = body.is_the1_event === true;
+  }
 
   if (Array.isArray(body.event_selections) && body.event_selections.length === 0) {
     await releaseSelectedSeats(coeId);

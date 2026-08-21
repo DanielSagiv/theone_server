@@ -255,6 +255,9 @@ const coeSchema = new mongoose.Schema({
     
     /** Client opted in to shared-table / join events when available. */
     open_to_join_events: { type: Boolean, default: false },
+
+    /** Admin flagged this request as a THE1 event (Buy in label instead of Min Spend). */
+    is_the1_event: { type: Boolean, default: false },
     
     // When this request was made
     requested_at: { type: Date, default: Date.now }
@@ -265,6 +268,16 @@ const coeSchema = new mongoose.Schema({
   preferences: {
     type: mongoose.Schema.Types.Mixed,
     default: undefined
+  },
+
+  /**
+   * Admin: THE1 event experience — UI shows "Buy in" instead of "Min Spend".
+   * Default false; set at create from form prompt.
+   */
+  is_the1_event: {
+    type: Boolean,
+    default: false,
+    index: true,
   },
   
   // Detailed pricing breakdown (event-specific pricing)

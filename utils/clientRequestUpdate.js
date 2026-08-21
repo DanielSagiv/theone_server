@@ -73,6 +73,9 @@ function mergeClientOriginalRequestData(existingSubdoc, patch) {
   if (patch.open_to_join_events !== undefined) {
     prev.open_to_join_events = patch.open_to_join_events === true;
   }
+  if (patch.is_the1_event !== undefined) {
+    prev.is_the1_event = patch.is_the1_event === true;
+  }
 
   return prev;
 }
@@ -117,6 +120,8 @@ function buildCreateCoeDraftParamsFromClientRequest(body, coeId) {
     notes: `${body.seat_preferences || ''}\n${body.specific_preferences || ''}`.trim(),
     seat_preferences: body.seat_preferences || '',
     specific_preferences: body.specific_preferences || '',
+    open_to_join_events: body.open_to_join_events === true,
+    is_the1_event: body.is_the1_event === true,
   };
 
   const toolParams = {

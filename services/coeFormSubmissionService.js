@@ -180,6 +180,7 @@ async function processFormSubmissionPhase24(params) {
             general_preferences: raw.specific_preferences || '',
             city: raw.city || null,
             open_to_join_events: raw.open_to_join_events === true,
+            is_the1_event: raw.is_the1_event === true,
             requested_at: new Date(),
           };
 
@@ -222,6 +223,7 @@ async function processFormSubmissionPhase24(params) {
             start_date: start,
             end_date: end,
             original_request_data: originalRequestData,
+            is_the1_event: raw.is_the1_event === true,
           };
 
           const coe = await coeService.createCOE(requestCoeData, user._id, {
@@ -358,6 +360,7 @@ async function processFormSubmissionPhase24(params) {
             seat_preferences: extractionResult.raw.seat_preferences || '',
             specific_preferences: extractionResult.raw.specific_preferences || '',
             open_to_join_events: extractionResult.raw.open_to_join_events === true,
+            is_the1_event: extractionResult.raw.is_the1_event === true,
           }
         };
         
