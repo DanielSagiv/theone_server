@@ -12,6 +12,26 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
 /**
+ * Merge incoming socialMedia onto existing so a linkedin-only patch
+ * does not wipe facebook / x / instagram.
+ * @param {object} existingUser
+ * @param {object} patch
+ */
+function mergeSocialMediaIntoPatch(existingUser, patch) {
+  if (!patch.socialMedia || typeof patch.socialMedia !== 'object') {
+    return;
+  }
+  const prev = existingUser?.socialMedia;
+  const base =
+    prev && typeof prev.toObject === 'function'
+      ? prev.toObject()
+      : prev && typeof prev === 'object'
+        ? { ...prev }
+        : {};
+  patch.socialMedia = { ...base, ...patch.socialMedia };
+}
+
+/**
  * GET /v1/users/profile
  * Get current user profile
  */
@@ -85,6 +105,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
     }
 
     const patch = { ...value };
+    mergeSocialMediaIntoPatch(req.user, patch);
     try {
       await enrichUserAvatarFields(patch);
     } catch (enrichErr) {
@@ -641,6 +662,8 @@ router.put('/:id/profile', authenticateToken, requireAdmin, async (req, res) => 
     if (patch.email) {
       patch.email = String(patch.email).toLowerCase().trim();
     }
+
+    mergeSocialMediaIntoPatch(target, patch);
 
     if (patch.email && patch.email !== target.email) {
       const existingUser = await User.findOne({ email: patch.email });

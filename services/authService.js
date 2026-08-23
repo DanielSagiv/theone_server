@@ -248,6 +248,7 @@ const createClientByAdmin = async (payload) => {
     dateOfBirth: payload.dateOfBirth ? new Date(payload.dateOfBirth) : undefined,
     industry,
     industryCustom: payload.industryCustom || undefined,
+    socialMedia: payload.socialMedia || undefined,
     role: 'client',
     entity_status: 'live',
     emailVerified: true,

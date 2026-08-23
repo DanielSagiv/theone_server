@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const { LOCATION_SEAT_CATEGORY_VALUES } = require('../constants/locationSeatCategories');
+const { normalizeLinkedInProfileUrl } = require('./linkedinProfile');
 // Location validation
 const assetSchema = Joi.object({
   type: Joi.string().valid('image', 'video').required(),
@@ -589,6 +590,24 @@ const updateSeatAssignmentsSchema = Joi.object({
  * @description Joi validation schemas for authentication endpoints
  */
 
+const linkedinUrlSchema = Joi.string()
+  .allow('')
+  .optional()
+  .custom((value, helpers) => {
+    const normalized = normalizeLinkedInProfileUrl(value);
+    if (normalized === null) {
+      return helpers.message('Please enter a valid LinkedIn profile URL');
+    }
+    return normalized;
+  });
+
+const socialMediaLinkedInSchema = Joi.object({
+  facebook: Joi.string().uri().allow(''),
+  linkedin: linkedinUrlSchema,
+  x: Joi.string().uri().allow(''),
+  instagram: Joi.string().uri().allow(''),
+}).optional();
+
 /**
  * User signup validation schema
  */
@@ -604,6 +623,9 @@ const signupSchema = Joi.object({
   }),
   industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other').required(),
   industryCustom: Joi.string().allow('', null),
+  socialMedia: Joi.object({
+    linkedin: linkedinUrlSchema,
+  }).optional(),
   role: Joi.string().valid('admin', 'client', 'runner').default('client'),
   entity_status: Joi.string().valid('live', 'suspended', 'deleted', 'pendingApproval', 'registrationDeclined').default('pendingApproval'),
   visibilityStatus: Joi.string().valid('public', 'private').default('public'),
@@ -654,12 +676,7 @@ const updateProfileSchema = Joi.object({
   dateOfBirth: Joi.date().max('now'),
   industry: Joi.string().valid('fintech', 'cyber', 'social', 'sales', 'e-commerce', 'AI', 'energy', 'crypto', 'banking', 'real-estate', 'tech', 'other'),
   industryCustom: Joi.string().allow('', null),
-  socialMedia: Joi.object({
-    facebook: Joi.string().uri().allow(''),
-    linkedin: Joi.string().uri().allow(''),
-    x: Joi.string().uri().allow(''),
-    instagram: Joi.string().uri().allow('')
-  }).optional(),
+  socialMedia: socialMediaLinkedInSchema,
   avatarUrl: Joi.string().uri().allow('', null),
   avatar_width: Joi.number().min(0),
   avatar_height: Joi.number().min(0),
@@ -701,6 +718,9 @@ const adminCreateClientSchema = Joi.object({
   dateOfBirth: Joi.date().max('now').optional().allow(null),
   industry: Joi.string().valid(...industryEnum).optional(),
   industryCustom: Joi.string().allow('', null).optional(),
+  socialMedia: Joi.object({
+    linkedin: linkedinUrlSchema,
+  }).optional(),
   first_coe_deduction_enabled: Joi.boolean().default(false),
 });
 
