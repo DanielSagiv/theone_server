@@ -24,8 +24,28 @@ const PAYMENT_CONFIG = {
 const ADHOC_SIGNATURE_SVG_MAX = 200000;
 
 /**
+ * @param {unknown} raw
+ * @returns {number|null}
+ */
+function finiteUsdOrNull(raw) {
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Booked min-spend / buy-in for on-spot (same number Event Details shows as negotiated).
+ * Never use Event catalog fields (venue_min_spend_usd / negotiated_min_spend_usd).
+ * @param {object|null|undefined} row
+ * @returns {number|null}
+ */
+function bookedMinSpendUsd(row) {
+  return finiteUsdOrNull(row?.event_price) ?? finiteUsdOrNull(row?.base_price);
+}
+
+/**
  * Return the effective min-spend USD for a given event on a COE.
- * Reads stored values from selected_seats row (set during lazy back-fill).
+ * Cap is booked event_price (else base_price). Catalog is strikethrough-only.
  * @param {object} coe - lean or mongoose COE doc
  * @param {string} eventId
  * @returns {{ venue_usd: number|null, negotiated_usd: number|null, effective_usd: number|null }}
@@ -37,11 +57,20 @@ function resolveMinSpendForEvent(coe, eventId) {
     const rowEid =
       row?.event_id?._id?.toString?.() || row?.event_id?.toString?.() || '';
     if (rowEid !== eid) continue;
-    const venue = row.venue_min_spend_usd != null ? Number(row.venue_min_spend_usd) : null;
-    const negotiated =
-      row.negotiated_min_spend_usd != null ? Number(row.negotiated_min_spend_usd) : null;
-    const effective = negotiated != null ? negotiated : venue;
-    return { venue_usd: venue, negotiated_usd: negotiated, effective_usd: effective };
+
+    const catalog =
+      finiteUsdOrNull(row.venue_catalog_price) ??
+      finiteUsdOrNull(row.simple_joint_original_price) ??
+      finiteUsdOrNull(row.venue_min_spend_usd);
+
+    const booked = bookedMinSpendUsd(row);
+    const effective = booked ?? catalog;
+
+    return {
+      venue_usd: catalog,
+      negotiated_usd: effective,
+      effective_usd: effective,
+    };
   }
   return { venue_usd: null, negotiated_usd: null, effective_usd: null };
 }
@@ -176,8 +205,11 @@ function mapSavedCards(user) {
 }
 
 /**
- * Lazy back-fill venue_min_spend_usd / negotiated_min_spend_usd onto the COE selected_seats row
- * if they haven't been stored yet. Reads from Event catalog.
+ * Lazy back-fill venue_min_spend_usd / negotiated_min_spend_usd onto the COE selected_seats row.
+ * Catalog (venue_min_spend_usd) may come from Event when missing.
+ * negotiated_min_spend_usd always follows booked event_price/base_price when present —
+ * never Event.seats[].event_min_spend / min_spend (those freeze the cap at catalog).
+ * Does not touch on_spot_min_spend_used.
  * @param {string} coeId
  * @param {string} eventId
  * @returns {Promise<void>}
@@ -193,22 +225,31 @@ async function backfillMinSpendOnCoe(coeId, eventId) {
       const rowEid =
         row?.event_id?._id?.toString?.() || row?.event_id?.toString?.() || '';
       if (rowEid !== eid) continue;
-      if (row.venue_min_spend_usd != null) break; // already back-filled
-      const eventDoc = await Event.findById(eventId)
-        .select('seats')
-        .lean();
-      if (!eventDoc) break;
-      const seatId = row.seat_id?.toString?.() || '';
-      const evSeat = (eventDoc.seats || []).find(
-        (s) => (s._id?.toString?.() || '') === seatId,
-      );
-      if (!evSeat) break;
-      const venue = evSeat.min_spend != null ? Number(evSeat.min_spend) : null;
-      const negotiated =
-        evSeat.event_min_spend != null ? Number(evSeat.event_min_spend) : null;
-      row.venue_min_spend_usd = venue;
-      row.negotiated_min_spend_usd = negotiated;
-      changed = true;
+
+      const bookedFromSeat = bookedMinSpendUsd(row);
+
+      if (row.venue_min_spend_usd == null) {
+        const eventDoc = await Event.findById(eventId)
+          .select('seats')
+          .lean();
+        if (!eventDoc) break;
+        const seatId = row.seat_id?.toString?.() || '';
+        const evSeat = (eventDoc.seats || []).find(
+          (s) => (s._id?.toString?.() || '') === seatId,
+        );
+        if (!evSeat) break;
+        const venue = finiteUsdOrNull(evSeat.min_spend);
+        row.venue_min_spend_usd = venue;
+        changed = true;
+      }
+
+      if (
+        bookedFromSeat != null &&
+        finiteUsdOrNull(row.negotiated_min_spend_usd) !== bookedFromSeat
+      ) {
+        row.negotiated_min_spend_usd = bookedFromSeat;
+        changed = true;
+      }
       break;
     }
     if (changed) {
@@ -1265,4 +1306,7 @@ module.exports = {
   undoAdhocPayment,
   serializePaymentForApi,
   getCoePayerUserIds,
+  resolveMinSpendForEvent,
+  getMinSpendUsed,
+  computeMinSpendSplit,
 };
