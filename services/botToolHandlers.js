@@ -1333,6 +1333,13 @@ async function handleCreateCOEDraft(params, user, correlationId) {
                 : 20;
           }
 
+          const forceThe1Joint =
+            preferences.is_the1_event === true ||
+            conversationPreferences.is_the1_event === true;
+          if (forceThe1Joint) {
+            coeService.stampSimpleJointLikeMagic(seatToAdd, eventSeat);
+          }
+
           console.log('[BOT] [COE_CREATION_FULL_DEBUG] Adding seat to selection:', {
             seatId: seatToAdd.seat_id?.toString(),
             seatCode: seatToAdd.seat_code,

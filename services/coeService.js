@@ -922,6 +922,112 @@ function applySimpleJointToSeatRow(row, catalogSeat, manualPrice) {
 }
 
 /**
+ * True when the experience is marked The 1 event (root or original request).
+ * @param {object|null|undefined} coe
+ * @returns {boolean}
+ */
+function isThe1EventCoe(coe) {
+  if (!coe || typeof coe !== 'object') return false;
+  return (
+    coe.is_the1_event === true ||
+    coe.original_request_data?.is_the1_event === true
+  );
+}
+
+/**
+ * Tag a selected_seats row as simple joint the same way THE1 magic Joint does.
+ * Skips already-joint rows and shared-table allocation. Keeps current event_price.
+ * Mutates `row` in place.
+ * @param {object} row
+ * @param {{ event_price?: number, base_price?: number, min_spend?: number }|null|undefined} catalogSeat
+ * @returns {boolean} true when the row was stamped
+ */
+function stampSimpleJointLikeMagic(row, catalogSeat) {
+  if (!row) return false;
+  if (row.is_simple_joint === true || row.is_simple_joint === 'true') {
+    return false;
+  }
+  if (row.is_joint_allocation === true) return false;
+  const gid = row.joint_event_group_id;
+  if (gid != null && String(gid).trim() !== '') return false;
+
+  const catalogFromSeat =
+    Number(catalogSeat?.event_price) ||
+    Number(catalogSeat?.base_price) ||
+    Number(catalogSeat?.min_spend) ||
+    0;
+  const catalogFallback = {
+    event_price:
+      catalogFromSeat ||
+      Number(row.venue_catalog_price) ||
+      Number(row.simple_joint_original_price) ||
+      Number(row.event_price) ||
+      Number(row.base_price) ||
+      0,
+    base_price:
+      Number(catalogSeat?.base_price) ||
+      catalogFromSeat ||
+      Number(row.base_price) ||
+      Number(row.event_price) ||
+      0,
+  };
+  const currentRaw =
+    row.event_price != null && Number.isFinite(Number(row.event_price))
+      ? Number(row.event_price)
+      : Number(row.base_price);
+  const manual =
+    Number.isFinite(currentRaw) && currentRaw >= 0
+      ? currentRaw
+      : catalogFallback.event_price;
+  applySimpleJointToSeatRow(row, catalogSeat || catalogFallback, manual);
+  return true;
+}
+
+/**
+ * Resolve Event embedded seat for a COE selected_seats row.
+ * @param {object} row
+ * @param {object|null|undefined} eventDoc
+ * @returns {object|null}
+ */
+function findCatalogSeatForRow(row, eventDoc) {
+  if (!row || !eventDoc?.seats) return null;
+  const sid = normalizeIdToString(row.seat_id);
+  if (!sid) return null;
+  return (
+    eventDoc.seats.find((s) => normalizeIdToString(s._id) === sid) || null
+  );
+}
+
+/**
+ * Stamp simple joint on all eligible selected_seats of a THE1 experience.
+ * @param {object} coe
+ * @returns {Promise<boolean>} true when any row changed
+ */
+async function stampThe1SimpleJointOnCoe(coe) {
+  const seats = coe?.selected_seats;
+  if (!Array.isArray(seats) || seats.length === 0) return false;
+  const eventMap = await loadEventsMapByIds(
+    seats.map((s) => s.event_id),
+    { lean: true },
+  );
+  let changed = false;
+  for (const row of seats) {
+    const ev = eventMap.get(normalizeIdToString(row.event_id));
+    const catalogSeat = findCatalogSeatForRow(row, ev);
+    if (stampSimpleJointLikeMagic(row, catalogSeat)) {
+      changed = true;
+    }
+  }
+  if (changed) {
+    validateSelectedSeatsSimpleJointInvariants(seats);
+    if (typeof coe.markModified === 'function') {
+      coe.markModified('selected_seats');
+    }
+  }
+  return changed;
+}
+
+/**
  * Update selected seats status to 'held' when COE is created/approved
  * @param {Array} selectedSeats - Array of seat data
  * @param {string} coeId - COE ID for booking reference
@@ -2400,7 +2506,15 @@ async function updateCOE(coeId, updateData, options = {}) {
       throw new Error('COE not found');
     }
 
-    if (payload.selected_seats) {
+    const markedThe1 = payload.is_the1_event === true;
+    const stampThe1Seats =
+      markedThe1 || (isThe1EventCoe(coe) && Boolean(payload.selected_seats));
+    let stampedThe1 = false;
+    if (stampThe1Seats) {
+      stampedThe1 = await stampThe1SimpleJointOnCoe(coe);
+    }
+
+    if (payload.selected_seats || stampedThe1) {
       await applyPricingFromSelectedSeats(coe);
       await coe.save();
     }
@@ -5884,7 +5998,8 @@ async function addEventToCOEWithSeat(coeId, eventData, adminUserId) {
 
     const simpleJointPayload =
       eventData.is_simple_joint === true ||
-      eventData.is_simple_joint === 'true';
+      eventData.is_simple_joint === 'true' ||
+      isThe1EventCoe(coe);
     if (simpleJointPayload) {
       applySimpleJointToSeatRow(newSeat, seat, seatPrice);
       const t1Joint = eventData.the1_fee_percent;
@@ -6105,6 +6220,9 @@ module.exports = {
   validateSelectedSeats,
   validateSelectedSeatsSimpleJointInvariants,
   applySimpleJointToSeatRow,
+  isThe1EventCoe,
+  stampSimpleJointLikeMagic,
+  stampThe1SimpleJointOnCoe,
   enrichSelectedSeatsCategoryFromPopulatedEvents,
   loadEventsMapByIds,
   filterSelectedSeatsByEvents,
