@@ -14,39 +14,39 @@
       "sortOrder": 0,
       "items": [
         {
-          "name": "Absolut Elyx / Magnum",
+          "name": "Absolut Elyx",
           "description": "",
           "price": 750,
-          "priceLabel": "750 / 1350",
+          "priceLabel": "",
           "sortOrder": 0,
           "available": true
         },
         {
-          "name": "Belvedere / Magnum",
+          "name": "Absolut Elyx Magnum",
           "description": "",
-          "price": 795,
-          "priceLabel": "795 / 1450",
+          "price": 1350,
+          "priceLabel": "",
           "sortOrder": 1,
           "available": true
         },
         {
-          "name": "Belvedere 10 / Magnum",
+          "name": "Belvedere",
           "description": "",
-          "price": 1050,
-          "priceLabel": "1050 / 2200",
+          "price": 795,
+          "priceLabel": "",
           "sortOrder": 2,
           "available": true
         },
         {
-          "name": "Grey Goose / Magnum",
+          "name": "Belvedere Magnum",
           "description": "",
-          "price": 795,
-          "priceLabel": "795 / 1450",
+          "price": 1450,
+          "priceLabel": "",
           "sortOrder": 3,
           "available": true
         },
         {
-          "name": "Grey Goose Altius",
+          "name": "Belvedere 10",
           "description": "",
           "price": 1050,
           "priceLabel": "",
@@ -54,19 +54,67 @@
           "available": true
         },
         {
-          "name": "Ketel One / Magnum",
+          "name": "Belvedere 10 Magnum",
           "description": "",
-          "price": 850,
-          "priceLabel": "850 / 1500",
+          "price": 2200,
+          "priceLabel": "",
           "sortOrder": 5,
           "available": true
         },
         {
-          "name": "Tito’s Handmade / Magnum",
+          "name": "Grey Goose",
           "description": "",
           "price": 795,
-          "priceLabel": "795 / 1450",
+          "priceLabel": "",
           "sortOrder": 6,
+          "available": true
+        },
+        {
+          "name": "Grey Goose Magnum",
+          "description": "",
+          "price": 1450,
+          "priceLabel": "",
+          "sortOrder": 7,
+          "available": true
+        },
+        {
+          "name": "Grey Goose Altius",
+          "description": "",
+          "price": 1050,
+          "priceLabel": "",
+          "sortOrder": 8,
+          "available": true
+        },
+        {
+          "name": "Ketel One",
+          "description": "",
+          "price": 850,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Ketel One Magnum",
+          "description": "",
+          "price": 1500,
+          "priceLabel": "",
+          "sortOrder": 10,
+          "available": true
+        },
+        {
+          "name": "Tito’s Handmade",
+          "description": "",
+          "price": 795,
+          "priceLabel": "",
+          "sortOrder": 11,
+          "available": true
+        },
+        {
+          "name": "Tito’s Handmade Magnum",
+          "description": "",
+          "price": 1450,
+          "priceLabel": "",
+          "sortOrder": 12,
           "available": true
         },
         {
@@ -74,7 +122,7 @@
           "description": "",
           "price": 750,
           "priceLabel": "",
-          "sortOrder": 7,
+          "sortOrder": 13,
           "available": true
         }
       ]
@@ -356,11 +404,19 @@
           "available": true
         },
         {
-          "name": "Avión Reserva 44 / Magnum",
+          "name": "Avión Reserva 44",
           "description": "",
           "price": 1100,
-          "priceLabel": "1100 / 1800",
+          "priceLabel": "",
           "sortOrder": 1,
+          "available": true
+        },
+        {
+          "name": "Avión Reserva 44 Magnum",
+          "description": "",
+          "price": 1800,
+          "priceLabel": "",
+          "sortOrder": 2,
           "available": true
         },
         {
@@ -368,7 +424,7 @@
           "description": "",
           "price": 900,
           "priceLabel": "900 / 950",
-          "sortOrder": 2,
+          "sortOrder": 3,
           "available": true
         },
         {
@@ -376,7 +432,7 @@
           "description": "",
           "price": 2150,
           "priceLabel": "",
-          "sortOrder": 3,
+          "sortOrder": 4,
           "available": true
         },
         {
@@ -384,7 +440,7 @@
           "description": "",
           "price": 1050,
           "priceLabel": "",
-          "sortOrder": 4,
+          "sortOrder": 5,
           "available": true
         },
         {
@@ -392,7 +448,7 @@
           "description": "",
           "price": 800,
           "priceLabel": "800 / 1150",
-          "sortOrder": 5,
+          "sortOrder": 6,
           "available": true
         },
         {
@@ -400,7 +456,7 @@
           "description": "",
           "price": 1200,
           "priceLabel": "",
-          "sortOrder": 6,
+          "sortOrder": 7,
           "available": true
         },
         {
@@ -408,15 +464,23 @@
           "description": "",
           "price": 950,
           "priceLabel": "950 / 2500",
-          "sortOrder": 7,
+          "sortOrder": 8,
           "available": true
         },
         {
-          "name": "Cincoro Extra Añejo / Magnum",
+          "name": "Cincoro Extra Añejo",
           "description": "",
           "price": 4500,
-          "priceLabel": "4500 / 10000",
-          "sortOrder": 8,
+          "priceLabel": "",
+          "sortOrder": 9,
+          "available": true
+        },
+        {
+          "name": "Cincoro Extra Añejo Magnum",
+          "description": "",
+          "price": 10000,
+          "priceLabel": "",
+          "sortOrder": 10,
           "available": true
         },
         {
@@ -424,7 +488,7 @@
           "description": "",
           "price": null,
           "priceLabel": "",
-          "sortOrder": 9,
+          "sortOrder": 11,
           "available": true
         },
         {
@@ -432,7 +496,7 @@
           "description": "",
           "price": 750,
           "priceLabel": "750 / 950",
-          "sortOrder": 10,
+          "sortOrder": 12,
           "available": true
         },
         {
@@ -440,7 +504,7 @@
           "description": "",
           "price": 70,
           "priceLabel": "",
-          "sortOrder": 11,
+          "sortOrder": 13,
           "available": true
         },
         {
@@ -448,23 +512,39 @@
           "description": "",
           "price": null,
           "priceLabel": "",
-          "sortOrder": 12,
+          "sortOrder": 14,
           "available": true
         },
         {
-          "name": "Don Julio Reposado / Magnum",
+          "name": "Don Julio Reposado",
           "description": "",
           "price": 850,
-          "priceLabel": "850 / 1750",
-          "sortOrder": 13,
+          "priceLabel": "",
+          "sortOrder": 15,
           "available": true
         },
         {
-          "name": "Don Julio 1942 / Magnum",
+          "name": "Don Julio Reposado Magnum",
+          "description": "",
+          "price": 1750,
+          "priceLabel": "",
+          "sortOrder": 16,
+          "available": true
+        },
+        {
+          "name": "Don Julio 1942",
           "description": "",
           "price": 2200,
-          "priceLabel": "2200 / 4500",
-          "sortOrder": 14,
+          "priceLabel": "",
+          "sortOrder": 17,
+          "available": true
+        },
+        {
+          "name": "Don Julio 1942 Magnum",
+          "description": "",
+          "price": 4500,
+          "priceLabel": "",
+          "sortOrder": 18,
           "available": true
         },
         {
@@ -472,7 +552,7 @@
           "description": "",
           "price": 750,
           "priceLabel": "750 / 775",
-          "sortOrder": 15,
+          "sortOrder": 19,
           "available": true
         },
         {
@@ -480,7 +560,7 @@
           "description": "",
           "price": 1500,
           "priceLabel": "",
-          "sortOrder": 16,
+          "sortOrder": 20,
           "available": true
         },
         {
@@ -488,7 +568,7 @@
           "description": "",
           "price": 750,
           "priceLabel": "750 / 950",
-          "sortOrder": 17,
+          "sortOrder": 21,
           "available": true
         },
         {
@@ -496,7 +576,7 @@
           "description": "",
           "price": 1250,
           "priceLabel": "",
-          "sortOrder": 18,
+          "sortOrder": 22,
           "available": true
         },
         {
@@ -504,7 +584,7 @@
           "description": "",
           "price": 1250,
           "priceLabel": "",
-          "sortOrder": 19,
+          "sortOrder": 23,
           "available": true
         },
         {
@@ -512,7 +592,7 @@
           "description": "",
           "price": 725,
           "priceLabel": "725 / 750",
-          "sortOrder": 20,
+          "sortOrder": 24,
           "available": true
         },
         {
@@ -520,7 +600,7 @@
           "description": "",
           "price": 725,
           "priceLabel": "725 / 750",
-          "sortOrder": 21,
+          "sortOrder": 25,
           "available": true
         },
         {
@@ -528,15 +608,23 @@
           "description": "",
           "price": 1250,
           "priceLabel": "",
-          "sortOrder": 22,
+          "sortOrder": 26,
           "available": true
         },
         {
-          "name": "Volcan XA / Magnum",
+          "name": "Volcan XA",
           "description": "",
           "price": 1250,
-          "priceLabel": "1250 / 2600",
-          "sortOrder": 23,
+          "priceLabel": "",
+          "sortOrder": 27,
+          "available": true
+        },
+        {
+          "name": "Volcan XA Magnum",
+          "description": "",
+          "price": 2600,
+          "priceLabel": "",
+          "sortOrder": 28,
           "available": true
         }
       ]
