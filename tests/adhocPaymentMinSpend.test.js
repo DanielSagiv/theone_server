@@ -7,6 +7,8 @@ const {
   resolveMinSpendForEvent,
   getMinSpendUsed,
   computeMinSpendSplit,
+  remainingMinSpendForSplit,
+  parseApplyToBalance,
 } = require('../services/adhocPaymentService');
 
 const EVENT_ID = '64b0000000000000000000aa';
@@ -128,6 +130,32 @@ function testMissingEventReturnsNulls() {
   assert.strictEqual(r.effective_usd, null);
 }
 
+function testApplyToBalanceFalseChargesFullBase() {
+  const coe = makeCoe();
+  assert.strictEqual(parseApplyToBalance(undefined), true);
+  assert.strictEqual(parseApplyToBalance(true), true);
+  assert.strictEqual(parseApplyToBalance(false), false);
+  assert.strictEqual(parseApplyToBalance('false'), false);
+  assert.strictEqual(parseApplyToBalance(undefined, 1), false);
+  assert.strictEqual(parseApplyToBalance(true, '1'), false);
+  assert.strictEqual(parseApplyToBalance(undefined, true), false);
+
+  const remainingOn = remainingMinSpendForSplit(coe, EVENT_ID, true);
+  assert.strictEqual(remainingOn, 3000);
+  const splitOn = computeMinSpendSplit(remainingOn, 1000);
+  assert.strictEqual(splitOn.absorbed, 1000);
+  assert.strictEqual(splitOn.cardBase, 0);
+
+  const remainingOff = remainingMinSpendForSplit(coe, EVENT_ID, false);
+  assert.strictEqual(remainingOff, 0);
+  const splitOff = computeMinSpendSplit(remainingOff, 1000);
+  assert.strictEqual(splitOff.absorbed, 0);
+  assert.strictEqual(splitOff.cardBase, 1000);
+
+  const remainingOmitted = remainingMinSpendForSplit(coe, EVENT_ID);
+  assert.strictEqual(remainingOmitted, 3000);
+}
+
 function run() {
   testBookedPriceBeatsStaleCatalogBackfill();
   testFallbackWithoutEventPrice();
@@ -136,6 +164,7 @@ function run() {
   testSimpleJointCatalogPrefersOriginalPrice();
   testEventPriceBeatsStaleBasePriceAndCatalog();
   testMissingEventReturnsNulls();
+  testApplyToBalanceFalseChargesFullBase();
   console.log('adhocPaymentMinSpend.test.js: all passed');
 }
 

@@ -107,6 +107,52 @@ function computeMinSpendSplit(remaining, baseAmount) {
 }
 
 /**
+ * Remaining min-spend / buy-in for the split.
+ * When applyToBalance is false, treat remaining as 0 (full amount charged with fees).
+ * @param {object} coe
+ * @param {string} eventId
+ * @param {boolean} [applyToBalance=true]
+ * @returns {number}
+ */
+function remainingMinSpendForSplit(coe, eventId, applyToBalance = true) {
+  if (applyToBalance === false) return 0;
+  const msUsed = getMinSpendUsed(coe, eventId);
+  const msResolved = resolveMinSpendForEvent(coe, eventId);
+  return msResolved.effective_usd != null
+    ? Math.max(0, msResolved.effective_usd - msUsed)
+    : 0;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {boolean}
+ */
+function isExplicitTrueFlag(raw) {
+  return raw === true || raw === 1 || raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {boolean}
+ */
+function isExplicitFalseFlag(raw) {
+  return raw === false || raw === 0 || raw === '0' || raw === 'false' || raw === 'no';
+}
+
+/**
+ * Default true when omitted so existing admin charges keep absorbing.
+ * skipMinSpend (truthy) wins — used so "off" cannot be dropped as JSON false.
+ * @param {unknown} applyToBalance
+ * @param {unknown} [skipMinSpend]
+ * @returns {boolean}
+ */
+function parseApplyToBalance(applyToBalance, skipMinSpend) {
+  if (isExplicitTrueFlag(skipMinSpend)) return false;
+  if (isExplicitFalseFlag(applyToBalance)) return false;
+  return true;
+}
+
+/**
  * Validate and normalize payer signature for an on-spot charge.
  * @param {object} input
  * @param {string} [fallbackName]
@@ -576,6 +622,8 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     seat_upgrade_id: seatUpgradeId,
     adhoc_kind: adhocKindInput,
     adhoc_signature: adhocSignatureInput,
+    apply_to_balance: applyToBalanceInput,
+    skip_min_spend: skipMinSpendInput,
   } = payload;
 
   if (!amount || amount <= 0) {
@@ -617,16 +665,17 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     resolvedAdhocKind = 'upgrade';
   } else if (eventId) {
     // On-spot: amount is base entered by admin.
-    // For non-guest payers: apply min-spend deduction first; only charge card for the excess.
+    // For non-guest payers: apply min-spend deduction first (unless apply_to_balance is false);
+    // only charge card for the excess.
     const isGuestPayer =
       adhocPayerInput?.type === 'guest' ||
       (adhocPayerInput == null && false);
     if (!isGuestPayer) {
-      const msUsed = getMinSpendUsed(coe, eventId);
-      const msResolved = resolveMinSpendForEvent(coe, eventId);
-      const remaining = msResolved.effective_usd != null
-        ? Math.max(0, msResolved.effective_usd - msUsed)
-        : 0;
+      const applyToBalance = parseApplyToBalance(
+        applyToBalanceInput,
+        skipMinSpendInput,
+      );
+      const remaining = remainingMinSpendForSplit(coe, eventId, applyToBalance);
       const split = computeMinSpendSplit(remaining, Number(amount));
       minSpendAbsorbed = split.absorbed;
       cardChargedBase = split.cardBase;
@@ -1309,4 +1358,6 @@ module.exports = {
   resolveMinSpendForEvent,
   getMinSpendUsed,
   computeMinSpendSplit,
+  remainingMinSpendForSplit,
+  parseApplyToBalance,
 };

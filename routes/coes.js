@@ -3083,6 +3083,12 @@ router.post(
         ...req.body,
         coe_id: req.params.id,
       };
+      if (req.query.skip_min_spend != null && payload.skip_min_spend == null) {
+        payload.skip_min_spend = req.query.skip_min_spend;
+      }
+      if (req.query.apply_to_balance != null && payload.apply_to_balance == null) {
+        payload.apply_to_balance = req.query.apply_to_balance;
+      }
       const idempotencyKey =
         req.get('Idempotency-Key') || req.get('idempotency-key') || null;
       const payment = await adhocPaymentService.processAdhocPayment(

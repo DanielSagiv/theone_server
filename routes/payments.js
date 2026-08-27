@@ -105,6 +105,10 @@ const adminAdhocPaymentSchema = Joi.object({
   adhoc_note: Joi.string().trim().max(500).optional(),
   seat_upgrade_id: Joi.string().hex().length(24).optional(),
   adhoc_kind: Joi.string().valid('general', 'upgrade').optional(),
+  apply_to_balance: Joi.boolean().optional(),
+  skip_min_spend: Joi.alternatives()
+    .try(Joi.boolean(), Joi.number().valid(0, 1), Joi.string().valid('0', '1', 'true', 'false'))
+    .optional(),
   adhoc_signature: Joi.object({
     svg: Joi.string().trim().min(1).max(200000).required(),
     initials: Joi.string().trim().pattern(/^[A-Za-z]{1,8}$/).required(),
@@ -147,7 +151,14 @@ router.get(
  */
 router.post('/admin/adhoc', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { error, value } = adminAdhocPaymentSchema.validate(req.body);
+    const body = { ...(req.body || {}) };
+    if (req.query.skip_min_spend != null && body.skip_min_spend == null) {
+      body.skip_min_spend = req.query.skip_min_spend;
+    }
+    if (req.query.apply_to_balance != null && body.apply_to_balance == null) {
+      body.apply_to_balance = req.query.apply_to_balance;
+    }
+    const { error, value } = adminAdhocPaymentSchema.validate(body);
     if (error) {
       return res.status(400).json({
         success: false,
