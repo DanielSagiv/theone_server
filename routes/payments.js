@@ -84,7 +84,7 @@ const adminAdhocPaymentSchema = Joi.object({
   }),
   token_id: Joi.string().when('charge_method', {
     is: 'saved_card',
-    then: Joi.required(),
+    then: Joi.optional(),
     otherwise: Joi.optional(),
   }),
   card: Joi.object({

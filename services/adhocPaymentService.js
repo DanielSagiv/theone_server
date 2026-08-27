@@ -153,6 +153,31 @@ function parseApplyToBalance(applyToBalance, skipMinSpend) {
 }
 
 /**
+ * True when the experience is marked The 1 event (root or original request).
+ * @param {object|null|undefined} coe
+ * @returns {boolean}
+ */
+function isThe1EventCoe(coe) {
+  if (!coe || typeof coe !== 'object') return false;
+  return (
+    coe.is_the1_event === true ||
+    coe.original_request_data?.is_the1_event === true
+  );
+}
+
+/**
+ * THE1 experiences never absorb into min spend / buy-in.
+ * @param {object} coe
+ * @param {unknown} applyToBalanceInput
+ * @param {unknown} [skipMinSpendInput]
+ * @returns {boolean}
+ */
+function resolveApplyToBalanceForCharge(coe, applyToBalanceInput, skipMinSpendInput) {
+  if (isThe1EventCoe(coe)) return false;
+  return parseApplyToBalance(applyToBalanceInput, skipMinSpendInput);
+}
+
+/**
  * Validate and normalize payer signature for an on-spot charge.
  * @param {object} input
  * @param {string} [fallbackName]
@@ -665,13 +690,14 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     resolvedAdhocKind = 'upgrade';
   } else if (eventId) {
     // On-spot: amount is base entered by admin.
-    // For non-guest payers: apply min-spend deduction first (unless apply_to_balance is false);
-    // only charge card for the excess.
+    // For non-guest payers: apply min-spend deduction first (unless apply_to_balance
+    // is false or the COE is a THE1 experience); only charge card for the excess.
     const isGuestPayer =
       adhocPayerInput?.type === 'guest' ||
       (adhocPayerInput == null && false);
     if (!isGuestPayer) {
-      const applyToBalance = parseApplyToBalance(
+      const applyToBalance = resolveApplyToBalanceForCharge(
+        coe,
         applyToBalanceInput,
         skipMinSpendInput,
       );
@@ -1360,4 +1386,6 @@ module.exports = {
   computeMinSpendSplit,
   remainingMinSpendForSplit,
   parseApplyToBalance,
+  isThe1EventCoe,
+  resolveApplyToBalanceForCharge,
 };
