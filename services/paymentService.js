@@ -1293,7 +1293,7 @@ async function getPaymentById(paymentId) {
   try {
     const payment = await Payment.findById(paymentId)
       .populate('user_id', 'firstName lastName email phone')
-      .populate('coe_id', 'name total currency');
+      .populate('coe_id', 'name total currency is_the1_event original_request_data');
     
     if (!payment) {
       throw new Error('Payment not found');
@@ -1357,7 +1357,7 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
     
     // Get payments with pagination
     const payments = await Payment.find(query)
-      .populate('coe_id', 'name')
+      .populate('coe_id', 'name is_the1_event original_request_data')
       .sort({ createdAt: -1, _id: -1 })
       .skip(skip)
       .limit(limit)
@@ -1380,6 +1380,9 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
       withAdhocPaymentSummary({
         ...payment,
         coe_name: payment.coe_id?.name || null,
+        is_the1_event:
+          payment.coe_id?.is_the1_event === true ||
+          payment.coe_id?.original_request_data?.is_the1_event === true,
         coe_id: payment.coe_id?._id || payment.coe_id || null,
       })
     );
@@ -1419,7 +1422,7 @@ async function getInvoiceData(paymentId, userId, options = {}) {
       .populate('user_id', 'firstName lastName email phone')
       .populate({
         path: 'coe_id',
-        select: 'name description total subtotal tax currency events selected_seats',
+        select: 'name description total subtotal tax currency events selected_seats is_the1_event original_request_data',
         populate: {
           path: 'events.event_id',
           select: 'name description start_datetime end_datetime base_price'
@@ -1464,6 +1467,9 @@ async function getInvoiceData(paymentId, userId, options = {}) {
         _id: payment.coe_id._id,
         name: payment.coe_id.name,
         description: payment.coe_id.description || '',
+        is_the1_event:
+          payment.coe_id.is_the1_event === true ||
+          payment.coe_id.original_request_data?.is_the1_event === true,
         events: (payment.coe_id.events || []).map(event => ({
           event_name: event.event_id?.name || 'Event',
           event_date: event.event_date || event.event_id?.start_datetime,
@@ -1483,6 +1489,9 @@ async function getInvoiceData(paymentId, userId, options = {}) {
           last_four: payment.payment_channel === 'cash' ? '' : (payment.card_last_four || 'N/A')
         },
         adhoc_payment_summary: adhocPaymentSummary || undefined,
+        is_the1_event:
+          payment.coe_id?.is_the1_event === true ||
+          payment.coe_id?.original_request_data?.is_the1_event === true,
         transaction_id: payment.gp_transaction_id || 'N/A',
         completed_at: payment.completed_at
       },
