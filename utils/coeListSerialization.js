@@ -215,6 +215,26 @@ function normalizeProposalFields(doc) {
 }
 
 /**
+ * Host summary is computed at list time and is not a schema path, so toObject() drops it.
+ * Read it from $locals (mongoose) or the plain object.
+ * @param {object} doc
+ * @param {object} plain
+ * @returns {object|undefined}
+ */
+function readThe1ExperienceSummary(doc, plain) {
+  if (doc && doc.$locals && doc.$locals.the1_experience_summary) {
+    return doc.$locals.the1_experience_summary;
+  }
+  if (doc && doc.the1_experience_summary) {
+    return doc.the1_experience_summary;
+  }
+  if (plain && plain.the1_experience_summary) {
+    return plain.the1_experience_summary;
+  }
+  return undefined;
+}
+
+/**
  * Serialize one COE for GET /coes/my list response.
  * @param {object} doc - Mongoose doc or plain object after list processing
  * @returns {object}
@@ -222,9 +242,19 @@ function normalizeProposalFields(doc) {
 function serializeCoeForList(doc) {
   const o = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
   const proposal = normalizeProposalFields(o);
+  const the1Summary = readThe1ExperienceSummary(doc, o);
   return {
     ...o,
     ...proposal,
+    ...(the1Summary != null ? { the1_experience_summary: the1Summary } : {}),
+    is_the1_experience_host: o.is_the1_experience_host === true,
+    the1_experience_host_id: (() => {
+      const raw = o.the1_experience_host_id;
+      if (raw == null || raw === '') return null;
+      if (typeof raw === 'object' && raw._id != null) return String(raw._id);
+      const s = String(raw);
+      return s && s !== '[object Object]' ? s : null;
+    })(),
     events: trimCoeEventsForList(o.events),
     selected_seats: Array.isArray(o.selected_seats)
       ? o.selected_seats.map(trimSelectedSeatForList)

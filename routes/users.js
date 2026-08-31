@@ -424,7 +424,7 @@ router.get('/search', authenticateToken, requireAdmin, async (req, res) => {
 
     // Query clients
     const clients = await User.find(filter)
-      .select('firstName lastName email phone avatarUrl role entity_status createdAt')
+      .select('firstName lastName email phone avatarUrl role entity_status createdAt socialMedia')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(validLimit);

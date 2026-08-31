@@ -142,6 +142,11 @@ const toolRegistry = {
           type: 'number',
           description: 'Optional deposit percent (1-100) when admin_create_as_proposal is true; default 20. Payment timer is not set on this path.'
         },
+        is_the1_experience_host: {
+          type: 'boolean',
+          description:
+            'Admin only: create a THE1 Experience host with no client_id. Clients are added after.',
+        },
         preferences: {
           type: 'object',
           description: 'User preferences for AI selection (optional)',

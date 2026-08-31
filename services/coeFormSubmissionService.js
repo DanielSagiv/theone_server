@@ -266,7 +266,12 @@ async function processFormSubmissionPhase24(params) {
       }
       // CRITICAL: Check for admin without client_id BEFORE preparing tool params
       // This check must happen even if extractionResult.valid is false
-      if (user.role === 'admin' && !extractionResult?.raw?.client_id) {
+      // THE1 Experience host is created without a client; clients are added after.
+      if (
+        user.role === 'admin' &&
+        !extractionResult?.raw?.client_id &&
+        extractionResult?.raw?.is_the1_experience_host !== true
+      ) {
         console.warn('[BOT] Phase 2.4: Admin attempting COE creation without client_id - intercepting BEFORE tool preparation');
         console.log('[BOT] Phase 2.4: Extraction result:', JSON.stringify(extractionResult, null, 2));
         
@@ -361,6 +366,8 @@ async function processFormSubmissionPhase24(params) {
             specific_preferences: extractionResult.raw.specific_preferences || '',
             open_to_join_events: extractionResult.raw.open_to_join_events === true,
             is_the1_event: extractionResult.raw.is_the1_event === true,
+            is_the1_experience_host:
+              extractionResult.raw.is_the1_experience_host === true,
           }
         };
         
@@ -540,6 +547,12 @@ async function processFormSubmissionPhase24(params) {
           providedEventsCount: toolParams.events?.length || 0
         });
         
+        const isThe1ExperienceHost =
+          extractionResult.raw.is_the1_experience_host === true;
+        if (isThe1ExperienceHost) {
+          toolParams.is_the1_experience_host = true;
+        }
+
         // Add client_id if user is admin (required for admin)
         if (user.role === 'admin') {
           // Extract client_id from form submission (admin COE creation flow)
@@ -554,6 +567,8 @@ async function processFormSubmissionPhase24(params) {
           if (clientId && clientId.trim && clientId.trim().length > 0) {
             toolParams.client_id = clientId.trim();
             console.log('[BOT] Phase 2.4: Extracted client_id from form submission:', toolParams.client_id);
+          } else if (isThe1ExperienceHost) {
+            console.log('[BOT] Phase 2.4: THE1 Experience host — skipping client_id');
           } else {
             console.warn('[BOT] Phase 2.4: Admin COE creation but client_id not found in form submission - BLOCKING tool execution');
             // For admin users, if client_id is missing, don't call the tool
@@ -609,7 +624,8 @@ async function processFormSubmissionPhase24(params) {
         if (
           user.role === 'admin' &&
           !extractionResult.raw.request_coe_id &&
-          extractionResult.raw.admin_create_mode === 'proposal'
+          extractionResult.raw.admin_create_mode === 'proposal' &&
+          !isThe1ExperienceHost
         ) {
           toolParams.admin_create_as_proposal = true;
           if (typeof extractionResult.raw.proposal_deposit_percent === 'number') {
@@ -618,7 +634,7 @@ async function processFormSubmissionPhase24(params) {
         }
         
         // ADDITIONAL SAFETY CHECK: Don't proceed if admin and no client_id
-        if (user.role === 'admin' && !toolParams.client_id) {
+        if (user.role === 'admin' && !toolParams.client_id && !toolParams.is_the1_experience_host) {
           console.error('[BOT] Phase 2.4: SAFETY CHECK FAILED - Admin has no client_id but we reached tool execution. This should not happen!');
           throw new Error('Admin must provide client_id when creating a COE. This error should have been caught earlier.');
         }

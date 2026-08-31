@@ -53,8 +53,9 @@ const COEItemSchema = new mongoose.Schema({
   /**
    * Optional guests for this event line. When unset, UI/seat-fit fall back to
    * original_request_data.party_size / preferences.party_size.
+   * THE1 Experience host remaining may be 0 after client allocations.
    */
-  party_size: { type: Number, min: 1, required: false },
+  party_size: { type: Number, min: 0, required: false },
 
   /** True when this line is a joint-table share (deposit uses full line amount, see paymentService). */
   is_joint_allocation: { type: Boolean, default: false },
@@ -125,7 +126,9 @@ const coeSchema = new mongoose.Schema({
   client_id: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
-    required: true,
+    required: function requiredClientId() {
+      return this.is_the1_experience_host !== true;
+    },
     index: true
   },
   admin_id: { 
@@ -278,6 +281,28 @@ const coeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
     index: true,
+  },
+  /**
+   * Admin-owned THE1 Experience inventory (bought tables). No client_id.
+   * Distinct from is_the1_event (1:1 Buy in label).
+   */
+  is_the1_experience_host: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  /** Child proposal spawned from a THE1 Experience host. */
+  the1_experience_host_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'COE',
+    default: null,
+    index: true,
+  },
+  /** Denormalized child count for host list cards (not the ephemeral summary). */
+  the1_experience_client_count: {
+    type: Number,
+    default: 0,
+    min: 0,
   },
   
   // Detailed pricing breakdown (event-specific pricing)
@@ -716,7 +741,7 @@ const coeSchema = new mongoose.Schema({
     adhoc_payer: {
       type: {
         type: String,
-        enum: ['client', 'participant', 'guest'],
+        enum: ['client', 'participant', 'guest', 'table'],
       },
       user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       display_name: { type: String, trim: true },

@@ -60,7 +60,7 @@ const paymentSchema = new mongoose.Schema({
   adhoc_payer: {
     type: {
       type: String,
-      enum: ['client', 'participant', 'guest'],
+      enum: ['client', 'participant', 'guest', 'table'],
     },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     display_name: { type: String, trim: true },

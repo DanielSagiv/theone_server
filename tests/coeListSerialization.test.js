@@ -128,11 +128,35 @@ function testSerializeCoeForList() {
   assert.strictEqual(out.selected_seats[0].seat_code, 'T1');
 }
 
+function testSerializeCoeForListKeepsThe1HostSummary() {
+  const summary = { client_count: 1, table_cost: 16443, buy_in_collected: 0 };
+  const fromLocals = serializeCoeForList({
+    toObject() {
+      return {
+        _id: 'host1',
+        is_the1_experience_host: true,
+        name: 'THE1 Experience',
+      };
+    },
+    $locals: { the1_experience_summary: summary },
+  });
+  assert.strictEqual(fromLocals.the1_experience_summary.client_count, 1);
+  assert.strictEqual(fromLocals.is_the1_experience_host, true);
+
+  const fromPlain = serializeCoeForList({
+    _id: 'host1',
+    is_the1_experience_host: true,
+    the1_experience_summary: summary,
+  });
+  assert.strictEqual(fromPlain.the1_experience_summary.client_count, 1);
+}
+
 function run() {
   testTrimMediaForList();
   testTrimPopulatedEventForList();
   testTrimSelectedSeatForList();
   testSerializeCoeForList();
+  testSerializeCoeForListKeepsThe1HostSummary();
   console.log('coeListSerialization.test.js: all passed');
 }
 

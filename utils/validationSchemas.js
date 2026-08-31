@@ -346,7 +346,13 @@ const createCOESchema = Joi.object({
   status: Joi.string().valid('draft', 'request', 'approved', 'pending_pay', 'paid', 'rejected', 'expired', 'completed', 'cancelled').default('draft'),
   created_method: Joi.string().valid('manual', 'automated').default('manual'),
   creation_notes: Joi.string().max(500).allow(''),
-  client_id: Joi.string().hex().length(24).required(),
+  is_the1_experience_host: Joi.boolean().optional(),
+  the1_experience_host_id: Joi.string().hex().length(24).optional().allow(null),
+  client_id: Joi.string().hex().length(24).when('is_the1_experience_host', {
+    is: true,
+    then: Joi.optional().allow(null, ''),
+    otherwise: Joi.required(),
+  }),
   admin_id: Joi.string().hex().length(24).required(),
   participants: Joi.array().items(Joi.object({
     user_id: Joi.string().hex().length(24).required(),
@@ -401,7 +407,16 @@ const createCOESchema = Joi.object({
   notes: Joi.string().max(1000).allow(''),
   client_notes: Joi.string().max(1000).allow(''),
   sharable: Joi.boolean().default(false),
-  tags: Joi.array().items(Joi.string()).optional()
+  tags: Joi.array().items(Joi.string()).optional(),
+  is_the1_event: Joi.boolean().optional(),
+  original_request_data: Joi.object({
+    city: Joi.string().allow('', null),
+    party_size: Joi.number().integer().min(1),
+    budget: Joi.object({
+      max: Joi.number().min(0),
+      currency: Joi.string().valid('USD', 'EUR', 'GBP'),
+    }).optional(),
+  }).optional(),
 });
 
 // Partial update for COE.original_request_data (admin PUT); merged server-side so other request fields are preserved.
@@ -505,6 +520,8 @@ const updateCOESchema = Joi.object({
   sharable: Joi.boolean(),
   tags: Joi.array().items(Joi.string()),
   is_the1_event: Joi.boolean().optional(),
+  is_the1_experience_host: Joi.boolean().optional(),
+  the1_experience_host_id: Joi.string().hex().length(24).optional().allow(null),
   original_request_data: updateCOEOriginalRequestPartialSchema.optional()
 })
   .min(1)
@@ -803,6 +820,35 @@ const clientRequestEventSelectionSchema = Joi.object({
   party_size: Joi.number().integer().min(1).optional(),
 });
 
+const addThe1ExperienceClientsSchema = Joi.object({
+  client_id: Joi.string().hex().length(24).required(),
+  deposit_percent: Joi.number().integer().min(1).max(100).optional(),
+  events: Joi.array()
+    .items(
+      Joi.object({
+        event_id: Joi.string().hex().length(24).required(),
+        buy_in: Joi.number().min(0.01).required(),
+        party_size: Joi.number().integer().min(1).required(),
+      }),
+    )
+    .min(1)
+    .required(),
+});
+
+const updateThe1ExperienceClientSchema = Joi.object({
+  deposit_percent: Joi.number().integer().min(1).max(100).optional(),
+  events: Joi.array()
+    .items(
+      Joi.object({
+        event_id: Joi.string().hex().length(24).required(),
+        buy_in: Joi.number().min(0.01).required(),
+        party_size: Joi.number().integer().min(1).required(),
+      }),
+    )
+    .min(1)
+    .required(),
+});
+
 const updateClientRequestCOESchema = Joi.object({
   start_date: Joi.date().required(),
   end_date: Joi.date().min(Joi.ref('start_date')).required(),
@@ -854,6 +900,7 @@ const updateClientRequestCOESchema = Joi.object({
 /** GET /coes/my query */
 const getMyCOEsQuerySchema = Joi.object({
   time_range: Joi.string().valid('upcoming', 'past', 'all').optional(),
+  the1_experience_host_id: Joi.string().hex().length(24).allow('').optional(),
 });
 
 const venueMenuItemSchema = Joi.object({
@@ -920,6 +967,8 @@ module.exports = {
   loginOtpRequestSchema,
   loginOtpVerifySchema,
   updateClientRequestCOESchema,
+  addThe1ExperienceClientsSchema,
+  updateThe1ExperienceClientSchema,
   getMyCOEsQuerySchema,
   upsertVenueMenuSchema,
 };

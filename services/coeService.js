@@ -1308,8 +1308,12 @@ async function preparePaymentForCOE(coeId) {
  */
 async function holdSeatsForCOE(coeId) {
   try {
+    const { isThe1ExperienceChild } = require('../utils/the1Experience');
     const coe = await COE.findById(coeId).lean();
     if (!coe || !coe.selected_seats || coe.selected_seats.length === 0) {
+      return;
+    }
+    if (isThe1ExperienceChild(coe)) {
       return;
     }
     const selectedSeats = coe.selected_seats;
@@ -1437,16 +1441,24 @@ async function createCOE(coeData, createdBy, options = {}) {
       .toLowerCase();
     const allowUnavailable = actorRole === 'admin';
 
+    const isHost = normalizedData.is_the1_experience_host === true;
     const [client, admin] = await Promise.all([
-      User.findById(normalizedData.client_id),
+      isHost || !normalizedData.client_id
+        ? Promise.resolve(null)
+        : User.findById(normalizedData.client_id),
       User.findById(normalizedData.admin_id)
     ]);
 
-    if (!client) {
+    if (!isHost && !client) {
       throw new Error('Client not found');
     }
     if (!admin) {
       throw new Error('Admin not found');
+    }
+
+    if (isHost) {
+      normalizedData.client_id = undefined;
+      normalizedData.is_the1_experience_host = true;
     }
 
     if (normalizedData.selected_seats && normalizedData.selected_seats.length > 0) {
@@ -1554,11 +1566,13 @@ async function createCOE(coeData, createdBy, options = {}) {
     };
     const clientIdStr = normActorId(coeData.client_id);
     const createdByStr = normActorId(createdBy);
-    const clientRoleNorm = (client.role != null ? String(client.role) : '').toLowerCase();
+    const clientRoleNorm = (client?.role != null ? String(client.role) : '')
+      .toLowerCase();
     const looksLikeClientUser =
-      client.role == null ||
+      !!client &&
+      (client.role == null ||
       String(client.role).trim() === '' ||
-      clientRoleNorm === 'client';
+      clientRoleNorm === 'client');
     const shouldNotifyAdminNewRequest =
       coe.status === 'request' &&
       admin &&
@@ -2756,6 +2770,14 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
       await proposalGroupService.prepareOpenProposalGroupForApprovedWinner(coe, updatedBy);
     }
 
+    const { isThe1ExperienceHost, isThe1ExperienceChild } = require('../utils/the1Experience');
+    if (isThe1ExperienceHost(coe)) {
+      const blocked = ['approved', 'accepted_not_paid', 'pending_pay', 'paid'];
+      if (blocked.includes(normalizedStatus)) {
+        throw new Error('Cannot propose or pay a THE1 Experience host');
+      }
+    }
+
     // Validate status transition
     const validTransitions = {
       'draft': ['approved', 'cancelled', 'deleted'],
@@ -2779,20 +2801,35 @@ async function updateCOEStatus(coeId, status, updatedBy, options = {}) {
     await coe.updateStatus(normalizedStatus, updatedBy);
     
     // Handle seat status changes based on COE status
+    const skipChildInventory = isThe1ExperienceChild(coe);
     if (normalizedStatus === 'paid') {
-      // When COE is paid, seats become 'booked'
-      await updateSeatStatusesToBooked(coeId);
-      // Update selected_seats status in COE
-      const coe = await COE.findById(coeId);
-      if (coe && coe.selected_seats && coe.selected_seats.length > 0) {
-        coe.selected_seats.forEach(seat => {
+      if (!skipChildInventory) {
+        await updateSeatStatusesToBooked(coeId);
+      }
+      const paidCoe = await COE.findById(coeId);
+      if (paidCoe && paidCoe.selected_seats && paidCoe.selected_seats.length > 0) {
+        paidCoe.selected_seats.forEach(seat => {
           seat.status = 'booked';
         });
-        await coe.save();
+        await paidCoe.save();
       }
     } else if (['cancelled', 'rejected', 'expired', 'deleted'].includes(normalizedStatus)) {
-      // When COE is cancelled/rejected/expired/deleted, seats are released
       await releaseSelectedSeats(coeId);
+      if (normalizedStatus === 'deleted' && isThe1ExperienceChild(coe)) {
+        try {
+          const {
+            syncHostClientCount,
+            restoreHostPartySizeFromChild,
+          } = require('./the1ExperienceService');
+          await restoreHostPartySizeFromChild(coe.the1_experience_host_id, coe);
+          await syncHostClientCount(coe.the1_experience_host_id);
+        } catch (syncErr) {
+          console.warn(
+            '[updateCOEStatus] THE1 host client count sync failed:',
+            syncErr.message,
+          );
+        }
+      }
     }
     
     // Send notifications for status changes (skip soft-delete — COE is hidden)

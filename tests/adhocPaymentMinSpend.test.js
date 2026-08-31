@@ -192,7 +192,22 @@ function run() {
   testMissingEventReturnsNulls();
   testApplyToBalanceFalseChargesFullBase();
   testThe1EventNeverAppliesToBalance();
+  testThe1ExperienceChildCanApplyToBalance();
   console.log('adhocPaymentMinSpend.test.js: all passed');
+}
+
+function testThe1ExperienceChildCanApplyToBalance() {
+  const child = Object.assign(makeCoe(), {
+    is_the1_event: true,
+    the1_experience_host_id: '64b0000000000000000000ff',
+  });
+  assert.strictEqual(resolveApplyToBalanceForCharge(child, true), true);
+  const remaining = remainingMinSpendForSplit(
+    child,
+    EVENT_ID,
+    resolveApplyToBalanceForCharge(child, true),
+  );
+  assert.strictEqual(remaining, 3000);
 }
 
 run();

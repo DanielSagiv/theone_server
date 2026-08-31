@@ -395,8 +395,12 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       manual_event_selection = false,
       request_coe_id = null,
       admin_create_as_proposal = false,
-      proposal_deposit_percent: proposalDepositPercent
+      proposal_deposit_percent: proposalDepositPercent,
+      is_the1_experience_host = false,
     } = params;
+    const isThe1ExperienceHost =
+      is_the1_experience_host === true ||
+      preferences?.is_the1_experience_host === true;
     
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] Params destructured:', {
       name: name,
@@ -498,7 +502,17 @@ async function handleCreateCOEDraft(params, user, correlationId) {
     });
     
     let targetClientId = client_id;
-    if (user.role === 'client') {
+    if (isThe1ExperienceHost) {
+      if (user.role !== 'admin') {
+        throw createError(
+          ErrorCodes.PERMISSION_DENIED,
+          'Only admins can create a THE1 Experience.',
+          ErrorCategories.PERMISSION,
+          false
+        );
+      }
+      targetClientId = null;
+    } else if (user.role === 'client') {
       // Clients can only create COEs for themselves
       targetClientId = user._id.toString();
       console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client role - using user ID as targetClientId:', targetClientId);
@@ -527,46 +541,49 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       );
     }
 
-    // Get client to generate COE name
-    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Fetching client:', {
-      targetClientId: targetClientId,
-      targetClientIdType: typeof targetClientId
-    });
-    
-    const client = await User.findById(targetClientId);
-    if (!client) {
-      console.error('[BOT] [COE_CREATION_FULL_DEBUG] Client not found:', {
-        targetClientId: targetClientId,
-        searchedWith: typeof targetClientId === 'string' ? targetClientId : String(targetClientId)
-      });
-      throw createError(
-        ErrorCodes.SERVICE_UNAVAILABLE,
-        'Client not found.',
-        ErrorCategories.SERVICE,
-        false
-      );
-    }
-    
-    console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client found:', {
-      clientId: client._id?.toString(),
-      clientName: `${client.firstName || ''} ${client.lastName || ''}`.trim(),
-      clientEmail: client.email,
-      clientRole: client.role
-    });
-
-    // Auto-generate COE name and description if not provided
     const { formatDateRange } = require('../utils/dateParser');
     const dateStr = formatDateRange(startDate, endDate || startDate);
-    
-    // Get client full name
-    const clientFullName = client.firstName && client.lastName 
-      ? `${client.firstName} ${client.lastName}`
-      : client.firstName || client.email || 'Client';
+
+    let client = null;
+    let clientFullName = 'THE1 Experience';
+    if (!isThe1ExperienceHost) {
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Fetching client:', {
+        targetClientId: targetClientId,
+        targetClientIdType: typeof targetClientId
+      });
+      
+      client = await User.findById(targetClientId);
+      if (!client) {
+        console.error('[BOT] [COE_CREATION_FULL_DEBUG] Client not found:', {
+          targetClientId: targetClientId,
+          searchedWith: typeof targetClientId === 'string' ? targetClientId : String(targetClientId)
+        });
+        throw createError(
+          ErrorCodes.SERVICE_UNAVAILABLE,
+          'Client not found.',
+          ErrorCategories.SERVICE,
+          false
+        );
+      }
+      
+      console.log('[BOT] [COE_CREATION_FULL_DEBUG] Client found:', {
+        clientId: client._id?.toString(),
+        clientName: `${client.firstName || ''} ${client.lastName || ''}`.trim(),
+        clientEmail: client.email,
+        clientRole: client.role
+      });
+
+      clientFullName = client.firstName && client.lastName 
+        ? `${client.firstName} ${client.lastName}`
+        : client.firstName || client.email || 'Client';
+    }
     
     // Generate description: "<client full name> experience, <start date> to <end date>"
     let coeDescription = description;
     if (!coeDescription || coeDescription.trim() === '') {
-      coeDescription = `${clientFullName} experience, ${dateStr}`;
+      coeDescription = isThe1ExperienceHost
+        ? `THE1 Experience, ${dateStr}`
+        : `${clientFullName} experience, ${dateStr}`;
     }
     
     // Auto-generate COE name (same as description for now)
@@ -1757,7 +1774,7 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       description: coeDescription,
       start_date: startDate,
       end_date: endDate,
-      client_id: targetClientId,
+      client_id: isThe1ExperienceHost ? undefined : targetClientId,
       admin_id: adminId,
       created_by: user._id.toString(),
       status: initialStatus, // Set status based on creator role
@@ -1782,8 +1799,10 @@ async function handleCreateCOEDraft(params, user, correlationId) {
       tags: [],
       sharable: false,
       is_the1_event:
-        preferences.is_the1_event === true ||
-        conversationPreferences.is_the1_event === true,
+        !isThe1ExperienceHost &&
+        (preferences.is_the1_event === true ||
+          conversationPreferences.is_the1_event === true),
+      is_the1_experience_host: isThe1ExperienceHost === true,
     };
 
     console.log('[BOT] [COE_CREATION_FULL_DEBUG] ========== AUTO-FILL PHASE ==========');
@@ -2979,7 +2998,8 @@ function formatClientForResponse(client) {
     avatarUrl: client.avatarUrl || null,
     role: client.role || 'client',
     entity_status: client.entity_status || null,
-    createdAt: client.createdAt || null
+    createdAt: client.createdAt || null,
+    socialMedia: client.socialMedia || null,
   };
 }
 
@@ -3024,7 +3044,7 @@ async function handleGetClients(params, user, correlationId) {
 
     // Query clients
     const clients = await User.find(filter)
-      .select('firstName lastName email phone avatarUrl role entity_status createdAt')
+      .select('firstName lastName email phone avatarUrl role entity_status createdAt socialMedia')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(validLimit);

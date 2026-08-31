@@ -22,6 +22,8 @@ const {
   assignRunnerToCOESchema,
   updateSeatAssignmentsSchema,
   updateClientRequestCOESchema,
+  addThe1ExperienceClientsSchema,
+  updateThe1ExperienceClientSchema,
   getMyCOEsQuerySchema,
 } = require('../utils/validationSchemas');
 const { canClientEditOwnRequest } = require('../utils/coeUtils');
@@ -284,7 +286,9 @@ router.post('/unmerge', authenticateToken, requireAdmin, async (req, res) => {
 /**
  * GET /v1/coes/my
  * Get COEs for the Experiences home list.
- * Clients/runners: COEs they are tied to. Admins: all COEs.
+ * Clients/runners: COEs they are tied to (hosts omitted).
+ * Admins: non-deleted COEs except THE1 child proposals, unless
+ * `the1_experience_host_id` is set (then only that host's children).
  * @access Authenticated users
  */
 router.get('/my', authenticateToken, async (req, res) => {
@@ -315,10 +319,15 @@ router.get('/my', authenticateToken, async (req, res) => {
       ? { $in: coeService.CLIENT_HOME_LIST_STATUS_ALLOWLIST }
       : { $ne: 'deleted' };
 
+    const the1HostIdFilter = isAdmin
+      ? String(queryValue.the1_experience_host_id || '').trim()
+      : '';
+
     const coeListQuery = isAdmin
       ? { status: statusMatch }
       : {
           status: statusMatch,
+          is_the1_experience_host: { $ne: true },
           $or: [
             { admin_id: userIdObj },
             { client_id: userIdObj },
@@ -326,6 +335,35 @@ router.get('/my', authenticateToken, async (req, res) => {
             { 'participants.user_id': userIdObj }
           ]
         };
+
+    if (isAdmin) {
+      if (
+        the1HostIdFilter &&
+        mongoose.Types.ObjectId.isValid(the1HostIdFilter)
+      ) {
+        const hostOid = new mongoose.Types.ObjectId(the1HostIdFilter);
+        coeListQuery.$and = [
+          ...(coeListQuery.$and || []),
+          {
+            $or: [
+              { the1_experience_host_id: hostOid },
+              { the1_experience_host_id: the1HostIdFilter },
+            ],
+          },
+        ];
+      } else {
+        coeListQuery.$and = [
+          ...(coeListQuery.$and || []),
+          {
+            $or: [
+              { the1_experience_host_id: { $exists: false } },
+              { the1_experience_host_id: null },
+            ],
+          },
+        ];
+      }
+    }
+
     const timeRangeMatch = buildCoeListTimeRangeMatch(timeRange);
     if (Object.keys(timeRangeMatch).length > 0) {
       coeListQuery.$and = [...(coeListQuery.$and || []), timeRangeMatch];
@@ -352,6 +390,9 @@ router.get('/my', authenticateToken, async (req, res) => {
         await coeService.attachCatalogTotalDisplay(coe);
       }
     }
+
+    const { attachHostSummaries } = require('../services/the1ExperienceService');
+    const summariesByHostId = await attachHostSummaries(coes);
 
     // Ensure proposal_group_id from raw BSON is on each doc (multi-proposal list grouping on mobile)
     if (coes.length > 0) {
@@ -389,7 +430,16 @@ router.get('/my', authenticateToken, async (req, res) => {
     }
 
     // Slim list JSON: top-level COE fields preserved; nested events/seats trimmed for mobile + EJS.
-    const data = coes.map((doc) => serializeCoeForList(doc));
+    // Stamp THE1 host summary after serialize — it is not a schema path, so toObject() drops it.
+    const data = coes.map((doc) => {
+      const out = serializeCoeForList(doc);
+      const hid = doc && doc._id != null ? String(doc._id) : '';
+      const summary = hid ? summariesByHostId.get(hid) : undefined;
+      if (summary != null) {
+        out.the1_experience_summary = summary;
+      }
+      return out;
+    });
 
     res.json({
       success: true,
@@ -656,23 +706,25 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     const isAdmin = req.user.role === 'admin';
     const coeCheck = isAdmin
       ? await COE.findById(id).select(
-          '_id admin_id client_id runner_assignment.runner_id status',
+          '_id admin_id client_id runner_assignment.runner_id status is_the1_experience_host',
         )
       : await COE.findOne({
           _id: id,
+          is_the1_experience_host: { $ne: true },
           $or: [
             { admin_id: userIdObj },
             { client_id: userIdObj },
             { 'runner_assignment.runner_id': userIdObj },
             { 'participants.user_id': userIdObj }
           ]
-        }).select('_id admin_id client_id runner_assignment.runner_id status');
+        }).select('_id admin_id client_id runner_assignment.runner_id status is_the1_experience_host');
     
     if (
       !coeCheck ||
       coeCheck.status === 'deleted' ||
       (req.user.role === 'client' &&
-        !coeService.isCoeHomeListVisibleToClient(coeCheck.status))
+        (coeCheck.is_the1_experience_host === true ||
+          !coeService.isCoeHomeListVisibleToClient(coeCheck.status)))
     ) {
       // Log for debugging
       const coeExists = await COE.findById(id).select('admin_id client_id runner_assignment.runner_id').lean();
@@ -732,7 +784,7 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
       // This queries fresh from the database
       coe = await COE.findById(id)
         .lean()
-        .populate('client_id', 'firstName lastName email phone avatarUrl avatar_thumb_url')
+        .populate('client_id', 'firstName lastName email phone avatarUrl avatar_thumb_url socialMedia')
         .populate('admin_id', 'firstName lastName email')
         .populate('created_by', 'firstName lastName email')
         .populate('participants.user_id', 'firstName lastName email phone')
@@ -1065,6 +1117,15 @@ router.get('/my/:id', authenticateToken, async (req, res) => {
     await paymentService.attachExperiencePaymentUndoFields(coe, {
       isAdmin: req.user.role === 'admin',
     });
+
+    if (coe.is_the1_experience_host === true && req.user.role === 'admin') {
+      try {
+        const { buildHostSummary } = require('../services/the1ExperienceService');
+        coe.the1_experience_summary = await buildHostSummary(coe);
+      } catch (summaryErr) {
+        console.warn('[GET /coes/my/:id] THE1 Experience summary failed:', summaryErr.message);
+      }
+    }
 
     // DEBUG: Log original_request_data so we can inspect what mobile receives
     try {
@@ -1779,6 +1840,97 @@ router.get('/:id/history', authenticateToken, async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /v1/coes/:id/the1-experience/clients
+ * Spawn a client proposal from a THE1 Experience host (admin only).
+ */
+router.post(
+  '/:id/the1-experience/clients',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Experience ID format',
+        });
+      }
+      const { error, value } = addThe1ExperienceClientsSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation error',
+          error: error.details[0].message,
+        });
+      }
+      const { addClientToThe1Experience } = require('../services/the1ExperienceService');
+      const child = await addClientToThe1Experience(id, value, req.user.id);
+      return res.status(201).json({
+        success: true,
+        message: 'Client proposal created',
+        data: child,
+      });
+    } catch (err) {
+      console.error('[POST /coes/:id/the1-experience/clients]', err);
+      const msg = err.message || 'Failed to add client';
+      const notFound = /not found/i.test(msg);
+      return res.status(notFound ? 404 : 400).json({
+        success: false,
+        message: msg,
+      });
+    }
+  },
+);
+
+/**
+ * PUT /v1/coes/:id/the1-experience/clients/:childId
+ * Update unpaid child event subset + buy-in (admin only).
+ */
+router.put(
+  '/:id/the1-experience/clients/:childId',
+  authenticateToken,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id, childId } = req.params;
+      if (
+        !id.match(/^[0-9a-fA-F]{24}$/) ||
+        !childId.match(/^[0-9a-fA-F]{24}$/)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Experience ID format',
+        });
+      }
+      const { error, value } = updateThe1ExperienceClientSchema.validate(req.body);
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation error',
+          error: error.details[0].message,
+        });
+      }
+      const { updateThe1ExperienceClient } = require('../services/the1ExperienceService');
+      const child = await updateThe1ExperienceClient(id, childId, value);
+      return res.json({
+        success: true,
+        message: 'Client proposal updated',
+        data: child,
+      });
+    } catch (err) {
+      console.error('[PUT /coes/:id/the1-experience/clients/:childId]', err);
+      const msg = err.message || 'Failed to update client';
+      const notFound = /not found/i.test(msg);
+      return res.status(notFound ? 404 : 400).json({
+        success: false,
+        message: msg,
+      });
+    }
+  },
+);
 
 /**
  * POST /v1/coes
@@ -2700,6 +2852,16 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Experience not found',
+      });
+    }
+
+    const { assertThe1ExperienceHostNotPayable } = require('../utils/the1Experience');
+    try {
+      assertThe1ExperienceHostNotPayable(coe);
+    } catch (hostErr) {
+      return res.status(400).json({
+        success: false,
+        message: hostErr.message,
       });
     }
 

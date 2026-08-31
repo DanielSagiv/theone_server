@@ -166,6 +166,40 @@ function isThe1EventCoe(coe) {
 }
 
 /**
+ * Min-spend remaining for THE1 Experience children lives on the host event.
+ * @param {object} coe
+ * @returns {Promise<object>}
+ */
+async function resolveMinSpendLedgerCoe(coe) {
+  const { isThe1ExperienceChild } = require('../utils/the1Experience');
+  if (!isThe1ExperienceChild(coe)) return coe;
+  const hostId = coe.the1_experience_host_id;
+  if (!hostId) return coe;
+  const host = await COE.findById(hostId);
+  return host || coe;
+}
+
+function applyMinSpendAbsorbedToCoe(coeDoc, eventId, minSpendAbsorbed) {
+  if (!(minSpendAbsorbed > 0) || !coeDoc) return;
+  coeDoc.on_spot_min_spend_used = coeDoc.on_spot_min_spend_used || [];
+  const eid = String(eventId);
+  const trackerRow = coeDoc.on_spot_min_spend_used.find(
+    (r) =>
+      (r?.event_id?._id?.toString?.() || r?.event_id?.toString?.() || '') === eid,
+  );
+  if (trackerRow) {
+    trackerRow.absorbed =
+      Math.round(((Number(trackerRow.absorbed) || 0) + minSpendAbsorbed) * 100) /
+      100;
+  } else {
+    coeDoc.on_spot_min_spend_used.push({
+      event_id: eventId,
+      absorbed: minSpendAbsorbed,
+    });
+  }
+}
+
+/**
  * THE1 experiences never absorb into min spend / buy-in.
  * @param {object} coe
  * @param {unknown} applyToBalanceInput
@@ -173,6 +207,10 @@ function isThe1EventCoe(coe) {
  * @returns {boolean}
  */
 function resolveApplyToBalanceForCharge(coe, applyToBalanceInput, skipMinSpendInput) {
+  const { isThe1ExperienceChild } = require('../utils/the1Experience');
+  if (isThe1ExperienceChild(coe)) {
+    return parseApplyToBalance(applyToBalanceInput, skipMinSpendInput);
+  }
   if (isThe1EventCoe(coe)) return false;
   return parseApplyToBalance(applyToBalanceInput, skipMinSpendInput);
 }
@@ -353,7 +391,8 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     throw new Error('Event not found on this experience');
   }
 
-  const payerUserIds = getCoePayerUserIds(coe);
+  const { isThe1ExperienceHost } = require('../utils/the1Experience');
+  const payerUserIds = isThe1ExperienceHost(coe) ? [] : getCoePayerUserIds(coe);
   const users = await User.find({ _id: { $in: payerUserIds } }).select(
     'firstName lastName email phone saved_payment_methods default_payment_method role'
   );
@@ -447,12 +486,13 @@ async function getAdhocPaymentOptions(coeId, eventId) {
     }
   }
 
-  // Build min-spend balance info for this event.
+  // Build min-spend balance info for this event (host ledger for THE1 Experience children).
   let minSpendInfo = null;
   if (eventId) {
-    const msResolved = resolveMinSpendForEvent(coe, eventId);
+    const ledgerCoe = await resolveMinSpendLedgerCoe(coe);
+    const msResolved = resolveMinSpendForEvent(ledgerCoe, eventId);
     if (msResolved.effective_usd != null) {
-      const used = getMinSpendUsed(coe, eventId);
+      const used = getMinSpendUsed(ledgerCoe, eventId);
       const remaining = Math.max(0, msResolved.effective_usd - used);
       minSpendInfo = {
         venue_usd: msResolved.venue_usd,
@@ -472,6 +512,11 @@ async function getAdhocPaymentOptions(coeId, eventId) {
       client_id: coe.client_id?._id?.toString?.() || coe.client_id?.toString?.(),
       adhoc_collected_total: coe.adhoc_collected_total || 0,
       is_the1_event: coe.is_the1_event === true,
+      the1_experience_host_id:
+        coe.the1_experience_host_id != null
+          ? String(coe.the1_experience_host_id)
+          : null,
+      is_the1_experience_host: coe.is_the1_experience_host === true,
       original_request_data: {
         is_the1_event: coe.original_request_data?.is_the1_event === true,
       },
@@ -662,9 +707,22 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   if (!coe) {
     throw new Error('Experience not found');
   }
+  const {
+    assertThe1ExperienceHostNotPayable,
+    isThe1ExperienceHost,
+  } = require('../utils/the1Experience');
+  const isHostTableCharge = isThe1ExperienceHost(coe);
+  if (!isHostTableCharge) {
+    assertThe1ExperienceHostNotPayable(coe);
+  } else if (seatUpgradeId) {
+    throw new Error('Table Order cannot be a seat upgrade');
+  } else if (!eventId) {
+    throw new Error('Event is required for a table Order');
+  }
   if (eventId && !coeHasEventId(coe, eventId)) {
     throw new Error('Event not found on this experience');
   }
+  const minSpendLedgerCoe = await resolveMinSpendLedgerCoe(coe);
 
   const paidSeatUpgradeService = require('./paidSeatUpgradeService');
   let resolvedAdhocKind = adhocKindInput || 'general';
@@ -696,15 +754,24 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
       adhocPayerInput?.type === 'guest' ||
       (adhocPayerInput == null && false);
     if (!isGuestPayer) {
-      const applyToBalance = resolveApplyToBalanceForCharge(
-        coe,
-        applyToBalanceInput,
-        skipMinSpendInput,
+      const applyToBalance = isHostTableCharge
+        ? true
+        : resolveApplyToBalanceForCharge(
+            coe,
+            applyToBalanceInput,
+            skipMinSpendInput,
+          );
+      const remaining = remainingMinSpendForSplit(
+        minSpendLedgerCoe,
+        eventId,
+        applyToBalance,
       );
-      const remaining = remainingMinSpendForSplit(coe, eventId, applyToBalance);
       const split = computeMinSpendSplit(remaining, Number(amount));
       minSpendAbsorbed = split.absorbed;
       cardChargedBase = split.cardBase;
+      if (isHostTableCharge && split.cardBase > 0) {
+        throw new Error('Amount exceeds remaining table balance');
+      }
     } else {
       // Guest payer — no min-spend deduction.
       cardChargedBase = Number(amount);
@@ -738,14 +805,23 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
 
   const billingUserId =
     coe.client_id?._id?.toString?.() || coe.client_id?.toString?.();
-  if (!billingUserId) {
+  if (!isHostTableCharge && !billingUserId) {
     throw new Error('Experience has no primary client');
   }
 
   let chargeUserId = payerUserId || billingUserId;
   let adhocPayer = adhocPayerInput || { type: 'client' };
 
-  if (adhocPayer.type === 'guest') {
+  if (isHostTableCharge) {
+    chargeUserId = adminUserId;
+    adhocPayer = {
+      type: 'table',
+      display_name:
+        (adhocPayerInput?.display_name &&
+          String(adhocPayerInput.display_name).trim()) ||
+        'General table',
+    };
+  } else if (adhocPayer.type === 'guest') {
     if (!adhocPayer.display_name || !String(adhocPayer.display_name).trim()) {
       throw new Error('Guest name is required');
     }
@@ -797,7 +873,7 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   const payment = new Payment({
     coe_id: coeId,
     event_id: eventId || undefined,
-    user_id: billingUserId,
+    user_id: isHostTableCharge ? adminUserId : billingUserId,
     amount: chargeAmount,
     currency: coe.currency || PAYMENT_CONFIG.currency,
     payment_type: 'adhoc',
@@ -817,19 +893,21 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
   await payment.save();
 
   const chargeUser = await User.findById(chargeUserId);
-  if (!chargeUser) {
-    payment.status = 'failed';
-    payment.failure_message = 'Charge user not found';
-    payment.failed_at = new Date();
-    await payment.save();
-    throw new Error('Charge user not found');
-  }
+  if (!isHostTableCharge) {
+    if (!chargeUser) {
+      payment.status = 'failed';
+      payment.failure_message = 'Charge user not found';
+      payment.failed_at = new Date();
+      await payment.save();
+      throw new Error('Charge user not found');
+    }
 
-  assertAdhocReceiptEmailAvailable(
-    adhocPayer,
-    chargeUser,
-    chargeMethod !== 'cash' && isReceiptEmailEnabled()
-  );
+    assertAdhocReceiptEmailAvailable(
+      adhocPayer,
+      chargeUser,
+      chargeMethod !== 'cash' && isReceiptEmailEnabled()
+    );
+  }
 
   try {
     if (isMinSpendOnly) {
@@ -971,27 +1049,54 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
             created_at: new Date(),
           });
 
-          // Update the per-event min-spend balance tracker.
+          // Update the per-event min-spend balance tracker on the ledger COE
+          // (host for THE1 Experience children).
           if (minSpendAbsorbed > 0) {
-            coeForLine.on_spot_min_spend_used = coeForLine.on_spot_min_spend_used || [];
-            const eid = String(eventId);
-            const trackerRow = coeForLine.on_spot_min_spend_used.find(
-              (r) =>
-                (r?.event_id?._id?.toString?.() || r?.event_id?.toString?.() || '') === eid,
-            );
-            if (trackerRow) {
-              trackerRow.absorbed = Math.round(
-                ((Number(trackerRow.absorbed) || 0) + minSpendAbsorbed) * 100,
-              ) / 100;
-            } else {
-              coeForLine.on_spot_min_spend_used.push({
-                event_id: eventId,
-                absorbed: minSpendAbsorbed,
-              });
+            const ledgerId =
+              minSpendLedgerCoe?._id?.toString?.() ||
+              String(minSpendLedgerCoe?._id || '');
+            const lineId = coeForLine._id.toString();
+            if (ledgerId && ledgerId === lineId) {
+              applyMinSpendAbsorbedToCoe(
+                coeForLine,
+                eventId,
+                minSpendAbsorbed,
+              );
+            } else if (ledgerId) {
+              applyMinSpendAbsorbedToCoe(
+                minSpendLedgerCoe,
+                eventId,
+                minSpendAbsorbed,
+              );
+              await minSpendLedgerCoe.save();
             }
           }
 
           await coeForLine.save();
+
+          const ledgerId =
+            minSpendLedgerCoe?._id?.toString?.() ||
+            String(minSpendLedgerCoe?._id || '');
+          const lineId = coeForLine._id.toString();
+          if (ledgerId && ledgerId !== lineId && minSpendLedgerCoe) {
+            minSpendLedgerCoe.on_spot_charges =
+              minSpendLedgerCoe.on_spot_charges || [];
+            minSpendLedgerCoe.on_spot_charges.push({
+              event_id: eventId,
+              payment_id: payment._id,
+              description: String(payment.description || '').trim(),
+              amount:
+                onSpotBaseAmount != null
+                  ? onSpotBaseAmount
+                  : Number(payment.amount) || 0,
+              min_spend_absorbed: minSpendAbsorbed,
+              card_charged_base: cardChargedBase,
+              adhoc_payer: payerSnap,
+              created_by: adminUserId,
+              created_at: new Date(),
+            });
+            await minSpendLedgerCoe.save();
+          }
         }
       } catch (lineErr) {
         console.error('[AdhocPayment] on_spot_charges append failed:', {
@@ -1136,8 +1241,18 @@ function mapGoatUndoType(goatBody, mode) {
  */
 async function listEventCardCharges(coeId, eventId) {
   if (!eventId) return [];
+  const { isThe1ExperienceHost } = require('../utils/the1Experience');
+  const ledger = await COE.findById(coeId)
+    .select('is_the1_experience_host')
+    .lean();
+  let coeIds = [coeId];
+  if (isThe1ExperienceHost(ledger)) {
+    const { listChildCoeIds } = require('./the1ExperienceService');
+    const childIds = await listChildCoeIds(coeId);
+    coeIds = [coeId, ...childIds];
+  }
   const payments = await Payment.find({
-    coe_id: coeId,
+    coe_id: { $in: coeIds },
     event_id: eventId,
     payment_type: 'adhoc',
     // Include card and min_spend channels; exclude cash.

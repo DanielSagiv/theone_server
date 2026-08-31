@@ -186,6 +186,13 @@ async function prepareCoePaymentCharge(coeId, userId, paymentType) {
     throw new Error('Experience not found');
   }
 
+  const { assertThe1ExperienceHostNotPayable } = require('../utils/the1Experience');
+  assertThe1ExperienceHostNotPayable(coe);
+
+  if (!coe.client_id || !coe.client_id._id) {
+    throw new Error('Experience has no associated client');
+  }
+
   if (coe.client_id._id.toString() !== userId.toString()) {
     throw new Error('Unauthorized: You can only pay for your own experiences');
   }

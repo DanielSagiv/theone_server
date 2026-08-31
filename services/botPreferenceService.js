@@ -269,7 +269,8 @@ function extractPreferencesFromFormSubmission(message) {
       /THE1 negotiated pricing:\s*([^\n]+?)(?:\n|$)/i,
     admin_create_mode: /Admin create mode:\s*(draft|proposal)/i,
     proposal_deposit_percent: /Deposit percent:\s*(\d+)/i,
-    proposal_payment_deadline_hours: /Payment deadline hours:\s*(\d+)/i
+    proposal_payment_deadline_hours: /Payment deadline hours:\s*(\d+)/i,
+    is_the1_experience_host: /THE1 Experience host:\s*(yes|no)/i,
   };
 
   // Extract client_id (for admin COE creation flow)
@@ -387,6 +388,12 @@ function extractPreferencesFromFormSubmission(message) {
   preferences.is_the1_event =
     the1EventMatch && the1EventMatch[1]
       ? the1EventMatch[1].trim().toLowerCase() === 'yes'
+      : false;
+
+  const the1HostMatch = message.match(patterns.is_the1_experience_host);
+  preferences.is_the1_experience_host =
+    the1HostMatch && the1HostMatch[1]
+      ? the1HostMatch[1].trim().toLowerCase() === 'yes'
       : false;
 
   // Extract selected event IDs (optional)
@@ -593,6 +600,7 @@ function extractPreferencesFromFormSubmission(message) {
       specific_preferences: preferences.specific_preferences,
       open_to_join_events: preferences.open_to_join_events === true,
       is_the1_event: preferences.is_the1_event === true,
+      is_the1_experience_host: preferences.is_the1_experience_host === true,
       selected_events: preferences.selected_events,
       selected_seat_categories: preferences.selected_seat_categories,
       event_party_sizes: preferences.event_party_sizes,
