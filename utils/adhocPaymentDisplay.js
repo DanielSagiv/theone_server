@@ -1,7 +1,7 @@
 /**
  * Human-readable copy for on-spot (adhoc) payments.
  */
-
+//
 /**
  * Resolve payer display name from adhoc snapshot or populated user.
  * @param {object} payment
