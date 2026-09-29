@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Payment = require('../models/Payment');
 const COE = require('../models/COE');
 const User = require('../models/User');
@@ -1276,19 +1277,22 @@ async function getPaymentHistory(coeId) {
 }
 
 /**
- * Whether the user may view invoice/payment detail (owner or admin for on-spot charges).
+ * Whether the user may view invoice/payment detail (owner, or any payment for admin).
  * @param {import('mongoose').Document|object} payment
  * @param {string} userId
  * @param {boolean} [isAdmin]
  * @returns {boolean}
  */
 function canAccessPaymentRecord(payment, userId, isAdmin = false) {
+  if (isAdmin) {
+    return true;
+  }
   const ownerId =
     payment.user_id?._id?.toString?.() || payment.user_id?.toString?.();
   if (ownerId && ownerId === userId.toString()) {
     return true;
   }
-  return Boolean(isAdmin && payment.payment_type === 'adhoc');
+  return false;
 }
 
 /**
@@ -1411,6 +1415,117 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
     };
   } catch (error) {
     console.error('Error getting user payment history:', error);
+    throw error;
+  }
+}
+
+/**
+ * Inclusive calendar-day bounds for createdAt filters (YYYY-MM-DD or ISO).
+ * @param {string|Date|null|undefined} startInput
+ * @param {string|Date|null|undefined} endInput
+ * @returns {{ start: Date|null, end: Date|null }}
+ */
+function parseAdminPaymentDateBounds(startInput, endInput) {
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const toStart = raw => {
+    if (raw == null || raw === '') return null;
+    const s = String(raw).trim();
+    const m = s.match(ymd);
+    if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`);
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const toEnd = raw => {
+    if (raw == null || raw === '') return null;
+    const s = String(raw).trim();
+    const m = s.match(ymd);
+    if (m) return new Date(`${m[1]}-${m[2]}-${m[3]}T23:59:59.999Z`);
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  return { start: toStart(startInput), end: toEnd(endInput) };
+}
+
+/**
+ * Admin list of payments across clients (newest first).
+ * @param {Object} filters
+ * @param {Object} pagination
+ * @returns {Promise<Object>}
+ */
+async function getAdminPaymentHistory(filters = {}, pagination = {}) {
+  try {
+    const { user_id, start_date, end_date } = filters;
+    const page = Math.max(parseInt(pagination.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(pagination.limit, 10) || 20, 1), 100);
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (user_id != null && String(user_id).trim() !== '') {
+      const id = String(user_id).trim();
+      if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+        throw new Error('Invalid user_id');
+      }
+      query.user_id = new mongoose.Types.ObjectId(id);
+    }
+
+    const { start, end } = parseAdminPaymentDateBounds(start_date, end_date);
+    if (start || end) {
+      query.createdAt = {};
+      if (start) query.createdAt.$gte = start;
+      if (end) query.createdAt.$lte = end;
+    }
+
+    const total = await Payment.countDocuments(query);
+    const payments = await Payment.find(query)
+      .populate('user_id', 'firstName lastName email')
+      .populate('coe_id', 'name is_the1_event original_request_data')
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const { withAdhocPaymentSummary } = require('../utils/adhocPaymentDisplay');
+
+    const formattedPayments = payments.map(payment => {
+      const payer = payment.user_id && typeof payment.user_id === 'object'
+        ? payment.user_id
+        : null;
+      const clientName = payer
+        ? [payer.firstName, payer.lastName].filter(Boolean).join(' ').trim() ||
+          payer.email ||
+          null
+        : null;
+      return withAdhocPaymentSummary({
+        ...payment,
+        client_name: clientName,
+        client_email: payer?.email || null,
+        coe_name: payment.coe_id?.name || null,
+        is_the1_event:
+          payment.coe_id?.is_the1_event === true ||
+          payment.coe_id?.original_request_data?.is_the1_event === true,
+        coe_id: payment.coe_id?._id || payment.coe_id || null,
+        user_id: payer
+          ? {
+              _id: payer._id,
+              firstName: payer.firstName,
+              lastName: payer.lastName,
+              email: payer.email,
+            }
+          : payment.user_id,
+      });
+    });
+
+    return {
+      payments: formattedPayments,
+      pagination: {
+        total,
+        page,
+        limit,
+        total_pages: Math.ceil(total / limit),
+      },
+    };
+  } catch (error) {
+    console.error('Error getting admin payment history:', error);
     throw error;
   }
 }
@@ -2617,6 +2732,7 @@ module.exports = {
   getPaymentById,
   canAccessPaymentRecord,
   getUserPaymentHistory,
+  getAdminPaymentHistory,
   getInvoiceData,
   verifyWebhookSignature,
   verifyGoatWebhookSignature,

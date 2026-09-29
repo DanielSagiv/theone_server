@@ -146,6 +146,44 @@ router.get(
 );
 
 /**
+ * GET /v1/payments/admin/recent
+ * Admin list of payments across clients (newest first).
+ * NOTE: Must come before /:paymentId to avoid route conflicts.
+ */
+router.get('/admin/recent', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const filters = {
+      user_id: req.query.user_id,
+      start_date: req.query.start_date,
+      end_date: req.query.end_date,
+    };
+    const pagination = {
+      page: req.query.page,
+      limit: req.query.limit,
+    };
+    const result = await paymentService.getAdminPaymentHistory(filters, pagination);
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Get admin recent payments error:', {
+      user_id: req.user._id,
+      error: error.message,
+      timestamp: new Date().toISOString(),
+    });
+    const isValidation = /invalid user_id/i.test(error.message || '');
+    res.status(isValidation ? 400 : 500).json({
+      success: false,
+      error: {
+        code: isValidation ? 'VALIDATION_ERROR' : 'GET_ADMIN_PAYMENTS_FAILED',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
  * POST /v1/payments/admin/adhoc
  * Admin on-spot charge (COE or event scope)
  */
