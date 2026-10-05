@@ -188,6 +188,23 @@ function testOmniaBalconySmallMapsToBalconySmall() {
   assert.strictEqual(seatCode, 'Main Room Balcony Small');
 }
 
+function testOmniaNightDanceFloorMapsToMainRoomDanceFloor() {
+  const nightKey = normalizeOmniaTableName('Dance Floor 10 Arrive by 12:00am');
+  assert.strictEqual(
+    resolveOmniaSeatMapping(nightKey, 'night_club').seatCode,
+    'Main Room Dance Floor'
+  );
+
+  const mainRoomKey = normalizeOmniaTableName('Main Room Dance Floor 12 Arrive by 12:00am');
+  assert.strictEqual(
+    resolveOmniaSeatMapping(mainRoomKey, 'night_club').seatCode,
+    'Main Room Dance Floor'
+  );
+
+  const dayKey = normalizeOmniaTableName('Dance Floor 8 Arrive by 11:00am');
+  assert.strictEqual(resolveOmniaSeatMapping(dayKey, 'day_club').seatCode, 'Dance Floor');
+}
+
 function testOmniaDayclubTableMappings() {
   const premiumKey = normalizeOmniaTableName('Premium Villa 15 Arrive by 11:00am');
   assert.strictEqual(resolveOmniaSeatMapping(premiumKey, 'day_club').seatCode, 'Premium Villa');
@@ -733,6 +750,7 @@ function run() {
   testApplyInventoryUnmatchedSeatUnchanged();
   testFilterScrapEventsNotInPast();
   testOmniaBalconySmallMapsToBalconySmall();
+  testOmniaNightDanceFloorMapsToMainRoomDanceFloor();
   testOmniaDayclubTableMappings();
   testOmniaVenueConfigScope();
   testOmniaDayclubInventoryApply();

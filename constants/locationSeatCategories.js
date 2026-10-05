@@ -34,6 +34,7 @@ const LOCATION_SEAT_CATEGORY_OPTIONS = [
   { value: 'dance_floor', label: 'Dance Floor' },
   { value: 'dance_floor_section', label: 'Dance Floor Section' },
   { value: 'daybeds', label: 'Daybeds' },
+  { value: 'dj_hideaway', label: 'Dj Hideaway' },
   { value: 'driftwood_den', label: 'Driftwood Den' },
   { value: 'entry_level', label: 'Entry Level' },
   { value: 'large_3rd_tier_couch', label: 'Large 3rd Tier Couch' },

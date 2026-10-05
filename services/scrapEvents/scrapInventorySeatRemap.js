@@ -80,6 +80,42 @@ function findLocationSeatForInventoryItem(item, locationSeats, options = {}) {
     return seats.find((s) => s.code === legacy.code) || null;
   }
 
+  const itemName = String(item.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b2nd\b/g, 'second');
+  if (itemName) {
+    const byNameCode = seats.find(
+      (s) =>
+        String(s.code || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\b2nd\b/g, 'second') === itemName
+    );
+    if (byNameCode) return byNameCode;
+    const byNameLabel = seats.find(
+      (s) =>
+        String(s.label || '')
+          .trim()
+          .toLowerCase()
+          .replace(/\b2nd\b/g, 'second') === itemName
+    );
+    if (byNameLabel) return byNameLabel;
+    const nameSlug = displayNameToCategorySlug(itemName);
+    const byNameCat = seats.find(
+      (s) => s.category === nameSlug || s.the1Category === nameSlug
+    );
+    if (byNameCat) return byNameCat;
+    const compactName = itemName.replace(/\s+/g, '');
+    const byCompact = seats.find((s) =>
+      String(s.code || '')
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .startsWith(compactName)
+    );
+    if (byCompact) return byCompact;
+  }
+
   return null;
 }
 

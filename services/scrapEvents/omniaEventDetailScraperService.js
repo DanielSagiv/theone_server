@@ -34,7 +34,7 @@ const OMNIA_NIGHT_TABLE_TO_SEAT_CODE = {
   'terrace cabana': 'Terrace Cabana',
   'terrace strip view': 'Terrace Strip View',
   'terrace 2nd tier': 'Terrace 2nd Tier',
-  'dance floor': 'Dance Floor',
+  'dance floor': 'Main Room Dance Floor',
 };
 
 /** Booketing OMNIA Dayclub TABLES → Omnia DayClub location seat codes. */

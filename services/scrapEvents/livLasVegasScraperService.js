@@ -4,7 +4,13 @@ const LIV_EVENTS_LISTING_URL =
   process.env.LIV_EVENTS_LISTING_URL || 'https://www.livnightclub.com/las-vegas/events/';
 
 const LOG_PREFIX = '[LIV scraper]';
-const EVENT_ITEM_SELECTOR = '.uws-event-list-item[data-eventcode]';
+/** New LIV cards (lvw) plus legacy Universe (uws) widgets. */
+const EVENT_ITEM_SELECTOR = [
+  'a.lvw-event-list-item[data-eventcode]',
+  '.lvw-event-list-item[data-eventcode]',
+  'a.livlv-event-card[data-eventcode]',
+  '.uws-event-list-item[data-eventcode]',
+].join(', ');
 
 /**
  * Parse YYYYMMDD from LIV event code (e.g. EVE121488100020260626).
@@ -20,13 +26,24 @@ function parseIsoDateFromEventCode(eventCode) {
 }
 
 /**
+ * Prefer listing ISO date; fall back to trailing YYYYMMDD on legacy EVE codes.
+ * @param {object} raw
+ * @returns {string|null}
+ */
+function resolveLivIsoDate(raw) {
+  const fromAttr = raw?.isoDate && String(raw.isoDate).trim();
+  if (fromAttr && /^\d{4}-\d{2}-\d{2}$/.test(fromAttr)) return fromAttr;
+  return parseIsoDateFromEventCode(raw?.code);
+}
+
+/**
  * Build human-readable date from parts and optional event code year.
  * @param {object} raw
  * @returns {string}
  */
 function buildDateDisplay(raw) {
   if (raw.uwsdate) return raw.uwsdate.trim();
-  const iso = parseIsoDateFromEventCode(raw.code);
+  const iso = resolveLivIsoDate(raw);
   if (iso) {
     const d = new Date(`${iso}T12:00:00`);
     if (!Number.isNaN(d.getTime())) {
@@ -63,7 +80,7 @@ function slugify(value) {
 function normalizeLivEvent(raw) {
   const detailUrl = (raw.href || '').split('?')[0];
   const dateDisplay = buildDateDisplay(raw);
-  const isoDate = parseIsoDateFromEventCode(raw.code);
+  const isoDate = resolveLivIsoDate(raw);
   const externalKey = raw.code
     ? `liv|${raw.code}`
     : `liv|${slugify(raw.name)}|${slugify(raw.venue)}|${isoDate || dateDisplay}`;
@@ -91,8 +108,8 @@ function normalizeLivEvent(raw) {
  */
 function parseEventCodeFromHref(href) {
   if (!href) return null;
-  const match = href.match(/\/event\/(EVE\d+)/i);
-  return match ? match[1] : null;
+  const match = href.match(/\/event\/(EVE[-A-Z0-9]+)/i);
+  return match ? match[1].toUpperCase() : null;
 }
 
 /**
@@ -206,7 +223,7 @@ async function extractLivCustomEventsFromPage(page) {
  * @returns {Promise<number>}
  */
 async function countVisibleEventTiles(page) {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const isVisible = (el) => {
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
@@ -217,10 +234,9 @@ async function countVisibleEventTiles(page) {
         style.visibility !== 'hidden'
       );
     };
-    return document.querySelectorAll('.uws-event-list-item').length
-      ? Array.from(document.querySelectorAll('.uws-event-list-item')).filter(isVisible).length
-      : 0;
-  });
+    const nodes = document.querySelectorAll(selector);
+    return nodes.length ? Array.from(nodes).filter(isVisible).length : 0;
+  }, EVENT_ITEM_SELECTOR);
 }
 
 /**
@@ -233,7 +249,7 @@ async function extractLivCalendarEventsFromPage(page) {
     const links = Array.from(document.querySelectorAll('a.uws-cal-single-link[href*="/event/"]'));
     return links.map((link) => {
       const href = link.href || '';
-      const codeMatch = href.match(/\/event\/(EVE\d+)/i);
+      const codeMatch = href.match(/\/event\/(EVE[-A-Z0-9]+)/i);
       const code = codeMatch ? codeMatch[1] : null;
       const img = link.querySelector('img[src]');
       return {
@@ -259,45 +275,86 @@ async function extractLivCalendarEventsFromPage(page) {
  * @returns {Promise<number|null>}
  */
 async function readLivWidgetEventCount(page) {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const widget = document.querySelector('.uws-integration.uws-events');
-    if (!widget || !widget.className) return null;
-    const match = widget.className.match(/uws-events-count-(\d+)/);
-    return match ? parseInt(match[1], 10) : null;
-  });
+    if (widget && widget.className) {
+      const match = widget.className.match(/uws-events-count-(\d+)/);
+      if (match) return parseInt(match[1], 10);
+    }
+    const codes = new Set();
+    document.querySelectorAll(selector).forEach((el) => {
+      const code = (el.getAttribute('data-eventcode') || el.getAttribute('data-liv-event-id') || '').trim();
+      if (code) codes.add(code.toUpperCase());
+    });
+    return codes.size > 0 ? codes.size : null;
+  }, EVENT_ITEM_SELECTOR);
 }
 
 /**
- * Extract event rows from rendered LIV listing page inside the browser.
+ * Extract event rows from the current LIV listing cards (lvw redesign + legacy uws).
  * @param {import('puppeteer-core').Page} page
  * @returns {Promise<object[]>}
  */
 async function extractLivEventsFromPage(page) {
-  return page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('.uws-event-list-item[data-eventcode]'));
+  return page.evaluate((selector) => {
+    const items = Array.from(document.querySelectorAll(selector));
     return items.map((item) => {
-      const code = item.getAttribute('data-eventcode');
-      const link =
-        item.querySelector('a.hd-link[href*="/event/"]') ||
-        item.querySelector('a[href*="/event/"]');
+      const code =
+        item.getAttribute('data-eventcode') ||
+        item.getAttribute('data-liv-event-id') ||
+        '';
+      const hrefEl =
+        item.tagName === 'A' && item.href
+          ? item
+          : item.querySelector('a[href*="/event/"]') ||
+            item.querySelector('a.hd-link[href]') ||
+            item.querySelector('a[href]');
+      const href = hrefEl && hrefEl.href ? hrefEl.href.split('?')[0] : '';
       const img = item.querySelector('img[src]');
+      const venueName =
+        item.getAttribute('data-liv-venue-name') ||
+        item.querySelector('.uv-ev-venue, .uwsvenuename')?.textContent?.trim() ||
+        '';
+      const venueKey = (item.getAttribute('data-liv-venue-key') || '').toLowerCase();
+      const isoDate = item.getAttribute('data-liv-event-date') || '';
+      const name =
+        item.getAttribute('data-liv-event-name') ||
+        item.querySelector('.uv-event-name-title, .uwsname, h3')?.textContent?.trim() ||
+        '';
+      const metaSmall = item.querySelector('small')?.textContent?.trim() || '';
+      let time = item.querySelector('.uwsdtime')?.textContent?.trim() || '';
+      if (!time && metaSmall.includes('|')) {
+        time = metaSmall.split('|').pop().trim();
+      }
+      const legacyCat = item.querySelector('.venueurl span')?.textContent?.trim() || '';
+      let cat = legacyCat;
+      if (!cat) {
+        if (venueKey.includes('beach') || /liv\s*beach/i.test(venueName)) {
+          cat = 'Daylife';
+        } else if (
+          venueKey === 'livlasvegas' ||
+          /liv\s*las\s*vegas|liv\s*nightclub/i.test(venueName)
+        ) {
+          cat = 'Nightlife';
+        }
+      }
       return {
-        code,
-        href: link ? link.href : '',
-        cat: item.querySelector('.venueurl span')?.textContent?.trim() || '',
-        name:
-          item.querySelector('.uv-event-name-title, .uwsname')?.textContent?.trim() || '',
-        venue:
-          item.querySelector('.uv-ev-venue, .uwsvenuename')?.textContent?.trim() || '',
-        time: item.querySelector('.uwsdtime')?.textContent?.trim() || '',
+        code: code ? String(code).toUpperCase() : null,
+        href,
+        cat,
+        name,
+        venue: venueName,
+        time,
         weekday: item.querySelector('.uv-ev-weekday')?.textContent?.trim() || '',
         month: item.querySelector('.uv-ev-month')?.textContent?.trim() || '',
         day: item.querySelector('.uv-ev-day')?.textContent?.trim() || '',
         uwsdate: item.querySelector('.uwsddate')?.textContent?.trim() || '',
+        isoDate,
         img: img ? img.src : '',
+        venueKey,
       };
     });
-  });
+  }, EVENT_ITEM_SELECTOR);
 }
 
 /**
@@ -321,6 +378,13 @@ async function dismissLivPopups(page) {
     document.querySelectorAll('.uwsjs-closepop, .uws-closepop').forEach((el) => {
       if (typeof el.click === 'function') el.click();
     });
+    const buttons = Array.from(document.querySelectorAll('button, a'));
+    const accept = buttons.find((b) =>
+      /^(accept all cookies|accept all|allow all|i agree|agree)$/i.test(
+        (b.textContent || '').trim()
+      )
+    );
+    if (accept && typeof accept.click === 'function') accept.click();
   });
 }
 
@@ -366,14 +430,24 @@ async function pollForEventCards(page, maxMs = 30000) {
  * @returns {Promise<number>} visible event card count after prep
  */
 async function prepareLivListingPage(page) {
-  await page.waitForSelector('.uws-integration.uws-events', { timeout: 30000 }).catch(() => {});
+  await page
+    .waitForSelector(
+      `${EVENT_ITEM_SELECTOR}, .uws-integration.uws-events, .lvw-agenda-default`,
+      { timeout: 30000 }
+    )
+    .catch(() => {});
   await dismissLivPopups(page);
   await new Promise((r) => setTimeout(r, 2000));
   await dismissLivPopups(page);
 
-  await clickViewTab(page, 'Agenda');
-  await new Promise((r) => setTimeout(r, 2000));
   let count = await pollForEventCards(page, 20000);
+
+  if (count === 0) {
+    console.log(`${LOG_PREFIX} prepareLivListingPage: 0 cards, trying Agenda tab`);
+    await clickViewTab(page, 'Agenda');
+    await new Promise((r) => setTimeout(r, 2000));
+    count = await pollForEventCards(page, 20000);
+  }
 
   if (count === 0) {
     console.log(`${LOG_PREFIX} prepareLivListingPage: Agenda view had 0 cards, trying List`);
@@ -392,20 +466,24 @@ async function prepareLivListingPage(page) {
  * @returns {Promise<object>}
  */
 async function collectLivPageDiagnostics(page) {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const activeViewEl = document.querySelector(
-      '.uws-events-view.uvsactive, .uws-events-view.uwsactive, .uws-events-view[class*="active"]'
+      '.uws-events-view.uvsactive, .uws-events-view.uwsactive, .uws-events-view[class*="active"], .lvw-agenda-default'
     );
     return {
       title: document.title || '',
-      eventListItems: document.querySelectorAll('.uws-event-list-item[data-eventcode]').length,
+      eventListItems: document.querySelectorAll(selector).length,
+      lvwCards: document.querySelectorAll(
+        'a.lvw-event-list-item[data-eventcode], .lvw-event-list-item[data-eventcode]'
+      ).length,
       calendarLinks: document.querySelectorAll('a.uws-cal-single-link[href*="/event/"]').length,
       hdLinks: document.querySelectorAll('a.hd-link[href*="/event/"]').length,
+      eventHrefs: document.querySelectorAll('a[href*="/las-vegas/event/EVE"]').length,
       eventsWidget: document.querySelectorAll('.uws-integration.uws-events').length,
       activeViewClass: activeViewEl ? activeViewEl.className : null,
       cloudflareBlocked: /cloudflare|blocked|attention required/i.test(document.title || ''),
     };
-  });
+  }, EVENT_ITEM_SELECTOR);
 }
 
 /**
@@ -422,7 +500,8 @@ function formatDiagnosticsWarning(diagnostics) {
   }
   return (
     `No events found after page prep. Diagnostics: title="${diagnostics.title}", ` +
-    `eventCards=${diagnostics.eventListItems}, hdLinks=${diagnostics.hdLinks}, ` +
+    `eventCards=${diagnostics.eventListItems}, lvwCards=${diagnostics.lvwCards ?? 0}, ` +
+    `hdLinks=${diagnostics.hdLinks}, eventHrefs=${diagnostics.eventHrefs ?? 0}, ` +
     `widget=${diagnostics.eventsWidget}, activeView="${diagnostics.activeViewClass || 'unknown'}".`
   );
 }
@@ -561,6 +640,7 @@ async function fetchLivLasVegasEventsPreview() {
 module.exports = {
   fetchLivLasVegasEventsPreview,
   parseIsoDateFromEventCode,
+  parseEventCodeFromHref,
   normalizeLivEvent,
   prepareLivListingPage,
   scrapeLivListingPage,

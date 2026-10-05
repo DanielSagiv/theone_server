@@ -139,15 +139,57 @@ async function clickSectionAccordion(page, label) {
 }
 
 /**
+ * Parse a livlv-event-area-card (new LIV detail inventory tile).
+ * @param {{ name?: string, spendText?: string, guestsText?: string, innerText?: string }} raw
+ * @returns {{ name: string, capacity: number|null, minSpend: number, payNow: null }|null}
+ */
+function parseLivAreaCardInventoryFromRaw(raw) {
+  const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const name = clean(raw?.name);
+  const spendSource = clean(raw?.spendText) || clean(raw?.innerText);
+  const spendMatch = spendSource.match(/\$?\s*([\d,]+(?:\.\d+)?)/);
+  const minSpend = spendMatch ? parseFloat(spendMatch[1].replace(/,/g, '')) : NaN;
+  const guestsMatch = clean(raw?.guestsText).match(/(\d+)/);
+  if (!name || !Number.isFinite(minSpend)) return null;
+  return {
+    name,
+    capacity: guestsMatch ? parseInt(guestsMatch[1], 10) : null,
+    minSpend,
+    payNow: null,
+  };
+}
+
+/**
+ * Collect inventory from new LIV area cards (no accordion required).
+ * @param {import('puppeteer-core').Page} page
+ * @returns {Promise<object[]>}
+ */
+async function collectLivAreaCardInventory(page) {
+  const rawRows = await page.evaluate(() => {
+    const clean = (t) => (t || '').replace(/\s+/g, ' ').trim();
+    return Array.from(document.querySelectorAll('article.livlv-event-area-card')).map((el) => ({
+      name: clean(el.querySelector('h3')?.textContent),
+      spendText: clean(el.querySelector('.livlv-event-area-card__minimum-value')?.textContent),
+      guestsText: clean(el.querySelector('.livlv-event-area-card__guests')?.textContent),
+      innerText: clean(el.innerText),
+    }));
+  });
+  return rawRows.map(parseLivAreaCardInventoryFromRaw).filter(Boolean);
+}
+
+/**
  * Parse inventory rows from expanded LIV event detail page.
  * @param {import('puppeteer-core').Page} page
  * @returns {Promise<object>}
  */
 async function extractDetailInventory(page) {
-  const rawRows = await collectUrvenueInventoryRawRows(page);
-  const items = rawRows
-    .map((raw) => parseUrvenueInventoryItemFromRaw(raw, { nameStyle: 'liv' }))
-    .filter(Boolean);
+  let items = await collectLivAreaCardInventory(page);
+  if (!items.length) {
+    const rawRows = await collectUrvenueInventoryRawRows(page);
+    items = rawRows
+      .map((raw) => parseUrvenueInventoryItemFromRaw(raw, { nameStyle: 'liv' }))
+      .filter(Boolean);
+  }
   const description = await extractUrvenueEventDescription(page);
   return { items, description };
 }
@@ -166,13 +208,20 @@ async function scrapeLivEventDetailPage(page, options = {}) {
 
   await dismissLivPopups(page);
   await new Promise((r) => setTimeout(r, 2000));
+  await page
+    .waitForSelector('article.livlv-event-area-card, .uwsinv-item, .uv-eventitems-item', {
+      timeout: 20000,
+    })
+    .catch(() => {});
 
-  for (const section of sections) {
-    await clickSectionAccordion(page, section);
-    await new Promise((r) => setTimeout(r, 1500));
+  let raw = await extractDetailInventory(page);
+  if (!raw.items?.length) {
+    for (const section of sections) {
+      await clickSectionAccordion(page, section);
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    raw = await extractDetailInventory(page);
   }
-
-  const raw = await extractDetailInventory(page);
   const items = (raw.items || []).map((item) => {
     const key = normalizeTableName(item.name);
     const { seatCode, the1Category } = resolveLivSeatMapping(key, venueType);
@@ -223,6 +272,7 @@ module.exports = {
   LIV_BEACH_LEGACY_SHORT_CODES,
   LIV_TABLE_TO_SEAT_CODE: LIV_NIGHT_TABLE_TO_SEAT_CODE,
   normalizeTableName,
+  parseLivAreaCardInventoryFromRaw,
   resolveLivSeatMapping,
   NIGHT_SECTIONS_TO_EXPAND,
   BEACH_SECTIONS_TO_EXPAND,

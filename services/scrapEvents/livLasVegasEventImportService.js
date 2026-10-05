@@ -211,14 +211,81 @@ async function partitionLivEventsByImportStatus(events, options = {}) {
   };
 }
 
+const LIV_PRICE_REASON = 'LIV scrap import';
+const DJ_TABLE_BACKSTAGE_UNMATCHED_WARNING =
+  'Location seat "DJ Table Backstage" had no scraped inventory on detail page';
+
+/**
+ * @param {object} seat
+ * @returns {boolean}
+ */
+function isLivStageSeat(seat) {
+  return String(seat?.code || '').trim() === 'Stage';
+}
+
+/**
+ * @param {object} seat
+ * @returns {boolean}
+ */
+function isLivDjTableBackstageSeat(seat) {
+  const code = String(seat?.code || '').trim();
+  const category = String(seat?.category || '').trim();
+  return code === 'DJ Table Backstage' || category === 'DJ_Table_Backstage';
+}
+
+/**
+ * Internal THE1 seat: copy Stage venue catalog onto DJ Table Backstage when both exist.
+ * @param {object[]} seats
+ * @param {string[]} warnings
+ * @returns {{ seats: object[], warnings: string[] }}
+ */
+function applyLivDjTableBackstageStagePrice(seats, warnings) {
+  const list = Array.isArray(seats) ? seats : [];
+  const stage = list.find(isLivStageSeat);
+  const dj = list.find(isLivDjTableBackstageSeat);
+  if (!stage || !dj) {
+    return { seats: list, warnings: Array.isArray(warnings) ? warnings : [] };
+  }
+
+  const stagePrice =
+    typeof stage.event_price === 'number'
+      ? stage.event_price
+      : typeof stage.event_min_spend === 'number'
+        ? stage.event_min_spend
+        : null;
+  if (stagePrice == null || Number.isNaN(stagePrice)) {
+    return { seats: list, warnings: Array.isArray(warnings) ? warnings : [] };
+  }
+
+  const stageMin =
+    typeof stage.event_min_spend === 'number' ? stage.event_min_spend : stagePrice;
+
+  const nextSeats = list.map((seat) => {
+    if (!isLivDjTableBackstageSeat(seat)) return seat;
+    return {
+      ...seat,
+      event_price: stagePrice,
+      event_min_spend: stageMin,
+      price_change_reason: LIV_PRICE_REASON,
+    };
+  });
+
+  const nextWarnings = (Array.isArray(warnings) ? warnings : []).filter(
+    (w) => w !== DJ_TABLE_BACKSTAGE_UNMATCHED_WARNING
+  );
+  return { seats: nextSeats, warnings: nextWarnings };
+}
+
 /**
  * Apply scraped inventory min spends onto inherited event seats.
+ * DJ Table Backstage is not on the public LIV site; it inherits Stage's venue price.
  * @param {object[]} seats
  * @param {object[]} inventoryItems
  * @returns {{ seats: object[], warnings: string[] }}
  */
 function applyInventoryToSeats(seats, inventoryItems) {
-  return applySharedInventoryToSeats(seats, inventoryItems, 'LIV scrap import');
+  const applied = applySharedInventoryToSeats(seats, inventoryItems, LIV_PRICE_REASON);
+  return applyLivDjTableBackstageStagePrice(applied.seats, applied.warnings);
 }
 
 /**

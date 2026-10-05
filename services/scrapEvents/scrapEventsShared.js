@@ -147,11 +147,32 @@ async function findCoesReferencingEventIds(eventIds) {
  * @returns {boolean}
  */
 function inventoryItemMatchesSeat(seat, item) {
-  if (!item?.seatCode || item.seatCode !== seat.code) return false;
-  if (item.the1Category) {
-    return seat.the1Category === item.the1Category || seat.category === item.the1Category;
+  if (item?.seatCode && item.seatCode === seat.code) {
+    if (item.the1Category) {
+      return seat.the1Category === item.the1Category || seat.category === item.the1Category;
+    }
+    return true;
   }
-  return true;
+  const itemName = String(item?.name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b2nd\b/g, 'second');
+  if (!itemName) return false;
+  const seatCode = String(seat.code || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b2nd\b/g, 'second');
+  const seatLabel = String(seat.label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b2nd\b/g, 'second');
+  if (itemName === seatCode || itemName === seatLabel) return true;
+  const slug = itemName.replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+  if (slug && (seat.category === slug || seat.the1Category === slug)) return true;
+  const compactName = itemName.replace(/\s+/g, '');
+  const compactCode = seatCode.replace(/\s+/g, '');
+  if (compactName && compactCode && compactCode.startsWith(compactName)) return true;
+  return false;
 }
 
 /**

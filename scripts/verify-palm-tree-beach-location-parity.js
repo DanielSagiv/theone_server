@@ -23,6 +23,8 @@ const EXPECTED_SEAT_CODES = [
   'Shore Table',
   'Boardwalk Table',
   'Ocean Bed',
+  'Driftwood Den',
+  'Dj Hideaway',
 ].sort();
 
 /**
