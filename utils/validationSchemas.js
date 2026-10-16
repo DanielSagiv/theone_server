@@ -336,7 +336,9 @@ const coeSelectedSeatSchema = Joi.object({
   /** Venue list/catalog snapshot for strikethrough UI; optional. */
   venue_catalog_price: Joi.number().min(0).allow(null).optional(),
   /** THE1 fee % on negotiated base; optional — server math treats missing as 0. */
-  the1_fee_percent: Joi.number().min(0).max(100).allow(null).optional()
+  the1_fee_percent: Joi.number().min(0).max(100).allow(null).optional(),
+  /** Booked min spend for this client. Follows event_price when an admin edits the negotiated price. */
+  negotiated_min_spend_usd: Joi.number().min(0).allow(null).optional()
 });
 
 // Create COE validation schema
