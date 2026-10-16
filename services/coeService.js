@@ -3575,6 +3575,78 @@ async function assignRunnerToCOE(coeId, runnerData, assignedBy) {
   }
 }
 
+const NEGOTIATED_PRICE_LOCKED_MESSAGE =
+  'Negotiated price can only be changed before payment';
+
+/**
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {boolean}
+ */
+function moneyAmountsEqual(a, b) {
+  const left = a == null || a === '' ? null : Number(a);
+  const right = b == null || b === '' ? null : Number(b);
+  if (left == null && right == null) return true;
+  if (left == null || right == null || !Number.isFinite(left) || !Number.isFinite(right)) {
+    return false;
+  }
+  return Math.abs(left - right) < 0.001;
+}
+
+/**
+ * @param {object} seat
+ * @returns {string}
+ */
+function selectedSeatMatchKey(seat) {
+  return `${normalizeIdToString(seat?.event_id) || ''}:${normalizeIdToString(seat?.seat_id) || ''}`;
+}
+
+/**
+ * Paid experiences can still change the catalog strikethrough.
+ * Booked price fields stay locked once payment has started.
+ * @param {Array<object>} previousSeats
+ * @param {Array<object>} nextSeats
+ */
+function assertNegotiatedPriceUnchanged(previousSeats, nextSeats) {
+  const previousByKey = new Map(
+    (previousSeats || []).map((seat) => [selectedSeatMatchKey(seat), seat])
+  );
+  for (const next of nextSeats || []) {
+    const prev = previousByKey.get(selectedSeatMatchKey(next));
+    if (!prev) continue;
+    const bookedPriceChanged =
+      !moneyAmountsEqual(prev.event_price, next.event_price) ||
+      !moneyAmountsEqual(prev.base_price, next.base_price);
+    const negotiatedSpendProvided =
+      next.negotiated_min_spend_usd != null && next.negotiated_min_spend_usd !== '';
+    const negotiatedSpendChanged =
+      negotiatedSpendProvided &&
+      !moneyAmountsEqual(prev.negotiated_min_spend_usd, next.negotiated_min_spend_usd);
+    if (bookedPriceChanged || negotiatedSpendChanged) {
+      throw new Error(NEGOTIATED_PRICE_LOCKED_MESSAGE);
+    }
+  }
+}
+
+/**
+ * Keep negotiated_min_spend_usd aligned with the booked price when that price changes,
+ * and keep the stored value when a catalog-only edit omits it.
+ * @param {object|undefined} previous
+ * @param {object} next
+ * @returns {number|null|undefined}
+ */
+function resolveNegotiatedMinSpendForSeatUpdate(previous, next) {
+  if (next.negotiated_min_spend_usd != null && next.negotiated_min_spend_usd !== '') {
+    return Number(next.negotiated_min_spend_usd);
+  }
+  if (!previous) return next.negotiated_min_spend_usd;
+  const priceUnchanged =
+    moneyAmountsEqual(previous.event_price, next.event_price) &&
+    moneyAmountsEqual(previous.base_price, next.base_price);
+  if (priceUnchanged) return previous.negotiated_min_spend_usd;
+  return Number(next.event_price) || Number(next.base_price) || 0;
+}
+
 /**
  * Update seat assignments for COE
  * @param {string} coeId - COE ID
@@ -3605,13 +3677,32 @@ async function updateSeatAssignments(coeId, selectedSeats) {
 
     validateSelectedSeatsSimpleJointInvariants(selectedSeats);
 
-    coe.selected_seats = selectedSeats.map(seat => ({
-      ...seat,
-      status: seat.status || 'selected'
-    }));
+    const previousSeats = (coe.selected_seats || []).map((seat) =>
+      typeof seat.toObject === 'function' ? seat.toObject() : seat
+    );
+    if ((coe.payment_status || 'unpaid') !== 'unpaid') {
+      assertNegotiatedPriceUnchanged(previousSeats, selectedSeats);
+    }
+
+    const previousByKey = new Map(
+      previousSeats.map((seat) => [selectedSeatMatchKey(seat), seat])
+    );
+    coe.selected_seats = selectedSeats.map(seat => {
+      const previous = previousByKey.get(selectedSeatMatchKey(seat));
+      return {
+        ...seat,
+        status: seat.status || 'selected',
+        negotiated_min_spend_usd: resolveNegotiatedMinSpendForSeatUpdate(previous, seat)
+      };
+    });
 
     // Recalculate subtotal, taxes, and total from selected seats after removals/edits.
     await applyPricingFromSelectedSeats(coe);
+
+    if ((coe.payment_status || 'unpaid') === 'unpaid') {
+      const { computeInitialDepositPricing } = require('./paymentService');
+      coe.deposit_required = computeInitialDepositPricing(coe).total;
+    }
 
     await coe.save();
 

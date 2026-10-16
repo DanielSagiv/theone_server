@@ -3124,6 +3124,14 @@ router.put('/:id/seats', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
 
+    if (error.message === 'Negotiated price can only be changed before payment') {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        error: error.message
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Failed to update seat assignments',
