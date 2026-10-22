@@ -855,10 +855,10 @@ async function processAdhocPayment(adminUserId, payload, idempotencyKey) {
     };
   }
 
-  const adhocSignature = normalizeAdhocSignature(
-    adhocSignatureInput,
-    adhocPayer.display_name
-  );
+  const adhocSignature =
+    chargeMethod === 'cash' && !adhocSignatureInput
+      ? undefined
+      : normalizeAdhocSignature(adhocSignatureInput, adhocPayer.display_name);
 
   if (idempotencyKey) {
     const existing = await Payment.findOne({ idempotency_key: idempotencyKey });

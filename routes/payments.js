@@ -113,7 +113,11 @@ const adminAdhocPaymentSchema = Joi.object({
     svg: Joi.string().trim().min(1).max(200000).required(),
     initials: Joi.string().trim().pattern(/^[A-Za-z]{1,8}$/).required(),
     signed_name: Joi.string().trim().max(120).allow('', null).optional(),
-  }).required(),
+  }).when('charge_method', {
+    is: 'cash',
+    then: Joi.optional(),
+    otherwise: Joi.required(),
+  }),
 });
 
 /**
