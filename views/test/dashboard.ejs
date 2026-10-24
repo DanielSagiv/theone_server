@@ -16753,11 +16753,14 @@
             if (body.alreadyImported && getScrapImportPlatform() === 'local') {
                 return { alreadyImported: true, body };
             }
-            await finishScrapImportAfterPrepare(body, venueKey, venue.label, {
+            const committed = await finishScrapImportAfterPrepare(body, venueKey, venue.label, {
                 forceDirect: true,
                 listingEvent: listingRow,
                 silent: !!(opts && opts.silent),
             });
+            if (committed && committed.cancelled) {
+                return { alreadyImported: false, cancelled: true, body };
+            }
             return { alreadyImported: false, body };
         }
 
@@ -16871,6 +16874,8 @@
                             });
                             if (result.alreadyImported) {
                                 appendScrapBulkLog(`SKIP already imported: ${row.name || code}`);
+                            } else if (result.cancelled) {
+                                appendScrapBulkLog(`SKIP name cancelled: ${row.name || code}`);
                             } else {
                                 appendScrapBulkLog(`OK ${row.name || code}`);
                             }
@@ -20328,11 +20333,82 @@
         }
 
         /**
+         * Escape text for an HTML attribute.
+         * @param {string} value
+         * @returns {string}
+         */
+        function escapeScrapNameAttr(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;');
+        }
+
+        /**
+         * Ask for the event name before a scrap commit. Cancel imports nothing.
+         * @param {string} currentName
+         * @returns {Promise<string|null>}
+         */
+        function askScrapImportEventName(currentName) {
+            return new Promise((resolve) => {
+                const modal = document.createElement('div');
+                modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+                modal.innerHTML = `
+                    <div style="background: #1e293b; border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; border: 1px solid rgba(255,255,255,0.1);">
+                        <h3 style="color: #fff; margin: 0 0 1rem 0; font-size: 1.2rem;">Event name</h3>
+                        <input class="scrap-import-name" type="text" value="${escapeScrapNameAttr(currentName)}" style="width:100%;padding:10px;border:1px solid #ecf0f1;border-radius:8px;box-sizing:border-box;" />
+                        <p class="scrap-import-name-error" style="display:none;color:#ef4444;margin:0.75rem 0 0;font-size:13px;">Enter an event name to import.</p>
+                        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                            <button class="scrap-import-name-cancel" type="button" style="background: rgba(100, 116, 139, 0.3); color: #cbd5f5; border: 1px solid rgba(100, 116, 139, 0.5); padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;">Cancel</button>
+                            <button class="scrap-import-name-import" type="button" style="background: rgba(34, 197, 94, 0.25); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.5); padding: 0.5rem 1.5rem; border-radius: 4px; cursor: pointer;">Import</button>
+                        </div>
+                    </div>
+                `;
+
+                const input = modal.querySelector('.scrap-import-name');
+                const errorEl = modal.querySelector('.scrap-import-name-error');
+                const close = (value) => {
+                    if (modal.parentNode) document.body.removeChild(modal);
+                    resolve(value);
+                };
+                const submit = () => {
+                    const name = input.value.trim();
+                    if (!name) {
+                        errorEl.style.display = 'block';
+                        input.focus();
+                        return;
+                    }
+                    close(name);
+                };
+
+                modal.querySelector('.scrap-import-name-import').onclick = submit;
+                modal.querySelector('.scrap-import-name-cancel').onclick = () => close(null);
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        submit();
+                    }
+                });
+                input.addEventListener('input', () => {
+                    errorEl.style.display = 'none';
+                });
+                modal.onclick = (event) => {
+                    if (event.target === modal) close(null);
+                };
+
+                document.body.appendChild(modal);
+                input.focus();
+                input.select();
+            });
+        }
+
+        /**
          * After successful prepare-import: wizard modal or direct active create.
          * @param {object} body
          * @param {string} venueKey
          * @param {string} venueLabel
          * @param {{ forceDirect?: boolean, listingEvent?: object, silent?: boolean }} [options]
+         * @returns {Promise<true|{ cancelled: true }>}
          */
         async function finishScrapImportAfterPrepare(body, venueKey, venueLabel, options) {
             const opts = options || {};
@@ -20353,6 +20429,12 @@
                 showAlert('Review the pre-filled Create Event form and click Create Event when ready.', 'success');
                 return true;
             }
+
+            const editedName = await askScrapImportEventName(prefill.name || '');
+            if (!editedName) {
+                return { cancelled: true };
+            }
+            prefill.name = editedName;
 
             return commitScrapImportDirect(prefill, venueKey, opts.listingEvent, {
                 silent: !!opts.silent,
