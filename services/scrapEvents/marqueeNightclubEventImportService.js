@@ -26,6 +26,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[Marquee Nightclub import]';
 const PRICE_CHANGE_REASON = 'Marquee Nightclub scrap import';
@@ -325,6 +326,11 @@ async function prepareMarqueeNightclubImport(listingEvent, options = {}) {
     scrapedInventory: inventoryItems,
     venueName,
   };
+
+  await applyRecognizedArtistImportName(prefill, [
+    listingEvent.name,
+    detail.metadata && detail.metadata.name,
+  ]);
 
   console.log(`${LOG_PREFIX} prepareMarqueeNightclubImport: "${prefill.name}" -> location ${location.name}`);
 

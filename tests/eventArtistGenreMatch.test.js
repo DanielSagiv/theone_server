@@ -6,6 +6,7 @@ const assert = require('assert');
 const {
   matchArtistsInEventNameAgainstCatalog,
   resolveDjOnlyEventName,
+  recognizedArtistEventNameFromCatalog,
   normalizeArtistKey,
 } = require('../services/eventArtistGenreMatchService');
 
@@ -45,6 +46,12 @@ const CATALOG = [
     artist: 'ERIC D-LUX',
     genre: 'Open Format (Various Genre)',
     genres: ['Open Format'],
+  },
+  {
+    artistKey: 'DIPLO',
+    artist: 'Diplo',
+    genre: 'EDM',
+    genres: ['EDM'],
   },
 ];
 
@@ -184,6 +191,31 @@ function testBareHyphenInsideArtistNeverSplits() {
   );
 }
 
+function testRecognizedArtistNameUsesArtistsOnly() {
+  assert.strictEqual(
+    recognizedArtistEventNameFromCatalog("Diplo's Plunge Club", CATALOG),
+    'Diplo',
+  );
+  assert.strictEqual(
+    recognizedArtistEventNameFromCatalog(
+      ['Special Guest', "Nov 8 Diplo's Plunge Club"],
+      CATALOG,
+    ),
+    'Diplo',
+  );
+  assert.strictEqual(
+    recognizedArtistEventNameFromCatalog('Special Guest', CATALOG),
+    null,
+  );
+  assert.strictEqual(
+    recognizedArtistEventNameFromCatalog(
+      'Tiësto b2b John Summit',
+      CATALOG,
+    ),
+    'Tiësto, JOHN SUMMIT',
+  );
+}
+
 function run() {
   testExactPhraseMatch();
   testNoSubstringInsideWord();
@@ -197,6 +229,7 @@ function run() {
   testDjOnlyUnmatchedUnchanged();
   testDjOnlyNoSuffixUnchanged();
   testBareHyphenInsideArtistNeverSplits();
+  testRecognizedArtistNameUsesArtistsOnly();
   console.log('eventArtistGenreMatch.test.js: all passed');
 }
 

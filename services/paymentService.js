@@ -420,41 +420,113 @@ async function recordCashCoePayment(
     coe,
     experienceChargeAmount,
     subscriptionChargeAmount,
+    totalDueNow,
     deductionContext,
     quoteBreakdown,
     description,
   } = prepared;
 
-  if (
-    deductionContext.isEligible &&
-    subscriptionChargeAmount > 0
-  ) {
-    throw new Error('First experience subscription must be collected by card');
+  const cashNote = options.cash_note
+    ? String(options.cash_note).trim().slice(0, 500)
+    : undefined;
+  const currency = coe.currency || PAYMENT_CONFIG.currency;
+  const dualCharge =
+    deductionContext.isEligible === true && subscriptionChargeAmount > 0;
+  const deductionMarker = `first-coe-deduction:${coeId}`;
+
+  let subscriptionPayment = null;
+  let createdSubscriptionInThisRequest = false;
+  if (dualCharge) {
+    subscriptionPayment = new Payment({
+      user_id: clientUserId,
+      amount: subscriptionChargeAmount,
+      currency,
+      payment_type: 'subscription',
+      payment_channel: 'cash',
+      recorded_by_admin_id: adminUserId,
+      created_by_admin_id: adminUserId,
+      cash_note: cashNote,
+      finance_sync_status: 'pending',
+      status: 'completed',
+      description: `Required annual subscription (first experience deduction flow) [${deductionMarker}]`,
+      completed_at: new Date(),
+    });
+    await subscriptionPayment.save();
+    createdSubscriptionInThisRequest = true;
   }
 
   const payment = new Payment({
     coe_id: coeId,
     user_id: clientUserId,
     amount: experienceChargeAmount,
-    currency: coe.currency || PAYMENT_CONFIG.currency,
+    currency,
     payment_type: paymentType,
     payment_channel: 'cash',
     recorded_by_admin_id: adminUserId,
     created_by_admin_id: adminUserId,
-    cash_note: options.cash_note ? String(options.cash_note).trim().slice(0, 500) : undefined,
+    cash_note: cashNote,
     finance_sync_status: 'pending',
     status: 'completed',
     description,
     completed_at: new Date(),
   });
-  await payment.save();
+  try {
+    await payment.save();
+  } catch (experienceError) {
+    if (createdSubscriptionInThisRequest && subscriptionPayment?._id) {
+      try {
+        await Payment.deleteOne({ _id: subscriptionPayment._id });
+      } catch (deleteError) {
+        throw new Error(
+          `${experienceError.message}. Subscription cash record succeeded but removing it failed; manual review required.`,
+        );
+      }
+    }
+    throw experienceError;
+  }
 
   await updateCOEPaymentStatus(coeId, payment);
+
+  if (dualCharge) {
+    const now = new Date();
+    const nextYear = new Date(now);
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+    await User.updateOne(
+      { _id: clientUserId, first_coe_deduction_consumed: false },
+      {
+        $set: {
+          first_coe_deduction_consumed: true,
+          subscription_required: false,
+          subscription_paid_at: now,
+          subscription_expires_at: nextYear,
+        },
+      },
+    );
+
+    await COE.updateOne(
+      { _id: coeId, subscription_deduction_applied: { $ne: true } },
+      {
+        $set: {
+          subscription_deduction_applied: true,
+          subscription_deduction_amount: deductionContext.deductionAmount,
+          subscription_deduction_note: 'First experience dual-charge deduction applied',
+        },
+      },
+    );
+  }
 
   const clientUser = await User.findById(clientUserId);
   setImmediate(() => {
     (async () => {
       try {
+        if (subscriptionPayment) {
+          await sendPaymentReceiptEmail({
+            user: clientUser,
+            payment: subscriptionPayment,
+            coeName: null,
+          });
+        }
         await sendPaymentReceiptEmail({
           user: clientUser,
           payment,
@@ -471,16 +543,20 @@ async function recordCashCoePayment(
     client_id: clientUserId,
     coe_id: coeId,
     payment_id: payment._id,
+    subscription_payment_id: subscriptionPayment?._id,
     payment_type: paymentType,
-    amount: experienceChargeAmount,
+    amount: dualCharge ? totalDueNow : experienceChargeAmount,
     payment_channel: 'cash',
     timestamp: new Date().toISOString(),
   });
 
   return {
     payment_id: payment._id,
-    amount: experienceChargeAmount,
-    currency: coe.currency || PAYMENT_CONFIG.currency,
+    ...(subscriptionPayment
+      ? { subscription_payment_id: subscriptionPayment._id }
+      : {}),
+    amount: dualCharge ? totalDueNow : experienceChargeAmount,
+    currency,
     status: payment.status,
     breakdown: quoteBreakdown,
   };

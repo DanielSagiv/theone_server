@@ -26,6 +26,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[TAO Beach import]';
 const PRICE_CHANGE_REASON = 'TAO Beach scrap import';
@@ -336,6 +337,8 @@ async function prepareTaoBeachEventImport(listingEvent, options = {}) {
     scrapedInventory: inventoryItems,
     venueName,
   };
+
+  await applyRecognizedArtistImportName(prefill, [listingEvent.name]);
 
   console.log(`${LOG_PREFIX} prepareTaoBeachEventImport: "${prefill.name}" -> location ${location.name}`);
 

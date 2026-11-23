@@ -16830,10 +16830,17 @@
             }
             appendScrapBulkLog(`Start bulk → ${platform} (${fromDate} to ${toDate})`);
 
-            let aborted = false;
+            const notLoaded = [];
+            function recordNotLoaded(venueLabel, date, eventName, reason) {
+                notLoaded.push({
+                    venue: venueLabel,
+                    date: date || '—',
+                    name: eventName || '—',
+                    reason: reason || 'Unknown error',
+                });
+            }
             try {
                 for (let vi = 0; vi < SCRAP_BULK_VENUE_ORDER.length; vi += 1) {
-                    if (aborted) break;
                     const venue = SCRAP_BULK_VENUE_ORDER[vi];
                     setScrapBulkProgress(`Venue ${vi + 1}/${SCRAP_BULK_VENUE_ORDER.length}: ${venue.label}`);
                     appendScrapBulkLog(`Scraping listing: ${venue.label}`);
@@ -16841,13 +16848,9 @@
                     try {
                         newEvents = await fetchScrapVenueListingForBulk(venue, fromDate, toDate);
                     } catch (err) {
-                        const action = await waitForScrapBulkPause(
-                            `${venue.label} listing failed: ${err.message}`
-                        );
-                        if (action === 'abort') {
-                            aborted = true;
-                            break;
-                        }
+                        const reason = err.message || 'Listing scrape failed';
+                        appendScrapBulkLog(`SKIP listing: ${venue.label}: ${reason}`);
+                        recordNotLoaded(venue.label, '', '', `Listing failed: ${reason}`);
                         continue;
                     }
 
@@ -16861,40 +16864,54 @@
                     appendScrapBulkLog(`${venue.label}: ${newEvents.length} new event(s)`);
 
                     for (let ei = 0; ei < newEvents.length; ei += 1) {
-                        if (aborted) break;
                         const row = newEvents[ei];
                         const code = scrapRowExternalCode(venue.venueKey, row) || '';
+                        const eventName = row.name || code;
+                        const eventDate = row.isoDate || row.dateDisplay || '';
                         setScrapBulkProgress(
-                            `Venue ${vi + 1}/${SCRAP_BULK_VENUE_ORDER.length} ${venue.label} — event ${ei + 1}/${newEvents.length}: ${row.name || code}`
+                            `Venue ${vi + 1}/${SCRAP_BULK_VENUE_ORDER.length} ${venue.label} — event ${ei + 1}/${newEvents.length}: ${eventName}`
                         );
-                        appendScrapBulkLog(`Import ${row.name || code}…`);
+                        appendScrapBulkLog(`Import ${eventName}…`);
                         try {
                             const result = await runScrapPrepareAndCommit(venue.venueKey, row, {
                                 silent: true,
                             });
                             if (result.alreadyImported) {
-                                appendScrapBulkLog(`SKIP already imported: ${row.name || code}`);
+                                appendScrapBulkLog(`SKIP already imported: ${eventName}`);
                             } else if (result.cancelled) {
-                                appendScrapBulkLog(`SKIP name cancelled: ${row.name || code}`);
+                                appendScrapBulkLog(`SKIP name cancelled: ${eventName}`);
+                                recordNotLoaded(venue.label, eventDate, eventName, 'Name cancelled');
                             } else {
-                                appendScrapBulkLog(`OK ${row.name || code}`);
+                                appendScrapBulkLog(`OK ${eventName}`);
                             }
                             await delayMs(750);
                         } catch (err) {
-                            const action = await waitForScrapBulkPause(
-                                `${venue.label} / ${row.name || code}: ${err.message}`
-                            );
-                            if (action === 'abort') {
-                                aborted = true;
-                                break;
-                            }
-                            appendScrapBulkLog(`SKIP after error: ${row.name || code}`);
+                            const reason = err.message || 'Import failed';
+                            appendScrapBulkLog(`SKIP after error: ${eventName}: ${reason}`);
+                            recordNotLoaded(venue.label, eventDate, eventName, reason);
                         }
                     }
                 }
-                appendScrapBulkLog(aborted ? 'Bulk aborted.' : 'Bulk finished.');
-                setScrapBulkProgress(aborted ? 'Aborted' : 'Complete');
-                showAlert(aborted ? 'Bulk import aborted.' : 'Bulk import finished.', aborted ? 'warning' : 'success');
+                appendScrapBulkLog('Bulk finished.');
+                appendScrapBulkLog(`Not loaded (${notLoaded.length}):`);
+                if (!notLoaded.length) {
+                    appendScrapBulkLog('None.');
+                } else {
+                    notLoaded.forEach((item) => {
+                        appendScrapBulkLog(`${item.venue} | ${item.date} | ${item.name} | ${item.reason}`);
+                    });
+                }
+                setScrapBulkProgress(
+                    notLoaded.length
+                        ? `Complete — ${notLoaded.length} not loaded`
+                        : 'Complete'
+                );
+                showAlert(
+                    notLoaded.length
+                        ? `Bulk import finished. ${notLoaded.length} not loaded. The list is in the Big Gun log.`
+                        : 'Bulk import finished. All new events loaded.',
+                    notLoaded.length ? 'warning' : 'success'
+                );
             } finally {
                 window.scrapBulkRunning = false;
                 setScrapBulkPausedUi(false);
@@ -20430,11 +20447,11 @@
                 return true;
             }
 
-            const editedName = await askScrapImportEventName(prefill.name || '');
-            if (!editedName) {
-                return { cancelled: true };
+            const eventName = String(prefill.name || '').trim();
+            if (!eventName) {
+                throw new Error('No event name');
             }
-            prefill.name = editedName;
+            prefill.name = eventName;
 
             return commitScrapImportDirect(prefill, venueKey, opts.listingEvent, {
                 silent: !!opts.silent,
