@@ -21,6 +21,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[OMNIA import]';
 
@@ -353,6 +354,8 @@ async function prepareOmniaEventImport(listingEvent, options = {}) {
     detailUrl,
     scrapedInventory: inventoryItems,
   };
+
+  await applyRecognizedArtistImportName(prefill, [listingEvent.name]);
 
   console.log(`${LOG_PREFIX} prepareOmniaEventImport: "${prefill.name}" -> location ${location.name}`);
 

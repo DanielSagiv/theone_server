@@ -134,6 +134,102 @@ function resolveDjOnlyEventName(originalName, matchedArtists) {
 }
 
 /**
+ * Drop a trailing possessive so "Diplo's" can match the artist Diplo.
+ * @param {string} title
+ * @returns {string}
+ */
+function loosenTitlePossessive(title) {
+  return String(title || '').replace(/['’]s\b/gi, ' ');
+}
+
+/**
+ * First word index of an artist key inside a title, or a large number when absent.
+ * @param {string} title
+ * @param {string} artistKey
+ * @returns {number}
+ */
+function artistPhraseIndex(title, artistKey) {
+  const hay = normalizeArtistKey(loosenTitlePossessive(title))
+    .split(' ')
+    .filter(Boolean);
+  const needle = String(artistKey || '')
+    .split(' ')
+    .filter(Boolean);
+  if (!needle.length || needle.length > hay.length) return Number.MAX_SAFE_INTEGER;
+  for (let i = 0; i <= hay.length - needle.length; i++) {
+    let ok = true;
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return i;
+  }
+  return Number.MAX_SAFE_INTEGER;
+}
+
+/**
+ * Artist display names found in any title, in title order, or null.
+ * Earlier titles win when the same artist appears again.
+ * @param {string|string[]} titles
+ * @param {Array<object>} catalog
+ * @returns {string|null}
+ */
+function recognizedArtistEventNameFromCatalog(titles, catalog) {
+  const list = (Array.isArray(titles) ? titles : [titles])
+    .map((title) => String(title || '').trim())
+    .filter(Boolean);
+  const seen = new Set();
+  const names = [];
+  for (const title of list) {
+    const loosened = loosenTitlePossessive(title);
+    const result = matchArtistsInEventNameAgainstCatalog(loosened, catalog);
+    const ordered = result.matched_artists
+      .map((artist) => ({
+        artist,
+        at: artistPhraseIndex(title, artist.artistKey),
+      }))
+      .sort((a, b) => a.at - b.at);
+    for (const { artist } of ordered) {
+      const key = String(artist.artistKey || '').trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const display = String(artist.artist || artist.artistKey || '').trim();
+      if (display) names.push(display);
+    }
+  }
+  return names.length ? names.join(', ') : null;
+}
+
+/**
+ * When a scraped title contains catalog artists, replace prefill.name and skip the name dialog.
+ * @param {object} prefill
+ * @param {string|string[]} titles
+ * @returns {Promise<object>}
+ */
+async function applyRecognizedArtistImportName(prefill, titles) {
+  if (!prefill || typeof prefill !== 'object') return prefill;
+  try {
+    const catalog = await loadArtistGenreCatalog();
+    const artistName = recognizedArtistEventNameFromCatalog(titles, catalog);
+    if (!artistName) {
+      prefill.skipNamePrompt = false;
+      return prefill;
+    }
+    prefill.name = artistName;
+    prefill.skipNamePrompt = true;
+  } catch (err) {
+    console.warn(
+      `${LOG} recognized-artist name failed (keeping name prompt):`,
+      err?.message || err,
+    );
+    prefill.skipNamePrompt = false;
+  }
+  return prefill;
+}
+
+/**
  * Match artists in an event name against an in-memory catalog (pure; for tests).
  * @param {string} eventName
  * @param {Array<{ artistKey: string, artist?: string, genre?: string, genres?: string[] }>} catalog
@@ -313,6 +409,8 @@ module.exports = {
   MIN_ARTIST_KEY_CHARS,
   emptyMatchResult,
   matchArtistsInEventNameAgainstCatalog,
+  recognizedArtistEventNameFromCatalog,
+  applyRecognizedArtistImportName,
   resolveDjOnlyEventName,
   loadArtistGenreCatalog,
   clearArtistGenreCatalogCache,

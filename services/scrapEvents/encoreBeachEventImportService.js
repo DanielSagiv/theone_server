@@ -32,6 +32,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[Encore Beach import]';
 const PRICE_CHANGE_REASON = 'Encore Beach scrap import';
@@ -372,6 +373,11 @@ async function prepareEncoreBeachImport(listingEvent, options = {}) {
     scrapedInventory: inventoryItems,
     venueName,
   };
+
+  await applyRecognizedArtistImportName(prefill, [
+    listingEvent.name,
+    detail.metadata && detail.metadata.name,
+  ]);
 
   console.log(
     `${LOG_PREFIX} prepareEncoreBeachImport: "${prefill.name}" -> ${venueName} (${locationId})`

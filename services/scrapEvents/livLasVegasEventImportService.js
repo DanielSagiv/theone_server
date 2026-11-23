@@ -20,6 +20,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[LIV import]';
 
@@ -448,6 +449,8 @@ async function prepareLivEventImport(listingEvent, options = {}) {
     detailUrl,
     scrapedInventory: detail.items,
   };
+
+  await applyRecognizedArtistImportName(prefill, [listingEvent.name]);
 
   console.log(`${LOG_PREFIX} prepareLivEventImport: "${prefill.name}" -> location ${location.name}`);
 

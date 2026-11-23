@@ -29,6 +29,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[Palm Tree Beach import]';
 const PRICE_CHANGE_REASON = 'Palm Tree Beach scrap import';
@@ -313,6 +314,8 @@ async function preparePalmTreeBeachImport(listingEvent, options = {}) {
     scrapedInventory: inventoryItems,
     venueName,
   };
+
+  await applyRecognizedArtistImportName(prefill, [listingEvent.name]);
 
   console.log(`${LOG_PREFIX} preparePalmTreeBeachImport: "${prefill.name}" -> location ${location.name}`);
 

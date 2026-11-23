@@ -26,6 +26,7 @@ const {
   findAlreadyImportedForScrap,
   enrichPartitionWithIdentityDedupe,
 } = require('./scrapImportDedupe');
+const { applyRecognizedArtistImportName } = require('../eventArtistGenreMatchService');
 
 const LOG_PREFIX = '[Hakkasan import]';
 const PRICE_CHANGE_REASON = 'Hakkasan scrap import';
@@ -324,6 +325,8 @@ async function prepareHakkasanEventImport(listingEvent, options = {}) {
     scrapedInventory: inventoryItems,
     venueName,
   };
+
+  await applyRecognizedArtistImportName(prefill, [listingEvent.name]);
 
   console.log(`${LOG_PREFIX} prepareHakkasanEventImport: "${prefill.name}" -> location ${location.name}`);
 
