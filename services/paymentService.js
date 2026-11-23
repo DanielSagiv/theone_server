@@ -1394,6 +1394,41 @@ async function getPaymentById(paymentId) {
 }
 
 /**
+ * COE id stored in a first-experience subscription description.
+ * The subscription payment has no coe_id so it is not added to the experience total.
+ * @param {string} description
+ * @returns {string|null}
+ */
+function firstCoeDeductionIdFromDescription(description) {
+  const match = String(description || '').match(/first-coe-deduction:([a-fA-F0-9]{24})/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Fill coe_name for first-experience subscription rows that are not linked to the experience.
+ * @param {object[]} payments
+ * @returns {Promise<object[]>}
+ */
+async function attachFirstCoeNames(payments) {
+  const ids = [];
+  for (const payment of payments) {
+    if (payment?.coe_name) continue;
+    const id = firstCoeDeductionIdFromDescription(payment?.description);
+    if (id) ids.push(id);
+  }
+  if (!ids.length) return payments;
+  const coes = await COE.find({ _id: { $in: ids } }).select('name').lean();
+  const names = new Map(coes.map(coe => [String(coe._id), coe.name]));
+  return payments.map(payment => {
+    if (payment?.coe_name) return payment;
+    const id = firstCoeDeductionIdFromDescription(payment?.description);
+    const name = id ? names.get(id) : null;
+    if (!name) return payment;
+    return { ...payment, coe_name: name };
+  });
+}
+
+/**
  * Get user payment history with filters and pagination
  * @param {string} userId - User ID
  * @param {Object} filters - Filter options { status, payment_type, coe_id, start_date, end_date }
@@ -1463,7 +1498,7 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
     const { withAdhocPaymentSummary } = require('../utils/adhocPaymentDisplay');
 
     // Format payments with COE name and adhoc payer line when applicable
-    const formattedPayments = payments.map(payment =>
+    const formattedPayments = await attachFirstCoeNames(payments.map(payment =>
       withAdhocPaymentSummary({
         ...payment,
         coe_name: payment.coe_id?.name || null,
@@ -1472,7 +1507,7 @@ async function getUserPaymentHistory(userId, filters = {}, pagination = {}) {
           payment.coe_id?.original_request_data?.is_the1_event === true,
         coe_id: payment.coe_id?._id || payment.coe_id || null,
       })
-    );
+    ));
     
     return {
       payments: formattedPayments,
@@ -1562,7 +1597,7 @@ async function getAdminPaymentHistory(filters = {}, pagination = {}) {
 
     const { withAdhocPaymentSummary } = require('../utils/adhocPaymentDisplay');
 
-    const formattedPayments = payments.map(payment => {
+    const formattedPayments = await attachFirstCoeNames(payments.map(payment => {
       const payer = payment.user_id && typeof payment.user_id === 'object'
         ? payment.user_id
         : null;
@@ -1589,7 +1624,7 @@ async function getAdminPaymentHistory(filters = {}, pagination = {}) {
             }
           : payment.user_id,
       });
-    });
+    }));
 
     return {
       payments: formattedPayments,
